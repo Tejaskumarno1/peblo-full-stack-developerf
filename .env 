@@ -1,0 +1,12 @@
+# Database (SQLite for local dev)
+DATABASE_URL=file:./dev.db
+
+# JWT Secrets (generate strong random strings)
+JWT_SECRET=your-jwt-secret-here
+JWT_REFRESH_SECRET=your-jwt-refresh-secret-here
+
+# AI Provider — Google Gemini
+GEMINI_API_KEY=AIzaSyBgkh820mtMxfwFBVwQQwtHlLhZVnaHpiQ
+
+# Server Port
+PORT=3001

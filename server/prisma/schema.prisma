@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  notes         Note[]
+  aiGenerations AiGeneration[]
+
+  @@map("users")
+}
+
+model Note {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  title      String   @default("Untitled")
+  content    String   @default("")
+  category   String?
+  isArchived Boolean  @default(false) @map("is_archived")
+  isPublic   Boolean  @default(false) @map("is_public")
+  shareId    String?  @unique @map("share_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags          NoteTag[]
+  aiGenerations AiGeneration[]
+  backups       NoteBackup[]
+
+  @@map("notes")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  notes NoteTag[]
+
+  @@map("tags")
+}
+
+model NoteTag {
+  noteId String @map("note_id")
+  tagId  String @map("tag_id")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+  @@map("note_tags")
+}
+
+model AiGeneration {
+  id        String   @id @default(uuid())
+  noteId    String   @map("note_id")
+  userId    String   @map("user_id")
+  type      String
+  result    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_generations")
+}
+
+model NoteBackup {
+  id        String   @id @default(uuid())
+  noteId    String   @map("note_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("note_backups")
+}
