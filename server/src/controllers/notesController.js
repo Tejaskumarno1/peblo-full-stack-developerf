@@ -114,6 +114,7 @@ export async function getNotes(req, res, next) {
       select: {
         id: true,
         title: true,
+        content: true, // Preloaded for zero-latency client-side transitions
         category: true,
         isArchived: true,
         isPublic: true,
