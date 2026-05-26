@@ -12,7 +12,7 @@
     "db:push": "cd server && npx prisma db push",
     "db:seed": "cd server && npm run db:seed",
     "build": "cd client && npm run build && cd .. && rm -rf public && mv client/dist public",
-    "postinstall": "cd server && npm install && npx prisma generate && npx prisma db push"
+    "postinstall": "cd server && npm install && npx prisma generate && npx prisma db push --accept-data-loss"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
