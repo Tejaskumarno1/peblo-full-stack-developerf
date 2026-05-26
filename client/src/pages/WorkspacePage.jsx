@@ -55,6 +55,7 @@ export default function WorkspacePage() {
   const [showPreview, setShowPreview] = useState(true);
 
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiPanelTab, setAiPanelTab] = useState('assist');
   const [aiResults, setAiResults] = useState({});
   const [aiError, setAiError] = useState('');
   
@@ -785,101 +786,120 @@ export default function WorkspacePage() {
                         ×
                       </button>
                     </div>
-                    <div className="ai-panel-content">
-                      <div className="ai-actions">
-                        <button
-                          type="button"
-                          className={`ai-action-btn primary ${generating ? 'generating' : ''}`}
-                          onClick={() => generateAIContent('summary')}
-                          disabled={generating || !noteContent?.trim()}
-                        >
-                          <Sparkles size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                          <span>{generating ? 'Generating Summary...' : 'Generate Summary'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
-                          onClick={() => generateAIContent('actions')}
-                          disabled={generating || !noteContent?.trim()}
-                        >
-                          <Check size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                          <span>{generating ? 'Extracting...' : 'Extract Action Items'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
-                          onClick={() => generateAIContent('title')}
-                          disabled={generating || !noteContent?.trim()}
-                        >
-                          <PenLine size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                          <span>{generating ? 'Suggesting...' : 'Suggest Title'}</span>
-                        </button>
-                      </div>
-                      {aiError && <p className="ai-error">{aiError}</p>}
-                      {Object.keys(aiResults).length > 0 && (
-                        <div className="ai-results-card">
-                          <div className="ai-results-card-header">
-                            <Sparkles size={14} className="ai-accent-color" />
-                            <span>AI Insights</span>
-                          </div>
-                          <div className="ai-results-content">
-                            {aiResults.summary?.summary && <p>{aiResults.summary.summary}</p>}
-                            {aiResults.actions?.action_items?.length > 0 && (
-                              <ul className="ai-action-list">
-                                {aiResults.actions.action_items.map((item, i) => (
-                                  <li key={i}>{item}</li>
-                                ))}
-                              </ul>
-                            )}
-                            {aiResults.title?.suggested_title && (
-                              <div className="title-suggestion">
-                                <span>{aiResults.title.suggested_title}</span>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => setNoteTitle(aiResults.title.suggested_title)}
-                                >
-                                  Apply Title
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
 
-                      <div className="ws-ai-chat-section">
-                        <div className="ws-ai-chat-header">
-                          <MessageSquare size={14} />
-                          <h4>Chat with Note</h4>
-                        </div>
-                        <div className="ws-ai-chat-messages">
-                          {wsChatMessages.map((m, i) => (
-                            <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
-                              <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
-                            </div>
-                          ))}
-                          {wsChatLoading && (
-                            <div className="ws-ai-chat-msg assistant">
-                              <div className="ws-ai-chat-bubble typing">
-                                <span className="dot"></span><span className="dot"></span><span className="dot"></span>
+                    <div className="ai-tabs-container">
+                      <button 
+                        className={`ai-tab-btn ${aiPanelTab === 'assist' ? 'active' : ''}`}
+                        onClick={() => setAiPanelTab('assist')}
+                      >
+                        Insights
+                      </button>
+                      <button 
+                        className={`ai-tab-btn ${aiPanelTab === 'chat' ? 'active' : ''}`}
+                        onClick={() => setAiPanelTab('chat')}
+                      >
+                        Chat
+                      </button>
+                    </div>
+
+                    <div className="ai-panel-content">
+                      {aiPanelTab === 'assist' && (
+                        <div className="ai-assist-tab">
+                          <div className="ai-actions">
+                            <button
+                              type="button"
+                              className={`ai-action-btn primary ${generating ? 'generating' : ''}`}
+                              onClick={() => generateAIContent('summary')}
+                              disabled={generating || !noteContent?.trim()}
+                            >
+                              <Sparkles size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                              <span>{generating ? 'Generating Summary...' : 'Generate Summary'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
+                              onClick={() => generateAIContent('actions')}
+                              disabled={generating || !noteContent?.trim()}
+                            >
+                              <Check size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                              <span>{generating ? 'Extracting...' : 'Extract Action Items'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
+                              onClick={() => generateAIContent('title')}
+                              disabled={generating || !noteContent?.trim()}
+                            >
+                              <PenLine size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                              <span>{generating ? 'Suggesting...' : 'Suggest Title'}</span>
+                            </button>
+                          </div>
+                          
+                          {aiError && <p className="ai-error">{aiError}</p>}
+                          
+                          {Object.keys(aiResults).length > 0 && (
+                            <div className="ai-results-card">
+                              <div className="ai-results-card-header">
+                                <Sparkles size={14} className="ai-accent-color" />
+                                <span>AI Insights</span>
+                              </div>
+                              <div className="ai-results-content">
+                                {aiResults.summary?.summary && <p>{aiResults.summary.summary}</p>}
+                                {aiResults.actions?.action_items?.length > 0 && (
+                                  <ul className="ai-action-list">
+                                    {aiResults.actions.action_items.map((item, i) => (
+                                      <li key={i}>{item}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                {aiResults.title?.suggested_title && (
+                                  <div className="title-suggestion">
+                                    <span>{aiResults.title.suggested_title}</span>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-primary"
+                                      onClick={() => setNoteTitle(aiResults.title.suggested_title)}
+                                    >
+                                      Apply Title
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
                         </div>
-                        <form className="ws-ai-chat-form" onSubmit={handleWsChatSubmit}>
-                          <input
-                            type="text"
-                            placeholder="Tell AI to update this note..."
-                            value={wsChatInput}
-                            onChange={e => setWsChatInput(e.target.value)}
-                            disabled={wsChatLoading}
-                          />
-                          <button type="submit" disabled={wsChatLoading || !wsChatInput.trim()}>
-                            <Sparkles size={14} />
-                          </button>
-                        </form>
-                      </div>
+                      )}
 
+                      {aiPanelTab === 'chat' && (
+                        <div className="ws-ai-chat-section">
+                          <div className="ws-ai-chat-messages">
+                            {wsChatMessages.map((m, i) => (
+                              <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
+                                <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
+                              </div>
+                            ))}
+                            {wsChatLoading && (
+                              <div className="ws-ai-chat-msg assistant">
+                                <div className="ws-ai-chat-bubble typing">
+                                  <span className="dot"></span><span className="dot"></span><span className="dot"></span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <form className="ws-ai-chat-form" onSubmit={handleWsChatSubmit}>
+                            <input
+                              type="text"
+                              placeholder="Ask AI about this note..."
+                              value={wsChatInput}
+                              onChange={e => setWsChatInput(e.target.value)}
+                              disabled={wsChatLoading}
+                            />
+                            <button type="submit" disabled={wsChatLoading || !wsChatInput.trim()}>
+                              <Sparkles size={14} />
+                            </button>
+                          </form>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
