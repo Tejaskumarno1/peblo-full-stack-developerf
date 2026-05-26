@@ -5,6 +5,7 @@ import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import Navigation from '../components/Navigation';
+import ShareModal from '../components/ShareModal';
 import { marked } from 'marked';
 import {
   Sparkles,
@@ -60,6 +61,8 @@ export default function WorkspacePage() {
   const [wsChatLoading, setWsChatLoading] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   
   const [showBackups, setShowBackups] = useState(false);
   const [backupsList, setBackupsList] = useState([]);
@@ -279,7 +282,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleShareNote = async () => {
+  const handleToggleShare = async () => {
     if (!selectedNote || isDraft) return;
     try {
       const res = await notesAPI.share(selectedNote.id);
@@ -287,18 +290,6 @@ export default function WorkspacePage() {
       
       setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
       setSelectedNote(updatedNote);
-      
-      if (updatedNote.isPublic && updatedNote.shareId) {
-        const url = `${window.location.origin}/shared/${updatedNote.shareId}`;
-        try {
-          await navigator.clipboard.writeText(url);
-          alert(`Note is now public!\nLink copied to clipboard:\n${url}`);
-        } catch(e) {
-          alert(`Note is now public!\nLink:\n${url}`);
-        }
-      } else {
-        alert('Note is now private.');
-      }
     } catch (err) {
       console.error('Failed to share note:', err);
       alert('Failed to update sharing settings.');
@@ -638,8 +629,8 @@ export default function WorkspacePage() {
                     <button
                       type="button"
                       className={`toolbar-btn ${selectedNote?.isPublic ? 'active' : ''}`}
-                      onClick={handleShareNote}
-                      title={selectedNote?.isPublic ? 'Make Private' : 'Share Publicly'}
+                      onClick={() => setIsShareModalOpen(true)}
+                      title="Share Note"
                     >
                       <Link2 size={14} /> {selectedNote?.isPublic ? 'Shared' : 'Share'}
                     </button>
@@ -923,6 +914,13 @@ export default function WorkspacePage() {
           )}
         </main>
       </div>
+
+      <ShareModal 
+        isOpen={isShareModalOpen} 
+        onClose={() => setIsShareModalOpen(false)} 
+        note={selectedNote} 
+        onToggleShare={handleToggleShare} 
+      />
     </div>
   );
 }
