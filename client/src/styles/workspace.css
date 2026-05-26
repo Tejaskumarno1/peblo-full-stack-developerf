@@ -14,25 +14,21 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
-  padding: 12px;
-  gap: 12px;
-  background: var(--bg-base);
+  background: var(--bg-primary);
 }
 
 /* Sidebar */
 .ws-sidebar {
-  width: 320px;
-  min-width: 320px;
-  background: var(--bg-surface);
+  width: 300px;
+  min-width: 300px;
+  background: var(--bg-navbar);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.4s cubic-bezier(0.16, 1, 0.3, 1), padding 0.4s;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
   z-index: 20;
 }
 
@@ -391,10 +387,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-primary);
   min-width: 0;
   position: relative;
 }
@@ -738,7 +731,7 @@
 }
 
 .editor-content.with-panel {
-  margin-right: 332px; /* 320px + 12px gap */
+  margin-right: 360px;
 }
 
 .editor-textarea {
@@ -801,17 +794,16 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: 320px;
+  width: 360px;
   height: 100%;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  background: var(--bg-navbar);
+  backdrop-filter: blur(24px);
+  border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  animation: slideInRight 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   z-index: 100;
-  box-shadow: var(--shadow-sm);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.05);
 }
 
 @keyframes ai-spin-pulse {
@@ -834,52 +826,60 @@
 }
 
 .ai-panel-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: var(--border-subtle);
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .ai-panel-header h3 {
-  font-size: var(--text-sm);
+  font-size: 14px;
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  color: var(--text-primary);
+}
+
+.ai-panel-header h3 svg {
   color: var(--ai-accent);
 }
 
 .ai-panel-content {
-  padding: 1.25rem;
-  overflow-y: auto;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  overflow-y: auto;
+  padding: 1.5rem;
+  gap: 1.5rem;
 }
 
 .ai-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
 }
 
 .ai-action-btn {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.5rem;
   padding: 0.875rem 1rem;
   width: 100%;
   border-radius: 12px;
-  border: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
 
 .ai-action-btn:disabled {
@@ -890,31 +890,34 @@
 
 .ai-action-btn:not(:disabled):hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-color: var(--ai-accent);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+  background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(99, 102, 241, 0.03) 100%);
 }
 
 .ai-action-btn .btn-icon {
-  flex-shrink: 0;
+  color: var(--ai-accent);
 }
 
+/* Make the first button span full width as primary action */
 .ai-action-btn.primary {
+  grid-column: span 2;
   background: linear-gradient(135deg, var(--ai-accent), #4f46e5);
+  color: #fff;
+  border: none;
+  flex-direction: row;
+  align-items: center;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+.ai-action-btn.primary .btn-icon {
   color: #fff;
 }
 
 .ai-action-btn.primary:not(:disabled):hover {
-  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.3);
-}
-
-.ai-action-btn.outline {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.ai-action-btn.outline:not(:disabled):hover {
-  border-color: var(--ai-accent);
-  color: var(--ai-accent);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
 }
 
 /* AI Premium Results Card */

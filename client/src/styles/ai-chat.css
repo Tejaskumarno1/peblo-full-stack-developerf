@@ -50,7 +50,7 @@
 }
 
 body.ai-panel-open .ai-chat-fab {
-  right: calc(320px + 1.25rem);
+  right: calc(360px + 1.25rem);
 }
 
 .ai-chat-fab::before {
