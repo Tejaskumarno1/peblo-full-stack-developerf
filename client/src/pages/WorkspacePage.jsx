@@ -279,6 +279,32 @@ export default function WorkspacePage() {
     }
   };
 
+  const handleShareNote = async () => {
+    if (!selectedNote || isDraft) return;
+    try {
+      const res = await notesAPI.share(selectedNote.id);
+      const updatedNote = res.data.note;
+      
+      setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+      setSelectedNote(updatedNote);
+      
+      if (updatedNote.isPublic && updatedNote.shareId) {
+        const url = `${window.location.origin}/shared/${updatedNote.shareId}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          alert(`Note is now public!\nLink copied to clipboard:\n${url}`);
+        } catch(e) {
+          alert(`Note is now public!\nLink:\n${url}`);
+        }
+      } else {
+        alert('Note is now private.');
+      }
+    } catch (err) {
+      console.error('Failed to share note:', err);
+      alert('Failed to update sharing settings.');
+    }
+  };
+
   const handleAddTag = (e) => {
     if (e.key === 'Enter' && tagInput.trim()) {
       e.preventDefault();
@@ -608,6 +634,16 @@ export default function WorkspacePage() {
                   </span>
                 </div>
                 <div className="editor-toolbar-right">
+                  {!isDraft && (
+                    <button
+                      type="button"
+                      className={`toolbar-btn ${selectedNote?.isPublic ? 'active' : ''}`}
+                      onClick={handleShareNote}
+                      title={selectedNote?.isPublic ? 'Make Private' : 'Share Publicly'}
+                    >
+                      <Link2 size={14} /> {selectedNote?.isPublic ? 'Shared' : 'Share'}
+                    </button>
+                  )}
                   {!isDraft && (
                     <button
                       type="button"
