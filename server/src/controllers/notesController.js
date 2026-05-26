@@ -3,23 +3,48 @@ import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
 
-// Helper to sync tags: find-or-create each tag, then connect to note
+// Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions
 async function syncTags(noteId, tagNames) {
-  // Remove existing tag associations
+  const normalizedInput = Array.from(
+    new Set((tagNames || []).map((t) => t.trim().toLowerCase()).filter(Boolean))
+  ).sort();
+
+  // Fetch current tag names associated with the note
+  const currentAssociations = await prisma.noteTag.findMany({
+    where: { noteId },
+    include: { tag: true }
+  });
+  const normalizedCurrent = currentAssociations.map((ca) => ca.tag.name.trim().toLowerCase()).sort();
+
+  // If tags are identical, do nothing (bypasses up to 7-10 redundant DB queries)
+  if (JSON.stringify(normalizedInput) === JSON.stringify(normalizedCurrent)) {
+    return;
+  }
+
+  // Remove existing associations
   await prisma.noteTag.deleteMany({ where: { noteId } });
 
-  if (!tagNames || tagNames.length === 0) return;
+  if (normalizedInput.length === 0) return;
 
-  for (const name of tagNames) {
-    const trimmed = name.trim().toLowerCase();
-    if (!trimmed) continue;
+  // Resolve all tag IDs in parallel
+  const resolvedTags = await Promise.all(
+    normalizedInput.map(async (name) => {
+      let tag = await prisma.tag.findUnique({ where: { name } });
+      if (!tag) {
+        try {
+          tag = await prisma.tag.create({ data: { name } });
+        } catch (e) {
+          tag = await prisma.tag.findUnique({ where: { name } });
+        }
+      }
+      return tag;
+    })
+  );
 
-    let tag = await prisma.tag.findUnique({ where: { name: trimmed } });
-    if (!tag) {
-      tag = await prisma.tag.create({ data: { name: trimmed } });
-    }
-    await prisma.noteTag.create({ data: { noteId, tagId: tag.id } });
-  }
+  // Bulk associate tags with the note
+  await prisma.noteTag.createMany({
+    data: resolvedTags.filter(Boolean).map((tag) => ({ noteId, tagId: tag.id }))
+  });
 }
 
 // Include clause for notes with tags and AI metadata

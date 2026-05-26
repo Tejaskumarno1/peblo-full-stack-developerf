@@ -27,23 +27,24 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
     const current = JSON.stringify(payload);
     if (current === lastSavedRef.current) return true;
 
-    setSaveStatus('saving');
+    setSaveStatus(prev => prev !== 'saving' ? 'saving' : prev);
     try {
       await saveFnRef.current(id, payload);
       lastSavedRef.current = current;
-      setSaveStatus('saved');
+      setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
       return true;
     } catch (err) {
-      setSaveStatus('error');
+      setSaveStatus(prev => prev !== 'error' ? 'error' : prev);
       console.error('Auto-save failed:', err);
       return false;
     }
   }, []);
 
+  // ONLY initialize when noteId changes, bypassing redundant updates while typing
   useEffect(() => {
     lastSavedRef.current = data ? JSON.stringify(data) : '';
-    setSaveStatus('saved');
-  }, [noteId, data]);
+    setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
+  }, [noteId]);
 
   // Flush when switching to another note
   useEffect(() => {
@@ -66,7 +67,9 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
     const current = JSON.stringify(data);
     if (current === lastSavedRef.current) return;
 
-    setSaveStatus('unsaved');
+    // Use functional state updates to prevent extra re-renders on every keystroke
+    setSaveStatus(prev => prev !== 'unsaved' ? 'unsaved' : prev);
+    
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       persist(noteId, data);

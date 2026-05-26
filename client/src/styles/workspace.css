@@ -731,7 +731,7 @@
 }
 
 .editor-content.with-panel {
-  margin-right: 360px;
+  margin-right: 376px;
 }
 
 .editor-textarea {
@@ -792,19 +792,20 @@
 /* AI Panel Redesign */
 .ai-panel {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 16px;
+  right: 16px;
   width: 360px;
-  height: 100%;
+  height: calc(100% - 32px);
   background: var(--bg-navbar);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border-left: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   z-index: 100;
-  box-shadow: -10px 0 35px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes ai-spin-pulse {
@@ -818,8 +819,9 @@
 }
 
 .theme-dark .ai-panel {
-  background: rgba(18, 18, 26, 0.95);
-  box-shadow: -10px 0 35px rgba(0, 0, 0, 0.35);
+  background: rgba(18, 18, 26, 0.93);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes slideInRight {

@@ -24,6 +24,7 @@ import {
   History,
   Save,
   MessageSquare,
+  X,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -236,12 +237,23 @@ export default function WorkspacePage() {
     [applyNoteToEditor, navigate, forceSave]
   );
 
+  const lastRouteIdRef = useRef(null);
+
   useEffect(() => {
-    if (!routeId) return;
+    if (!routeId) {
+      lastRouteIdRef.current = null;
+      return;
+    }
+
+    // Bypass if we are already actively editing or loaded this routeId
+    if (lastRouteIdRef.current === routeId && selectedNote?.id === routeId) {
+      return;
+    }
 
     const noteInList = notes.find((n) => n.id === routeId);
     if (noteInList && noteInList.content !== undefined) {
       if (selectedNote?.id !== routeId) {
+        lastRouteIdRef.current = routeId;
         applyNoteToEditor(noteInList);
       }
       return;
@@ -255,6 +267,7 @@ export default function WorkspacePage() {
       .then((res) => {
         if (cancelled) return;
         const note = res.data.note;
+        lastRouteIdRef.current = note.id;
         setNotes((prev) => {
           if (prev.some((n) => n.id === note.id)) {
             return prev.map((n) => (n.id === note.id ? note : n));
@@ -784,7 +797,7 @@ export default function WorkspacePage() {
                           <span>AI Workspace Copilot</span>
                         </h3>
                         <button type="button" className="btn-icon-sm close-ai-btn" onClick={() => setAiPanelOpen(false)} aria-label="Close panel">
-                          ×
+                          <X size={16} />
                         </button>
                       </div>
 
