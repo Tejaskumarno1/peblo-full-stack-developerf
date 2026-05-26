@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesAPI, aiAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
