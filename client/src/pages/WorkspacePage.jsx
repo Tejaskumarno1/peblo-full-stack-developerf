@@ -317,7 +317,18 @@ export default function WorkspacePage() {
     setNoteContent(note.content || '');
     setNoteTags(note.tags || []);
     setNoteCategory(note.category || '');
-    setAiResults({});
+    
+    // Parse and pre-populate previously persisted AI summaries and insights
+    const loadedAI = {};
+    if (note.aiGenerations && Array.isArray(note.aiGenerations)) {
+      note.aiGenerations.forEach((gen) => {
+        if (gen.type && gen.result) {
+          loadedAI[gen.type] = gen.result;
+        }
+      });
+    }
+    setAiResults(loadedAI);
+    
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(note.id !== '__draft__');
@@ -483,6 +494,36 @@ export default function WorkspacePage() {
       }
 
       setAiResults((prev) => ({ ...prev, [type]: res.data }));
+
+      // Instantly propagate the new generation details to in-memory list & selection
+      if (type === 'summary') {
+        setNotes((prevNotes) =>
+          prevNotes.map((n) =>
+            n.id === noteId
+              ? {
+                  ...n,
+                  hasSummary: true,
+                  aiGenerations: [
+                    ...(n.aiGenerations || []).filter(ai => ai.type !== 'summary'),
+                    { type: 'summary', result: res.data }
+                  ]
+                }
+              : n
+          )
+        );
+        setSelectedNote((prevSelected) =>
+          prevSelected && prevSelected.id === noteId
+            ? {
+                ...prevSelected,
+                hasSummary: true,
+                aiGenerations: [
+                  ...(prevSelected.aiGenerations || []).filter(ai => ai.type !== 'summary'),
+                  { type: 'summary', result: res.data }
+                ]
+              }
+            : prevSelected
+        );
+      }
     } catch (err) {
       const message =
         err.response?.data?.error ||

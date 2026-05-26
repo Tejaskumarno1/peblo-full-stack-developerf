@@ -53,7 +53,11 @@ const noteInclude = {
     include: { tag: true }
   },
   aiGenerations: {
-    select: { type: true }
+    select: {
+      type: true,
+      result: true,
+      createdAt: true
+    }
   }
 };
 
@@ -62,7 +66,12 @@ function formatNote(note) {
   return {
     ...note,
     tags: note.tags ? note.tags.map(nt => nt.tag.name) : [],
-    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false
+    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false,
+    aiGenerations: note.aiGenerations ? note.aiGenerations.map(ai => ({
+      type: ai.type,
+      result: ai.result ? JSON.parse(ai.result) : null,
+      createdAt: ai.createdAt
+    })) : []
   };
 }
 
