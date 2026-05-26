@@ -939,13 +939,45 @@
 /* Make the first button span full width as primary action */
 .ai-action-btn.primary {
   grid-column: span 2;
-  background: linear-gradient(135deg, var(--ai-accent), #4f46e5);
+  position: relative;
+  background: linear-gradient(135deg, var(--ai-accent), #4f46e5, #8b5cf6, var(--ai-accent));
+  background-size: 300% 300%;
   color: #fff;
   border: none;
   flex-direction: row;
   align-items: center;
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 1rem;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+  animation: primary-btn-gradient 4s ease infinite;
+}
+
+@keyframes primary-btn-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.ai-action-btn.primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: skewX(-20deg);
+  animation: primary-btn-shine 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes primary-btn-shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
 }
 
 .ai-action-btn.primary .btn-icon {
@@ -953,8 +985,8 @@
 }
 
 .ai-action-btn.primary:not(:disabled):hover {
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
-  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
 }
 
 /* AI Premium Results Card */
