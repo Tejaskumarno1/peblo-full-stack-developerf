@@ -912,7 +912,37 @@ export default function WorkspacePage() {
                                     <MessageSquare size={24} />
                                   </div>
                                   <h4>Interactive AI Copilot</h4>
-                                  <p>Ask questions about your note, brainstorm adjustments, or command the AI to write draft content for you.</p>
+                                  <p>Ask questions, brainstorm adjustments, or command the AI to edit your note.</p>
+                                  <div className="chat-suggestions-grid">
+                                    <button
+                                      type="button"
+                                      className="chat-suggestion-chip"
+                                      onClick={() => setWsChatInput("Summarize my note and list the core takeaways.")}
+                                    >
+                                      ✨ Summarize Takeaways
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="chat-suggestion-chip"
+                                      onClick={() => setWsChatInput("Convert this note into a clean checklist.")}
+                                    >
+                                      ✅ Make Checklist
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="chat-suggestion-chip"
+                                      onClick={() => setWsChatInput("Fix any grammar errors and make the tone professional.")}
+                                    >
+                                      ✍️ Improve Grammar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="chat-suggestion-chip"
+                                      onClick={() => setWsChatInput("Brainstorm 3 creative follow-up topics based on this.")}
+                                    >
+                                      💡 Brainstorm Ideas
+                                    </button>
+                                  </div>
                                 </div>
                               ) : (
                                 wsChatMessages.map((m, i) => (
