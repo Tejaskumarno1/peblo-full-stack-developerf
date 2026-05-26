@@ -692,7 +692,7 @@ export default function WorkspacePage() {
                     </div>
                     <div className="note-card-tags">
                       {note.tags?.slice(0, 2).map((t) => (
-                        <span key={t} className="mini-tag">
+                        <span key={t} className={`mini-tag ${stringToColorClass(t)}`}>
                           {t}
                         </span>
                       ))}

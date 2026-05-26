@@ -169,8 +169,7 @@ export default function AiChatPanel() {
 
   const showWelcome = !hasChatted && messages.length === 0;
 
-  const isWorkspace = window.location.pathname.includes('/notes') || window.location.pathname.includes('/workspace');
-  if (!mounted || isWorkspace) return null;
+  if (!mounted) return null;
 
   return createPortal(
     <div className="ai-chat-root">
