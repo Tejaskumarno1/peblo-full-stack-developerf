@@ -15,9 +15,10 @@ Welcome to **Peblo Notes**, a collaborative AI-powered notes workspace. This pro
 
 - **Frontend**: React 18, Vite, React Router, Vanilla CSS (with CSS Variables for theming).
 - **Backend**: Node.js, Express.js.
-- **Database**: SQLite (via Prisma ORM), easily migratable to PostgreSQL.
-- **AI**: Google Gemini API (`@google/generative-ai`).
+- **Database**: PostgreSQL (Supabase) via Prisma ORM.
+- **AI**: Multi-provider cascade — OpenAI (primary) → Google Gemini with key rotation (fallback) → Mock responses (safety net).
 - **Security**: bcryptjs, jsonwebtoken, express-rate-limit.
+- **Deployment**: Vercel (Serverless Functions + Static Frontend).
 
 ## Setup Instructions
 
@@ -39,10 +40,14 @@ In the `server` directory, create a `.env` file (or copy `.env.example` to `.env
 cp .env.example server/.env
 ```
 
-Make sure to populate `GEMINI_API_KEY` in the `.env` file if you want real AI functionality. If no key is provided, the application will fall back to mocked AI responses for testing purposes.
+Required environment variables:
+- `DATABASE_URL` — Supabase PostgreSQL connection string (use the pooler URL)
+- `GEMINI_API_KEYS` — Comma-separated Google Gemini API keys for rotation
+- `OPENAI_API_KEY` — OpenAI API key (primary AI provider)
+- `JWT_SECRET` / `JWT_REFRESH_SECRET` — JWT signing secrets
 
 ### 4. Database Setup
-The app uses SQLite for local development. Push the schema and seed the database:
+The app uses PostgreSQL via Supabase. Push the schema and seed the database:
 
 ```bash
 npm run db:push
