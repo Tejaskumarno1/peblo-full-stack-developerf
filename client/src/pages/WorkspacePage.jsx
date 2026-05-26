@@ -660,14 +660,16 @@ export default function WorkspacePage() {
                       <History size={14} /> Backups
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className={`toolbar-btn spark ${aiPanelOpen ? 'active' : ''}`}
-                    onClick={() => setAiPanelOpen(!aiPanelOpen)}
-                    title="AI Assistant (Ctrl+J)"
-                  >
-                    <Sparkles size={14} /> AI
-                  </button>
+                  {!aiPanelOpen && (
+                    <button
+                      type="button"
+                      className="toolbar-btn spark"
+                      onClick={() => setAiPanelOpen(true)}
+                      title="AI Assistant (Ctrl+J)"
+                    >
+                      <Sparkles size={14} /> AI
+                    </button>
+                  )}
                   <div className="editor-toolbar-divider" />
                   <button
                     type="button"
