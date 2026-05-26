@@ -23,6 +23,7 @@ import {
   PenLine,
   History,
   Save,
+  MessageSquare,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -815,44 +816,53 @@ export default function WorkspacePage() {
                         </button>
                       </div>
                       {aiError && <p className="ai-error">{aiError}</p>}
-                      <div className="ai-results">
-                        {aiResults.summary?.summary && <p>{aiResults.summary.summary}</p>}
-                        {aiResults.actions?.action_items?.length > 0 && (
-                          <ul className="ai-action-list">
-                            {aiResults.actions.action_items.map((item, i) => (
-                              <li key={i}>{item}</li>
-                            ))}
-                          </ul>
-                        )}
-                        {aiResults.title?.suggested_title && (
-                          <div className="title-suggestion">
-                            <span>{aiResults.title.suggested_title}</span>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-primary"
-                              onClick={() => setNoteTitle(aiResults.title.suggested_title)}
-                            >
-                              Apply
-                            </button>
+                      {Object.keys(aiResults).length > 0 && (
+                        <div className="ai-results-card">
+                          <div className="ai-results-card-header">
+                            <Sparkles size={14} className="ai-accent-color" />
+                            <span>AI Insights</span>
                           </div>
-                        )}
-                      </div>
+                          <div className="ai-results-content">
+                            {aiResults.summary?.summary && <p>{aiResults.summary.summary}</p>}
+                            {aiResults.actions?.action_items?.length > 0 && (
+                              <ul className="ai-action-list">
+                                {aiResults.actions.action_items.map((item, i) => (
+                                  <li key={i}>{item}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {aiResults.title?.suggested_title && (
+                              <div className="title-suggestion">
+                                <span>{aiResults.title.suggested_title}</span>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => setNoteTitle(aiResults.title.suggested_title)}
+                                >
+                                  Apply Title
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="ws-ai-chat-section">
-                        <h4>Chat with this Note</h4>
+                        <div className="ws-ai-chat-header">
+                          <MessageSquare size={14} />
+                          <h4>Chat with Note</h4>
+                        </div>
                         <div className="ws-ai-chat-messages">
                           {wsChatMessages.map((m, i) => (
                             <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
-                              <div className="ws-ai-chat-avatar">
-                                {m.role === 'assistant' ? <Sparkles size={12} /> : null}
-                              </div>
                               <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
                             </div>
                           ))}
                           {wsChatLoading && (
                             <div className="ws-ai-chat-msg assistant">
-                              <div className="ws-ai-chat-avatar"><Sparkles size={12} /></div>
-                              <div className="ws-ai-chat-bubble">Thinking...</div>
+                              <div className="ws-ai-chat-bubble typing">
+                                <span className="dot"></span><span className="dot"></span><span className="dot"></span>
+                              </div>
                             </div>
                           )}
                         </div>
