@@ -86,7 +86,21 @@ export async function getNotes(req, res, next) {
 
     const notes = await prisma.note.findMany({
       where,
-      include: noteInclude,
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        isArchived: true,
+        isPublic: true,
+        createdAt: true,
+        updatedAt: true,
+        tags: {
+          select: { tag: true }
+        },
+        aiGenerations: {
+          select: { type: true }
+        }
+      },
       orderBy
     });
 

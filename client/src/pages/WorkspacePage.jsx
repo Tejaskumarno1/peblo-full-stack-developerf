@@ -215,8 +215,8 @@ export default function WorkspacePage() {
   const selectNote = useCallback(
     async (note) => {
       await forceSave();
-      applyNoteToEditor(note);
       if (note.id === '__draft__') {
+        applyNoteToEditor(note);
         navigate('/notes', { replace: true });
       } else {
         navigate(`/notes/${note.id}`, { replace: true });
@@ -229,7 +229,7 @@ export default function WorkspacePage() {
     if (!routeId) return;
 
     const noteInList = notes.find((n) => n.id === routeId);
-    if (noteInList) {
+    if (noteInList && noteInList.content !== undefined) {
       if (selectedNote?.id !== routeId) {
         applyNoteToEditor(noteInList);
       }
@@ -244,7 +244,12 @@ export default function WorkspacePage() {
       .then((res) => {
         if (cancelled) return;
         const note = res.data.note;
-        setNotes((prev) => (prev.some((n) => n.id === note.id) ? prev : [note, ...prev]));
+        setNotes((prev) => {
+          if (prev.some((n) => n.id === note.id)) {
+            return prev.map((n) => (n.id === note.id ? note : n));
+          }
+          return [note, ...prev];
+        });
         applyNoteToEditor(note);
       })
       .catch(() => {
