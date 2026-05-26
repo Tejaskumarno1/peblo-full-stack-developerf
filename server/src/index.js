@@ -22,16 +22,19 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Middleware — allow Vite dev ports (5173–5180) when defaults are in use
+// Middleware — CORS
+const isVercel = !!process.env.VERCEL;
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
-  : [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-      'http://localhost:5176',
-      'http://localhost:3000',
-    ];
+  : isVercel
+    ? true // same-origin on Vercel, allow all
+    : [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
+        'http://localhost:3000',
+      ];
 
 app.use(cors({
   origin: corsOrigins,
@@ -56,18 +59,24 @@ app.get('/api/health', (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
-});
+// Only start listener locally — Vercel handles this as a serverless function
+if (!process.env.VERCEL) {
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
+  });
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(
-      `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
-        `   fuser -k ${PORT}/tcp   OR   kill $(lsof -t -i:${PORT})\n` +
-        `   Then run: npm run dev\n`
-    );
-    process.exit(1);
-  }
-  throw err;
-});
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
+          `   fuser -k ${PORT}/tcp   OR   kill $(lsof -t -i:${PORT})\n` +
+          `   Then run: npm run dev\n`
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
+}
+
+// Export for Vercel serverless
+export default app;

@@ -33,7 +33,10 @@ export default function SignupPage() {
       await signup(name, email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Signup failed');
+      const errData = err.response?.data?.error;
+      const errMsg = typeof errData === 'string' ? errData 
+                   : errData?.message || err.message || 'Signup failed';
+      setError(errMsg);
     } finally {
       setLoading(false);
     }

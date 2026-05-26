@@ -20,7 +20,10 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      const errData = err.response?.data?.error;
+      const errMsg = typeof errData === 'string' ? errData 
+                   : errData?.message || err.message || 'Login failed';
+      setError(errMsg);
     } finally {
       setLoading(false);
     }

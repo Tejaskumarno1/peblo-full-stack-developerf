@@ -150,12 +150,9 @@ export default function AiChatPanel() {
       setMessages((prev) => [...prev, { role: 'assistant', text: reply, links }]);
       loadNotes();
     } catch (err) {
-      let msg = 'Could not reach AI. Check your connection and GEMINI_API_KEY in server/.env.';
-      if (err.response?.data?.error) {
-        msg = typeof err.response.data.error === 'string'
-          ? err.response.data.error
-          : err.response.data.error.message || JSON.stringify(err.response.data.error);
-      }
+      const msg =
+        err.response?.data?.error ||
+        'Could not reach AI. Check your connection and GEMINI_API_KEY in server/.env.';
       setError(msg);
       setMessages((prev) => [...prev, { role: 'assistant', text: msg, isError: true }]);
     } finally {
