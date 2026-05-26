@@ -645,11 +645,6 @@ export default function WorkspacePage() {
                   <div className="note-card-header">
                     <div className="note-card-title-row">
                       <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
-                      {note.hasSummary && (
-                        <span className="ai-spark-badge" title="AI summary available">
-                          <Sparkles size={12} />
-                        </span>
-                      )}
                     </div>
                     <div className="note-card-actions">
                       <button
@@ -682,10 +677,22 @@ export default function WorkspacePage() {
                     {stripMarkdown(note.content)?.substring(0, 90) || 'Empty note'}
                   </p>
                   <div className="note-card-footer">
-                    <span className="note-card-date">{formatRelativeDate(note.updatedAt)}</span>
+                    <div className="note-card-footer-left">
+                      <span className="note-card-date">{formatRelativeDate(note.updatedAt)}</span>
+                      {note.isPublic && (
+                        <span className="note-footer-badge shared" title="Publicly shared">
+                          <Link2 size={10} /> Shared
+                        </span>
+                      )}
+                      {note.hasSummary && (
+                        <span className="note-footer-badge ai" title="AI summary available">
+                          <Sparkles size={10} /> Summarized
+                        </span>
+                      )}
+                    </div>
                     <div className="note-card-tags">
                       {note.tags?.slice(0, 2).map((t) => (
-                        <span key={t} className={`mini-tag ${stringToColorClass(t)}`}>
+                        <span key={t} className="mini-tag">
                           {t}
                         </span>
                       ))}
@@ -694,11 +701,6 @@ export default function WorkspacePage() {
                       )}
                     </div>
                   </div>
-                  {note.isPublic && (
-                    <span className="shared-badge">
-                      <Link2 size={10} /> Shared
-                    </span>
-                  )}
                 </div>
               ))
             )}
@@ -764,73 +766,79 @@ export default function WorkspacePage() {
                 </div>
                 <div className="editor-toolbar-right">
                   {!isDraft && (
-                    <button
-                      type="button"
-                      className={`toolbar-btn ${selectedNote?.isPublic ? 'active' : ''}`}
-                      onClick={() => setIsShareModalOpen(true)}
-                      title="Share Note"
-                    >
-                      <Link2 size={14} /> {selectedNote?.isPublic ? 'Shared' : 'Share'}
-                    </button>
-                  )}
-                  {!isDraft && (
-                    <button
-                      type="button"
-                      className={`toolbar-btn ${showBackups ? 'active' : ''}`}
-                      onClick={showBackups ? () => setShowBackups(false) : loadBackups}
-                      title="View AI Edit History"
-                    >
-                      <History size={14} /> Backups
-                    </button>
-                  )}
-                  {!isDraft && (
-                    <div className="export-dropdown-wrapper" ref={exportRef}>
+                    <div className="toolbar-group">
                       <button
                         type="button"
-                        className={`toolbar-btn ${exportDropdownOpen ? 'active' : ''}`}
-                        onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
-                        title="Export Note"
+                        className={`toolbar-btn ${selectedNote?.isPublic ? 'active' : ''}`}
+                        onClick={() => setIsShareModalOpen(true)}
+                        title="Share Note"
                       >
-                        <Download size={14} /> Export
+                        <Link2 size={14} /> {selectedNote?.isPublic ? 'Shared' : 'Share'}
                       </button>
-                      {exportDropdownOpen && (
-                        <div className="export-dropdown-menu">
-                          <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
-                            📄 Markdown (.md)
-                          </button>
-                          <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
-                            📕 PDF Document (.pdf)
-                          </button>
-                          <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
-                            🌐 Rich HTML (.html)
-                          </button>
-                          <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
-                            📝 Plain Text (.txt)
-                          </button>
-                        </div>
-                      )}
                     </div>
                   )}
-                  {!aiPanelOpen && (
+
+                  {!isDraft && (
+                    <div className="toolbar-group">
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${showBackups ? 'active' : ''}`}
+                        onClick={showBackups ? () => setShowBackups(false) : loadBackups}
+                        title="View AI Edit History"
+                      >
+                        <History size={14} /> Backups
+                      </button>
+
+                      <div className="export-dropdown-wrapper" ref={exportRef}>
+                        <button
+                          type="button"
+                          className={`toolbar-btn ${exportDropdownOpen ? 'active' : ''}`}
+                          onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                          title="Export Note"
+                        >
+                          <Download size={14} /> Export
+                        </button>
+                        {exportDropdownOpen && (
+                          <div className="export-dropdown-menu">
+                            <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
+                              📄 Markdown (.md)
+                            </button>
+                            <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
+                              📕 PDF Document (.pdf)
+                            </button>
+                            <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
+                              🌐 Rich HTML (.html)
+                            </button>
+                            <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
+                              📝 Plain Text (.txt)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="toolbar-group">
+                    {!aiPanelOpen && (
+                      <button
+                        type="button"
+                        className="toolbar-btn spark"
+                        onClick={() => setAiPanelOpen(true)}
+                        title="AI Assistant (Ctrl+J)"
+                      >
+                        <Sparkles size={14} /> AI
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="toolbar-btn spark"
-                      onClick={() => setAiPanelOpen(true)}
-                      title="AI Assistant (Ctrl+J)"
+                      className={`toolbar-btn ${showPreview ? 'active' : ''}`}
+                      onClick={() => setShowPreview(!showPreview)}
+                      title="Preview (Ctrl+P)"
                     >
-                      <Sparkles size={14} /> AI
+                      {showPreview ? <Edit2 size={14} /> : <Eye size={14} />}
+                      {showPreview ? 'Edit' : 'Preview'}
                     </button>
-                  )}
-                  <div className="editor-toolbar-divider" />
-                  <button
-                    type="button"
-                    className={`toolbar-btn ${showPreview ? 'active' : ''}`}
-                    onClick={() => setShowPreview(!showPreview)}
-                    title="Preview (Ctrl+P)"
-                  >
-                    {showPreview ? <Edit2 size={14} /> : <Eye size={14} />}
-                    {showPreview ? 'Edit' : 'Preview'}
-                  </button>
+                  </div>
                 </div>
               </div>
 
