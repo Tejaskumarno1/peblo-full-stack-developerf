@@ -25,6 +25,7 @@ import {
   Save,
   MessageSquare,
   X,
+  Download,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -71,6 +72,19 @@ export default function WorkspacePage() {
   const [showBackups, setShowBackups] = useState(false);
   const [backupsList, setBackupsList] = useState([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
+
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const exportRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setExportDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const wordCount = useMemo(() => countWords(noteContent), [noteContent]);
@@ -210,6 +224,52 @@ export default function WorkspacePage() {
     } catch (err) {
       console.error('Failed to restore backup', err);
     }
+  };
+
+  const handleExport = (format) => {
+    let mimeType = 'text/plain';
+    let fileExtension = 'txt';
+    let outputContent = noteContent;
+
+    if (format === 'md') {
+      mimeType = 'text/markdown';
+      fileExtension = 'md';
+      outputContent = `# ${noteTitle || 'Untitled'}\n\n${noteContent}`;
+    } else if (format === 'html') {
+      mimeType = 'text/html';
+      fileExtension = 'html';
+      outputContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${noteTitle || 'Untitled'}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1e293b; background: #f8fafc; }
+    .container { background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+    h1 { border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0; }
+    pre { background: #0f172a; padding: 16px; border-radius: 8px; overflow-x: auto; color: #f8fafc; }
+    code { font-family: monospace; font-size: 0.9em; }
+    blockquote { border-left: 4px solid #6366f1; padding-left: 16px; color: #475569; font-style: italic; margin: 20px 0; }
+    img { max-width: 100%; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${noteTitle || 'Untitled'}</h1>
+    <div>${marked.parse(noteContent || '')}</div>
+  </div>
+</body>
+</html>`;
+    }
+
+    const blob = new Blob([outputContent], { type: `${mimeType};charset=utf-8;` });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${(noteTitle || 'Untitled').trim().replace(/\s+/g, '_')}.${fileExtension}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const applyNoteToEditor = useCallback((note) => {
@@ -683,6 +743,31 @@ export default function WorkspacePage() {
                     >
                       <History size={14} /> Backups
                     </button>
+                  )}
+                  {!isDraft && (
+                    <div className="export-dropdown-wrapper" ref={exportRef}>
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${exportDropdownOpen ? 'active' : ''}`}
+                        onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                        title="Export Note"
+                      >
+                        <Download size={14} /> Export
+                      </button>
+                      {exportDropdownOpen && (
+                        <div className="export-dropdown-menu">
+                          <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
+                            📄 Markdown (.md)
+                          </button>
+                          <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
+                            🌐 Rich HTML (.html)
+                          </button>
+                          <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
+                            📝 Plain Text (.txt)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {!aiPanelOpen && (
                     <button
