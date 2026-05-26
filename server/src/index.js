@@ -56,22 +56,18 @@ app.get('/api/health', (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
-  });
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
+});
 
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(
-        `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
-          `   fuser -k ${PORT}/tcp   OR   kill $(lsof -t -i:${PORT})\n` +
-          `   Then run: npm run dev\n`
-      );
-      process.exit(1);
-    }
-    throw err;
-  });
-}
-
-export default app;
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
+        `   fuser -k ${PORT}/tcp   OR   kill $(lsof -t -i:${PORT})\n` +
+        `   Then run: npm run dev\n`
+    );
+    process.exit(1);
+  }
+  throw err;
+});
