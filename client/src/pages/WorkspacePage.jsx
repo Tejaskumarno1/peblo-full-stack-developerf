@@ -225,8 +225,8 @@ export default function WorkspacePage() {
   }, []);
 
   const selectNote = useCallback(
-    async (note) => {
-      await forceSave();
+    (note) => {
+      forceSave(); // Safe background save, does not block routing
       if (note.id === '__draft__') {
         applyNoteToEditor(note);
         navigate('/notes', { replace: true });
