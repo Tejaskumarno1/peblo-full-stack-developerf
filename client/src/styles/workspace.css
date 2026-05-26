@@ -1744,3 +1744,96 @@
     transform: translateY(0);
   }
 }
+
+/* Mode Switch Segmented Controls */
+.segmented-control {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.theme-dark .segmented-control {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.segmented-control .toolbar-btn {
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-secondary);
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+}
+
+.segmented-control .toolbar-btn:hover {
+  color: var(--text-primary) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+
+.theme-dark .segmented-control .toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.segmented-control .toolbar-btn.active {
+  background: #ffffff !important;
+  color: var(--accent) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+  font-weight: 600 !important;
+}
+
+.theme-dark .segmented-control .toolbar-btn.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Side-by-Side Split Editor View */
+.split-editor-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  height: 100%;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.theme-dark .split-editor-container {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.split-editor-container .editor-textarea {
+  flex: 1;
+  max-width: 50% !important;
+  width: 50% !important;
+  margin: 0 !important;
+  padding: 1.5rem 2rem;
+  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
+  height: 100%;
+}
+
+.theme-dark .split-editor-container .editor-textarea {
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.split-editor-container .markdown-preview {
+  flex: 1;
+  max-width: 50% !important;
+  width: 50% !important;
+  margin: 0 !important;
+  padding: 1.5rem 2rem;
+  height: 100%;
+  overflow-y: auto;
+}

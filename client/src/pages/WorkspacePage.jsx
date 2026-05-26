@@ -26,6 +26,7 @@ import {
   MessageSquare,
   X,
   Download,
+  Columns,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -54,7 +55,7 @@ export default function WorkspacePage() {
   const [noteTags, setNoteTags] = useState([]);
   const [noteCategory, setNoteCategory] = useState('');
   const [tagInput, setTagInput] = useState('');
-  const [showPreview, setShowPreview] = useState(true);
+  const [editorMode, setEditorMode] = useState('split'); // 'edit' | 'split' | 'preview'
 
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiPanelTab, setAiPanelTab] = useState('assist');
@@ -148,14 +149,20 @@ export default function WorkspacePage() {
     setAiResults({});
     setAiError('');
     setAiPanelOpen(false);
-    setShowPreview(false);
+    setEditorMode('edit');
     navigate('/notes', { replace: true });
   }, [navigate]);
 
   useKeyboardShortcut('s', () => forceSave(), { ctrl: true });
   useKeyboardShortcut('k', () => document.getElementById('search-input')?.focus(), { ctrl: true });
   useKeyboardShortcut('n', handleCreateNote, { ctrl: true });
-  useKeyboardShortcut('p', () => setShowPreview((p) => !p), { ctrl: true });
+  useKeyboardShortcut('p', () => {
+    setEditorMode((prev) => {
+      if (prev === 'edit') return 'split';
+      if (prev === 'split') return 'preview';
+      return 'edit';
+    });
+  }, { ctrl: true });
   useKeyboardShortcut('j', () => setAiPanelOpen((p) => !p), { ctrl: true });
 
   const fetchNotes = useCallback(async () => {
@@ -288,12 +295,11 @@ export default function WorkspacePage() {
     <div>${marked.parse(noteContent || '')}</div>
   </div>
   <script>
-    window.onload = function() {
-      setTimeout(function() {
-        window.print();
-        window.close();
-      }, 300);
-    };
+    setTimeout(function() {
+      window.focus();
+      window.print();
+      window.close();
+    }, 450);
   </script>
 </body>
 </html>`);
@@ -331,7 +337,7 @@ export default function WorkspacePage() {
     
     setAiError('');
     setAiPanelOpen(false);
-    setShowPreview(note.id !== '__draft__');
+    setEditorMode(note.id === '__draft__' ? 'edit' : 'split');
   }, []);
 
   const selectNote = useCallback(
@@ -870,15 +876,32 @@ export default function WorkspacePage() {
                         <Sparkles size={14} /> AI
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className={`toolbar-btn ${showPreview ? 'active' : ''}`}
-                      onClick={() => setShowPreview(!showPreview)}
-                      title="Preview (Ctrl+P)"
-                    >
-                      {showPreview ? <Edit2 size={14} /> : <Eye size={14} />}
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
+                    <div className="segmented-control">
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${editorMode === 'edit' ? 'active' : ''}`}
+                        onClick={() => setEditorMode('edit')}
+                        title="Edit Mode"
+                      >
+                        <Edit2 size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${editorMode === 'split' ? 'active' : ''}`}
+                        onClick={() => setEditorMode('split')}
+                        title="Split Screen View"
+                      >
+                        <Columns size={12} /> Split
+                      </button>
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${editorMode === 'preview' ? 'active' : ''}`}
+                        onClick={() => setEditorMode('preview')}
+                        title="Full Preview Mode"
+                      >
+                        <Eye size={12} /> Preview
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -944,12 +967,14 @@ export default function WorkspacePage() {
 
               <div className="editor-body">
                 <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
-                  {showPreview ? (
+                  {editorMode === 'preview' && (
                     <div
                       className={`markdown-preview font-${settings?.fontSize || 'medium'}`}
                       dangerouslySetInnerHTML={{ __html: marked.parse(noteContent || '') }}
                     />
-                  ) : (
+                  )}
+
+                  {editorMode === 'edit' && (
                     <textarea
                       className={`editor-textarea font-${settings?.fontSize || 'medium'}`}
                       style={{ whiteSpace: settings?.wordWrap ? 'pre-wrap' : 'pre' }}
@@ -958,6 +983,23 @@ export default function WorkspacePage() {
                       placeholder="Start writing… Markdown supported."
                       aria-label="Note content"
                     />
+                  )}
+
+                  {editorMode === 'split' && (
+                    <div className="split-editor-container">
+                      <textarea
+                        className={`editor-textarea font-${settings?.fontSize || 'medium'}`}
+                        style={{ whiteSpace: settings?.wordWrap ? 'pre-wrap' : 'pre' }}
+                        value={noteContent}
+                        onChange={(e) => setNoteContent(e.target.value)}
+                        placeholder="Start writing… Markdown supported."
+                        aria-label="Note content"
+                      />
+                      <div
+                        className={`markdown-preview font-${settings?.fontSize || 'medium'}`}
+                        dangerouslySetInnerHTML={{ __html: marked.parse(noteContent || '') }}
+                      />
+                    </div>
                   )}
                   <div className="editor-footer">
                     <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
