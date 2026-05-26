@@ -44,8 +44,13 @@
     box-shadow 0.25s ease,
     opacity 0.2s ease,
     width 0.25s ease,
-    padding 0.25s ease;
+    padding 0.25s ease,
+    right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   animation: ai-fab-glow 3s ease-in-out infinite;
+}
+
+body.ai-panel-open .ai-chat-fab {
+  right: calc(320px + 1.25rem);
 }
 
 .ai-chat-fab::before {

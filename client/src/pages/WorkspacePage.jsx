@@ -174,6 +174,15 @@ export default function WorkspacePage() {
     return () => window.removeEventListener('note-updated', handleGlobalUpdate);
   }, [selectedNote]);
 
+  useEffect(() => {
+    if (aiPanelOpen) {
+      document.body.classList.add('ai-panel-open');
+    } else {
+      document.body.classList.remove('ai-panel-open');
+    }
+    return () => document.body.classList.remove('ai-panel-open');
+  }, [aiPanelOpen]);
+
   const loadBackups = async () => {
     if (!selectedNote || selectedNote.isDraft || selectedNote.id === '__draft__') return;
     setLoadingBackups(true);
@@ -779,27 +788,30 @@ export default function WorkspacePage() {
                       <div className="ai-actions">
                         <button
                           type="button"
-                          className="btn btn-primary btn-full"
+                          className="ai-action-btn primary"
                           onClick={() => generateAIContent('summary')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          {generating ? 'Generating…' : 'Generate Summary'}
+                          <Sparkles size={16} className="btn-icon" />
+                          <span>{generating ? 'Generating…' : 'Generate Summary'}</span>
                         </button>
                         <button
                           type="button"
-                          className="btn btn-outline btn-full"
+                          className="ai-action-btn outline"
                           onClick={() => generateAIContent('actions')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          Extract Action Items
+                          <Check size={16} className="btn-icon" />
+                          <span>Extract Action Items</span>
                         </button>
                         <button
                           type="button"
-                          className="btn btn-outline btn-full"
+                          className="ai-action-btn outline"
                           onClick={() => generateAIContent('title')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          Suggest Title
+                          <PenLine size={16} className="btn-icon" />
+                          <span>Suggest Title</span>
                         </button>
                       </div>
                       {aiError && <p className="ai-error">{aiError}</p>}
