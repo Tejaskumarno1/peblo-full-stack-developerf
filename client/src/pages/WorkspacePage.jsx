@@ -338,11 +338,16 @@ export default function WorkspacePage() {
 
       setAiResults((prev) => ({ ...prev, [type]: res.data }));
     } catch (err) {
-      const message =
-        err.response?.data?.error ||
-        (err.response?.status === 502
-          ? 'AI service unavailable. Check GEMINI_API_KEY in server/.env and restart the server.'
-          : 'AI request failed. Try again.');
+      let message = 'AI request failed. Try again.';
+      if (err.response?.status === 502) {
+        message = 'AI service unavailable. Check GEMINI_API_KEY in server/.env and restart the server.';
+      } else if (err.response?.data?.error) {
+        message = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : err.response.data.error.message || JSON.stringify(err.response.data.error);
+      } else if (err.response?.data?.message) {
+        message = err.response.data.message;
+      }
       setAiError(message);
     } finally {
       setGenerating(false);
@@ -386,7 +391,12 @@ export default function WorkspacePage() {
         setSelectedNote(updatedNote);
       }
     } catch (err) {
-      const msg = err.response?.data?.error || 'Chat failed.';
+      let msg = 'Chat failed.';
+      if (err.response?.data?.error) {
+        msg = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : err.response.data.error.message || 'Chat failed.';
+      }
       setWsChatMessages(prev => [...prev, { role: 'assistant', text: msg, isError: true }]);
     } finally {
       setWsChatLoading(false);
