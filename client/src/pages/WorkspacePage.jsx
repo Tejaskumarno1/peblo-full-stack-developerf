@@ -260,6 +260,45 @@ export default function WorkspacePage() {
   </div>
 </body>
 </html>`;
+    } else if (format === 'pdf') {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+      printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${noteTitle || 'Untitled'}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0; }
+    pre { background: #0f172a; padding: 16px; border-radius: 8px; overflow-x: auto; color: #f8fafc; }
+    code { font-family: monospace; font-size: 0.9em; }
+    blockquote { border-left: 4px solid #6366f1; padding-left: 16px; color: #475569; font-style: italic; margin: 20px 0; }
+    img { max-width: 100%; border-radius: 8px; }
+    @media print {
+      body { padding: 0; background: #ffffff; }
+      @page { size: auto; margin: 20mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${noteTitle || 'Untitled'}</h1>
+    <div>${marked.parse(noteContent || '')}</div>
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+        window.close();
+      }, 300);
+    };
+  </script>
+</body>
+</html>`);
+      printWindow.document.close();
+      return;
     }
 
     const blob = new Blob([outputContent], { type: `${mimeType};charset=utf-8;` });
@@ -758,6 +797,9 @@ export default function WorkspacePage() {
                         <div className="export-dropdown-menu">
                           <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
                             📄 Markdown (.md)
+                          </button>
+                          <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
+                            📕 PDF Document (.pdf)
                           </button>
                           <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
                             🌐 Rich HTML (.html)
