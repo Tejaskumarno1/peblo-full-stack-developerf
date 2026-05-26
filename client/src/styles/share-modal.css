@@ -14,8 +14,8 @@
 }
 
 .share-modal-content {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-light);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   width: 100%;
   max-width: 500px;
@@ -30,7 +30,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .share-modal-header h3 {
@@ -94,7 +94,7 @@
 
 .access-option.active {
   background-color: rgba(255, 255, 255, 0.03);
-  border-color: var(--border-light);
+  border-color: var(--border-default);
 }
 
 .access-option:disabled {
@@ -146,14 +146,14 @@
 .share-link-section {
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid var(--border-light);
+  border-top: 1px solid var(--border-default);
 }
 
 .link-input-wrapper {
   display: flex;
   align-items: center;
   background-color: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   padding: 4px 4px 4px 12px;
   gap: 12px;
@@ -198,7 +198,7 @@
 
 .share-modal-footer {
   padding: 16px 24px;
-  border-top: 1px solid var(--border-light);
+  border-top: 1px solid var(--border-default);
   display: flex;
   justify-content: flex-end;
 }
