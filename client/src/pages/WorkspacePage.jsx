@@ -22,6 +22,7 @@ import {
   Plus,
   PenLine,
   History,
+  Save,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -163,8 +164,8 @@ export default function WorkspacePage() {
       const updatedNote = e.detail;
       setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
       if (selectedNote?.id === updatedNote.id) {
-        setNoteContent(updatedNote.content);
-        setNoteTitle(updatedNote.title);
+        setNoteContent(updatedNote.content || '');
+        setNoteTitle(updatedNote.title || '');
         setNoteTags(updatedNote.tags || []);
         setSelectedNote(updatedNote);
       }
@@ -201,8 +202,8 @@ export default function WorkspacePage() {
 
   const applyNoteToEditor = useCallback((note) => {
     setSelectedNote(note);
-    setNoteTitle(note.title);
-    setNoteContent(note.content);
+    setNoteTitle(note.title || '');
+    setNoteContent(note.content || '');
     setNoteTags(note.tags || []);
     setNoteCategory(note.category || '');
     setAiResults({});
@@ -603,6 +604,15 @@ export default function WorkspacePage() {
                       <PanelLeft size={14} />
                     </button>
                   )}
+                  <button 
+                    type="button"
+                    className="toolbar-btn"
+                    onClick={() => forceSave()}
+                    disabled={saveStatus === 'saving' || isDraft}
+                    title="Save Note (Ctrl+S)"
+                  >
+                    <Save size={14} /> Save
+                  </button>
                   <span className={`save-status ${saveStatus === 'saved' ? 'saved' : ''}`}>
                     {saveStatus === 'saving' && (
                       <>
@@ -764,7 +774,7 @@ export default function WorkspacePage() {
                           type="button"
                           className="btn btn-primary btn-full"
                           onClick={() => generateAIContent('summary')}
-                          disabled={generating || !noteContent.trim()}
+                          disabled={generating || !noteContent?.trim()}
                         >
                           {generating ? 'Generating…' : 'Generate Summary'}
                         </button>
@@ -772,7 +782,7 @@ export default function WorkspacePage() {
                           type="button"
                           className="btn btn-outline btn-full"
                           onClick={() => generateAIContent('actions')}
-                          disabled={generating || !noteContent.trim()}
+                          disabled={generating || !noteContent?.trim()}
                         >
                           Extract Action Items
                         </button>
@@ -780,7 +790,7 @@ export default function WorkspacePage() {
                           type="button"
                           className="btn btn-outline btn-full"
                           onClick={() => generateAIContent('title')}
-                          disabled={generating || !noteContent.trim()}
+                          disabled={generating || !noteContent?.trim()}
                         >
                           Suggest Title
                         </button>

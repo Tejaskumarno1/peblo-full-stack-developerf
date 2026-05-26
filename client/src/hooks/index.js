@@ -105,10 +105,11 @@ export function useKeyboardShortcut(key, callback, modifiers = { ctrl: false, sh
       if (modifiers.shift && !e.shiftKey) return;
       if (e.key.toLowerCase() === key.toLowerCase()) {
         e.preventDefault();
+        e.stopPropagation();
         callback();
       }
     }
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
   }, [key, callback, modifiers]);
 }
