@@ -788,30 +788,30 @@ export default function WorkspacePage() {
                       <div className="ai-actions">
                         <button
                           type="button"
-                          className="ai-action-btn primary"
+                          className={`ai-action-btn primary ${generating ? 'generating' : ''}`}
                           onClick={() => generateAIContent('summary')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          <Sparkles size={16} className="btn-icon" />
-                          <span>{generating ? 'Generating…' : 'Generate Summary'}</span>
+                          <Sparkles size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                          <span>{generating ? 'Generating Summary...' : 'Generate Summary'}</span>
                         </button>
                         <button
                           type="button"
-                          className="ai-action-btn outline"
+                          className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
                           onClick={() => generateAIContent('actions')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          <Check size={16} className="btn-icon" />
-                          <span>Extract Action Items</span>
+                          <Check size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                          <span>{generating ? 'Extracting...' : 'Extract Action Items'}</span>
                         </button>
                         <button
                           type="button"
-                          className="ai-action-btn outline"
+                          className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
                           onClick={() => generateAIContent('title')}
                           disabled={generating || !noteContent?.trim()}
                         >
-                          <PenLine size={16} className="btn-icon" />
-                          <span>Suggest Title</span>
+                          <PenLine size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
+                          <span>{generating ? 'Suggesting...' : 'Suggest Title'}</span>
                         </button>
                       </div>
                       {aiError && <p className="ai-error">{aiError}</p>}

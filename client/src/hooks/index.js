@@ -99,17 +99,26 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
 }
 
 export function useKeyboardShortcut(key, callback, modifiers = { ctrl: false, shift: false }) {
+  const cbRef = useRef(callback);
+  const modRef = useRef(modifiers);
+
+  useEffect(() => {
+    cbRef.current = callback;
+    modRef.current = modifiers;
+  });
+
   useEffect(() => {
     function handler(e) {
-      if (modifiers.ctrl && !(e.ctrlKey || e.metaKey)) return;
-      if (modifiers.shift && !e.shiftKey) return;
+      const mods = modRef.current;
+      if (mods.ctrl && !(e.ctrlKey || e.metaKey)) return;
+      if (mods.shift && !e.shiftKey) return;
       if (e.key.toLowerCase() === key.toLowerCase()) {
         e.preventDefault();
         e.stopPropagation();
-        callback();
+        cbRef.current();
       }
     }
     window.addEventListener('keydown', handler, { capture: true });
     return () => window.removeEventListener('keydown', handler, { capture: true });
-  }, [key, callback, modifiers]);
+  }, [key]);
 }

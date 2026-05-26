@@ -14,21 +14,25 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  padding: 12px;
+  gap: 12px;
+  background: var(--bg-base);
 }
 
 /* Sidebar */
 .ws-sidebar {
   width: 320px;
   min-width: 320px;
-  background: var(--bg-navbar);
+  background: var(--bg-surface);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-right: var(--border-navbar);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.4s cubic-bezier(0.16, 1, 0.3, 1), padding 0.4s;
   overflow: hidden;
-  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   z-index: 20;
 }
 
@@ -37,6 +41,8 @@
   min-width: 0;
   border: none;
   box-shadow: none;
+  margin: 0;
+  padding: 0;
 }
 
 .sidebar-header {
@@ -385,10 +391,12 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 58, 237, 0.08), transparent),
-    var(--bg-base);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
   min-width: 0;
+  position: relative;
 }
 
 .ws-sidebar-reopen {
@@ -730,7 +738,7 @@
 }
 
 .editor-content.with-panel {
-  margin-right: 300px;
+  margin-right: 332px; /* 320px + 12px gap */
 }
 
 .editor-textarea {
@@ -797,12 +805,23 @@
   height: 100%;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
-  border-left: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   z-index: 100;
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
+}
+
+@keyframes ai-spin-pulse {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); opacity: 0.7; }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.btn-icon.spinning {
+  animation: ai-spin-pulse 1.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .theme-dark .ai-panel {
