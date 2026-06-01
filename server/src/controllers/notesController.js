@@ -53,11 +53,7 @@ const noteInclude = {
     include: { tag: true }
   },
   aiGenerations: {
-    select: {
-      type: true,
-      result: true,
-      createdAt: true
-    }
+    select: { type: true }
   }
 };
 
@@ -66,12 +62,7 @@ function formatNote(note) {
   return {
     ...note,
     tags: note.tags ? note.tags.map(nt => nt.tag.name) : [],
-    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false,
-    aiGenerations: note.aiGenerations ? note.aiGenerations.map(ai => ({
-      type: ai.type,
-      result: ai.result ? JSON.parse(ai.result) : null,
-      createdAt: ai.createdAt
-    })) : []
+    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false
   };
 }
 
@@ -123,7 +114,6 @@ export async function getNotes(req, res, next) {
       select: {
         id: true,
         title: true,
-        content: true, // Preloaded for zero-latency client-side transitions
         category: true,
         isArchived: true,
         isPublic: true,

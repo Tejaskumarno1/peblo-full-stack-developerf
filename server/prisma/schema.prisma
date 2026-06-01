@@ -38,6 +38,7 @@ model Note {
   aiGenerations AiGeneration[]
   backups       NoteBackup[]
 
+  @@index([userId])
   @@map("notes")
 }
 
@@ -59,6 +60,7 @@ model NoteTag {
   tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([noteId, tagId])
+  @@index([tagId])
   @@map("note_tags")
 }
 
@@ -73,6 +75,8 @@ model AiGeneration {
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([noteId])
   @@map("ai_generations")
 }
 

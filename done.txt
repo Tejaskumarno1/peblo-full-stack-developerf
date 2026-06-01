@@ -1,0 +1,53 @@
+Peblo Notes - Full Stack Codebase Analysis
+
+# 1. Backend Architecture & Functionality
+The backend is built using Node.js, Express, and Prisma ORM.
+- Entry Point: `server/src/index.js` initializes the Express server, applies CORS (cross-origin resource sharing), JSON parsing (10mb limit), and rate limiting.
+- Routes: The server exposes several API endpoints categorized by functionality:
+  - `/api/auth` (handled by authController.js): User signup, login, get current user, and token refresh.
+  - `/api/notes` (handled by notesController.js): Full CRUD operations for notes. Supports searching, tagging, archiving, and categorizing. Uses an optimized `syncTags` function for associating tags to notes efficiently.
+  - `/api/notes/:id/ai/*` (handled by aiController.js): Triggers AI operations on specific notes like summary generation, action item extraction, and title suggestions.
+  - `/api/ai/chat` (handled by aiChatController.js): Manages conversational interactions with the AI.
+  - `/api/shared` (handled by shareController.js): Logic for accessing publicly shared notes via a unique `shareId`.
+  - `/api/dashboard`: Fetches aggregated data like recent activity and streaks.
+- Database: Powered by Prisma, mapping to tables for Notes, Users, Tags, NoteTags, and NoteBackups. 
+
+# 2. How the API is Called (Frontend)
+The frontend uses `axios` to interact with the backend APIs.
+- API Client Setup: `client/src/api/client.js` configures the base URL to `/api` (or Vite env var `VITE_API_URL`).
+- Authentication: It uses Axios Interceptors to automatically attach a Bearer JWT `accessToken` from `localStorage` to every request.
+- Token Refresh: A response interceptor listens for 401 Unauthorized errors with a `TOKEN_EXPIRED` code. If caught, it automatically calls `/api/auth/refresh` with the `refreshToken` to get a new access token, retries the original request, and logs the user out if refreshing fails.
+- API Modules: API calls are structured in `client/src/api/index.js` into objects: `authAPI`, `notesAPI`, `aiAPI`, `dashboardAPI`, and `sharedAPI`. The UI components call these methods directly, e.g., `notesAPI.getAll(params)`.
+
+# 3. UI Design & Overall Structure (Detailed)
+The frontend is a React Single Page Application (SPA) built with Vite, heavily stylized with CSS variables for seamless light/dark mode toggling.
+- Design System: Defined in `index.css`, utilizing variables for backgrounds, text, and semantic colors. It employs a base scale for border radii: `sm: 6px`, `md: 10px`, `lg: 16px`, and `xl: 24px`.
+- Aesthetics: Uses glassmorphism (`backdrop-filter: blur(12px)`) across overlays like the navbar. The application is characterized by fully rounded pill shapes for primary navigation elements and soft, rounded rectangles (`16px` border-radius) for main content cards like notes. 
+- Shadows: A subtle layered shadow system provides depth: `shadow-sm: 0 1px 2px`, `shadow-md: 0 4px 12px`, and an `accent-glow` for active elements.
+
+# 4. Container Sizes & Dimensions
+The layout uses very specific pixel dimensions to maintain structure:
+- Floating Navbar (`.floating-navbar`): Centered at the top middle of the screen. Max-width is `1200px`, fixed height is `68px`. It's housed in a wrapper (`.floating-navbar-wrapper`) with `0.75rem` top/bottom padding and `1.5rem` side padding, ensuring it floats down from the top edge.
+- Workspace Sidebar (`.ws-sidebar`): Fixed width of `340px`. When closed, width shrinks to `0px`.
+- Note Cards (`.note-card`): Padding of `1.125rem` (18px) top/bottom and `1.25rem` (20px) left/right. The corners have a `16px` (`border-radius: var(--radius-lg)`) rounded edge.
+- Settings/Shortcuts Modals: Max-width of `360px` with a `1.5rem` (24px) padding and `16px` rounded corners.
+- Editor Welcome Screen: Max-width of `640px` inside the main workspace area.
+- Exported/Printed Document: Max-width of `800px` for optimal prose reading.
+
+# 5. UI of the Heatmap (Activity Tracker)
+The "Heatmap" component (`Heatmap.jsx`) is a highly specific grid visualization for user activity, exactly resembling GitHub's contribution graph.
+- Dimensions: The total height of the months wrapper is `120px`. The day labels (Mon, Wed, Fri) are stacked vertically with a height of `102px` and a top margin of `18px`.
+- Cells (`.heatmap-cell`): Each individual day is a perfect `12px` by `12px` square with slightly rounded corners (`border-radius: 3px`). 
+- Gaps: Cells within a week column are vertically separated by `3px`. Week columns are horizontally separated by `3px`. Month blocks are separated by `1.5rem` (24px).
+- Layout Direction: The blocks are rendered in a `flex-direction: row-reverse` container, pushing the newest month to the right and allowing older months to overflow to the left gracefully.
+- Interactivity: Hovering over a cell triggers `transform: scale(1.25)` and adds a glowing box-shadow (`0 0 0 2px`) of the primary color. Cells are styled with classes `level-0` (empty) to `level-4` (solid color) based on activity.
+
+# 6. Navbar Elements (Detailed Structure)
+The global navigation (`Navigation.jsx`) is a floating header centered in the upper-middle of the screen.
+- Shape & Positioning: It uses `border-radius: 9999px` to create a perfectly rounded pill shape on its left and right edges. The internal padding is `0 1.75rem` (0px top/bottom, 28px left/right).
+- Left (Logo): An SVG circle (width/height: `26px`) paired with text in a premium green (`#10b981`).
+- Center (Tab Switcher): A pill-shaped toggle container (`padding: 4px`, `border-radius: 9999px`, `gap: 2px`). The buttons inside ("Dashboard", "Workspace") have `padding: 0.5rem 1.25rem` and `border-radius: 9999px`.
+- Right (Controls):
+  - Icon Buttons (Keyboard, Bell): Perfectly circular (`border-radius: 50%`) with width and height exactly `34px`.
+  - Notifications Bell: Has an absolute positioned red dot (`width: 6px`, `height: 6px`) in the top right corner (`top: 7px`, `right: 7px`).
+  - User Profile Dropdown (`.navbar-avatar-circle`): A circular avatar with width and height `34px`, a `50%` border-radius, and a `2px` solid border matching the background surface to make it pop.
