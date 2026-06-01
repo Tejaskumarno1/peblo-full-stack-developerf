@@ -39,6 +39,8 @@ model Note {
   backups       NoteBackup[]
 
   @@index([userId])
+  @@index([userId, isArchived])
+  @@index([userId, category])
   @@map("notes")
 }
 

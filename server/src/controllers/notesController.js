@@ -26,24 +26,31 @@ async function syncTags(noteId, tagNames) {
 
   if (normalizedInput.length === 0) return;
 
-  // Resolve all tag IDs in parallel
-  const resolvedTags = await Promise.all(
-    normalizedInput.map(async (name) => {
-      let tag = await prisma.tag.findUnique({ where: { name } });
-      if (!tag) {
-        try {
-          tag = await prisma.tag.create({ data: { name } });
-        } catch (e) {
-          tag = await prisma.tag.findUnique({ where: { name } });
-        }
-      }
-      return tag;
-    })
-  );
+  // Bulk fetch existing tags to avoid N+1 sequential queries
+  const existingTags = await prisma.tag.findMany({
+    where: { name: { in: normalizedInput } }
+  });
+  
+  const existingTagNames = existingTags.map(t => t.name);
+  const missingTagNames = normalizedInput.filter(name => !existingTagNames.includes(name));
+
+  let newTags = [];
+  if (missingTagNames.length > 0) {
+    // Bulk create missing tags (Prisma createMany returns count, not records, so we re-fetch)
+    await prisma.tag.createMany({
+      data: missingTagNames.map(name => ({ name })),
+      skipDuplicates: true
+    });
+    newTags = await prisma.tag.findMany({
+      where: { name: { in: missingTagNames } }
+    });
+  }
+
+  const allResolvedTags = [...existingTags, ...newTags];
 
   // Bulk associate tags with the note
   await prisma.noteTag.createMany({
-    data: resolvedTags.filter(Boolean).map((tag) => ({ noteId, tagId: tag.id }))
+    data: allResolvedTags.map((tag) => ({ noteId, tagId: tag.id }))
   });
 }
 
@@ -114,6 +121,7 @@ export async function getNotes(req, res, next) {
       select: {
         id: true,
         title: true,
+        content: true, // Restored to render the sidebar snippet preview correctly
         category: true,
         isArchived: true,
         isPublic: true,
@@ -126,7 +134,8 @@ export async function getNotes(req, res, next) {
           select: { type: true }
         }
       },
-      orderBy
+      orderBy,
+      take: 50 // Limit notes returned to optimize Workspace sidebar loading speed
     });
 
     res.json({ notes: notes.map(formatNote) });
@@ -184,36 +193,31 @@ export async function createNote(req, res, next) {
 
 export async function updateNote(req, res, next) {
   try {
-    const { title, content, category, tags } = req.body;
-
-    // Verify ownership
-    const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    if (!existing) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const { title, content, category, isArchived, isPublic, tags } = req.body;
 
     const data = {};
     if (title !== undefined) data.title = title;
     if (content !== undefined) data.content = content;
     if (category !== undefined) data.category = category || null;
+    if (isArchived !== undefined) data.isArchived = isArchived;
+    if (isPublic !== undefined) data.isPublic = isPublic;
 
-    await prisma.note.update({
-      where: { id: req.params.id },
+    // Use updateMany to enforce userId ownership safely in a single query
+    const { count } = await prisma.note.updateMany({
+      where: { id: req.params.id, userId: req.user.id },
       data
     });
+
+    if (count === 0) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
 
     if (tags !== undefined) {
       await syncTags(req.params.id, tags);
     }
 
-    const note = await prisma.note.findUnique({
-      where: { id: req.params.id },
-      include: noteInclude
-    });
-
-    res.json({ note: formatNote(note) });
+    // Return early to save an extra sequential database lookup
+    res.json({ message: 'Note updated' });
   } catch (error) {
     next(error);
   }

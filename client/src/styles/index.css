@@ -848,11 +848,29 @@ kbd {
 }
 
 @media (max-width: 768px) {
-  .navbar-links-section .navbar-link-btn {
-    display: none;
+  .floating-navbar-wrapper {
+    padding: 0.5rem;
   }
   .floating-navbar {
     padding: 0 1rem;
+    height: 60px;
+  }
+  .navbar-logo-text {
+    display: none; /* Hide 'peblo' text on small screens */
+  }
+  .navbar-tab-switcher .tab-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+  }
+  .navbar-controls-section {
+    gap: 0.375rem;
+  }
+  .navbar-icon-btn, .navbar-avatar-circle {
+    width: 30px;
+    height: 30px;
+  }
+  .shortcuts-modal {
+    max-width: 90vw;
   }
 }
 

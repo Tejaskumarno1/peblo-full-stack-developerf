@@ -1621,6 +1621,10 @@
 }
 
 /* Responsive */
+.ws-mobile-overlay {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .ws-sidebar {
     position: absolute;
@@ -1634,6 +1638,15 @@
     min-width: 0;
   }
 
+  .ws-mobile-overlay.open {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 40;
+    backdrop-filter: blur(2px);
+  }
+
   .editor-content.with-panel {
     margin-right: 0;
   }
@@ -1641,10 +1654,30 @@
   .ai-panel {
     width: 100%;
     min-width: 100%;
+    position: absolute;
+    z-index: 60;
   }
 
   .ws-quick-pick-grid {
     grid-template-columns: 1fr;
+  }
+
+  .editor-title-input {
+    padding: 1.25rem 1.25rem 0 !important;
+    font-size: 1.5rem;
+  }
+
+  .editor-textarea, .markdown-preview {
+    padding: 1rem 1.25rem 4rem !important;
+  }
+
+  .editor-toolbar {
+    padding: 0.5rem 1rem;
+    overflow-x: auto;
+  }
+
+  .editor-toolbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

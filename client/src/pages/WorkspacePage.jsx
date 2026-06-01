@@ -332,6 +332,11 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(note.id !== '__draft__');
+
+    // Auto-close sidebar on mobile devices so the editor is visible immediately
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
   }, []);
 
   const selectNote = useCallback(
@@ -595,7 +600,8 @@ export default function WorkspacePage() {
       <Navigation activeTab="workspace" />
 
       <div className="ws-body">
-        <aside className={`ws-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+        <aside className={`ws-sidebar ${sidebarOpen ? '' : 'closed'}`}>
           <div className="sidebar-header">
             <div className="sidebar-header-title">
               <h2>Notes</h2>

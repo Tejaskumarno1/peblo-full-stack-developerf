@@ -12,7 +12,8 @@ export async function getInsights(req, res, next) {
   try {
     const userId = req.user.id;
 
-    // Run ALL queries in parallel for maximum speed
+    // Run ALL queries in a single transaction to use only 1 connection, 
+    // preventing connection pool saturation and massive latency
     const [
       totalNotes,
       archivedNotes,
@@ -23,7 +24,7 @@ export async function getInsights(req, res, next) {
       totalAiUsage,
       allNotes,
       categories,
-    ] = await Promise.all([
+    ] = await prisma.$transaction([
       // Total notes count
       prisma.note.count({ where: { userId, isArchived: false } }),
 
@@ -41,10 +42,13 @@ export async function getInsights(req, res, next) {
         take: 5,
       }),
 
-      // All note tags for tag cloud
-      prisma.noteTag.findMany({
+      // All note tags for tag cloud (Optimized: group by tagId in DB)
+      prisma.noteTag.groupBy({
+        by: ['tagId'],
         where: { note: { userId } },
-        include: { tag: true },
+        _count: { tagId: true },
+        orderBy: { _count: { tagId: 'desc' } },
+        take: 10,
       }),
 
       // Recent AI generations
@@ -67,7 +71,7 @@ export async function getInsights(req, res, next) {
 
       // All notes for heatmap (lightweight select)
       prisma.note.findMany({
-        where: { userId },
+        where: { userId, updatedAt: { gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) } },
         select: { createdAt: true, updatedAt: true, isPublic: true },
       }),
 
@@ -79,18 +83,26 @@ export async function getInsights(req, res, next) {
       }),
     ]);
 
-    // Process tag counts
-    const tagCounts = {};
-    allNoteTags.forEach((nt) => {
-      tagCounts[nt.tag.name] = (tagCounts[nt.tag.name] || 0) + 1;
+    // We now have the top 10 tagIds, we need to fetch their names
+    const topTagIds = allNoteTags.map((nt) => nt.tagId);
+    const resolvedTags = await prisma.tag.findMany({
+      where: { id: { in: topTagIds } },
+      select: { id: true, name: true }
     });
+    
+    // Process tag counts
+    const uniqueTagCount = await prisma.noteTag.groupBy({
+      by: ['tagId'],
+      where: { note: { userId } }
+    }).then(res => res.length);
 
-    const uniqueTagCount = Object.keys(tagCounts).length;
-
-    const topTags = Object.entries(tagCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({ name, count }));
+    const topTags = allNoteTags.map((nt) => {
+      const tag = resolvedTags.find(t => t.id === nt.tagId);
+      return {
+        name: tag ? tag.name : 'Unknown',
+        count: nt._count.tagId
+      };
+    });
 
     // Process AI activity
     const recentAiActivity = recentAiGenerations.map((g) => {
