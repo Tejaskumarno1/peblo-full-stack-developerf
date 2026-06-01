@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Keyboard, Bell, User, Settings } from 'lucide-react';
+import { LogOut, Keyboard, Bell, User, Settings, Sparkles } from 'lucide-react';
 
 export default function Navigation({ activeTab }) {
   const { 
@@ -190,6 +190,28 @@ export default function Navigation({ activeTab }) {
         </div>
       </header>
 
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="mobile-bottom-nav premium-bottom-nav">
+        <Link to="/" className={`mobile-tab ${activeTab === 'dashboard' ? 'active' : ''}`}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+          </svg>
+          <span>Dashboard</span>
+        </Link>
+        <Link to="/notes" className={`mobile-tab ${activeTab === 'workspace' ? 'active' : ''}`}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span>Workspace</span>
+        </Link>
+        <button className="mobile-tab" onClick={() => document.querySelector('.ai-chat-fab')?.click()}>
+          <Sparkles size={24} />
+          <span>AI Copilot</span>
+        </button>
+        <button className="profile-trigger" style={{display: 'none'}} onClick={() => setProfileOpen(true)}></button>
+      </nav>
+
+
       {/* Keyboard Shortcuts Modal */}
       {shortcutsOpen && (
         <div className="shortcuts-overlay" onClick={() => setShortcutsOpen(false)}>
@@ -250,14 +272,41 @@ export default function Navigation({ activeTab }) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Email Address</label>
+                <label className="form-label">Email Address (Read-only)</label>
                 <input 
                   type="email" 
                   className="form-input"
                   value={profileEmail} 
-                  onChange={(e) => setProfileEmail(e.target.value)} 
-                  required
+                  disabled
+                  title="Email address cannot be changed"
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
                 />
+              </div>
+              <div className="setting-section" style={{ padding: '0.5rem 0', borderTop: '1px solid var(--border-subtle)' }}>
+                <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>App Theme</label>
+                <div className="theme-toggle-group">
+                  <button 
+                    type="button"
+                    className={`theme-toggle-btn ${theme === 'light' ? 'active' : ''}`}
+                    onClick={() => setTheme('light')}
+                  >
+                    Light
+                  </button>
+                  <button 
+                    type="button"
+                    className={`theme-toggle-btn ${theme === 'dark' ? 'active' : ''}`}
+                    onClick={() => setTheme('dark')}
+                  >
+                    Dark
+                  </button>
+                  <button 
+                    type="button"
+                    className={`theme-toggle-btn ${theme === 'system' ? 'active' : ''}`}
+                    onClick={() => setTheme('system')}
+                  >
+                    System
+                  </button>
+                </div>
               </div>
               <div className="modal-actions-row">
                 <button type="button" className="btn btn-outline btn-sm" onClick={() => setProfileOpen(false)}>

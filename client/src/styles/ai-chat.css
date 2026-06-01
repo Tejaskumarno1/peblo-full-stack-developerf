@@ -651,6 +651,12 @@ html.theme-dark .ai-chat-chip,
 }
 
 /* Mobile fullscreen */
+@media (max-width: 768px) {
+  .ai-chat-fab {
+    display: none !important;
+  }
+}
+
 @media (max-width: 520px) {
   .ai-chat-overlay {
     padding: 0;

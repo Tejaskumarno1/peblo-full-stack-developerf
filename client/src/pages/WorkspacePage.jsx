@@ -26,6 +26,11 @@ import {
   MessageSquare,
   X,
   Download,
+  FileText,
+  Globe,
+  FileDown,
+  FileBadge,
+  File,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -78,12 +83,16 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) {
+      if (!e.target.closest('.export-dropdown-wrapper')) {
         setExportDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
@@ -149,6 +158,9 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(false);
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
     navigate('/notes', { replace: true });
   }, [navigate]);
 
@@ -235,6 +247,15 @@ export default function WorkspacePage() {
       mimeType = 'text/markdown';
       fileExtension = 'md';
       outputContent = `# ${noteTitle || 'Untitled'}\n\n${noteContent}`;
+    } else if (format === 'doc') {
+      mimeType = 'application/msword';
+      fileExtension = 'doc';
+      outputContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='utf-8'><title>${noteTitle || 'Untitled'}</title></head>
+<body>
+<h1>${noteTitle || 'Untitled'}</h1>
+<div>${marked.parse(noteContent || '')}</div>
+</body></html>`;
     } else if (format === 'html') {
       mimeType = 'text/html';
       fileExtension = 'html';
@@ -262,7 +283,10 @@ export default function WorkspacePage() {
 </html>`;
     } else if (format === 'pdf') {
       const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
+      if (!printWindow) {
+        alert('Please allow pop-ups to print or save as PDF.');
+        return;
+      }
       printWindow.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -301,14 +325,24 @@ export default function WorkspacePage() {
       return;
     }
 
-    const blob = new Blob([outputContent], { type: `${mimeType};charset=utf-8;` });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${(noteTitle || 'Untitled').trim().replace(/\s+/g, '_')}.${fileExtension}`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const blob = new Blob([outputContent], { type: `${mimeType};charset=utf-8;` });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${(noteTitle || 'Untitled').trim().replace(/[^a-zA-Z0-9-_\s]/g, '').replace(/\s+/g, '_')}.${fileExtension}`);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 500);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Failed to export document. Please try again.');
+    }
   };
 
   const applyNoteToEditor = useCallback((note) => {
@@ -600,7 +634,7 @@ export default function WorkspacePage() {
       <Navigation activeTab="workspace" />
 
       <div className="ws-body">
-        <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+        <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => { if (selectedNote) setSidebarOpen(false) }} />
         <aside className={`ws-sidebar ${sidebarOpen ? '' : 'closed'}`}>
           <div className="sidebar-header">
             <div className="sidebar-header-title">
@@ -611,8 +645,8 @@ export default function WorkspacePage() {
             </div>
             <button
               type="button"
-              className="sidebar-collapse-btn"
-              onClick={() => setSidebarOpen(false)}
+              className={`sidebar-collapse-btn ${!selectedNote ? 'mobile-hidden' : ''}`}
+              onClick={() => { if (selectedNote) setSidebarOpen(false) }}
               title="Hide sidebar"
               aria-label="Hide sidebar"
             >
@@ -620,7 +654,7 @@ export default function WorkspacePage() {
             </button>
           </div>
 
-          <button type="button" className="btn btn-primary btn-full new-note-btn" onClick={handleCreateNote}>
+          <button type="button" className="btn btn-primary new-note-btn" onClick={handleCreateNote}>
             <Plus size={16} /> New Note
           </button>
 
@@ -757,7 +791,7 @@ export default function WorkspacePage() {
         {!sidebarOpen && (
           <button
             type="button"
-            className="ws-sidebar-reopen"
+            className="ws-sidebar-reopen desktop-only"
             onClick={() => setSidebarOpen(true)}
             title="Show sidebar"
             aria-label="Show sidebar"
@@ -769,7 +803,96 @@ export default function WorkspacePage() {
         <main className="ws-main">
           {selectedNote ? (
             <div className="editor-container">
-              <div className="editor-toolbar">
+              {/* Mobile Editor Header */}
+              <div className="mobile-editor-header mobile-only">
+                <button
+                  type="button"
+                  className="mobile-back-btn"
+                  onClick={() => setSidebarOpen(true)}
+                  title="Back to notes"
+                >
+                  <PanelLeft size={20} />
+                </button>
+                <div className="mobile-editor-title-wrap">
+                  {noteTitle || 'Untitled'}
+                </div>
+                <button
+                  type="button"
+                  className={`mobile-icon-btn ${showPreview ? 'active' : ''}`}
+                  onClick={() => setShowPreview(!showPreview)}
+                  title={showPreview ? 'Edit' : 'Preview'}
+                >
+                  {showPreview ? <Edit2 size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+
+              {/* Mobile Bottom Actions */}
+              <div className="mobile-bottom-actions mobile-only">
+                <button 
+                  type="button"
+                  className="mobile-action-btn"
+                  onClick={() => forceSave()}
+                  disabled={saveStatus === 'saving' || isDraft}
+                >
+                  <Save size={20} />
+                  <span>Save</span>
+                </button>
+                
+                {!isDraft && (
+                  <button
+                    type="button"
+                    className={`mobile-action-btn ${selectedNote?.isPublic ? 'active' : ''}`}
+                    onClick={() => setIsShareModalOpen(true)}
+                  >
+                    <Link2 size={20} />
+                    <span>Share</span>
+                  </button>
+                )}
+
+                {!isDraft && (
+                  <button
+                    type="button"
+                    className={`mobile-action-btn ${showBackups ? 'active' : ''}`}
+                    onClick={showBackups ? () => setShowBackups(false) : loadBackups}
+                  >
+                    <History size={20} />
+                    <span>Backups</span>
+                  </button>
+                )}
+
+                <div className="export-dropdown-wrapper" style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    className="mobile-action-btn"
+                    onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                  >
+                    <Download size={20} />
+                    <span>Export</span>
+                  </button>
+                  {exportDropdownOpen && (
+                    <div className="export-dropdown-menu" style={{ bottom: '100%', top: 'auto', right: '0', marginBottom: '10px' }}>
+                      <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
+                        <FileDown size={14} /> Markdown (.md)
+                      </button>
+                      <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
+                        <FileText size={14} /> PDF Document (.pdf)
+                      </button>
+                      <button type="button" onClick={() => { handleExport('doc'); setExportDropdownOpen(false); }}>
+                        <FileBadge size={14} /> Word Document (.doc)
+                      </button>
+                      <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
+                        <Globe size={14} /> Rich HTML (.html)
+                      </button>
+                      <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
+                        <File size={14} /> Plain Text (.txt)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop Toolbar */}
+              <div className="editor-toolbar desktop-only">
                 <div className="editor-toolbar-left">
                   {!sidebarOpen && (
                     <button
@@ -848,16 +971,19 @@ export default function WorkspacePage() {
                         {exportDropdownOpen && (
                           <div className="export-dropdown-menu">
                             <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
-                              📄 Markdown (.md)
+                              <FileDown size={14} /> Markdown (.md)
                             </button>
                             <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
-                              📕 PDF Document (.pdf)
+                              <FileText size={14} /> PDF Document (.pdf)
+                            </button>
+                            <button type="button" onClick={() => { handleExport('doc'); setExportDropdownOpen(false); }}>
+                              <FileBadge size={14} /> Word Document (.doc)
                             </button>
                             <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
-                              🌐 Rich HTML (.html)
+                              <Globe size={14} /> Rich HTML (.html)
                             </button>
                             <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
-                              📝 Plain Text (.txt)
+                              <File size={14} /> Plain Text (.txt)
                             </button>
                           </div>
                         )}
