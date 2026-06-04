@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 
-const prisma = new PrismaClient();
+// prisma imported from db.js
 
 const noteInclude = {
   tags: { include: { tag: true } },
@@ -165,6 +165,70 @@ export async function chatAndCreateNotes(req, res, next) {
       reply: plan.reply,
       notes: createdNotes,
       updatedNote,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function smartIntake(req, res, next) {
+  try {
+    const { rawData, template } = req.body;
+
+    if (!rawData?.trim()) {
+      return res.status(400).json({ error: 'Raw data is required' });
+    }
+
+    const userId = req.user.id;
+
+    // Step 1: AI analyzes and organizes the raw data
+    const result = await aiService.analyzeAndOrganize(rawData.trim(), template || 'auto');
+
+    // Step 2: Create the note
+    const note = await createNoteForUser(userId, result.note);
+
+    // Log AI generation
+    await prisma.aiGeneration.create({
+      data: {
+        noteId: note.id,
+        userId,
+        type: 'smart_intake',
+        result: JSON.stringify({ source: 'smart_intake', tasksExtracted: result.tasks.length }),
+      },
+    });
+
+    // Step 3: Create all extracted todos linked to this note
+    const createdTodos = [];
+    for (const task of result.tasks) {
+      const validPriorities = ['high', 'medium', 'low'];
+      let deadline = null;
+      if (task.deadline) {
+        try {
+          const parsed = new Date(task.deadline);
+          if (!isNaN(parsed.getTime())) deadline = parsed;
+        } catch (e) { /* skip invalid dates */ }
+      }
+
+      const todo = await prisma.todo.create({
+        data: {
+          text: task.text.trim(),
+          priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
+          deadline,
+          startTime: task.startTime || null,
+          endTime: task.endTime || null,
+          todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+          noteId: note.id,
+          userId,
+        },
+        include: { note: { select: { id: true, title: true } } }
+      });
+      createdTodos.push(todo);
+    }
+
+    res.json({
+      reply: result.reply,
+      note,
+      todos: createdTodos,
     });
   } catch (error) {
     next(error);

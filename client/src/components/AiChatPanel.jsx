@@ -1,15 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Sparkles,
   Send,
   FilePlus,
   FilePen,
+  Zap,
   X,
   User,
   FileText,
   ArrowUpRight,
+  CheckCircle2,
+  Calendar,
+  Flag,
+  MapPin,
+  GripHorizontal,
+  Trash2,
+  StopCircle
 } from 'lucide-react';
 import { marked } from 'marked';
 import { aiAPI, notesAPI } from '../api/index';
@@ -19,6 +27,28 @@ const SUGGESTIONS = [
   { label: 'Sprint planning notes', prompt: 'Create meeting notes for sprint planning with action items' },
   { label: 'Grocery & meal prep', prompt: 'Add a grocery list note and a meal prep ideas note' },
   { label: 'React performance research', prompt: 'Write research notes on React performance tips' },
+];
+
+const INTAKE_SUGGESTIONS = [
+  { label: 'Paste meeting notes', prompt: 'Meeting with product team on June 10 at 2pm. Discussed Q3 roadmap. John to finalize specs by Friday. Sarah handles design mockups by next Wednesday. Launch target: July 15. Budget review due June 20.' },
+  { label: 'Paste an email', prompt: 'Hi Team, Please complete the quarterly report by June 15. The client presentation is scheduled for June 18 at 10am. Make sure to review the analytics dashboard before the meeting. Also, we need to hire 2 new developers - start screening candidates ASAP. Best, Manager' },
+  { label: 'Braindump ideas', prompt: 'Need to fix the login bug ASAP. Also should redesign the dashboard - maybe add charts? Remember to call dentist tomorrow 3pm. Buy groceries: milk, eggs, bread. Project deadline is next Friday. Team standup every day at 9:30am.' },
+];
+
+const INTAKE_TEMPLATES = [
+  { id: 'auto', label: 'Auto-detect', hint: 'AI figures out the type' },
+  { id: 'meeting', label: 'Meeting Notes', hint: 'Attendees, decisions, action items' },
+  { id: 'email', label: 'Email Thread', hint: 'Sender, requests, deadlines' },
+  { id: 'project', label: 'Project Brief', hint: 'Scope, milestones, deliverables' },
+  { id: 'braindump', label: 'Braindump', hint: 'Unstructured thoughts → organized' },
+  { id: 'syllabus', label: 'Course / Syllabus', hint: 'Schedule, assignments, exams' },
+];
+
+const SLASH_COMMANDS = [
+  { cmd: '/summarize', label: 'Summarize note', prompt: 'Please summarize the following: ' },
+  { cmd: '/actions', label: 'Extract action items', prompt: 'Extract all action items and deadlines from: ' },
+  { cmd: '/rewrite', label: 'Rewrite professional', prompt: 'Rewrite the following text to be more professional: ' },
+  { cmd: '/fix', label: 'Fix grammar', prompt: 'Fix all grammar and spelling mistakes in: ' }
 ];
 
 function TypingIndicator() {
@@ -40,18 +70,41 @@ function TypingIndicator() {
 
 export default function AiChatPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [hasChatted, setHasChatted] = useState(false);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('peblo_ai_chat_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [hasChatted, setHasChatted] = useState(() => {
+    try {
+      const saved = localStorage.getItem('peblo_ai_chat_history');
+      return saved && JSON.parse(saved).length > 0;
+    } catch {
+      return false;
+    }
+  });
   const [input, setInput] = useState('');
-  const [mode, setMode] = useState('create');
+  const [mode, setMode] = useState('intake'); // Default to Smart Intake
   const [noteOptions, setNoteOptions] = useState([]);
   const [selectedNoteId, setSelectedNoteId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [intakeTemplate, setIntakeTemplate] = useState('auto');
+  
+  // Dragging state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+
   const listRef = useRef(null);
   const inputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const loadNotes = useCallback(() => {
     notesAPI
@@ -71,8 +124,27 @@ export default function AiChatPanel() {
   }, []);
 
   useEffect(() => {
-    if (isOpen) loadNotes();
-  }, [isOpen, loadNotes]);
+    try {
+      // Only save non-error messages
+      localStorage.setItem('peblo_ai_chat_history', JSON.stringify(messages.filter(m => !m.isError)));
+    } catch (err) {
+      console.error('Failed to save chat history', err);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadNotes();
+      
+      // Auto-detect context
+      const match = location.pathname.match(/^\/notes\/([a-zA-Z0-9_-]+)$/);
+      if (match) {
+        const noteId = match[1];
+        setMode('append');
+        setSelectedNoteId(noteId);
+      }
+    }
+  }, [isOpen, loadNotes, location.pathname]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,6 +178,27 @@ export default function AiChatPanel() {
     };
   }, [isOpen]);
 
+  const handlePointerDown = (e) => {
+    // Only drag from the header area, avoid buttons/inputs
+    if (e.target.closest('button') || e.target.closest('.ai-chat-mode') || e.target.closest('select')) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+    e.target.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDragging) return;
+    setPosition({
+      x: e.clientX - dragStart.current.x,
+      y: e.clientY - dragStart.current.y
+    });
+  };
+
+  const handlePointerUp = (e) => {
+    setIsDragging(false);
+    e.target.releasePointerCapture(e.pointerId);
+  };
+
   const resizeTextarea = () => {
     const el = inputRef.current;
     if (!el) return;
@@ -118,9 +211,12 @@ export default function AiChatPanel() {
     if (!trimmed || loading) return;
 
     if (mode === 'append' && !selectedNoteId) {
-      setError('Pick a note below, or switch to “New notes”.');
+      setError('Pick a note below, or switch to "New notes".');
       return;
     }
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
 
     setError('');
     setInput('');
@@ -130,26 +226,57 @@ export default function AiChatPanel() {
     setLoading(true);
 
     try {
-      const res = await aiAPI.chat({
-        message: trimmed,
-        mode,
-        noteId: mode === 'append' ? selectedNoteId : undefined,
-      });
+      if (mode === 'intake') {
+        // Smart Intake mode
+        const res = await aiAPI.smartIntake(
+          { rawData: trimmed, template: intakeTemplate },
+          { signal: abortControllerRef.current.signal }
+        );
+        const { reply, note, todos } = res.data;
 
-      const { reply, notes, updatedNote } = res.data;
-      const links = [];
+        const links = [];
+        if (note) {
+          links.push({ id: note.id, title: note.title, kind: 'created' });
+          window.dispatchEvent(new CustomEvent('note-created'));
+        }
+        if (todos && todos.length > 0) {
+          window.dispatchEvent(new CustomEvent('todo-updated'));
+        }
 
-      if (updatedNote) {
-        links.push({ id: updatedNote.id, title: updatedNote.title, kind: 'updated' });
-        window.dispatchEvent(new CustomEvent('note-updated', { detail: updatedNote }));
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          text: reply,
+          links,
+          intakeResult: { note, todos: todos || [] }
+        }]);
+        loadNotes();
+      } else {
+        // Regular chat mode (create)
+        const res = await aiAPI.chat(
+          { message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined },
+          { signal: abortControllerRef.current.signal }
+        );
+
+        const { reply, notes, updatedNote } = res.data;
+        const links = [];
+
+        if (updatedNote) {
+          links.push({ id: updatedNote.id, title: updatedNote.title, kind: 'updated' });
+          window.dispatchEvent(new CustomEvent('note-updated', { detail: updatedNote }));
+        }
+        for (const n of notes || []) {
+          links.push({ id: n.id, title: n.title, kind: 'created' });
+          window.dispatchEvent(new CustomEvent('note-created'));
+        }
+
+        setMessages((prev) => [...prev, { role: 'assistant', text: reply, links }]);
+        loadNotes();
       }
-      for (const n of notes || []) {
-        links.push({ id: n.id, title: n.title, kind: 'created' });
-      }
-
-      setMessages((prev) => [...prev, { role: 'assistant', text: reply, links }]);
-      loadNotes();
     } catch (err) {
+      if (err.name === 'CanceledError' || err.message === 'canceled') {
+         setMessages((prev) => [...prev, { role: 'assistant', text: 'Request cancelled by user.', isError: true }]);
+         return;
+      }
       const msg =
         err.response?.data?.error ||
         'Could not reach AI. Check your connection and GEMINI_API_KEY in server/.env.';
@@ -157,6 +284,13 @@ export default function AiChatPanel() {
       setMessages((prev) => [...prev, { role: 'assistant', text: msg, isError: true }]);
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const stopRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -167,7 +301,21 @@ export default function AiChatPanel() {
     }
   };
 
+  const handleCommandClick = (prompt) => {
+    setInput(prompt);
+    inputRef.current?.focus();
+    resizeTextarea();
+  };
+
+  const clearHistory = () => {
+    setMessages([]);
+    setHasChatted(false);
+    setError('');
+  };
+
   const showWelcome = !hasChatted && messages.length === 0;
+  const contextMatch = location.pathname.match(/^\/notes\/([a-zA-Z0-9_-]+)$/);
+  const contextNoteName = contextMatch ? noteOptions.find(n => n.id === contextMatch[1])?.title || 'Current Note' : null;
 
   if (!mounted) return null;
 
@@ -191,13 +339,24 @@ export default function AiChatPanel() {
       {isOpen && (
         <div className="ai-chat-overlay" role="presentation" onClick={() => setIsOpen(false)}>
           <section
-            className="ai-chat-window"
+            className={`ai-chat-window ${isDragging ? 'dragging' : ''}`}
             role="dialog"
             aria-labelledby="ai-chat-title"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
+            style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
           >
-            <header className="ai-chat-header">
+            <header 
+              className="ai-chat-header"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+            >
+              <div className="ai-chat-header-drag-indicator">
+                <GripHorizontal size={14} />
+              </div>
               <div className="ai-chat-header-top">
                 <div className="ai-chat-brand">
                   <div className="ai-chat-brand-icon">
@@ -208,16 +367,34 @@ export default function AiChatPanel() {
                       AI Note Assistant
                     </h2>
                     <p className="ai-chat-subtitle">Describe what to capture — I&apos;ll create or update notes</p>
+                    {contextNoteName && (
+                      <div className="ai-chat-context-pill">
+                        <MapPin size={10} /> Context: {contextNoteName}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="ai-chat-close"
-                  onClick={() => setIsOpen(false)}
-                  aria-label="Close chat"
-                >
-                  <X size={18} />
-                </button>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {messages.length > 0 && (
+                    <button
+                      type="button"
+                      className="ai-chat-close"
+                      onClick={clearHistory}
+                      aria-label="Clear history"
+                      title="Clear history"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ai-chat-close"
+                    onClick={() => setIsOpen(false)}
+                    aria-label="Close assistant"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               <div className="ai-chat-mode" role="tablist" aria-label="Note mode">
@@ -236,14 +413,14 @@ export default function AiChatPanel() {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={mode === 'append'}
-                  className={`ai-chat-mode-btn ${mode === 'append' ? 'active' : ''}`}
-                  onClick={() => setMode('append')}
+                  aria-selected={mode === 'intake'}
+                  className={`ai-chat-mode-btn ${mode === 'intake' ? 'active' : ''}`}
+                  onClick={() => setMode('intake')}
                 >
                   <span className="mode-label">
-                    <FilePen size={14} /> Add to note
+                    <Zap size={14} /> Smart Intake
                   </span>
-                  <span className="mode-hint">Append a section</span>
+                  <span className="mode-hint">Paste data → Notes + Tasks</span>
                 </button>
               </div>
 
@@ -274,12 +451,15 @@ export default function AiChatPanel() {
               {showWelcome && (
                 <div className="ai-chat-welcome">
                   <div className="ai-chat-welcome-icon">
-                    <Sparkles size={24} />
+                    {mode === 'intake' ? <Zap size={24} /> : <Sparkles size={24} />}
                   </div>
-                  <h3>What should I write?</h3>
-                  <p>Try a quick prompt below or type your own message.</p>
+                  <h3>{mode === 'intake' ? 'Paste any data' : 'What should I write?'}</h3>
+                  <p>{mode === 'intake'
+                    ? 'Drop meeting notes, emails, braindumps — I\'ll create notes & tasks with deadlines.'
+                    : 'Try a quick prompt below or type your own message.'}
+                  </p>
                   <div className="ai-chat-suggestions">
-                    {SUGGESTIONS.map((s) => (
+                    {(mode === 'intake' ? INTAKE_SUGGESTIONS : SUGGESTIONS).map((s) => (
                       <button
                         key={s.prompt}
                         type="button"
@@ -326,6 +506,35 @@ export default function AiChatPanel() {
                         ))}
                       </div>
                     )}
+                    {/* Smart Intake: Show extracted tasks */}
+                    {m.intakeResult?.todos?.length > 0 && (
+                      <div className="ai-intake-tasks">
+                        <div className="ai-intake-tasks-header">
+                          <CheckCircle2 size={14} />
+                          <span>{m.intakeResult.todos.length} task{m.intakeResult.todos.length > 1 ? 's' : ''} created</span>
+                        </div>
+                        {m.intakeResult.todos.map((todo) => (
+                          <div key={todo.id} className="ai-intake-task-card">
+                            <div className={`ai-intake-priority-dot priority-${todo.priority}`} />
+                            <div className="ai-intake-task-info">
+                              <span className="ai-intake-task-text">{todo.text}</span>
+                              <div className="ai-intake-task-meta">
+                                {todo.deadline && (
+                                  <span className="ai-intake-task-deadline">
+                                    <Calendar size={11} />
+                                    {new Date(todo.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </span>
+                                )}
+                                <span className={`ai-intake-task-priority priority-${todo.priority}`}>
+                                  <Flag size={11} />
+                                  {todo.priority}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -333,8 +542,29 @@ export default function AiChatPanel() {
               {loading && <TypingIndicator />}
             </div>
 
-            <footer className="ai-chat-footer">
+            <footer className="ai-chat-footer" style={{ position: 'relative' }}>
               {error && <p className="ai-chat-error" role="alert">{error}</p>}
+              
+              {input.startsWith('/') && (
+                <div className="ai-chat-slash-menu">
+                  <div className="ai-chat-slash-menu-title">Commands</div>
+                  {SLASH_COMMANDS.filter(c => c.cmd.startsWith(input)).map((cmd) => (
+                    <button
+                      key={cmd.cmd}
+                      className="ai-chat-slash-item"
+                      onClick={() => handleCommandClick(cmd.prompt)}
+                      type="button"
+                    >
+                      <span className="slash-cmd">{cmd.cmd}</span>
+                      <span className="slash-desc">{cmd.label}</span>
+                    </button>
+                  ))}
+                  {SLASH_COMMANDS.filter(c => c.cmd.startsWith(input)).length === 0 && (
+                    <div className="ai-chat-slash-item" style={{ color: 'var(--ai-text-muted)' }}>No matching commands</div>
+                  )}
+                </div>
+              )}
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -344,9 +574,11 @@ export default function AiChatPanel() {
                 <div className="ai-chat-input-wrap">
                   <textarea
                     ref={inputRef}
-                    rows={1}
+                    rows={mode === 'intake' ? 3 : 1}
                     placeholder={
-                      mode === 'append'
+                      mode === 'intake'
+                        ? 'Paste meeting notes, emails, project briefs, braindumps…'
+                        : mode === 'append'
                         ? 'What should I add to this note?'
                         : 'e.g. Create 3 notes for my product launch…'
                     }
@@ -359,14 +591,25 @@ export default function AiChatPanel() {
                     disabled={loading}
                     aria-label="Message to AI"
                   />
-                  <button
-                    type="submit"
-                    className="ai-chat-send"
-                    disabled={loading || !input.trim()}
-                    aria-label="Send message"
-                  >
-                    <Send size={18} />
-                  </button>
+                  {loading ? (
+                    <button
+                      type="button"
+                      className="ai-chat-send stop-btn"
+                      aria-label="Stop generation"
+                      onClick={stopRequest}
+                    >
+                      <StopCircle size={18} />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="ai-chat-send"
+                      disabled={!input.trim()}
+                      aria-label="Send message"
+                    >
+                      <Send size={18} />
+                    </button>
+                  )}
                 </div>
                 <p className="ai-chat-input-hint">Enter to send · Shift+Enter for new line</p>
               </form>

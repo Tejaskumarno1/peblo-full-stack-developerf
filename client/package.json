@@ -9,7 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "axios": "^1.7.9",
+    "framer-motion": "^12.40.0",
+    "html2pdf.js": "^0.14.0",
     "lucide-react": "^1.16.0",
     "marked": "^15.0.6",
     "react": "^18.3.1",

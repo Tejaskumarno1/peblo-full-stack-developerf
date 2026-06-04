@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 
-const prisma = new PrismaClient();
+// prisma imported from db.js
 
 export async function generateSummary(req, res, next) {
   try {

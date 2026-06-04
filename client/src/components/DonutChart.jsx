@@ -64,11 +64,12 @@ export default function DonutChart({ aiUsage }) {
           <span className="donut-label">Total</span>
         </div>
       </div>
-      <div className="donut-legend">
+      <div className="donut-legend donut-legend-table">
         {Object.entries(data).map(([key, value]) => (
           <div key={key} className="legend-item">
             <span className="legend-dot" style={{ backgroundColor: colors[key] || '#4f46e5' }} />
             <span className="legend-text">{labels[key] || key}</span>
+            <span className="legend-count">{value}</span>
             <span className="legend-pct">{Math.round((value / total) * 100)}%</span>
           </div>
         ))}

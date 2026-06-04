@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db.js';
 import bcrypt from 'bcryptjs';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 
-const prisma = new PrismaClient();
+// prisma imported from db.js
 
 export async function signup(req, res, next) {
   try {

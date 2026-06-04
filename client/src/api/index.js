@@ -20,14 +20,27 @@ export const notesAPI = {
 };
 
 export const aiAPI = {
-  summary: (id, data) => api.post(`/notes/${id}/ai/summary`, data),
-  actions: (id, data) => api.post(`/notes/${id}/ai/actions`, data),
-  title: (id, data) => api.post(`/notes/${id}/ai/title`, data),
-  chat: (data) => api.post('/ai/chat', data),
+  summary: (id, data, config) => api.post(`/notes/${id}/ai/summary`, data, config),
+  actions: (id, data, config) => api.post(`/notes/${id}/ai/actions`, data, config),
+  title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
+  chat: (data, config) => api.post('/ai/chat', data, config),
+  smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
 };
 
 export const dashboardAPI = {
-  insights: () => api.get('/dashboard/insights')
+  insights: () => api.get('/dashboard/insights'),
+  toggleTask: (data) => api.post('/dashboard/toggle-task', data),
+  dailyBriefing: () => api.get('/dashboard/daily-briefing'),
+  weeklyReport: () => api.get('/dashboard/weekly-report')
+};
+
+export const todosAPI = {
+  getAll: (params) => api.get('/todos', { params }),
+  getToday: () => api.get('/todos/today'),
+  getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
+  create: (data) => api.post('/todos', data),
+  update: (id, data) => api.patch(`/todos/${id}`, data),
+  delete: (id) => api.delete(`/todos/${id}`)
 };
 
 export const sharedAPI = {

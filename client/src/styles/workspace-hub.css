@@ -1,0 +1,148 @@
+/* Workspace Hub Clean Professional Styles */
+
+@media (min-width: 769px) {
+  .hub-layout {
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+.hub-main {
+  display: flex;
+  flex-direction: column;
+  padding: 4rem 2rem;
+  background: var(--dash-bg);
+}
+
+.hub-container {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.hub-header {
+  margin-bottom: 2.5rem;
+}
+
+.hub-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.hub-subtitle {
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.hub-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Card as a button for accessibility and clean interaction */
+.hub-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: var(--dash-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  outline: none;
+}
+
+.hub-card:hover {
+  background: var(--dash-surface-hover);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.hub-card:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.hub-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hub-card-content {
+  flex: 1;
+}
+
+.hub-card-content h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.hub-card-content p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.hub-card-action {
+  color: var(--text-muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.hub-card:hover .hub-card-action {
+  color: var(--text-primary);
+  transform: translateX(4px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .hub-main {
+    padding: 2rem 1.25rem;
+    padding-bottom: 120px; /* Space for mobile nav */
+  }
+
+  .hub-title {
+    font-size: 1.75rem;
+  }
+  
+  .hub-card {
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+
+  .hub-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .hub-card-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .hub-card-content h3 {
+    font-size: 1.05rem;
+  }
+  
+  .hub-card-content p {
+    font-size: 0.875rem;
+  }
+}

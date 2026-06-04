@@ -17,6 +17,7 @@ model User {
 
   notes         Note[]
   aiGenerations AiGeneration[]
+  todos         Todo[]
 
   @@map("users")
 }
@@ -37,6 +38,7 @@ model Note {
   tags          NoteTag[]
   aiGenerations AiGeneration[]
   backups       NoteBackup[]
+  linkedTodos   Todo[]
 
   @@index([userId])
   @@index([userId, isArchived])
@@ -92,4 +94,28 @@ model NoteBackup {
 
   @@index([noteId])
   @@map("note_backups")
+}
+
+model Todo {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  text      String
+  completed Boolean   @default(false) @map("is_completed")
+  priority  String    @default("medium")
+  deadline  DateTime? @map("deadline")
+  todoTags   String[]  @default([]) @map("tags")
+  noteId     String?   @map("linked_note_id")
+  startTime  String?   @map("start_time")
+  endTime    String?   @map("end_time")
+  recurrence String?   @default("none") @map("recurrence")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note Note? @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, deadline])
+  @@index([userId, completed])
+  @@map("todos")
 }

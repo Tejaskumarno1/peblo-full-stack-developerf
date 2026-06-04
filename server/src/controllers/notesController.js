@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 
-const prisma = new PrismaClient();
+// prisma imported from db.js
 
 // Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions
 async function syncTags(noteId, tagNames) {
@@ -61,6 +61,9 @@ const noteInclude = {
   },
   aiGenerations: {
     select: { type: true }
+  },
+  linkedTodos: {
+    select: { id: true, text: true, priority: true, deadline: true, completed: true }
   }
 };
 
@@ -69,7 +72,8 @@ function formatNote(note) {
   return {
     ...note,
     tags: note.tags ? note.tags.map(nt => nt.tag.name) : [],
-    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false
+    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false,
+    linkedTodos: note.linkedTodos || []
   };
 }
 

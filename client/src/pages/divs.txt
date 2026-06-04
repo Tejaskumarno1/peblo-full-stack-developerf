@@ -1,0 +1,97 @@
+786:              <div className="mobile-editor-header mobile-only">
+795:                <div className="mobile-editor-title-wrap">
+797:                </div>
+806:              </div>
+809:              <div className="mobile-bottom-actions mobile-only">
+842:                <div className="export-dropdown-wrapper" style={{ position: 'relative' }}>
+852:                    <div className="export-dropdown-menu" style={{ bottom: '100%', top: 'auto', right: '0', marginBottom: '10px' }}>
+868:                    </div>
+870:                </div>
+871:              </div>
+874:              <div className="editor-toolbar desktop-only">
+875:                <div className="editor-toolbar-left">
+915:                </div>
+916:                <div className="editor-toolbar-right">
+918:                    <div className="toolbar-group">
+927:                    </div>
+931:                    <div className="toolbar-group">
+950:                      <div className="export-dropdown-wrapper" ref={exportRef}>
+960:                          <div className="export-dropdown-menu">
+976:                          </div>
+978:                      </div>
+979:                    </div>
+982:                  <div className="toolbar-group">
+1002:                  </div>
+1003:                </div>
+1004:              </div>
+1007:                <div className="backups-banner">
+1008:                  <div className="backups-header">
+1011:                  </div>
+1017:                    <div className="backups-list">
+1019:                        <div key={backup.id} className="backup-item">
+1028:                        </div>
+1030:                    </div>
+1032:                </div>
+1035:              <div className="editor-header">
+1044:                <div className="editor-inline-tags">
+1062:                </div>
+1063:              </div>
+1065:              <div className="editor-body">
+1066:                <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
+1068:                    <div
+1082:                  <div className="editor-footer">
+1085:                  </div>
+1086:                </div>
+1089:                  <div className="ai-panel">
+1090:                      <div className="ai-panel-header">
+1098:                      </div>
+1100:                      <div className="ai-tabs-container">
+1101:                        <div className="ai-tabs-pill">
+1116:                        </div>
+1117:                      </div>
+1119:                      <div className="ai-panel-content">
+1121:                          <div className="ai-assist-tab">
+1122:                            <div className="ai-actions">
+1150:                            </div>
+1153:                              <div className="ai-error-container">
+1155:                              </div>
+1159:                              <div className="ai-results-card">
+1160:                                <div className="ai-results-card-header">
+1163:                                </div>
+1164:                                <div className="ai-results-content">
+1166:                                    <div className="ai-result-section">
+1169:                                    </div>
+1172:                                    <div className="ai-result-section">
+1179:                                    </div>
+1182:                                    <div className="title-suggestion">
+1183:                                      <div className="title-suggestion-info">
+1186:                                      </div>
+1194:                                    </div>
+1196:                                </div>
+1197:                              </div>
+1199:                          </div>
+1203:                          <div className="ws-ai-chat-section">
+1204:                            <div className="ws-ai-chat-messages">
+1206:                                <div className="chat-empty-state">
+1207:                                  <div className="chat-empty-icon">
+1209:                                  </div>
+1212:                                  <div className="chat-suggestions-grid">
+1241:                                  </div>
+1242:                                </div>
+1245:                                  <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
+1246:                                    <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
+1247:                                  </div>
+1251:                                <div className="ws-ai-chat-msg assistant">
+1252:                                  <div className="ws-ai-chat-bubble typing">
+1254:                                  </div>
+1255:                                </div>
+1257:                            </div>
+1259:                              <div className="ws-ai-chat-input-wrapper">
+1270:                              </div>
+1272:                          </div>
+1274:                      </div>
+1275:                    </div>
+1277:              </div>
+1278:            </div>
+1281:              <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
+1283:              </div>

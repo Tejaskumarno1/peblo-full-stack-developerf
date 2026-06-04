@@ -1,7 +1,7 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Keyboard, Bell, User, Settings, Sparkles } from 'lucide-react';
+import { LogOut, Keyboard, Bell, User, Settings, Sparkles, FileText, Calendar, ListTodo } from 'lucide-react';
 
 export default function Navigation({ activeTab }) {
   const { 
@@ -103,9 +103,21 @@ export default function Navigation({ activeTab }) {
             </Link>
             <Link 
               to="/notes" 
-              className={`tab-btn ${activeTab === 'workspace' ? 'active' : ''}`}
+              className={`tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
             >
-              Workspace
+              Notes
+            </Link>
+            <Link 
+              to="/calendar" 
+              className={`tab-btn ${activeTab === 'calendar' ? 'active' : ''}`}
+            >
+              Calendar
+            </Link>
+            <Link 
+              to="/todolist" 
+              className={`tab-btn ${activeTab === 'tasks' ? 'active' : ''}`}
+            >
+              Tasks
             </Link>
           </div>
 
@@ -193,21 +205,23 @@ export default function Navigation({ activeTab }) {
       {/* Mobile Bottom Tab Bar */}
       <nav className="mobile-bottom-nav premium-bottom-nav">
         <Link to="/" className={`mobile-tab ${activeTab === 'dashboard' ? 'active' : ''}`}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
           </svg>
-          <span>Dashboard</span>
+          <span>Home</span>
         </Link>
-        <Link to="/notes" className={`mobile-tab ${activeTab === 'workspace' ? 'active' : ''}`}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          <span>Workspace</span>
+        <Link to="/notes" className={`mobile-tab ${activeTab === 'notes' ? 'active' : ''}`}>
+          <FileText size={22} />
+          <span>Notes</span>
         </Link>
-        <button className="mobile-tab" onClick={() => document.querySelector('.ai-chat-fab')?.click()}>
-          <Sparkles size={24} />
-          <span>AI Copilot</span>
-        </button>
+        <Link to="/calendar" className={`mobile-tab ${activeTab === 'calendar' ? 'active' : ''}`}>
+          <Calendar size={22} />
+          <span>Calendar</span>
+        </Link>
+        <Link to="/todolist" className={`mobile-tab ${activeTab === 'tasks' ? 'active' : ''}`}>
+          <ListTodo size={22} />
+          <span>Tasks</span>
+        </Link>
         <button className="profile-trigger" style={{display: 'none'}} onClick={() => setProfileOpen(true)}></button>
       </nav>
 

@@ -1,7 +1,7 @@
 import { verifyAccessToken } from '../utils/jwt.js';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db.js';
 
-const prisma = new PrismaClient();
+// prisma imported from db.js
 
 export async function authenticate(req, res, next) {
   try {

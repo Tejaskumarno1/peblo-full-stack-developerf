@@ -322,3 +322,147 @@ export async function suggestTitle(content) {
     return getMockResponse('title', '', content);
   }
 }
+
+// --- Smart Intake: Analyze raw data and extract notes + tasks ---
+export async function analyzeAndOrganize(rawData, template = 'auto') {
+  const today = new Date().toISOString().split('T')[0];
+  const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
+  const templateHints = {
+    auto: 'Automatically detect the type of data and organize accordingly.',
+    meeting: 'This is MEETING NOTES. Focus on: attendees, key decisions, action items with owners, follow-up meetings. Use a table for action items with columns: Owner, Task, Deadline.',
+    email: 'This is an EMAIL THREAD. Focus on: sender/recipients, key requests, deadlines, required responses or approvals.',
+    project: 'This is a PROJECT BRIEF. Focus on: scope, objectives, milestones, deliverables, team responsibilities, budget, risks. Use tables for milestones.',
+    braindump: 'This is a BRAINDUMP. Focus on: grouping related ideas, separating tasks from ideas from reminders, identifying hidden deadlines, prioritizing by urgency.',
+    syllabus: 'This is a COURSE SYLLABUS. Focus on: course info, assignment due dates, exam dates, reading schedule, grade breakdown. Create chronological task list.',
+  };
+
+  const templateContext = templateHints[template] || templateHints.auto;
+
+  const systemPrompt = `You are an elite AI Chief of Staff and productivity architect.
+Your job is to take ANY raw data the user pastes (meeting notes, emails, project briefs, braindumps, syllabi, chat logs, etc.) and transform it into:
+
+1. A BEAUTIFULLY structured Note using rich Markdown (headers, bullet points, tables, bold, blockquotes, code blocks)
+2. A list of EVERY actionable task extracted from the data
+
+TEMPLATE CONTEXT: ${templateContext}
+
+CRITICAL RULES for task extraction:
+- Extract EVERY implicit or explicit task, deadline, appointment, or action item
+- For each task, determine:
+  - "text": A clear, actionable task description (imperative voice)
+  - "priority": "high" (urgent/critical/ASAP/important), "medium" (normal), or "low" (nice-to-have/optional)
+  - "deadline": ISO 8601 date string (YYYY-MM-DD) or null. Interpret relative dates like "next Monday", "by Friday", "in 2 weeks" relative to today (${today}, ${dayOfWeek}). If a task says "tomorrow", that means ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}.
+  - "startTime": Time string like "09:00" or null (if a specific time is mentioned)
+  - "endTime": Time string like "17:00" or null
+  - "tags": 1-3 relevant tags for this specific task
+
+For the note:
+- "title": A concise, descriptive title (3-8 words)
+- "content": Rich markdown content that organizes the raw data beautifully
+- "category": Best fit category (Work, Personal, Research, Ideas, Meeting, Project, Study, Health, Finance)
+- "tags": 3-6 relevant tags
+
+- "reply": A brief, warm summary of what you organized (2-3 sentences)
+
+Respond ONLY in valid JSON.`;
+
+  try {
+    return await runWithCascade('Smart Intake',
+      // OpenAI Implementation
+      async (openai) => {
+        const response = await openai.chat.completions.create({
+          model: DEFAULT_OPENAI_MODEL,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Analyze and organize the following raw data:\n\n---\n${rawData}\n---` }
+          ]
+        });
+        const parsed = JSON.parse(response.choices[0].message.content);
+        return normalizeIntakeResult(parsed);
+      },
+      // Gemini Implementation
+      async (gemini) => {
+        const model = gemini.getGenerativeModel({
+          model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+          systemInstruction: systemPrompt
+        });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: `Analyze and organize the following raw data:\n\n---\n${rawData}\n---` }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: SchemaType.OBJECT,
+              properties: {
+                reply: { type: SchemaType.STRING },
+                note: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    title: { type: SchemaType.STRING },
+                    content: { type: SchemaType.STRING },
+                    category: { type: SchemaType.STRING },
+                    tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+                  },
+                  required: ["title", "content", "category", "tags"]
+                },
+                tasks: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      text: { type: SchemaType.STRING },
+                      priority: { type: SchemaType.STRING },
+                      deadline: { type: SchemaType.STRING, nullable: true },
+                      startTime: { type: SchemaType.STRING, nullable: true },
+                      endTime: { type: SchemaType.STRING, nullable: true },
+                      tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+                    },
+                    required: ["text", "priority"]
+                  }
+                }
+              },
+              required: ["reply", "note", "tasks"]
+            }
+          }
+        });
+        const parsed = JSON.parse(result.response.text());
+        return normalizeIntakeResult(parsed);
+      }
+    );
+  } catch (err) {
+    // Graceful fallback — create a raw note with the pasted text
+    return {
+      reply: `I organized your data into a note. AI task extraction is temporarily unavailable, so please review for any action items.`,
+      note: {
+        title: 'Imported Data',
+        content: `## Raw Import\n\n${rawData}`,
+        category: 'Personal',
+        tags: ['imported', 'needs-review']
+      },
+      tasks: []
+    };
+  }
+}
+
+function normalizeIntakeResult(parsed) {
+  const validPriorities = ['high', 'medium', 'low'];
+  return {
+    reply: parsed.reply || 'Done! I organized your data into a note and extracted all tasks.',
+    note: {
+      title: parsed.note?.title || 'Imported Data',
+      content: parsed.note?.content || '',
+      category: parsed.note?.category || 'Personal',
+      tags: Array.isArray(parsed.note?.tags) ? parsed.note.tags : []
+    },
+    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(t => ({
+      text: t.text || '',
+      priority: validPriorities.includes(t.priority) ? t.priority : 'medium',
+      deadline: t.deadline || null,
+      startTime: t.startTime || null,
+      endTime: t.endTime || null,
+      tags: Array.isArray(t.tags) ? t.tags : []
+    })).filter(t => t.text.trim()) : []
+  };
+}
+

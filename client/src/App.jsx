@@ -4,8 +4,12 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import WorkspacePage from './pages/WorkspacePage';
+import WorkspaceHubPage from './pages/WorkspaceHubPage';
+import CalendarPage from './pages/CalendarPage';
+import TodoListPage from './pages/TodoListPage';
 import SharedNotePage from './pages/SharedNotePage';
 import AiChatPanel from './components/AiChatPanel';
+import CommandPalette from './components/CommandPalette';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -24,7 +28,12 @@ function AuthenticatedShell({ children }) {
   return (
     <>
       {children}
-      {user ? <AiChatPanel /> : null}
+      {user ? (
+        <>
+          <AiChatPanel />
+          <CommandPalette />
+        </>
+      ) : null}
     </>
   );
 }
@@ -45,11 +54,35 @@ export default function App() {
         }
       />
       <Route
+        path="/workspace"
+        element={<Navigate to="/notes" />}
+      />
+      <Route
         path="/notes"
         element={
           <ProtectedRoute>
             <AuthenticatedShell>
               <WorkspacePage />
+            </AuthenticatedShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <AuthenticatedShell>
+              <CalendarPage />
+            </AuthenticatedShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/todolist"
+        element={
+          <ProtectedRoute>
+            <AuthenticatedShell>
+              <TodoListPage />
             </AuthenticatedShell>
           </ProtectedRoute>
         }

@@ -6,7 +6,9 @@ import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/
 import { useAuth } from '../context/AuthContext';
 import Navigation from '../components/Navigation';
 import ShareModal from '../components/ShareModal';
+import TodoListPanel from '../components/TodoListPanel';
 import { marked } from 'marked';
+import html2pdf from 'html2pdf.js';
 import {
   Sparkles,
   Archive,
@@ -31,6 +33,7 @@ import {
   FileDown,
   FileBadge,
   File,
+  MoreHorizontal,
 } from 'lucide-react';
 import '../styles/workspace.css';
 
@@ -79,12 +82,15 @@ export default function WorkspacePage() {
   const [loadingBackups, setLoadingBackups] = useState(false);
 
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [todoPanelOpen, setTodoPanelOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const exportRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.export-dropdown-wrapper')) {
+      if (!e.target.closest('.export-dropdown-wrapper') && !e.target.closest('.more-menu-wrapper')) {
         setExportDropdownOpen(false);
+        setMoreMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -130,10 +136,10 @@ export default function WorkspacePage() {
       if (!created) throw new Error('Failed to save new note');
       return;
     }
-    const res = await notesAPI.update(noteId, data);
-    const saved = res.data.note;
-    setNotes((prev) => prev.map((n) => (n.id === noteId ? saved : n)));
-    setSelectedNote((prev) => (prev?.id === noteId ? saved : prev));
+    await notesAPI.update(noteId, data);
+    
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...data, updatedAt: new Date().toISOString() } : n)));
+    setSelectedNote((prev) => (prev?.id === noteId ? { ...prev, ...data, updatedAt: new Date().toISOString() } : prev));
   }, [persistDraft]);
 
   const { saveStatus, forceSave } = useAutoSave(selectedNote?.id, saveData, handleSave);
@@ -282,46 +288,22 @@ export default function WorkspacePage() {
 </body>
 </html>`;
     } else if (format === 'pdf') {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Please allow pop-ups to print or save as PDF.');
-        return;
-      }
-      printWindow.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>${noteTitle || 'Untitled'}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff; }
-    .container { max-width: 800px; margin: 0 auto; }
-    h1 { border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0; }
-    pre { background: #0f172a; padding: 16px; border-radius: 8px; overflow-x: auto; color: #f8fafc; }
-    code { font-family: monospace; font-size: 0.9em; }
-    blockquote { border-left: 4px solid #6366f1; padding-left: 16px; color: #475569; font-style: italic; margin: 20px 0; }
-    img { max-width: 100%; border-radius: 8px; }
-    @media print {
-      body { padding: 0; background: #ffffff; }
-      @page { size: auto; margin: 20mm; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>${noteTitle || 'Untitled'}</h1>
-    <div>${marked.parse(noteContent || '')}</div>
-  </div>
-  <script>
-    window.onload = function() {
-      setTimeout(function() {
-        window.print();
-        window.close();
-      }, 300);
-    };
-  </script>
-</body>
-</html>`);
-      printWindow.document.close();
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
+          <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${noteTitle || 'Untitled'}</h1>
+          <div>${marked.parse(noteContent || '')}</div>
+        </div>
+      `;
+      const opt = {
+        margin:       10,
+        filename:     `${(noteTitle || 'Untitled').trim().replace(/[^a-zA-Z0-9-_\s]/g, '').replace(/\s+/g, '_')}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      
+      html2pdf().set(opt).from(container).save();
       return;
     }
 
@@ -631,7 +613,7 @@ export default function WorkspacePage() {
 
   return (
     <div className="workspace-page">
-      <Navigation activeTab="workspace" />
+      <Navigation activeTab="notes" />
 
       <div className="ws-body">
         <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => { if (selectedNote) setSidebarOpen(false) }} />
@@ -802,7 +784,8 @@ export default function WorkspacePage() {
 
         <main className="ws-main">
           {selectedNote ? (
-            <div className="editor-container">
+            <>
+              <div className="editor-container">
               {/* Mobile Editor Header */}
               <div className="mobile-editor-header mobile-only">
                 <button
@@ -904,15 +887,6 @@ export default function WorkspacePage() {
                       <PanelLeft size={14} />
                     </button>
                   )}
-                  <button 
-                    type="button"
-                    className="toolbar-btn"
-                    onClick={() => forceSave()}
-                    disabled={saveStatus === 'saving' || isDraft}
-                    title="Save Note (Ctrl+S)"
-                  >
-                    <Save size={14} /> Save
-                  </button>
                   <span className={`save-status ${saveStatus === 'saved' ? 'saved' : ''}`}>
                     {saveStatus === 'saving' && (
                       <>
@@ -935,63 +909,7 @@ export default function WorkspacePage() {
                   </span>
                 </div>
                 <div className="editor-toolbar-right">
-                  {!isDraft && (
-                    <div className="toolbar-group">
-                      <button
-                        type="button"
-                        className={`toolbar-btn ${selectedNote?.isPublic ? 'active' : ''}`}
-                        onClick={() => setIsShareModalOpen(true)}
-                        title="Share Note"
-                      >
-                        <Link2 size={14} /> {selectedNote?.isPublic ? 'Shared' : 'Share'}
-                      </button>
-                    </div>
-                  )}
-
-                  {!isDraft && (
-                    <div className="toolbar-group">
-                      <button
-                        type="button"
-                        className={`toolbar-btn ${showBackups ? 'active' : ''}`}
-                        onClick={showBackups ? () => setShowBackups(false) : loadBackups}
-                        title="View AI Edit History"
-                      >
-                        <History size={14} /> Backups
-                      </button>
-
-                      <div className="export-dropdown-wrapper" ref={exportRef}>
-                        <button
-                          type="button"
-                          className={`toolbar-btn ${exportDropdownOpen ? 'active' : ''}`}
-                          onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
-                          title="Export Note"
-                        >
-                          <Download size={14} /> Export
-                        </button>
-                        {exportDropdownOpen && (
-                          <div className="export-dropdown-menu">
-                            <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
-                              <FileDown size={14} /> Markdown (.md)
-                            </button>
-                            <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
-                              <FileText size={14} /> PDF Document (.pdf)
-                            </button>
-                            <button type="button" onClick={() => { handleExport('doc'); setExportDropdownOpen(false); }}>
-                              <FileBadge size={14} /> Word Document (.doc)
-                            </button>
-                            <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
-                              <Globe size={14} /> Rich HTML (.html)
-                            </button>
-                            <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
-                              <File size={14} /> Plain Text (.txt)
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="toolbar-group">
+                  <div className="toolbar-group toolbar-primary-actions">
                     {!aiPanelOpen && (
                       <button
                         type="button"
@@ -1002,6 +920,19 @@ export default function WorkspacePage() {
                         <Sparkles size={14} /> AI
                       </button>
                     )}
+                    {!isDraft && (
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${todoPanelOpen ? 'active' : ''}`}
+                        onClick={() => setTodoPanelOpen(!todoPanelOpen)}
+                        title="View To-Do List"
+                      >
+                        <Check size={14} /> Tasks
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="toolbar-group">
                     <button
                       type="button"
                       className={`toolbar-btn ${showPreview ? 'active' : ''}`}
@@ -1012,6 +943,45 @@ export default function WorkspacePage() {
                       {showPreview ? 'Edit' : 'Preview'}
                     </button>
                   </div>
+
+                  {!isDraft && (
+                    <div className="more-menu-wrapper" style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${moreMenuOpen ? 'active' : ''}`}
+                        onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                        title="More actions"
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                      {moreMenuOpen && (
+                        <div className="export-dropdown-menu">
+                          <button type="button" onClick={() => { setIsShareModalOpen(true); setMoreMenuOpen(false); }}>
+                            <Link2 size={14} /> {selectedNote?.isPublic ? 'Sharing Settings' : 'Share Note'}
+                          </button>
+                          <button type="button" onClick={() => { showBackups ? setShowBackups(false) : loadBackups(); setMoreMenuOpen(false); }}>
+                            <History size={14} /> Backups
+                          </button>
+                          <div style={{ height: '1px', background: 'var(--dash-border, var(--border-subtle))', margin: '0.25rem 0' }} />
+                          <button type="button" onClick={() => { handleExport('md'); setMoreMenuOpen(false); }}>
+                            <FileDown size={14} /> Export as Markdown
+                          </button>
+                          <button type="button" onClick={() => { handleExport('pdf'); setMoreMenuOpen(false); }}>
+                            <FileText size={14} /> Export as PDF
+                          </button>
+                          <button type="button" onClick={() => { handleExport('doc'); setMoreMenuOpen(false); }}>
+                            <FileBadge size={14} /> Export as Word
+                          </button>
+                          <button type="button" onClick={() => { handleExport('html'); setMoreMenuOpen(false); }}>
+                            <Globe size={14} /> Export as HTML
+                          </button>
+                          <button type="button" onClick={() => { handleExport('txt'); setMoreMenuOpen(false); }}>
+                            <File size={14} /> Export as Plain Text
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1041,6 +1011,43 @@ export default function WorkspacePage() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Linked Todo Indicator */}
+              {selectedNote?.linkedTodos?.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '1rem', padding: '0 2rem' }}>
+                  {selectedNote.linkedTodos.map(todo => (
+                    <div 
+                      key={todo.id} 
+                      onClick={() => navigate('/todolist')}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem', 
+                        padding: '0.5rem 0.75rem', 
+                        background: 'rgba(79, 70, 229, 0.05)', 
+                        border: '1px solid rgba(79, 70, 229, 0.2)', 
+                        borderRadius: '8px', 
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        color: 'var(--dash-text)',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease'
+                      }}
+                      className="linked-todo-strip"
+                    >
+                      <span style={{ fontSize: '1rem' }}>📌</span>
+                      <span style={{ color: 'var(--dash-text-muted)' }}>Linked to task:</span>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: todo.priority === 'high' ? '#ef4444' : todo.priority === 'low' ? '#22c55e' : '#f59e0b' }}></span>
+                      <span style={{ flex: 1, textDecoration: todo.completed ? 'line-through' : 'none', opacity: todo.completed ? 0.6 : 1 }}>{todo.text}</span>
+                      {todo.deadline && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
+                          Due {new Date(todo.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -1104,7 +1111,7 @@ export default function WorkspacePage() {
                           <Sparkles size={16} className="sparkle-pulse" />
                           <span>AI Workspace Copilot</span>
                         </h3>
-                        <button type="button" className="btn-icon-sm close-ai-btn" onClick={() => setAiPanelOpen(false)} aria-label="Close panel">
+                        <button type="button" className="close-ai-btn" onClick={() => setAiPanelOpen(false)} aria-label="Close panel">
                           <X size={16} />
                         </button>
                       </div>
@@ -1288,8 +1295,15 @@ export default function WorkspacePage() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="editor-empty">
+            
+            {todoPanelOpen && (
+              <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
+                <TodoListPanel onClose={() => setTodoPanelOpen(false)} />
+              </div>
+            )}
+            </>
+        ) : (
+          <div className="editor-empty">
               <div className="ws-welcome">
                 <div className="ws-welcome-hero">
                   <div className="ws-welcome-icon">
