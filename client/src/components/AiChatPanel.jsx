@@ -17,7 +17,8 @@ import {
   MapPin,
   GripHorizontal,
   Trash2,
-  StopCircle
+  StopCircle,
+  Paperclip
 } from 'lucide-react';
 import { marked } from 'marked';
 import { aiAPI, notesAPI } from '../api/index';
@@ -96,6 +97,7 @@ export default function AiChatPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [intakeTemplate, setIntakeTemplate] = useState('auto');
+  const [attachedFile, setAttachedFile] = useState(null);
   
   // Dragging state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -105,6 +107,7 @@ export default function AiChatPanel() {
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const loadNotes = useCallback(() => {
     notesAPI
@@ -208,7 +211,7 @@ export default function AiChatPanel() {
 
   const sendMessage = async (text) => {
     const trimmed = (text ?? input).trim();
-    if (!trimmed || loading) return;
+    if ((!trimmed && !attachedFile) || loading) return;
 
     if (mode === 'append' && !selectedNoteId) {
       setError('Pick a note below, or switch to "New notes".');
@@ -220,18 +223,33 @@ export default function AiChatPanel() {
 
     setError('');
     setInput('');
+    const fileToUpload = attachedFile;
+    setAttachedFile(null);
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setHasChatted(true);
-    setMessages((prev) => [...prev, { role: 'user', text: trimmed }]);
+    
+    const userMessageText = fileToUpload 
+      ? `📄 **${fileToUpload.name}**\n\n${trimmed}`.trim()
+      : trimmed;
+      
+    setMessages((prev) => [...prev, { role: 'user', text: userMessageText }]);
     setLoading(true);
 
     try {
       if (mode === 'intake') {
         // Smart Intake mode
-        const res = await aiAPI.smartIntake(
-          { rawData: trimmed, template: intakeTemplate },
-          { signal: abortControllerRef.current.signal }
-        );
+        let res;
+        if (fileToUpload) {
+          const formData = new FormData();
+          formData.append('file', fileToUpload);
+          if (trimmed) formData.append('context', trimmed);
+          res = await aiAPI.smartIntakeUpload(formData, { signal: abortControllerRef.current.signal });
+        } else {
+          res = await aiAPI.smartIntake(
+            { rawData: trimmed, template: intakeTemplate },
+            { signal: abortControllerRef.current.signal }
+          );
+        }
         const { reply, note, todos } = res.data;
 
         const links = [];
@@ -571,45 +589,81 @@ export default function AiChatPanel() {
                   sendMessage();
                 }}
               >
-                <div className="ai-chat-input-wrap">
-                  <textarea
-                    ref={inputRef}
-                    rows={mode === 'intake' ? 3 : 1}
-                    placeholder={
-                      mode === 'intake'
-                        ? 'Paste meeting notes, emails, project briefs, braindumps…'
-                        : mode === 'append'
-                        ? 'What should I add to this note?'
-                        : 'e.g. Create 3 notes for my product launch…'
-                    }
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      resizeTextarea();
-                    }}
-                    onKeyDown={handleKeyDown}
-                    disabled={loading}
-                    aria-label="Message to AI"
-                  />
-                  {loading ? (
-                    <button
-                      type="button"
-                      className="ai-chat-send stop-btn"
-                      aria-label="Stop generation"
-                      onClick={stopRequest}
-                    >
-                      <StopCircle size={18} />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      className="ai-chat-send"
-                      disabled={!input.trim()}
-                      aria-label="Send message"
-                    >
-                      <Send size={18} />
-                    </button>
+                <div className="ai-chat-input-wrap" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  {attachedFile && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'var(--ai-message-bot)', borderRadius: '4px', fontSize: '12px', marginBottom: '8px', width: 'fit-content', border: '1px solid var(--ai-border)' }}>
+                      <Paperclip size={12} />
+                      <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
+                      <button type="button" onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}>
+                        <X size={14}/>
+                      </button>
+                    </div>
                   )}
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'flex-end' }}>
+                    <textarea
+                      ref={inputRef}
+                      rows={mode === 'intake' ? 3 : 1}
+                      placeholder={
+                        mode === 'intake'
+                          ? 'Paste meeting notes, emails, project briefs, braindumps…'
+                          : mode === 'append'
+                          ? 'What should I add to this note?'
+                          : 'e.g. Create 3 notes for my product launch…'
+                      }
+                      value={input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        resizeTextarea();
+                      }}
+                      onKeyDown={handleKeyDown}
+                      disabled={loading}
+                      aria-label="Message to AI"
+                    />
+                    
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      style={{ display: 'none' }} 
+                      accept=".pdf,.txt"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setAttachedFile(e.target.files[0]);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    
+                    <button 
+                      type="button" 
+                      className="ai-chat-send"
+                      style={{ background: 'transparent', color: 'var(--ai-text-muted)' }}
+                      onClick={() => { if (fileInputRef.current) fileInputRef.current.click(); }}
+                      disabled={loading}
+                      title="Attach PDF or TXT file"
+                    >
+                      <Paperclip size={18} />
+                    </button>
+
+                    {loading ? (
+                      <button
+                        type="button"
+                        className="ai-chat-send stop-btn"
+                        aria-label="Stop generation"
+                        onClick={stopRequest}
+                      >
+                        <StopCircle size={18} />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        className="ai-chat-send"
+                        disabled={!input.trim() && !attachedFile}
+                        aria-label="Send message"
+                      >
+                        <Send size={18} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="ai-chat-input-hint">Enter to send · Shift+Enter for new line</p>
               </form>

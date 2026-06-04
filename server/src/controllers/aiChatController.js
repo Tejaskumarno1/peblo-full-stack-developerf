@@ -1,5 +1,6 @@
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
+import pdf from 'pdf-parse/lib/pdf-parse.js';
 
 // prisma imported from db.js
 
@@ -227,6 +228,92 @@ export async function smartIntake(req, res, next) {
 
     res.json({
       reply: result.reply,
+      note,
+      todos: createdTodos,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function smartIntakeUpload(req, res, next) {
+  try {
+    const userId = req.user.id;
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    let rawData = '';
+    
+    // Simple MIME type check
+    if (req.file.mimetype === 'application/pdf') {
+      const data = await pdf(req.file.buffer);
+      rawData = data.text;
+    } else if (req.file.mimetype === 'text/plain') {
+      rawData = req.file.buffer.toString('utf8');
+    } else {
+      return res.status(400).json({ error: 'Unsupported file type. Please upload a PDF or TXT file.' });
+    }
+
+    if (!rawData || !rawData.trim()) {
+      return res.status(400).json({ error: 'Could not extract any text from the file.' });
+    }
+
+    // Call the same AI service logic
+    const result = await aiService.generateSmartIntake(rawData, 'auto');
+
+    // Step 1: Create Note
+    const note = await prisma.note.create({
+      data: {
+        title: result.title || 'Parsed File Intake',
+        content: result.content || '',
+        userId,
+      },
+    });
+
+    if (result.tags && result.tags.length > 0) {
+      await syncTags(note.id, result.tags);
+    }
+
+    await prisma.aiGeneration.create({
+      data: {
+        noteId: note.id,
+        userId,
+        type: 'smart_intake_file',
+        result: JSON.stringify({ source: 'file_upload', tasksExtracted: result.tasks.length }),
+      },
+    });
+
+    // Step 2: Create Todos
+    const createdTodos = [];
+    for (const task of result.tasks) {
+      const validPriorities = ['high', 'medium', 'low'];
+      let deadline = null;
+      if (task.deadline) {
+        try {
+          const parsed = new Date(task.deadline);
+          if (!isNaN(parsed.getTime())) deadline = parsed;
+        } catch (e) { /* skip */ }
+      }
+
+      const todo = await prisma.todo.create({
+        data: {
+          text: task.text.trim(),
+          priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
+          deadline,
+          startTime: task.startTime || null,
+          endTime: task.endTime || null,
+          todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+          noteId: note.id,
+          userId,
+        },
+        include: { note: { select: { id: true, title: true } } }
+      });
+      createdTodos.push(todo);
+    }
+
+    res.json({
+      reply: `I successfully processed your file! ${result.reply}`,
       note,
       todos: createdTodos,
     });
