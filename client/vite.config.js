@@ -14,13 +14,14 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           ui: ['lucide-react', 'framer-motion'],
-          utils: ['marked', 'axios', '@hello-pangea/dnd']
+          utils: ['marked', 'axios', '@hello-pangea/dnd'],
+          pdf: ['html2pdf.js']
         }
       }
     }
