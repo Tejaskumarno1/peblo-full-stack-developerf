@@ -15,6 +15,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Vercel's proxy so rate limiting works correctly and doesn't throw ValidationError
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
