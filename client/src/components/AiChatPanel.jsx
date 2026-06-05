@@ -342,9 +342,10 @@ export default function AiChatPanel() {
          });
          return;
       }
-      const msg =
-        err.response?.data?.error ||
-        'Could not reach AI. Check your connection and GEMINI_API_KEY in server/.env.';
+      let msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Could not reach AI. Check your connection.';
+      if (typeof msg !== 'string') {
+        try { msg = JSON.stringify(msg); } catch(e) { msg = 'An unknown error occurred'; }
+      }
       setError(msg);
       addAiChatMessage({ role: 'assistant', text: msg, isError: true });
     } finally {
@@ -547,7 +548,7 @@ export default function AiChatPanel() {
                   <div className={`ai-chat-bubble ${m.isError ? 'error' : ''}`}>
                     <div 
                       className="ai-chat-markdown"
-                      dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} 
+                      dangerouslySetInnerHTML={{ __html: marked.parse(typeof m.text === 'string' ? m.text : (m.text ? JSON.stringify(m.text) : '')) }} 
                     />
                     {m.links?.length > 0 && (
                       <div className="ai-chat-results">
