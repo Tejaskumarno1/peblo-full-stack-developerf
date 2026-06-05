@@ -172,6 +172,117 @@ export async function chatAndCreateNotes(req, res, next) {
   }
 }
 
+export async function chatStream(req, res, next) {
+  try {
+    const { message, mode = 'create', noteId } = req.body;
+
+    if (!message?.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const userId = req.user.id;
+
+    const recentNotes = await prisma.note.findMany({
+      where: { userId, isArchived: false },
+      select: { id: true, title: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 25,
+    });
+
+    let targetNote = null;
+    if (mode === 'append' && noteId) {
+      targetNote = await prisma.note.findFirst({
+        where: { id: noteId, userId },
+        select: { id: true, title: true, content: true },
+      });
+      if (!targetNote) {
+        return res.status(404).json({ error: 'Note not found' });
+      }
+    }
+
+    // Call the streaming service! This function will pipe 'chunk' events to `res`
+    const plan = await aiService.chatPlanNotesStream({
+      message: message.trim(),
+      mode: mode === 'append' ? 'append' : 'create',
+      targetNote,
+      existingNotes: recentNotes.map((n) => ({ id: n.id, title: n.title })),
+    }, res);
+
+    const createdNotes = [];
+    let updatedNote = null;
+
+    const updateExistingNote = async (id, appendContent, replaceContent) => {
+      const existing = await prisma.note.findFirst({
+        where: { id, userId },
+      });
+      if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+
+      let newContent = existing.content || '';
+      if (replaceContent?.trim()) {
+        newContent = replaceContent.trim();
+      } else if (appendContent?.trim()) {
+        const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
+        newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
+      }
+
+      await prisma.noteBackup.create({
+        data: { noteId: existing.id, content: existing.content || '' }
+      });
+
+      await prisma.note.update({
+        where: { id: existing.id },
+        data: { content: newContent },
+      });
+
+      await prisma.aiGeneration.create({
+        data: {
+          noteId: existing.id,
+          userId,
+          type: 'chat',
+          result: JSON.stringify({ source: 'dashboard_chat_update' }),
+        },
+      });
+
+      const refetched = await prisma.note.findUnique({
+        where: { id: existing.id },
+        include: noteInclude,
+      });
+      return formatNote(refetched);
+    };
+
+    if (plan.updateNote?.noteId && (plan.updateNote.appendContent || plan.updateNote.replaceContent)) {
+      updatedNote = await updateExistingNote(plan.updateNote.noteId, plan.updateNote.appendContent, plan.updateNote.replaceContent);
+    } else if (mode === 'append' && targetNote) {
+      const appendContent = plan.notes[0]?.content || `## AI addition\n\n${message.trim()}`;
+      updatedNote = await updateExistingNote(targetNote.id, appendContent, null);
+      plan.notes = [];
+    }
+
+    for (const draft of plan.notes) {
+      if (!draft?.title && !draft?.content) continue;
+      const note = await createNoteForUser(userId, draft);
+      createdNotes.push(note);
+
+      await prisma.aiGeneration.create({
+        data: {
+          noteId: note.id,
+          userId,
+          type: 'chat',
+          result: JSON.stringify({ source: 'dashboard_chat', message: message.trim() }),
+        },
+      });
+    }
+
+    // Send final completion event with the DB records
+    res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Streaming error:', error);
+    res.write(`data: ${JSON.stringify({ error: 'AI processing failed' })}\n\n`);
+    res.end();
+  }
+}
+
 export async function smartIntake(req, res, next) {
   try {
     const { rawData, template } = req.body;

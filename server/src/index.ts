@@ -70,7 +70,7 @@ if (!process.env.VERCEL) {
     console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
   });
 
-  server.on('error', (err) => {
+  server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
       console.error(
         `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
@@ -81,6 +81,24 @@ if (!process.env.VERCEL) {
     }
     throw err;
   });
+
+  // Graceful shutdown for tsx watch
+  const gracefulShutdown = () => {
+    console.log('Shutting down gracefully...');
+    server.close(async () => {
+      // If you exported prisma from db.js, you can disconnect here.
+      console.log('Closed out remaining connections.');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error('Could not close connections in time, forcefully shutting down');
+      process.exit(1);
+    }, 4000);
+  };
+
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
 }
 
 // Export for Vercel serverless

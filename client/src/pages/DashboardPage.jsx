@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardAPI, todosAPI } from '../api/index';
 import { FileText, Archive, Sparkles, Tag, Globe, Bell, Calendar, Sunrise, Sun, Moon, AlertTriangle, ChevronRight, PartyPopper } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -10,58 +11,67 @@ import '../styles/dashboard.css';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [insights, setInsights] = useState(null);
-  const [tasks, setTasks] = useState([]);
-  const [todayData, setTodayData] = useState({ todayTasks: [], overdueTasks: [], upcomingTasks: [] });
-  const [briefing, setBriefing] = useState(null);
-  const [weeklyReport, setWeeklyReport] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    Promise.all([
-      dashboardAPI.insights(),
-      todosAPI.getToday(),
-      dashboardAPI.dailyBriefing(),
-      dashboardAPI.weeklyReport()
-    ])
-      .then(([insightsRes, todayRes, briefingRes, weeklyRes]) => {
-        setInsights(insightsRes.data);
-        setTasks(insightsRes.data.dashboardTasks || []);
-        setTodayData(todayRes.data);
-        setBriefing(briefingRes.data);
-        setWeeklyReport(weeklyRes.data);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: insightsData, isLoading: loadingInsights } = useQuery({
+    queryKey: ['insights'],
+    queryFn: () => dashboardAPI.insights().then(res => res.data),
+    staleTime: 60000
+  });
 
-  // The Dashboard will now load instantly and show skeleton states (if data is null) 
-  // instead of blocking the entire UI with a massive full-screen spinner.
+  const { data: todayDataRes, isLoading: loadingToday } = useQuery({
+    queryKey: ['todayTasks'],
+    queryFn: () => todosAPI.getToday().then(res => res.data),
+    staleTime: 60000
+  });
 
-  const handleToggleTask = async (task) => {
-    const originalCompleted = task.completed;
-    
-    // Optimistic update
-    setTasks(prev => prev.map(t => 
-      t.id === task.id
-        ? { ...t, completed: !t.completed } 
-        : t
-    ));
+  const { data: briefingData, isLoading: loadingBriefing } = useQuery({
+    queryKey: ['dailyBriefing'],
+    queryFn: () => dashboardAPI.dailyBriefing().then(res => res.data),
+    staleTime: 60000
+  });
 
-    try {
-      await dashboardAPI.toggleTask({
-        id: task.id,
-        completed: !originalCompleted
+  const { data: weeklyReportData, isLoading: loadingWeekly } = useQuery({
+    queryKey: ['weeklyReport'],
+    queryFn: () => dashboardAPI.weeklyReport().then(res => res.data),
+    staleTime: 60000
+  });
+
+  const loading = loadingInsights || loadingToday || loadingBriefing || loadingWeekly;
+  const insights = insightsData;
+  const todayData = todayDataRes || { todayTasks: [], overdueTasks: [], upcomingTasks: [] };
+  const briefing = briefingData;
+  const weeklyReport = weeklyReportData;
+
+  const toggleTaskMutation = useMutation({
+    mutationFn: (task) => dashboardAPI.toggleTask({ id: task.id, completed: !task.completed }),
+    onMutate: async (task) => {
+      await queryClient.cancelQueries({ queryKey: ['todayTasks'] });
+      const previousTodayData = queryClient.getQueryData(['todayTasks']);
+      
+      queryClient.setQueryData(['todayTasks'], old => {
+        if (!old) return old;
+        const toggleList = (list) => list.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t);
+        return {
+          ...old,
+          todayTasks: toggleList(old.todayTasks),
+          overdueTasks: toggleList(old.overdueTasks),
+          upcomingTasks: toggleList(old.upcomingTasks)
+        };
       });
-    } catch (err) {
-      console.error('Failed to toggle task:', err);
-      // Revert on failure
-      setTasks(prev => prev.map(t => 
-        t.id === task.id
-          ? { ...t, completed: originalCompleted } 
-          : t
-      ));
+
+      return { previousTodayData };
+    },
+    onError: (err, newTask, context) => {
+      queryClient.setQueryData(['todayTasks'], context.previousTodayData);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['todayTasks'] });
     }
+  });
+
+  const handleToggleTask = (task) => {
+    toggleTaskMutation.mutate(task);
   };
 
   const { user } = useAuth();

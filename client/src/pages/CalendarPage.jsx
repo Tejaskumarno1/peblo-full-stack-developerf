@@ -65,6 +65,11 @@ export default function CalendarPage() {
     }
   };
 
+  useEffect(() => {
+    window.addEventListener('todo-updated', loadMonthTodos);
+    return () => window.removeEventListener('todo-updated', loadMonthTodos);
+  }, [year, month]);
+
   const handleToggle = async (todo) => {
     const original = todo.completed;
     setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t));

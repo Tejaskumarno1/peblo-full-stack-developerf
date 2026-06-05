@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { todosAPI, notesAPI } from '../api';
 import { Check, Trash2, FileText, ChevronDown, ChevronRight, ListTodo, AlertTriangle, Plus, Calendar as CalendarIcon, Clock, Moon, Flame, Briefcase, Home, Play, Pause, Square } from 'lucide-react';
@@ -14,9 +15,20 @@ export default function TodoListPage() {
   const { user } = useAuth();
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
-  const [todos, setTodos] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const { data: todos = [], isLoading: loadingTodos } = useQuery({
+    queryKey: ['todos'],
+    queryFn: () => todosAPI.getAll().then(res => res.data.todos)
+  });
+
+  const { data: notes = [], isLoading: loadingNotes } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => notesAPI.getAll({ archived: false }).then(res => res.data.notes || [])
+  });
+
+  const loading = loadingTodos || loadingNotes;
+
   const [showCompleted, setShowCompleted] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // all, high, work, personal
 
@@ -36,10 +48,6 @@ export default function TodoListPage() {
   // Pomodoro Timer State
   const [timer, setTimer] = useState({ taskId: null, timeLeft: 25 * 60, isRunning: false });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   // Timer Tick Effect
   useEffect(() => {
     let interval = null;
@@ -54,38 +62,10 @@ export default function TodoListPage() {
     return () => clearInterval(interval);
   }, [timer.isRunning, timer.timeLeft]);
 
-  const loadData = async () => {
-    try {
-      const [todosRes, notesRes] = await Promise.all([
-        todosAPI.getAll(),
-        notesAPI.getAll({ archived: false })
-      ]);
-      setTodos(todosRes.data.todos);
-      setNotes(notesRes.data.notes || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!newText.trim()) return;
-
-    try {
-      const payload = {
-        text: newText.trim(),
-        priority: newPriority,
-        deadline: newDeadline || null,
-        startTime: newStartTime || null,
-        endTime: newEndTime || null,
-        recurrence: newRecurrence,
-        tags: newTags ? newTags.split(',').map(t => t.trim()).filter(Boolean) : [],
-        noteId: newNoteId || null
-      };
-      const res = await todosAPI.create(payload);
-      setTodos(prev => [res.data.todo, ...prev]);
+  const createTodo = useMutation({
+    mutationFn: (payload) => todosAPI.create(payload),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['todos'], old => [res.data.todo, ...(old || [])]);
       setNewText('');
       setNewDeadline('');
       setNewStartTime('');
@@ -94,54 +74,91 @@ export default function TodoListPage() {
       setNewTags('');
       setNewNoteId('');
       setNewPriority('medium');
-    } catch (err) {
-      console.error(err);
     }
+  });
+
+  const handleCreate = (e) => {
+    e.preventDefault();
+    if (!newText.trim()) return;
+
+    createTodo.mutate({
+      text: newText.trim(),
+      priority: newPriority,
+      deadline: newDeadline || null,
+      startTime: newStartTime || null,
+      endTime: newEndTime || null,
+      recurrence: newRecurrence,
+      tags: newTags ? newTags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      noteId: newNoteId || null
+    });
   };
 
-  const handleToggle = async (todo) => {
-    const original = todo.completed;
-    setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t));
-    try {
-      await todosAPI.update(todo.id, { completed: !original });
-    } catch {
-      setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, completed: original } : t));
-    }
-  };
+  const toggleTodo = useMutation({
+    mutationFn: (todo) => todosAPI.update(todo.id, { completed: !todo.completed }),
+    onMutate: async (todo) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
+      const prevTodos = queryClient.getQueryData(['todos']);
+      queryClient.setQueryData(['todos'], old =>
+        old.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t)
+      );
+      return { prevTodos };
+    },
+    onError: (err, todo, context) => queryClient.setQueryData(['todos'], context.prevTodos),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] })
+  });
 
-  const handleDelete = async (id) => {
-    setTodos(prev => prev.filter(t => t.id !== id));
-    try {
-      await todosAPI.delete(id);
-    } catch {
-      loadData();
-    }
-  };
+  const handleToggle = (todo) => toggleTodo.mutate(todo);
 
-  const handleUpdateText = async (e, id) => {
+  const deleteTodo = useMutation({
+    mutationFn: (id) => todosAPI.delete(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
+      const prevTodos = queryClient.getQueryData(['todos']);
+      queryClient.setQueryData(['todos'], old => old.filter(t => t.id !== id));
+      return { prevTodos };
+    },
+    onError: (err, id, context) => queryClient.setQueryData(['todos'], context.prevTodos),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] })
+  });
+
+  const handleDelete = (id) => deleteTodo.mutate(id);
+
+  const updateText = useMutation({
+    mutationFn: ({ id, text }) => todosAPI.update(id, { text }),
+    onMutate: async ({ id, text }) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
+      const prevTodos = queryClient.getQueryData(['todos']);
+      queryClient.setQueryData(['todos'], old => old.map(t => t.id === id ? { ...t, text } : t));
+      return { prevTodos };
+    },
+    onError: (err, variables, context) => queryClient.setQueryData(['todos'], context.prevTodos),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] })
+  });
+
+  const handleUpdateText = (e, id) => {
     e.preventDefault();
     if (!editText.trim()) return;
-    const backup = [...todos];
-    setTodos(todos.map(t => t.id === id ? { ...t, text: editText } : t));
+    updateText.mutate({ id, text: editText });
     setEditingId(null);
-    try {
-      await todosAPI.update(id, { text: editText });
-    } catch {
-      setTodos(backup);
-    }
   };
 
-  const handleSnooze = async (task) => {
+  const snoozeTodo = useMutation({
+    mutationFn: ({ id, deadline }) => todosAPI.update(id, { deadline }),
+    onMutate: async ({ id, deadline }) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
+      const prevTodos = queryClient.getQueryData(['todos']);
+      queryClient.setQueryData(['todos'], old => old.map(t => t.id === id ? { ...t, deadline } : t));
+      return { prevTodos };
+    },
+    onError: (err, variables, context) => queryClient.setQueryData(['todos'], context.prevTodos),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] })
+  });
+
+  const handleSnooze = (task) => {
     const tmrw = new Date();
     tmrw.setDate(tmrw.getDate() + 1);
     tmrw.setHours(23, 59, 59, 999);
-    const backup = [...todos];
-    setTodos(todos.map(t => t.id === task.id ? { ...t, deadline: tmrw.toISOString() } : t));
-    try {
-      await todosAPI.update(task.id, { deadline: tmrw.toISOString() });
-    } catch {
-      setTodos(backup);
-    }
+    snoozeTodo.mutate({ id: task.id, deadline: tmrw.toISOString() });
   };
 
   // Helpers

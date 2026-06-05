@@ -37,7 +37,7 @@ function rotateGeminiKey() {
   }
 }
 
-function getGenAI() {
+export function getGenAI() {
   const keys = getGeminiKeys();
   if (keys.length === 0) return null;
   if (!geminiInstance) {
@@ -284,6 +284,102 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
       updateNote: null,
     };
   }
+}
+
+export async function chatPlanNotesStream({ message, mode, targetNote, existingNotes }, res) {
+  const contextList = existingNotes?.slice(0, 20).map(n => `ID: ${n.id} | Title: ${n.title}`).join('\n') || '';
+  const titlesContext = contextList ? `Existing notes:\n${contextList}` : 'No existing notes.';
+  
+  const modeHint = mode === 'append' && targetNote
+      ? `You are modifying the existing note "${targetNote.title}" (id: ${targetNote.id}).\nCurrent Note Content:\n"""\n${targetNote.content}\n"""\nBased on the user's message, you can either add to the bottom using 'updateNote.appendContent', OR completely rewrite/edit the old content using 'updateNote.replaceContent'. Do not create new notes unless explicitly asked.`
+      : 'You can create new notes OR update existing notes if the user asks you to modify or improve one of their existing notes. Use the ID from the context.';
+      
+  const systemPrompt = `You are an elite, highly-paid "$10,000/month" AI Chief of Staff and Knowledge Manager.
+Your job is perfectly organize the user's thoughts into beautifully structured, comprehensive notes. 
+When creating notes:
+- Use extensive Markdown (tables, bold, headers, blockquotes, code blocks) to make them visually stunning.
+- Expand on brief ideas with deep, insightful additions where appropriate.
+- Assign the absolute best category (e.g., Work, Personal, Research, Ideas).
+- Generate 2-5 highly relevant tags.
+When the user asks to modify or improve an existing note (e.g. "update the list"):
+- Find the most relevant note ID from the context.
+- Use 'updateNote.replaceContent' to completely rewrite and improve the note, or 'updateNote.appendContent' to just add to the bottom.
+- Provide a warm, extremely intelligent, and concise reply to the user.
+Respond strictly in JSON with this schema: { reply: string, notes: [{title, content, category, tags}], updateNote: {noteId, appendContent, replaceContent} | null }`;
+
+  const userPrompt = `Context:\n${titlesContext}\n\nUser message: "${message}"\n\nMode: ${modeHint}`;
+
+  const gemini = getGenAI();
+  if (!gemini) throw new Error('No Gemini API key available');
+  
+  const SchemaType = require('@google/generative-ai').SchemaType;
+  const model = gemini.getGenerativeModel({
+    model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
+    systemInstruction: systemPrompt
+  });
+
+  const result = await model.generateContentStream({
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: SchemaType.OBJECT,
+        properties: {
+          reply: { type: SchemaType.STRING },
+          notes: {
+            type: SchemaType.ARRAY,
+            items: {
+              type: SchemaType.OBJECT,
+              properties: {
+                title: { type: SchemaType.STRING },
+                content: { type: SchemaType.STRING },
+                category: { type: SchemaType.STRING },
+                tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+              },
+              required: ["title", "content", "category", "tags"]
+            }
+          },
+          updateNote: {
+            type: SchemaType.OBJECT,
+            properties: {
+              noteId: { type: SchemaType.STRING },
+              appendContent: { type: SchemaType.STRING },
+              replaceContent: { type: SchemaType.STRING }
+            },
+            required: ["noteId"],
+            nullable: true
+          }
+        },
+        required: ["reply", "notes"]
+      }
+    }
+  });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+
+  let fullResponse = '';
+  for await (const chunk of result.stream) {
+    const chunkText = chunk.text();
+    fullResponse += chunkText;
+    res.write(`data: ${JSON.stringify({ chunk: chunkText })}\n\n`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fullResponse);
+  } catch (e) {
+    parsed = { reply: 'Error parsing AI response', notes: [], updateNote: null };
+  }
+
+  return {
+    reply: parsed.reply || 'Done! Your notes are ready.',
+    notes: Array.isArray(parsed.notes) ? parsed.notes : [],
+    updateNote: parsed.updateNote?.noteId ? parsed.updateNote : null,
+  };
 }
 
 export async function suggestTitle(content) {

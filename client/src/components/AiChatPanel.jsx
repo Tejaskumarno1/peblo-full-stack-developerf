@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { marked } from 'marked';
 import { aiAPI, notesAPI } from '../api/index';
+import { useUIStore } from '../store/useUIStore';
+import { useQueryClient } from '@tanstack/react-query';
 import '../styles/ai-chat.css';
 
 const SUGGESTIONS = [
@@ -72,24 +74,20 @@ function TypingIndicator() {
 export default function AiChatPanel() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState(() => {
-    try {
-      const saved = localStorage.getItem('peblo_ai_chat_history');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [hasChatted, setHasChatted] = useState(() => {
-    try {
-      const saved = localStorage.getItem('peblo_ai_chat_history');
-      return saved && JSON.parse(saved).length > 0;
-    } catch {
-      return false;
-    }
-  });
+  
+  const { 
+    isAiChatOpen: isOpen, 
+    setAiChatOpen: setIsOpen, 
+    aiChatMessages: messages, 
+    setAiChatMessages: setMessages, 
+    addAiChatMessage,
+    hasChatted, 
+    setHasChatted,
+    clearAiChatMessages
+  } = useUIStore();
+
   const [input, setInput] = useState('');
   const [mode, setMode] = useState('intake'); // Default to Smart Intake
   const [noteOptions, setNoteOptions] = useState([]);
@@ -125,15 +123,6 @@ export default function AiChatPanel() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    try {
-      // Only save non-error messages
-      localStorage.setItem('peblo_ai_chat_history', JSON.stringify(messages.filter(m => !m.isError)));
-    } catch (err) {
-      console.error('Failed to save chat history', err);
-    }
-  }, [messages]);
 
   useEffect(() => {
     if (isOpen) {
@@ -232,7 +221,7 @@ export default function AiChatPanel() {
       ? `📄 **${fileToUpload.name}**\n\n${trimmed}`.trim()
       : trimmed;
       
-    setMessages((prev) => [...prev, { role: 'user', text: userMessageText }]);
+    addAiChatMessage({ role: 'user', text: userMessageText });
     setLoading(true);
 
     try {
@@ -255,51 +244,109 @@ export default function AiChatPanel() {
         const links = [];
         if (note) {
           links.push({ id: note.id, title: note.title, kind: 'created' });
-          window.dispatchEvent(new CustomEvent('note-created'));
+          queryClient.invalidateQueries({ queryKey: ['notes'] });
         }
         if (todos && todos.length > 0) {
+          queryClient.invalidateQueries({ queryKey: ['todos'] });
           window.dispatchEvent(new CustomEvent('todo-updated'));
         }
 
-        setMessages((prev) => [...prev, {
+        addAiChatMessage({
           role: 'assistant',
           text: reply,
           links,
           intakeResult: { note, todos: todos || [] }
-        }]);
+        });
         loadNotes();
       } else {
-        // Regular chat mode (create)
-        const res = await aiAPI.chat(
-          { message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined },
-          { signal: abortControllerRef.current.signal }
-        );
+        // Regular chat mode (create) - STREAMING SSE
+        const tempId = Date.now().toString();
+        setMessages(prev => [...prev, { id: tempId, role: 'assistant', text: '', isStreaming: true }]);
 
-        const { reply, notes, updatedNote } = res.data;
+        const token = localStorage.getItem('token');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/ai/chat-stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined }),
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to reach AI streaming endpoint');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let done = false;
+        let accumulatedJsonStr = '';
+        let streamedReply = '';
+        let finalData = null;
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const dataStr = line.replace('data: ', '');
+                if (!dataStr) continue;
+                try {
+                  const dataObj = JSON.parse(dataStr);
+                  if (dataObj.error) {
+                    throw new Error(dataObj.error);
+                  }
+                  if (dataObj.done) {
+                    finalData = dataObj;
+                  } else if (dataObj.chunk) {
+                    accumulatedJsonStr += dataObj.chunk;
+                    // Regex extract the reply value from the accumulating JSON string
+                    const match = accumulatedJsonStr.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/);
+                    if (match) {
+                      streamedReply = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: streamedReply } : m));
+                    }
+                  }
+                } catch (e) {} // ignore incomplete JSON lines
+              }
+            }
+          }
+          done = readerDone;
+        }
+
+        const { reply, notes, updatedNote } = finalData || { reply: streamedReply, notes: [] };
         const links = [];
 
         if (updatedNote) {
           links.push({ id: updatedNote.id, title: updatedNote.title, kind: 'updated' });
-          window.dispatchEvent(new CustomEvent('note-updated', { detail: updatedNote }));
+          queryClient.invalidateQueries({ queryKey: ['notes'] });
         }
         for (const n of notes || []) {
           links.push({ id: n.id, title: n.title, kind: 'created' });
-          window.dispatchEvent(new CustomEvent('note-created'));
+          queryClient.invalidateQueries({ queryKey: ['notes'] });
         }
 
-        setMessages((prev) => [...prev, { role: 'assistant', text: reply, links }]);
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: reply, links, isStreaming: false } : m));
         loadNotes();
       }
     } catch (err) {
-      if (err.name === 'CanceledError' || err.message === 'canceled') {
-         setMessages((prev) => [...prev, { role: 'assistant', text: 'Request cancelled by user.', isError: true }]);
+      if (err.name === 'CanceledError' || err.message === 'canceled' || err.name === 'AbortError') {
+         setMessages(prev => {
+           const last = prev[prev.length - 1];
+           if (last?.isStreaming) return prev.map(m => m.id === last.id ? { ...m, text: m.text + '\n\n*(Cancelled by user)*', isStreaming: false } : m);
+           return [...prev, { role: 'assistant', text: 'Request cancelled by user.', isError: true }];
+         });
          return;
       }
       const msg =
         err.response?.data?.error ||
         'Could not reach AI. Check your connection and GEMINI_API_KEY in server/.env.';
       setError(msg);
-      setMessages((prev) => [...prev, { role: 'assistant', text: msg, isError: true }]);
+      addAiChatMessage({ role: 'assistant', text: msg, isError: true });
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
@@ -326,7 +373,7 @@ export default function AiChatPanel() {
   };
 
   const clearHistory = () => {
-    setMessages([]);
+    clearAiChatMessages();
     setHasChatted(false);
     setError('');
   };

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesAPI, aiAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
@@ -35,6 +36,7 @@ import {
   File,
   MoreHorizontal,
 } from 'lucide-react';
+import BlockEditor from '../components/BlockEditor';
 import '../styles/workspace.css';
 
 function countWords(text) {
@@ -47,13 +49,24 @@ export default function WorkspacePage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   const { settings } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [notes, setNotes] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [sortBy, setSortBy] = useState('updated');
   const [showArchived, setShowArchived] = useState(false);
-  const [listLoading, setListLoading] = useState(true);
+  const debouncedSearch = useDebounce(searchQuery, 400);
+
+  const { data: notes = [], isLoading: listLoading } = useQuery({
+    queryKey: ['notes', { sort: sortBy, archived: showArchived, search: debouncedSearch, tag: filterTag }],
+    queryFn: () => {
+      const params = { sort: sortBy, archived: showArchived.toString() };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filterTag) params.tag = filterTag;
+      return notesAPI.getAll(params).then(res => res.data.notes);
+    }
+  });
+
   const [generating, setGenerating] = useState(false);
 
   const [selectedNote, setSelectedNote] = useState(null);
@@ -101,7 +114,6 @@ export default function WorkspacePage() {
     };
   }, []);
 
-  const debouncedSearch = useDebounce(searchQuery, 400);
   const wordCount = useMemo(() => countWords(noteContent), [noteContent]);
 
   const saveData = useMemo(() => {
@@ -119,7 +131,10 @@ export default function WorkspacePage() {
         category: category || undefined,
       });
       const newNote = res.data.note;
-      setNotes((prev) => [newNote, ...prev]);
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return [newNote, ...old];
+      });
       setSelectedNote(newNote);
       navigate(`/notes/${newNote.id}`, { replace: true });
       return newNote;
@@ -127,7 +142,7 @@ export default function WorkspacePage() {
       console.error('Failed to persist draft:', err);
       return null;
     }
-  }, [navigate]);
+  }, [navigate, queryClient]);
 
   const handleSave = useCallback(async (noteId, data) => {
     if (noteId === '__draft__') {
@@ -138,9 +153,12 @@ export default function WorkspacePage() {
     }
     await notesAPI.update(noteId, data);
     
-    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, ...data, updatedAt: new Date().toISOString() } : n)));
+    queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+      if (!old) return old;
+      return old.map((n) => (n.id === noteId ? { ...n, ...data, updatedAt: new Date().toISOString() } : n));
+    });
     setSelectedNote((prev) => (prev?.id === noteId ? { ...prev, ...data, updatedAt: new Date().toISOString() } : prev));
-  }, [persistDraft]);
+  }, [persistDraft, queryClient]);
 
   const { saveStatus, forceSave } = useAutoSave(selectedNote?.id, saveData, handleSave);
 
@@ -176,28 +194,13 @@ export default function WorkspacePage() {
   useKeyboardShortcut('p', () => setShowPreview((p) => !p), { ctrl: true });
   useKeyboardShortcut('j', () => setAiPanelOpen((p) => !p), { ctrl: true });
 
-  const fetchNotes = useCallback(async () => {
-    try {
-      const params = { sort: sortBy, archived: showArchived.toString() };
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (filterTag) params.tag = filterTag;
-      const res = await notesAPI.getAll(params);
-      setNotes(res.data.notes);
-    } catch (err) {
-      console.error('Failed to fetch notes:', err);
-    } finally {
-      setListLoading(false);
-    }
-  }, [debouncedSearch, filterTag, sortBy, showArchived]);
-
-  useEffect(() => {
-    fetchNotes();
-  }, [fetchNotes]);
-
   useEffect(() => {
     const handleGlobalUpdate = (e) => {
       const updatedNote = e.detail;
-      setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.map((n) => (n.id === updatedNote.id ? updatedNote : n));
+      });
       if (selectedNote?.id === updatedNote.id) {
         setNoteContent(updatedNote.content || '');
         setNoteTitle(updatedNote.title || '');
@@ -237,7 +240,10 @@ export default function WorkspacePage() {
     try {
       const res = await notesAPI.revertBackup(selectedNote.id, backupId);
       applyNoteToEditor(res.data.note);
-      setNotes(prev => prev.map(n => n.id === res.data.note.id ? res.data.note : n));
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.map(n => n.id === res.data.note.id ? res.data.note : n);
+      });
       setShowBackups(false);
     } catch (err) {
       console.error('Failed to restore backup', err);
@@ -399,11 +405,12 @@ export default function WorkspacePage() {
         if (cancelled) return;
         const note = res.data.note;
         lastRouteIdRef.current = note.id;
-        setNotes((prev) => {
-          if (prev.some((n) => n.id === note.id)) {
-            return prev.map((n) => (n.id === note.id ? note : n));
+        queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+          if (!old) return old;
+          if (old.some((n) => n.id === note.id)) {
+            return old.map((n) => (n.id === note.id ? note : n));
           }
-          return [note, ...prev];
+          return [note, ...old];
         });
         applyNoteToEditor(note);
       })
@@ -420,7 +427,10 @@ export default function WorkspacePage() {
     if (!confirm('Delete this note?')) return;
     try {
       await notesAPI.delete(noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.filter((n) => n.id !== noteId);
+      });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });
@@ -433,7 +443,10 @@ export default function WorkspacePage() {
   const handleArchiveNote = async (noteId) => {
     try {
       await notesAPI.archive(noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.filter((n) => n.id !== noteId);
+      });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });
@@ -449,7 +462,10 @@ export default function WorkspacePage() {
       const res = await notesAPI.share(selectedNote.id);
       const updatedNote = res.data.note;
       
-      setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.map((n) => (n.id === updatedNote.id ? updatedNote : n));
+      });
       setSelectedNote(updatedNote);
     } catch (err) {
       console.error('Failed to share note:', err);
@@ -518,8 +534,9 @@ export default function WorkspacePage() {
 
       // Instantly propagate the new generation details to in-memory list & selection
       if (type === 'summary') {
-        setNotes((prevNotes) =>
-          prevNotes.map((n) =>
+        queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+          if (!old) return old;
+          return old.map((n) =>
             n.id === noteId
               ? {
                   ...n,
@@ -530,8 +547,8 @@ export default function WorkspacePage() {
                   ]
                 }
               : n
-          )
-        );
+          );
+        });
         setSelectedNote((prevSelected) =>
           prevSelected && prevSelected.id === noteId
             ? {
@@ -590,7 +607,10 @@ export default function WorkspacePage() {
         setNoteContent(updatedNote.content);
         setNoteTitle(updatedNote.title);
         setNoteTags(updatedNote.tags || []);
-        setNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n));
+        queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+          if (!old) return old;
+          return old.map(n => n.id === updatedNote.id ? updatedNote : n);
+        });
         setSelectedNote(updatedNote);
       }
     } catch (err) {
@@ -1014,42 +1034,7 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              {/* Linked Todo Indicator */}
-              {selectedNote?.linkedTodos?.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '1rem', padding: '0 2rem' }}>
-                  {selectedNote.linkedTodos.map(todo => (
-                    <div 
-                      key={todo.id} 
-                      onClick={() => navigate('/todolist')}
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.5rem', 
-                        padding: '0.5rem 0.75rem', 
-                        background: 'rgba(79, 70, 229, 0.05)', 
-                        border: '1px solid rgba(79, 70, 229, 0.2)', 
-                        borderRadius: '8px', 
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        color: 'var(--dash-text)',
-                        fontWeight: 500,
-                        transition: 'all 0.2s ease'
-                      }}
-                      className="linked-todo-strip"
-                    >
-                      <span style={{ fontSize: '1rem' }}>📌</span>
-                      <span style={{ color: 'var(--dash-text-muted)' }}>Linked to task:</span>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: todo.priority === 'high' ? '#ef4444' : todo.priority === 'low' ? '#22c55e' : '#f59e0b' }}></span>
-                      <span style={{ flex: 1, textDecoration: todo.completed ? 'line-through' : 'none', opacity: todo.completed ? 0.6 : 1 }}>{todo.text}</span>
-                      {todo.deadline && (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--dash-text-muted)' }}>
-                          Due {new Date(todo.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Linked Todo Indicator Removed */}
 
               <div className="editor-header">
                 <input
@@ -1083,21 +1068,12 @@ export default function WorkspacePage() {
 
               <div className="editor-body">
                 <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
-                  {showPreview ? (
-                    <div
-                      className={`markdown-preview font-${settings?.fontSize || 'medium'}`}
-                      dangerouslySetInnerHTML={{ __html: marked.parse(noteContent || '') }}
-                    />
-                  ) : (
-                    <textarea
-                      className={`editor-textarea font-${settings?.fontSize || 'medium'}`}
-                      style={{ whiteSpace: settings?.wordWrap ? 'pre-wrap' : 'pre' }}
-                      value={noteContent}
-                      onChange={(e) => setNoteContent(e.target.value)}
-                      placeholder="Start writing… Markdown supported."
-                      aria-label="Note content"
-                    />
-                  )}
+                  <BlockEditor
+                    key={selectedNote?.id || 'new'}
+                    initialContent={noteContent}
+                    onChange={(content) => setNoteContent(content)}
+                    editable={!showPreview}
+                  />
                   <div className="editor-footer">
                     <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
                     <span>Ctrl+S save · Ctrl+K search</span>

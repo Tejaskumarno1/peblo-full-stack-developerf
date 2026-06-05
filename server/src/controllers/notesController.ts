@@ -1,12 +1,13 @@
+import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // prisma imported from db.js
 
 // Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions
-async function syncTags(noteId, tagNames) {
+async function syncTags(noteId: any, tagNames: any) {
   const normalizedInput = Array.from(
-    new Set((tagNames || []).map((t) => t.trim().toLowerCase()).filter(Boolean))
+    new Set((tagNames || []).map((t: any) => t.trim().toLowerCase()).filter(Boolean))
   ).sort();
 
   // Fetch current tag names associated with the note
@@ -14,7 +15,7 @@ async function syncTags(noteId, tagNames) {
     where: { noteId },
     include: { tag: true }
   });
-  const normalizedCurrent = currentAssociations.map((ca) => ca.tag.name.trim().toLowerCase()).sort();
+  const normalizedCurrent = currentAssociations.map((ca: any) => ca.tag.name.trim().toLowerCase()).sort();
 
   // If tags are identical, do nothing (bypasses up to 7-10 redundant DB queries)
   if (JSON.stringify(normalizedInput) === JSON.stringify(normalizedCurrent)) {
@@ -31,14 +32,14 @@ async function syncTags(noteId, tagNames) {
     where: { name: { in: normalizedInput } }
   });
   
-  const existingTagNames = existingTags.map(t => t.name);
-  const missingTagNames = normalizedInput.filter(name => !existingTagNames.includes(name));
+  const existingTagNames = existingTags.map((t: any) => t.name);
+  const missingTagNames = normalizedInput.filter((name: any) => !existingTagNames.includes(name));
 
-  let newTags = [];
+  let newTags: any[] = [];
   if (missingTagNames.length > 0) {
     // Bulk create missing tags (Prisma createMany returns count, not records, so we re-fetch)
     await prisma.tag.createMany({
-      data: missingTagNames.map(name => ({ name })),
+      data: missingTagNames.map((name: any) => ({ name })),
       skipDuplicates: true
     });
     newTags = await prisma.tag.findMany({
@@ -50,7 +51,7 @@ async function syncTags(noteId, tagNames) {
 
   // Bulk associate tags with the note
   await prisma.noteTag.createMany({
-    data: allResolvedTags.map((tag) => ({ noteId, tagId: tag.id }))
+    data: allResolvedTags.map((tag: any) => ({ noteId, tagId: tag.id }))
   });
 }
 
@@ -68,21 +69,21 @@ const noteInclude = {
 };
 
 // Format note for API response
-function formatNote(note) {
+function formatNote(note: any) {
   return {
     ...note,
-    tags: note.tags ? note.tags.map(nt => nt.tag.name) : [],
-    hasSummary: note.aiGenerations ? note.aiGenerations.some(ai => ai.type === 'summary') : false,
+    tags: note.tags ? note.tags.map((nt: any) => nt.tag.name) : [],
+    hasSummary: note.aiGenerations ? note.aiGenerations.some((ai: any) => ai.type === 'summary') : false,
     linkedTodos: note.linkedTodos || []
   };
 }
 
-export async function getNotes(req, res, next) {
+export async function getNotes(req: any, res: any, next: any) {
   try {
     const { search, tag, category, sort = 'updated', archived } = req.query;
     const userId = req.user.id;
 
-    const where = { userId };
+    const where: any = { userId };
 
     // Archive filter
     where.isArchived = archived === 'true';
@@ -148,7 +149,7 @@ export async function getNotes(req, res, next) {
   }
 }
 
-export async function getNote(req, res, next) {
+export async function getNote(req: any, res: any, next: any) {
   try {
     const note = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id },
@@ -165,7 +166,7 @@ export async function getNote(req, res, next) {
   }
 }
 
-export async function createNote(req, res, next) {
+export async function createNote(req: any, res: any, next: any) {
   try {
     const { title, content, category, tags } = req.body;
 
@@ -195,11 +196,11 @@ export async function createNote(req, res, next) {
   }
 }
 
-export async function updateNote(req, res, next) {
+export async function updateNote(req: any, res: any, next: any) {
   try {
     const { title, content, category, isArchived, isPublic, tags } = req.body;
 
-    const data = {};
+    const data: any = {};
     if (title !== undefined) data.title = title;
     if (content !== undefined) data.content = content;
     if (category !== undefined) data.category = category || null;
@@ -227,7 +228,7 @@ export async function updateNote(req, res, next) {
   }
 }
 
-export async function deleteNote(req, res, next) {
+export async function deleteNote(req: any, res: any, next: any) {
   try {
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id }
@@ -243,7 +244,7 @@ export async function deleteNote(req, res, next) {
   }
 }
 
-export async function archiveNote(req, res, next) {
+export async function archiveNote(req: any, res: any, next: any) {
   try {
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id }
@@ -264,7 +265,7 @@ export async function archiveNote(req, res, next) {
   }
 }
 
-export async function shareNote(req, res, next) {
+export async function shareNote(req: any, res: any, next: any) {
   try {
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id }
@@ -289,7 +290,7 @@ export async function shareNote(req, res, next) {
   }
 }
 
-export async function getBackups(req, res, next) {
+export async function getBackups(req: any, res: any, next: any) {
   try {
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id }
@@ -307,7 +308,7 @@ export async function getBackups(req, res, next) {
   }
 }
 
-export async function revertBackup(req, res, next) {
+export async function revertBackup(req: any, res: any, next: any) {
   try {
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, userId: req.user.id }

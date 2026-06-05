@@ -25,6 +25,7 @@ export const aiAPI = {
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
   chat: (data, config) => api.post('/ai/chat', data, config),
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
+  smartIntakeUpload: (formData, config) => api.post('/ai/smart-intake-upload', formData, config),
 };
 
 export const dashboardAPI = {

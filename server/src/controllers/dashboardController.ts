@@ -9,6 +9,7 @@ import {
 // prisma imported from db.js
 
 export async function getInsights(req, res, next) {
+  console.time('getInsights');
   try {
     const userId = req.user.id;
 
@@ -38,7 +39,15 @@ export async function getInsights(req, res, next) {
           userId,
           updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
         },
-        include: { tags: { include: { tag: true } } },
+        select: {
+          id: true,
+          title: true,
+          updatedAt: true,
+          isPublic: true,
+          tags: {
+            include: { tag: true }
+          }
+        },
         orderBy: { updatedAt: 'desc' },
         take: 5,
       }),
@@ -180,7 +189,9 @@ export async function getInsights(req, res, next) {
         count: c._count.id,
       })),
     });
+    console.timeEnd('getInsights');
   } catch (error) {
+    console.timeEnd('getInsights');
     next(error);
   }
 }
@@ -321,6 +332,17 @@ export async function getWeeklyReport(req, res, next) {
       : [];
 
     // Daily breakdown for the week
+    const [weeklyCompletedTodos, weeklyNotes] = await prisma.$transaction([
+      prisma.todo.findMany({
+        where: { userId, completed: true, updatedAt: { gte: weekAgo, lte: now } },
+        select: { updatedAt: true }
+      }),
+      prisma.note.findMany({
+        where: { userId, updatedAt: { gte: weekAgo, lte: now } },
+        select: { updatedAt: true }
+      })
+    ]);
+
     const dailyStats = [];
     for (let i = 6; i >= 0; i--) {
       const day = new Date(now);
@@ -328,10 +350,8 @@ export async function getWeeklyReport(req, res, next) {
       const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
       const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999);
 
-      const [completed, created] = await prisma.$transaction([
-        prisma.todo.count({ where: { userId, completed: true, updatedAt: { gte: dayStart, lte: dayEnd } } }),
-        prisma.note.count({ where: { userId, updatedAt: { gte: dayStart, lte: dayEnd } } }),
-      ]);
+      const completed = weeklyCompletedTodos.filter(t => t.updatedAt >= dayStart && t.updatedAt <= dayEnd).length;
+      const created = weeklyNotes.filter(n => n.updatedAt >= dayStart && n.updatedAt <= dayEnd).length;
 
       dailyStats.push({
         day: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),

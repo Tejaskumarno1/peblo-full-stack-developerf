@@ -55,39 +55,37 @@ export async function getTodayTodos(req, res, next) {
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-
-    // Tasks due today
-    const todayTasks = await prisma.todo.findMany({
-      where: {
-        userId,
-        completed: false,
-        deadline: { gte: todayStart, lte: todayEnd }
-      },
-      include: { note: { select: { id: true, title: true } } }
-    });
-
-    // Overdue tasks (deadline before today, not completed)
-    const overdueTasks = await prisma.todo.findMany({
-      where: {
-        userId,
-        completed: false,
-        deadline: { lt: todayStart, not: null }
-      },
-      include: { note: { select: { id: true, title: true } } }
-    });
-
-    // Upcoming tasks (next 3 days after today)
+    
     const threeDaysLater = new Date(todayEnd);
     threeDaysLater.setDate(threeDaysLater.getDate() + 3);
 
-    const upcomingTasks = await prisma.todo.findMany({
-      where: {
-        userId,
-        completed: false,
-        deadline: { gt: todayEnd, lte: threeDaysLater }
-      },
-      include: { note: { select: { id: true, title: true } } }
-    });
+    // Run concurrently to eliminate sequential DB roundtrips
+    const [todayTasks, overdueTasks, upcomingTasks] = await prisma.$transaction([
+      prisma.todo.findMany({
+        where: {
+          userId,
+          completed: false,
+          deadline: { gte: todayStart, lte: todayEnd }
+        },
+        include: { note: { select: { id: true, title: true } } }
+      }),
+      prisma.todo.findMany({
+        where: {
+          userId,
+          completed: false,
+          deadline: { lt: todayStart, not: null }
+        },
+        include: { note: { select: { id: true, title: true } } }
+      }),
+      prisma.todo.findMany({
+        where: {
+          userId,
+          completed: false,
+          deadline: { gt: todayEnd, lte: threeDaysLater }
+        },
+        include: { note: { select: { id: true, title: true } } }
+      })
+    ]);
 
     // Sort by priority
     const sortByPriority = (a, b) => (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);

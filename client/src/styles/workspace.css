@@ -2002,4 +2002,45 @@
   .mobile-action-btn:active svg {
     transform: translateY(-2px) scale(1.1);
   }
+
+  /* ============================
+     BlockNote Mobile Optimizations
+     ============================ */
+  .bn-root, .bn-container {
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+
+  .bn-editor {
+    padding: 0.5rem 0.25rem !important;
+    font-size: 16px !important; /* Prevents iOS auto-zoom on inputs */
+  }
+
+  .bn-block-content {
+    max-width: 100% !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+  }
+
+  .bn-block-content img, .bn-block-content video {
+    max-width: 100% !important;
+    border-radius: 8px !important;
+    height: auto !important;
+  }
+  
+  .bn-inline-content {
+    line-height: 1.6 !important;
+  }
+
+  .bn-block-outer {
+    margin-left: 0 !important;
+    padding-left: 0.2rem !important;
+  }
+  
+  .bn-side-menu {
+    width: 24px !important; /* Smaller side menu (drag handle / + button) */
+  }
 }
