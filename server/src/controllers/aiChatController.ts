@@ -309,8 +309,8 @@ export async function smartIntake(req, res, next) {
       },
     });
 
-    // Step 3: Create all extracted todos linked to this note concurrently
-    const createdTodos = await Promise.all(result.tasks.map(async (task) => {
+    // Step 3: Create all extracted todos linked to this note using createManyAndReturn
+    const todosData = result.tasks.map((task) => {
       const validPriorities = ['high', 'medium', 'low'];
       let deadline = null;
       if (task.deadline) {
@@ -320,20 +320,26 @@ export async function smartIntake(req, res, next) {
         } catch (e) { /* skip invalid dates */ }
       }
 
-      return prisma.todo.create({
-        data: {
-          text: task.text.trim(),
-          priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
-          deadline,
-          startTime: task.startTime || null,
-          endTime: task.endTime || null,
-          todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
-          noteId: note.id,
-          userId,
-        },
-        include: { note: { select: { id: true, title: true } } }
-      });
-    }));
+      return {
+        text: task.text.trim(),
+        priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
+        deadline,
+        startTime: task.startTime || null,
+        endTime: task.endTime || null,
+        todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+        noteId: note.id,
+        userId,
+      };
+    });
+
+    let createdTodos = [];
+    if (todosData.length > 0) {
+      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
+      createdTodos = inserted.map(t => ({
+        ...t,
+        note: { id: note.id, title: note.title }
+      }));
+    }
 
     res.json({
       reply: result.reply,
@@ -393,8 +399,8 @@ export async function smartIntakeUpload(req, res, next) {
       },
     });
 
-    // Step 2: Create Todos concurrently
-    const createdTodos = await Promise.all(result.tasks.map(async (task) => {
+    // Step 2: Create Todos using createManyAndReturn
+    const todosData = result.tasks.map((task) => {
       const validPriorities = ['high', 'medium', 'low'];
       let deadline = null;
       if (task.deadline) {
@@ -404,20 +410,26 @@ export async function smartIntakeUpload(req, res, next) {
         } catch (e) { /* skip */ }
       }
 
-      return prisma.todo.create({
-        data: {
-          text: task.text.trim(),
-          priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
-          deadline,
-          startTime: task.startTime || null,
-          endTime: task.endTime || null,
-          todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
-          noteId: note.id,
-          userId,
-        },
-        include: { note: { select: { id: true, title: true } } }
-      });
-    }));
+      return {
+        text: task.text.trim(),
+        priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
+        deadline,
+        startTime: task.startTime || null,
+        endTime: task.endTime || null,
+        todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+        noteId: note.id,
+        userId,
+      };
+    });
+
+    let createdTodos = [];
+    if (todosData.length > 0) {
+      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
+      createdTodos = inserted.map(t => ({
+        ...t,
+        note: { id: note.id, title: note.title }
+      }));
+    }
 
     res.json({
       reply: `I successfully processed your file! ${result.reply}`,
