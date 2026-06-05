@@ -309,9 +309,8 @@ export async function smartIntake(req, res, next) {
       },
     });
 
-    // Step 3: Create all extracted todos linked to this note
-    const createdTodos = [];
-    for (const task of result.tasks) {
+    // Step 3: Create all extracted todos linked to this note concurrently
+    const createdTodos = await Promise.all(result.tasks.map(async (task) => {
       const validPriorities = ['high', 'medium', 'low'];
       let deadline = null;
       if (task.deadline) {
@@ -321,7 +320,7 @@ export async function smartIntake(req, res, next) {
         } catch (e) { /* skip invalid dates */ }
       }
 
-      const todo = await prisma.todo.create({
+      return prisma.todo.create({
         data: {
           text: task.text.trim(),
           priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
@@ -334,8 +333,7 @@ export async function smartIntake(req, res, next) {
         },
         include: { note: { select: { id: true, title: true } } }
       });
-      createdTodos.push(todo);
-    }
+    }));
 
     res.json({
       reply: result.reply,
@@ -371,19 +369,19 @@ export async function smartIntakeUpload(req, res, next) {
     }
 
     // Call the same AI service logic
-    const result = await aiService.generateSmartIntake(rawData, 'auto');
+    const result = await aiService.analyzeAndOrganize(rawData, 'auto');
 
     // Step 1: Create Note
     const note = await prisma.note.create({
       data: {
-        title: result.title || 'Parsed File Intake',
-        content: result.content || '',
+        title: result.note.title || 'Parsed File Intake',
+        content: result.note.content || '',
         userId,
       },
     });
 
-    if (result.tags && result.tags.length > 0) {
-      await syncTags(note.id, result.tags);
+    if (result.note.tags && result.note.tags.length > 0) {
+      await syncTags(note.id, result.note.tags);
     }
 
     await prisma.aiGeneration.create({
@@ -395,9 +393,8 @@ export async function smartIntakeUpload(req, res, next) {
       },
     });
 
-    // Step 2: Create Todos
-    const createdTodos = [];
-    for (const task of result.tasks) {
+    // Step 2: Create Todos concurrently
+    const createdTodos = await Promise.all(result.tasks.map(async (task) => {
       const validPriorities = ['high', 'medium', 'low'];
       let deadline = null;
       if (task.deadline) {
@@ -407,7 +404,7 @@ export async function smartIntakeUpload(req, res, next) {
         } catch (e) { /* skip */ }
       }
 
-      const todo = await prisma.todo.create({
+      return prisma.todo.create({
         data: {
           text: task.text.trim(),
           priority: validPriorities.includes(task.priority) ? task.priority : 'medium',
@@ -420,8 +417,7 @@ export async function smartIntakeUpload(req, res, next) {
         },
         include: { note: { select: { id: true, title: true } } }
       });
-      createdTodos.push(todo);
-    }
+    }));
 
     res.json({
       reply: `I successfully processed your file! ${result.reply}`,

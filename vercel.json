@@ -6,7 +6,7 @@
   "functions": {
     "api/index.js": {
       "includeFiles": "server/prisma/schema.prisma",
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "rewrites": [
