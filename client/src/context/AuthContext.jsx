@@ -66,6 +66,14 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const googleLogin = useCallback(async (payload) => {
+    const { data } = await authAPI.googleLogin(payload);
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    setUser(data.user);
+    return data.user;
+  }, []);
+
   const signup = useCallback(async (name, email, password) => {
     const { data } = await authAPI.signup({ name, email, password });
     localStorage.setItem('accessToken', data.accessToken);
@@ -134,6 +142,7 @@ export function AuthProvider({ children }) {
       user, 
       loading, 
       login, 
+      googleLogin,
       signup, 
       logout, 
       updateProfile,

@@ -10,6 +10,7 @@ import aiChatRoutes from './routes/aiChat.js';
 import shareRoutes from './routes/share.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
+import calendarRoutes from './routes/calendar.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -55,6 +56,7 @@ app.use('/api/ai', aiChatRoutes);
 app.use('/api/shared', shareRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/todos', todosRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

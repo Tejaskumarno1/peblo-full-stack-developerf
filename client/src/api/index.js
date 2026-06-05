@@ -3,6 +3,7 @@ import api from './client';
 export const authAPI = {
   signup: (data) => api.post('/auth/signup', data),
   login: (data) => api.post('/auth/login', data),
+  googleLogin: (data) => api.post('/auth/google', data),
   me: () => api.get('/auth/me'),
   refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken })
 };
@@ -39,11 +40,15 @@ export const todosAPI = {
   getAll: (params) => api.get('/todos', { params }),
   getToday: () => api.get('/todos/today'),
   getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
-  create: (data) => api.post('/todos', data),
-  update: (id, data) => api.patch(`/todos/${id}`, data),
+  create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   delete: (id) => api.delete(`/todos/${id}`)
 };
 
 export const sharedAPI = {
   getNote: (shareId) => api.get(`/shared/${shareId}`)
+};
+
+export const calendarAPI = {
+  syncTodos: () => api.post('/calendar/sync')
 };

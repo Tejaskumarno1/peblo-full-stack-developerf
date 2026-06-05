@@ -12,6 +12,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String   @map("password_hash")
+  googleRefreshToken String? @map("google_refresh_token")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -108,6 +109,7 @@ model Todo {
   startTime  String?   @map("start_time")
   endTime    String?   @map("end_time")
   recurrence String?   @default("none") @map("recurrence")
+  googleEventId String? @map("google_event_id")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
