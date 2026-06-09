@@ -9,7 +9,7 @@ import * as aiService from '../services/aiService.js';
 export async function syncTags(noteId: any, tagNames: any) {
   const normalizedInput = Array.from(
     new Set((tagNames || []).map((t: any) => t.trim().toLowerCase()).filter(Boolean))
-  ).sort();
+  ).sort() as string[];
 
   // Fetch current tag names associated with the note
   const currentAssociations = await prisma.noteTag.findMany({
@@ -34,7 +34,7 @@ export async function syncTags(noteId: any, tagNames: any) {
   });
   
   const existingTagNames = existingTags.map((t: any) => t.name);
-  const missingTagNames = normalizedInput.filter((name: any) => !existingTagNames.includes(name));
+  const missingTagNames = normalizedInput.filter((name: any) => !existingTagNames.includes(name)) as string[];
 
   let newTags: any[] = [];
   if (missingTagNames.length > 0) {

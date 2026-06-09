@@ -5,6 +5,13 @@ import prisma from '../db.js';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
+function getMockResponse(type: string, title: string, content: string) {
+  if (type === 'summary') return { summary: 'AI service unavailable. Please check your API keys.' };
+  if (type === 'action_items') return { action_items: [] };
+  if (type === 'title') return { title: 'Untitled Note' };
+  return {};
+}
+
 async function getUserSettings(userId: string) {
   return await prisma.user.findUnique({ 
     where: { id: userId },
