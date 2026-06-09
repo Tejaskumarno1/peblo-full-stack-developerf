@@ -77,6 +77,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/health-db', async (req, res) => {
+  try {
+    const { PrismaClient } = await import('./generated/client/index.js');
+    const prisma = new PrismaClient();
+    await prisma.$queryRawUnsafe('SELECT 1');
+    res.json({ status: 'db_ok' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, stack: err.stack, details: err });
+  }
+});
+
 // Error handler
 app.use(errorHandler);
 
