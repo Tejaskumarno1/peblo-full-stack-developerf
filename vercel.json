@@ -4,15 +4,15 @@
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/dist",
   "functions": {
-    "api/index.js": {
-      "includeFiles": "server/prisma/schema.prisma",
+    "api/index.ts": {
+      "includeFiles": "{server/prisma/schema.prisma,server/node_modules/.prisma/client/*}",
       "maxDuration": 60
     }
   },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.js"
+      "destination": "/api/index.ts"
     },
     {
       "source": "/(.*)",
