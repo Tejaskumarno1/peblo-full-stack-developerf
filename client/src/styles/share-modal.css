@@ -1,100 +1,115 @@
+/* ============================
+   SHARE MODAL — Component Styles
+   ============================ */
+
 .share-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.6);
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  animation: fadeIn 0.2s ease-out;
+  z-index: 2000;
+  animation: fadeIn 0.15s ease-out;
 }
 
 .share-modal-content {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 500px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  animation: slideUp 0.2s ease-out;
-  display: flex;
-  flex-direction: column;
+  max-width: 480px;
+  box-shadow: var(--shadow-lg), 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
+/* Header */
 .share-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-default);
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .share-modal-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
 }
 
-.close-btn {
-  background: none;
+.share-modal-header .close-btn {
+  background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
-.close-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.share-modal-header .close-btn:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
+/* Body */
 .share-modal-body {
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 .share-access-section h4 {
-  margin: 0 0 12px 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
 }
 
+/* Access Options */
 .access-options {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .access-option {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
   cursor: pointer;
+  transition: all var(--transition-fast);
   text-align: left;
-  transition: all 0.2s;
+  width: 100%;
+  font-family: inherit;
 }
 
 .access-option:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .access-option.active {
-  background-color: rgba(255, 255, 255, 0.03);
-  border-color: var(--border-default);
+  border-color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .access-option:disabled {
@@ -103,64 +118,69 @@
 }
 
 .access-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .access-icon.restricted {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-muted);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 .access-icon.public {
-  background-color: rgba(138, 43, 226, 0.2);
-  color: var(--accent);
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .access-info {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .access-title {
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .access-desc {
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .access-check {
   color: var(--accent);
+  flex-shrink: 0;
 }
 
+/* Link Section */
 .share-link-section {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-default);
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
 }
 
 .link-input-wrapper {
   display: flex;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 4px 4px 4px 12px;
-  gap: 12px;
+  gap: 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
 }
 
-.link-icon {
+.link-input-wrapper .link-icon {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .link-input-wrapper input {
@@ -168,47 +188,53 @@
   background: none;
   border: none;
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
+  font-family: 'JetBrains Mono', monospace;
   outline: none;
+  min-width: 0;
 }
 
 .copy-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 6px;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--accent-gradient);
+  color: white;
   border: none;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  font-family: inherit;
 }
 
 .copy-btn:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow);
 }
 
 .copy-btn.copied {
-  background-color: #10b981;
-  color: white;
+  background: var(--success);
 }
 
+/* Footer */
 .share-modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-default);
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
 }
 
+/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes slideIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }

@@ -1,4 +1,6 @@
-export function errorHandler(err, req, res, next) {
+import { Request, Response, NextFunction } from 'express';
+
+export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   console.error('Error:', err.message);
 
   // Prisma unique constraint violation
@@ -15,3 +17,4 @@ export function errorHandler(err, req, res, next) {
   const message = err.message || 'Internal server error';
   res.status(statusCode).json({ error: message, stack: err.stack });
 }
+

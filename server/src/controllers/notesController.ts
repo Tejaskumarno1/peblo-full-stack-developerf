@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
 import { v4 as uuidv4 } from 'uuid';
+import * as aiService from '../services/aiService.js';
 
 // prisma imported from db.js
 
 // Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions
-async function syncTags(noteId: any, tagNames: any) {
+export async function syncTags(noteId: any, tagNames: any) {
   const normalizedInput = Array.from(
     new Set((tagNames || []).map((t: any) => t.trim().toLowerCase()).filter(Boolean))
   ).sort();
@@ -80,13 +81,16 @@ function formatNote(note: any) {
 
 export async function getNotes(req: any, res: any, next: any) {
   try {
-    const { search, tag, category, sort = 'updated', archived } = req.query;
+    const { search, tag, category, sort = 'updated', archived, deleted } = req.query;
     const userId = req.user.id;
 
     const where: any = { userId };
 
     // Archive filter
     where.isArchived = archived === 'true';
+
+    // Deleted filter
+    where.isDeleted = deleted === 'true';
 
     // Category filter
     if (category) {
@@ -129,6 +133,7 @@ export async function getNotes(req: any, res: any, next: any) {
         content: true, // Restored to render the sidebar snippet preview correctly
         category: true,
         isArchived: true,
+        isDeleted: true,
         isPublic: true,
         createdAt: true,
         updatedAt: true,
@@ -230,15 +235,53 @@ export async function updateNote(req: any, res: any, next: any) {
 
 export async function deleteNote(req: any, res: any, next: any) {
   try {
-    const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
+    const noteId = req.params.id;
+    const userId = req.user.id;
+
+    // Try soft-delete first (move to trash) — single query with ownership check
+    const { count: softDeleted } = await prisma.note.updateMany({
+      where: { id: noteId, userId, isDeleted: false },
+      data: { isDeleted: true, deletedAt: new Date(), isArchived: false }
     });
-    if (!existing) {
+
+    if (softDeleted > 0) {
+      return res.json({ message: 'Note moved to trash' });
+    }
+
+    // If not soft-deleted, it might already be in trash — permanently delete
+    const { count: hardDeleted } = await prisma.note.deleteMany({
+      where: { id: noteId, userId, isDeleted: true }
+    });
+
+    if (hardDeleted > 0) {
+      return res.json({ message: 'Note permanently deleted' });
+    }
+
+    return res.status(404).json({ error: 'Note not found' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function restoreNote(req: any, res: any, next: any) {
+  try {
+    // Single updateMany enforces ownership without a separate findFirst
+    const { count } = await prisma.note.updateMany({
+      where: { id: req.params.id, userId: req.user.id },
+      data: { isDeleted: false, deletedAt: null }
+    });
+
+    if (count === 0) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
-    await prisma.note.delete({ where: { id: req.params.id } });
-    res.json({ message: 'Note deleted' });
+    // Fetch the restored note for the response
+    const note = await prisma.note.findUnique({
+      where: { id: req.params.id },
+      include: noteInclude
+    });
+
+    res.json({ note: formatNote(note) });
   } catch (error) {
     next(error);
   }
@@ -292,15 +335,14 @@ export async function shareNote(req: any, res: any, next: any) {
 
 export async function getBackups(req: any, res: any, next: any) {
   try {
-    const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    if (!existing) return res.status(404).json({ error: 'Note not found' });
-
-    const backups = await prisma.noteBackup.findMany({
-      where: { noteId: req.params.id },
-      orderBy: { createdAt: 'desc' }
-    });
+    // Single query — if the note doesn't belong to the user, the JOIN returns 0 rows
+    const backups = await prisma.$queryRaw<any[]>`
+      SELECT b.id, b.content, b.created_at AS "createdAt"
+      FROM note_backups b
+      JOIN notes n ON n.id = b.note_id
+      WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
+      ORDER BY b.created_at DESC
+    `;
 
     res.json({ backups });
   } catch (error) {
@@ -331,5 +373,21 @@ export async function revertBackup(req: any, res: any, next: any) {
     res.json({ note: formatNote(note) });
   } catch (error) {
     next(error);
+  }
+}
+
+export async function saveEmbeddingForNote(userId: string, noteId: string, title: string, content: string) {
+  try {
+    const text = `Title: ${title}\n\nContent: ${content}`;
+    const embedding = await aiService.generateEmbedding(userId, text);
+    if (embedding && embedding.length > 0) {
+      await prisma.noteEmbedding.upsert({
+        where: { noteId },
+        update: { vector: JSON.stringify(embedding) },
+        create: { noteId, vector: JSON.stringify(embedding) }
+      });
+    }
+  } catch (error) {
+    console.error('Failed to save embedding for note:', noteId, error);
   }
 }

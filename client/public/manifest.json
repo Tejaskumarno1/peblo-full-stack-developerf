@@ -1,0 +1,17 @@
+{
+  "name": "Peblo Productivity Hub",
+  "short_name": "Peblo",
+  "description": "Collaborative, AI-enhanced workspace for tasks, meeting notes, project briefs, and syllabus tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

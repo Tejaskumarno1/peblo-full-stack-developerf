@@ -1,65 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { todosAPI } from '../api';
 import { CheckCircle2, Circle, Plus, Trash2, X, FileText } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import '../styles/dashboard.css'; 
 
 export default function TodoListPanel({ onClose }) {
-  const [tasks, setTasks] = useState([]);
+  const queryClient = useQueryClient();
   const [newTaskText, setNewTaskText] = useState('');
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchTodos();
-  }, []);
+  const { data: tasks = [], isLoading: loading } = useQuery({
+    queryKey: ['todos'],
+    queryFn: () => todosAPI.getAll().then(res => res.data.todos)
+  });
 
-  const fetchTodos = async () => {
-    try {
-      const res = await todosAPI.getAll();
-      setTasks(res.data.todos);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+  const createMutation = useMutation({
+    mutationFn: (text) => todosAPI.create({ text }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['todos']);
+      setNewTaskText('');
     }
-  };
+  });
 
-  const handleAddTask = async (e) => {
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, completed }) => todosAPI.update(id, { completed }),
+    onMutate: async ({ id, completed }) => {
+      await queryClient.cancelQueries(['todos']);
+      const previousTodos = queryClient.getQueryData(['todos']);
+      queryClient.setQueryData(['todos'], old => 
+        old.map(t => t.id === id ? { ...t, completed } : t)
+      );
+      return { previousTodos };
+    },
+    onError: (err, variables, context) => {
+      queryClient.setQueryData(['todos'], context.previousTodos);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries(['todos']);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => todosAPI.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['todos']);
+    }
+  });
+
+  const handleAddTask = (e) => {
     e.preventDefault();
     if (!newTaskText.trim()) return;
-
-    try {
-      const res = await todosAPI.create({ text: newTaskText });
-      setTasks([res.data.todo, ...tasks]);
-      setNewTaskText('');
-    } catch (err) {
-      console.error(err);
-    }
+    createMutation.mutate(newTaskText);
   };
 
-  const handleToggleTask = async (task) => {
-    const originalCompleted = task.completed;
-    
-    setTasks(prev => prev.map(t => 
-      t.id === task.id ? { ...t, completed: !t.completed } : t
-    ));
-
-    try {
-      await todosAPI.update(task.id, { completed: !originalCompleted });
-    } catch (err) {
-      setTasks(prev => prev.map(t => 
-        t.id === task.id ? { ...t, completed: originalCompleted } : t
-      ));
-    }
+  const handleToggleTask = (task) => {
+    toggleMutation.mutate({ id: task.id, completed: !task.completed });
   };
 
-  const handleDeleteTask = async (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-    try {
-      await todosAPI.delete(id);
-    } catch (err) {
-      console.error(err);
-      fetchTodos();
-    }
+  const handleDeleteTask = (id) => {
+    deleteMutation.mutate(id);
   };
 
   return (

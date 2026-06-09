@@ -1,3 +1,4 @@
+import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
@@ -9,15 +10,15 @@ const noteInclude = {
   aiGenerations: { select: { type: true } },
 };
 
-function formatNote(note) {
+function formatNote(note: any) {
   return {
     ...note,
-    tags: note.tags ? note.tags.map((nt) => nt.tag.name) : [],
-    hasSummary: note.aiGenerations?.some((ai) => ai.type === 'summary') ?? false,
+    tags: note.tags ? note.tags.map((nt: any) => nt.tag.name) : [],
+    hasSummary: note.aiGenerations?.some((ai: any) => ai.type === 'summary') ?? false,
   };
 }
 
-async function syncTags(noteId, tagNames) {
+async function syncTags(noteId: string, tagNames: string[] | undefined) {
   await prisma.noteTag.deleteMany({ where: { noteId } });
   if (!tagNames?.length) return;
 
@@ -30,7 +31,7 @@ async function syncTags(noteId, tagNames) {
   }
 }
 
-async function createNoteForUser(userId, { title, content, category, tags }) {
+async function createNoteForUser(userId: string, { title, content, category, tags }: { title?: string; content?: string; category?: string | null; tags?: string[] }) {
   const note = await prisma.note.create({
     data: {
       userId,
@@ -51,7 +52,7 @@ async function createNoteForUser(userId, { title, content, category, tags }) {
   return formatNote(updated);
 }
 
-export async function chatAndCreateNotes(req, res, next) {
+export async function chatAndCreateNotes(req: Request, res: Response, next: NextFunction) {
   try {
     const { message, mode = 'create', noteId } = req.body;
 
@@ -59,7 +60,7 @@ export async function chatAndCreateNotes(req, res, next) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const userId = req.user.id;
+    const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
       where: { userId, isArchived: false },
@@ -68,10 +69,10 @@ export async function chatAndCreateNotes(req, res, next) {
       take: 25,
     });
 
-    let targetNote = null;
+    let targetNote: any = null;
     if (mode === 'append' && noteId) {
       targetNote = await prisma.note.findFirst({
-        where: { id: noteId, userId },
+        where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
       });
       if (!targetNote) {
@@ -79,17 +80,17 @@ export async function chatAndCreateNotes(req, res, next) {
       }
     }
 
-    const plan = await aiService.chatPlanNotes({
+    const plan = await aiService.chatPlanNotes(userId, {
       message: message.trim(),
       mode: mode === 'append' ? 'append' : 'create',
       targetNote,
       existingNotes: recentNotes.map((n) => ({ id: n.id, title: n.title })),
     });
 
-    const createdNotes = [];
-    let updatedNote = null;
+    const createdNotes: any[] = [];
+    let updatedNote: any = null;
 
-    const updateExistingNote = async (id, appendContent, replaceContent) => {
+    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
       const existing = await prisma.note.findFirst({
         where: { id, userId },
       });
@@ -172,7 +173,7 @@ export async function chatAndCreateNotes(req, res, next) {
   }
 }
 
-export async function chatStream(req, res, next) {
+export async function chatStream(req: Request, res: Response, next: NextFunction) {
   try {
     const { message, mode = 'create', noteId } = req.body;
 
@@ -180,7 +181,7 @@ export async function chatStream(req, res, next) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const userId = req.user.id;
+    const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
       where: { userId, isArchived: false },
@@ -189,10 +190,10 @@ export async function chatStream(req, res, next) {
       take: 25,
     });
 
-    let targetNote = null;
+    let targetNote: any = null;
     if (mode === 'append' && noteId) {
       targetNote = await prisma.note.findFirst({
-        where: { id: noteId, userId },
+        where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
       });
       if (!targetNote) {
@@ -201,17 +202,17 @@ export async function chatStream(req, res, next) {
     }
 
     // Call the streaming service! This function will pipe 'chunk' events to `res`
-    const plan = await aiService.chatPlanNotesStream({
+    const plan = await aiService.chatPlanNotesStream(userId, {
       message: message.trim(),
       mode: mode === 'append' ? 'append' : 'create',
       targetNote,
       existingNotes: recentNotes.map((n) => ({ id: n.id, title: n.title })),
     }, res);
 
-    const createdNotes = [];
-    let updatedNote = null;
+    const createdNotes: any[] = [];
+    let updatedNote: any = null;
 
-    const updateExistingNote = async (id, appendContent, replaceContent) => {
+    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
       const existing = await prisma.note.findFirst({
         where: { id, userId },
       });
@@ -283,7 +284,7 @@ export async function chatStream(req, res, next) {
   }
 }
 
-export async function smartIntake(req, res, next) {
+export async function smartIntake(req: Request, res: Response, next: NextFunction) {
   try {
     const { rawData, template } = req.body;
 
@@ -291,10 +292,10 @@ export async function smartIntake(req, res, next) {
       return res.status(400).json({ error: 'Raw data is required' });
     }
 
-    const userId = req.user.id;
+    const userId = req.user!.id;
 
     // Step 1: AI analyzes and organizes the raw data
-    const result = await aiService.analyzeAndOrganize(rawData.trim(), template || 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData.trim(), template || 'auto');
 
     // Step 2: Create the note
     const note = await createNoteForUser(userId, result.note);
@@ -310,9 +311,9 @@ export async function smartIntake(req, res, next) {
     });
 
     // Step 3: Create all extracted todos linked to this note using createManyAndReturn
-    const todosData = result.tasks.map((task) => {
+    const todosData = result.tasks.map((task: any) => {
       const validPriorities = ['high', 'medium', 'low'];
-      let deadline = null;
+      let deadline: Date | null = null;
       if (task.deadline) {
         try {
           const parsed = new Date(task.deadline);
@@ -326,13 +327,13 @@ export async function smartIntake(req, res, next) {
         deadline,
         startTime: task.startTime || null,
         endTime: task.endTime || null,
-        todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+        todoTags: Array.isArray(task.tags) ? (task.tags as string[]).map(t => t.trim()).filter(Boolean) : [],
         noteId: note.id,
         userId,
       };
     });
 
-    let createdTodos = [];
+    let createdTodos: any[] = [];
     if (todosData.length > 0) {
       const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
       createdTodos = inserted.map(t => ({
@@ -351,9 +352,9 @@ export async function smartIntake(req, res, next) {
   }
 }
 
-export async function smartIntakeUpload(req, res, next) {
+export async function smartIntakeUpload(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user.id;
+    const userId = req.user!.id;
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -375,7 +376,7 @@ export async function smartIntakeUpload(req, res, next) {
     }
 
     // Call the same AI service logic
-    const result = await aiService.analyzeAndOrganize(rawData, 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData, 'auto');
 
     // Step 1: Create Note
     const note = await prisma.note.create({
@@ -400,9 +401,9 @@ export async function smartIntakeUpload(req, res, next) {
     });
 
     // Step 2: Create Todos using createManyAndReturn
-    const todosData = result.tasks.map((task) => {
+    const todosData = result.tasks.map((task: any) => {
       const validPriorities = ['high', 'medium', 'low'];
-      let deadline = null;
+      let deadline: Date | null = null;
       if (task.deadline) {
         try {
           const parsed = new Date(task.deadline);
@@ -416,13 +417,13 @@ export async function smartIntakeUpload(req, res, next) {
         deadline,
         startTime: task.startTime || null,
         endTime: task.endTime || null,
-        todoTags: Array.isArray(task.tags) ? task.tags.map(t => t.trim()).filter(Boolean) : [],
+        todoTags: Array.isArray(task.tags) ? (task.tags as string[]).map(t => t.trim()).filter(Boolean) : [],
         noteId: note.id,
         userId,
       };
     });
 
-    let createdTodos = [];
+    let createdTodos: any[] = [];
     if (todosData.length > 0) {
       const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
       createdTodos = inserted.map(t => ({

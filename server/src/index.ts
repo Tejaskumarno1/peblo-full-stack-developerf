@@ -1,7 +1,10 @@
-import './env.js';
+import './env.js'; // trigger restart 3
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { Server as SocketIOServer } from 'socket.io';
+import { createServer } from 'http';
 
 import authRoutes from './routes/auth.js';
 import notesRoutes from './routes/notes.js';
@@ -14,6 +17,7 @@ import calendarRoutes from './routes/calendar.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
 // Trust Vercel's proxy so rate limiting works correctly and doesn't throw ValidationError
@@ -27,7 +31,16 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Middleware — CORS
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // limit each IP to 50 requests per windowMs for auth routes
+  message: { error: 'Too many login attempts. Please wait a few minutes and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Middleware
+app.use(helmet());
 const isVercel = !!process.env.VERCEL;
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
@@ -49,9 +62,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(limiter);
 
 // Routes
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/notes', aiRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/ai', aiChatRoutes);
 app.use('/api/shared', shareRoutes);
 app.use('/api/dashboard', dashboardRoutes);
@@ -68,7 +82,25 @@ app.use(errorHandler);
 
 // Only start listener locally — Vercel handles this as a serverless function
 if (!process.env.VERCEL) {
-  const server = app.listen(PORT, () => {
+  // Setup Socket.IO
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: corsOrigins,
+      methods: ['GET', 'POST']
+    }
+  });
+
+  io.on('connection', (socket) => {
+    // Clients should emit 'join' with their user ID after authentication
+    socket.on('join', (userId) => {
+      socket.join(userId);
+    });
+  });
+
+  // Export io so controllers can broadcast events
+  app.set('io', io);
+
+  const server = httpServer.listen(PORT, () => {
     console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
   });
 

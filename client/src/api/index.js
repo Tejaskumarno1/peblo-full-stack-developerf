@@ -5,7 +5,11 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   googleLogin: (data) => api.post('/auth/google', data),
   me: () => api.get('/auth/me'),
-  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken })
+  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
+  updateProfile: (data) => api.put('/auth/profile', data),
+  updatePassword: (data) => api.post('/auth/password', data),
+  logoutAll: () => api.post('/auth/logout-all'),
+  linkGoogle: (data) => api.post('/auth/google-link', data)
 };
 
 export const notesAPI = {
@@ -14,6 +18,7 @@ export const notesAPI = {
   create: (data) => api.post('/notes', data),
   update: (id, data) => api.patch(`/notes/${id}`, data),
   delete: (id) => api.delete(`/notes/${id}`),
+  restore: (id) => api.post(`/notes/${id}/restore`),
   archive: (id) => api.post(`/notes/${id}/archive`),
   share: (id) => api.post(`/notes/${id}/share`),
   getBackups: (id) => api.get(`/notes/${id}/backups`),
@@ -24,9 +29,13 @@ export const aiAPI = {
   summary: (id, data, config) => api.post(`/notes/${id}/ai/summary`, data, config),
   actions: (id, data, config) => api.post(`/notes/${id}/ai/actions`, data, config),
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
+  suggestTag: (id, data, config) => api.post(`/notes/${id}/ai/tags`, data, config),
+  linkPreview: (url) => api.get('/ai/link-preview', { params: { url } }),
   chat: (data, config) => api.post('/ai/chat', data, config),
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
   smartIntakeUpload: (formData, config) => api.post('/ai/smart-intake-upload', formData, config),
+  processBlock: (data, config) => api.post('/notes/block/ai', data, config),
+  processVoiceCommand: (data, config) => api.post('/notes/voice-command', data, config)
 };
 
 export const dashboardAPI = {

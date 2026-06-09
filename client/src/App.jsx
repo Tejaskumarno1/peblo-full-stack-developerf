@@ -1,8 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Suspense, lazy } from 'react';
-import AiChatPanel from './components/AiChatPanel';
-import CommandPalette from './components/CommandPalette';
 
 // Lazy loaded routes for Code Splitting
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -12,6 +10,11 @@ const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const TodoListPage = lazy(() => import('./pages/TodoListPage'));
 const SharedNotePage = lazy(() => import('./pages/SharedNotePage'));
+
+// Lazy loaded heavy components for the Authenticated Shell
+const AiChatPanel = lazy(() => import('./components/AiChatPanel'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -31,10 +34,11 @@ function AuthenticatedShell({ children }) {
     <>
       {children}
       {user ? (
-        <>
+        <Suspense fallback={null}>
+          <AiVoiceCallManager />
           <AiChatPanel />
           <CommandPalette />
-        </>
+        </Suspense>
       ) : null}
     </>
   );

@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { todosAPI, notesAPI } from '../api';
-import { Check, Trash2, FileText, ChevronDown, ChevronRight, ListTodo, AlertTriangle, Plus, Calendar as CalendarIcon, Clock, Moon, Flame, Briefcase, Home, Play, Pause, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, ListTodo, AlertTriangle, Flame, Briefcase, Home, Play, Pause, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navigation from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
+import TodoItem from '../components/todo/TodoItem';
+import TodoCreateForm from '../components/todo/TodoCreateForm';
+import TodoEditModal from '../components/todo/TodoEditModal';
 import '../styles/dashboard.css';
 import '../styles/todolist.css';
 
 export default function TodoListPage() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
@@ -31,19 +31,7 @@ export default function TodoListPage() {
 
   const [showCompleted, setShowCompleted] = useState(false);
   const [filterMode, setFilterMode] = useState('all'); // all, high, work, personal
-
-  // Form state
-  const [newText, setNewText] = useState('');
-  const [newPriority, setNewPriority] = useState('medium');
-  const [newDeadline, setNewDeadline] = useState(searchParams.get('deadline') || '');
-  const [newStartTime, setNewStartTime] = useState('');
-  const [newEndTime, setNewEndTime] = useState('');
-  const [newRecurrence, setNewRecurrence] = useState('none');
-  const [newTags, setNewTags] = useState('');
-  const [newNoteId, setNewNoteId] = useState('');
-
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
+  const [editingTask, setEditingTask] = useState(null);
 
   // Pomodoro Timer State
   const [timer, setTimer] = useState({ taskId: null, timeLeft: 25 * 60, isRunning: false });
@@ -66,31 +54,11 @@ export default function TodoListPage() {
     mutationFn: (payload) => todosAPI.create(payload),
     onSuccess: (res) => {
       queryClient.setQueryData(['todos'], old => [res.data.todo, ...(old || [])]);
-      setNewText('');
-      setNewDeadline('');
-      setNewStartTime('');
-      setNewEndTime('');
-      setNewRecurrence('none');
-      setNewTags('');
-      setNewNoteId('');
-      setNewPriority('medium');
     }
   });
 
-  const handleCreate = (e) => {
-    e.preventDefault();
-    if (!newText.trim()) return;
-
-    createTodo.mutate({
-      text: newText.trim(),
-      priority: newPriority,
-      deadline: newDeadline || null,
-      startTime: newStartTime || null,
-      endTime: newEndTime || null,
-      recurrence: newRecurrence,
-      tags: newTags ? newTags.split(',').map(t => t.trim()).filter(Boolean) : [],
-      noteId: newNoteId || null
-    });
+  const handleCreate = (payload) => {
+    createTodo.mutate(payload);
   };
 
   const toggleTodo = useMutation({
@@ -123,23 +91,28 @@ export default function TodoListPage() {
 
   const handleDelete = (id) => deleteTodo.mutate(id);
 
-  const updateText = useMutation({
-    mutationFn: ({ id, text }) => todosAPI.update(id, { text }),
-    onMutate: async ({ id, text }) => {
+  const updateTask = useMutation({
+    mutationFn: (payload) => {
+      const { id, ...data } = payload;
+      return todosAPI.update(id, data);
+    },
+    onMutate: async (payload) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] });
       const prevTodos = queryClient.getQueryData(['todos']);
-      queryClient.setQueryData(['todos'], old => old.map(t => t.id === id ? { ...t, text } : t));
+      queryClient.setQueryData(['todos'], old => old.map(t => t.id === payload.id ? { ...t, ...payload } : t));
       return { prevTodos };
     },
     onError: (err, variables, context) => queryClient.setQueryData(['todos'], context.prevTodos),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] })
   });
 
-  const handleUpdateText = (e, id) => {
-    e.preventDefault();
-    if (!editText.trim()) return;
-    updateText.mutate({ id, text: editText });
-    setEditingId(null);
+  const handleUpdateText = (id, newText) => {
+    updateTask.mutate({ id, text: newText });
+  };
+
+  const handleSaveTask = (taskData) => {
+    updateTask.mutate(taskData);
+    setEditingTask(null);
   };
 
   const snoozeTodo = useMutation({
@@ -191,7 +164,29 @@ export default function TodoListPage() {
     return '';
   };
 
-  // Group tasks
+  const getDateKey = (dateStr) => {
+    if (!dateStr) return 'no-deadline';
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const formatDateSectionTitle = (dateStr) => {
+    if (!dateStr) return 'No Deadline';
+    if (isToday(dateStr)) return 'Today';
+
+    const d = new Date(dateStr);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+
+    const normalized = new Date(d);
+    normalized.setHours(0, 0, 0, 0);
+
+    if (normalized.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  // Group tasks by actual due date.
   const grouped = useMemo(() => {
     const filteredTodos = todos.filter(t => {
       if (filterMode === 'all') return true;
@@ -204,11 +199,6 @@ export default function TodoListPage() {
     const active = filteredTodos.filter(t => !t.completed);
     const completed = filteredTodos.filter(t => t.completed);
 
-    const overdue = active.filter(t => t.deadline && isOverdue(t.deadline));
-    const today = active.filter(t => t.deadline && isToday(t.deadline));
-    const upcoming = active.filter(t => t.deadline && !isOverdue(t.deadline) && !isToday(t.deadline));
-    const noDeadline = active.filter(t => !t.deadline);
-
     const priorityOrder = { high: 0, medium: 1, low: 2 };
     const sortByPriority = (a, b) => (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);
 
@@ -219,110 +209,58 @@ export default function TodoListPage() {
       return sortByPriority(a, b);
     };
 
+    const buildDateGroups = (items, newestFirst = false) => Object.entries(
+      items.reduce((acc, task) => {
+        const key = getDateKey(task.deadline);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(task);
+        return acc;
+      }, {})
+    )
+      .map(([key, tasks]) => ({
+        key,
+        date: key === 'no-deadline' ? null : tasks[0].deadline,
+        title: key === 'no-deadline' ? 'No Deadline' : formatDateSectionTitle(tasks[0].deadline),
+        tasks: tasks.sort(sortByTime),
+        isOverdue: key !== 'no-deadline' && isOverdue(tasks[0].deadline),
+        isToday: key !== 'no-deadline' && isToday(tasks[0].deadline),
+      }))
+      .sort((a, b) => {
+        if (a.key === 'no-deadline') return 1;
+        if (b.key === 'no-deadline') return -1;
+        const direction = newestFirst ? -1 : 1;
+        return (new Date(a.date) - new Date(b.date)) * direction;
+      });
+
+    const dateGroups = buildDateGroups(active);
+    const completedDateGroups = buildDateGroups(completed, true);
+
     return {
-      overdue: overdue.sort(sortByTime),
-      today: today.sort(sortByTime),
-      upcoming: upcoming.sort((a, b) => {
-        const dateA = new Date(a.deadline);
-        const dateB = new Date(b.deadline);
-        if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
-        return sortByTime(a, b);
-      }),
-      noDeadline: noDeadline.sort(sortByPriority),
-      completed
+      dateGroups,
+      completed,
+      completedDateGroups
     };
   }, [todos, filterMode]);
 
   // Daily Progress calculation
-  const todayTotal = grouped.today.length + grouped.completed.filter(t => isToday(t.deadline)).length;
+  const todayGroup = grouped.dateGroups.find(group => group.isToday);
+  const todayTotal = (todayGroup?.tasks.length || 0) + grouped.completed.filter(t => isToday(t.deadline)).length;
   const todayCompleted = grouped.completed.filter(t => isToday(t.deadline)).length;
   const progressPercent = todayTotal === 0 ? 0 : Math.round((todayCompleted / todayTotal) * 100);
 
   const renderTask = (task) => (
-    <motion.div 
-      key={task.id} 
-      className={`todo-item ${task.completed ? 'completed' : ''}`}
-      layout
-      initial={{ opacity: 0, y: 15, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.2 }}
-    >
-      <button
-        className={`todo-checkbox ${task.completed ? 'checked' : ''}`}
-        onClick={() => handleToggle(task)}
-        aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
-      >
-        {task.completed && <Check size={14} strokeWidth={3} />}
-      </button>
-
-      <div className="todo-priority-dot" data-priority={task.priority}>
-        <span className={`todo-priority-dot ${task.priority}`}></span>
-      </div>
-
-      <div className="todo-item-content">
-        {editingId === task.id ? (
-          <form onSubmit={(e) => handleUpdateText(e, task.id)} style={{ width: '100%', marginBottom: '0.4rem' }}>
-            <input
-              type="text"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              autoFocus
-              onBlur={(e) => handleUpdateText(e, task.id)}
-              className="todo-edit-input"
-            />
-          </form>
-        ) : (
-          <div className="todo-item-text" onClick={() => { setEditingId(task.id); setEditText(task.text); }}>
-            {task.text}
-          </div>
-        )}
-        <div className="todo-item-meta">
-          {task.deadline && (
-            <span className={`todo-deadline-badge ${getDeadlineClass(task.deadline)}`}>
-              <CalendarIcon size={10} style={{ marginRight: '3px', verticalAlign: 'middle' }} />
-              {formatDeadline(task.deadline)}
-            </span>
-          )}
-          {task.startTime && (
-            <span className="todo-time-badge">
-              <Clock size={10} style={{ marginRight: '3px', verticalAlign: 'middle' }} />
-              {task.startTime}{task.endTime ? ` - ${task.endTime}` : ''}
-            </span>
-          )}
-          {task.recurrence && task.recurrence !== 'none' && (
-            <span className="todo-recurrence-badge">
-              ↻ {task.recurrence}
-            </span>
-          )}
-          {task.todoTags?.map((tag, i) => (
-            <span key={i} className="todo-tag-pill">{tag}</span>
-          ))}
-          {task.note && (
-            <button
-              className="todo-note-link"
-              onClick={(e) => { e.stopPropagation(); navigate(`/notes/${task.note.id}`); }}
-              title={`Open: ${task.note.title}`}
-            >
-              <FileText size={12} />
-              {task.note.title?.substring(0, 20) || 'Note'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="todo-actions-hover">
-        <button className="todo-delete-btn" onClick={() => setTimer({ taskId: task.id, timeLeft: 25 * 60, isRunning: true })} title="Start 25m Focus Timer">
-          <Play size={16} />
-        </button>
-        <button className="todo-delete-btn" onClick={() => handleSnooze(task)} title="Snooze to Tomorrow">
-          <Moon size={16} />
-        </button>
-        <button className="todo-delete-btn" onClick={() => handleDelete(task.id)} title="Delete task">
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </motion.div>
+    <TodoItem
+      key={task.id}
+      task={task}
+      handleToggle={handleToggle}
+      handleUpdateText={handleUpdateText}
+      setTimer={setTimer}
+      handleSnooze={handleSnooze}
+      handleDelete={handleDelete}
+      getDeadlineClass={getDeadlineClass}
+      formatDeadline={formatDeadline}
+      onEditTask={setEditingTask}
+    />
   );
 
   const renderSection = (title, tasks, extra) => {
@@ -333,7 +271,7 @@ export default function TodoListPage() {
           {extra === 'overdue' && <AlertTriangle size={14} />}
           {title}
           <span className="todo-section-count">{tasks.length}</span>
-          {title === 'Today' && todayTotal > 0 && (
+          {extra === 'today' && todayTotal > 0 && (
             <div className="todo-daily-progress">
               <div className="todo-progress-bar">
                 <div className="todo-progress-fill" style={{ width: `${progressPercent}%` }} />
@@ -392,81 +330,7 @@ export default function TodoListPage() {
         </div>
 
         {/* Task Creation Form */}
-        <form className="todo-create-form" onSubmit={handleCreate}>
-          <div className="todo-create-row">
-            <input
-              className="todo-create-input"
-              type="text"
-              placeholder="What needs to be done?"
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-            />
-            <button type="submit" className="todo-submit-btn" disabled={!newText.trim()}>
-              <Plus size={16} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-              Add
-            </button>
-          </div>
-
-          <div className="todo-time-recurrence-row">
-            <div className="todo-time-inputs">
-              <Clock size={14} style={{ color: 'var(--dash-text-muted)' }} />
-              <input type="time" value={newStartTime} onChange={e => setNewStartTime(e.target.value)} className="todo-time-input" aria-label="Start time" />
-              <span className="todo-time-separator">-</span>
-              <input type="time" value={newEndTime} onChange={e => setNewEndTime(e.target.value)} className="todo-time-input" aria-label="End time" />
-            </div>
-            <select value={newRecurrence} onChange={e => setNewRecurrence(e.target.value)} className="todo-recurrence-select">
-              <option value="none">Does not repeat</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
-
-          <div className="todo-meta-row">
-            <div className="priority-selector">
-              {['high', 'medium', 'low'].map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`priority-btn ${p} ${newPriority === p ? 'active' : ''}`}
-                  onClick={() => setNewPriority(p)}
-                >
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            <input
-              className="todo-date-input"
-              type="date"
-              value={newDeadline}
-              onChange={(e) => setNewDeadline(e.target.value)}
-              placeholder="Deadline"
-            />
-
-            <input
-              className="todo-tags-input"
-              type="text"
-              placeholder="Tags (comma separated)"
-              value={newTags}
-              onChange={(e) => setNewTags(e.target.value)}
-            />
-
-            {notes.length > 0 && (
-              <select
-                className="todo-note-select"
-                value={newNoteId}
-                onChange={(e) => setNewNoteId(e.target.value)}
-              >
-                <option value="">Link a note...</option>
-                {notes.map(n => (
-                  <option key={n.id} value={n.id}>{n.title || 'Untitled'}</option>
-                ))}
-              </select>
-            )}
-          </div>
-        </form>
+        <TodoCreateForm handleCreate={handleCreate} notes={notes} />
 
         {/* Task List */}
         {loading ? (
@@ -483,10 +347,11 @@ export default function TodoListPage() {
           </div>
         ) : (
           <>
-            {renderSection('Overdue', grouped.overdue, 'overdue')}
-            {renderSection('Today', grouped.today)}
-            {renderSection('Upcoming', grouped.upcoming)}
-            {renderSection('No Deadline', grouped.noDeadline)}
+            {grouped.dateGroups.map(group => (
+              <React.Fragment key={group.key}>
+                {renderSection(group.title, group.tasks, group.isOverdue ? 'overdue' : group.isToday ? 'today' : '')}
+              </React.Fragment>
+            ))}
 
             {grouped.completed.length > 0 && (
               <div className="todo-section">
@@ -499,7 +364,15 @@ export default function TodoListPage() {
                   <span className="todo-section-count">{grouped.completed.length}</span>
                 </button>
                 <AnimatePresence>
-                  {showCompleted && grouped.completed.map(renderTask)}
+                  {showCompleted && grouped.completedDateGroups.map(group => (
+                    <div key={`completed-${group.key}`} className="todo-completed-date-group">
+                      <div className="todo-completed-date-label">
+                        {group.title}
+                        <span className="todo-section-count">{group.tasks.length}</span>
+                      </div>
+                      {group.tasks.map(renderTask)}
+                    </div>
+                  ))}
                 </AnimatePresence>
               </div>
             )}
@@ -534,6 +407,14 @@ export default function TodoListPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit Task Modal */}
+      <TodoEditModal
+        task={editingTask}
+        onClose={() => setEditingTask(null)}
+        onSave={handleSaveTask}
+        notes={notes}
+      />
     </div>
   );
 }

@@ -107,7 +107,7 @@ export default function Heatmap({ activityHeatmap, streakStats, editsThisMonth, 
 
       <div className="heatmap-container-new">
         <div className="heatmap-day-labels-new">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+          {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
             <span key={i} className="heatmap-day-label">{d}</span>
           ))}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { todosAPI, calendarAPI } from '../api';
+import { todosAPI } from '../api';
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,7 +31,6 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [selectedDay, setSelectedDay] = useState(new Date()); // Auto-select today
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'day'
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -163,18 +162,6 @@ export default function CalendarPage() {
     setCurrentDate(new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1));
     setSelectedDay(earliestDate);
     setIsAddingTask(false);
-  };
-
-  const handleSyncCalendar = async () => {
-    setSyncing(true);
-    try {
-      const res = await calendarAPI.syncTodos();
-      alert(res.data.message || 'Synced to Google Calendar!');
-    } catch (err) {
-      alert(err.response?.data?.error || 'Failed to sync to Google Calendar. Please log in with Google again.');
-    } finally {
-      setSyncing(false);
-    }
   };
 
   // Keyboard navigation
@@ -370,9 +357,6 @@ export default function CalendarPage() {
               <button className="cal-today-btn" onClick={handleGoToday}>
                 Today
               </button>
-              <button className="cal-today-btn" style={{ background: 'var(--ai-glow)', color: 'var(--ai-accent)', border: 'none' }} onClick={handleSyncCalendar} disabled={syncing}>
-                {syncing ? 'Syncing...' : 'Sync to Google'}
-              </button>
             </div>
           </div>
 
@@ -514,10 +498,10 @@ export default function CalendarPage() {
                       <span className="cal-task-count">{activeCount}</span>
                     )}
                   </div>
-                  {priorities.length > 0 && (
+                  {activeCount > 0 && (
                     <div className="cal-dots">
-                      {priorities.map((p, pi) => (
-                        <div key={pi} className={`cal-dot ${p}`} />
+                      {dayTasks.filter(t => !t.completed).map((task, idx) => (
+                        <div key={task.id || idx} className={`cal-dot ${task.priority}`} title={task.text} />
                       ))}
                     </div>
                   )}

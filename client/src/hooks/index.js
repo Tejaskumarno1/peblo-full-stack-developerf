@@ -31,6 +31,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
     try {
       await saveFnRef.current(id, payload);
       lastSavedRef.current = current;
+      delete pendingRef.current[id];
       setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
       return true;
     } catch (err) {

@@ -15,16 +15,21 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return; // Prevent double-submit
     setError('');
     setLoading(true);
     try {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      const errData = err.response?.data?.error;
-      const errMsg = typeof errData === 'string' ? errData 
-                   : errData?.message || err.message || 'Login failed';
-      setError(errMsg);
+      if (err.response?.status === 429) {
+        setError('Too many login attempts. Please wait a minute and try again.');
+      } else {
+        const errData = err.response?.data?.error;
+        const errMsg = typeof errData === 'string' ? errData 
+                     : errData?.message || err.message || 'Login failed';
+        setError(errMsg);
+      }
     } finally {
       setLoading(false);
     }

@@ -13,12 +13,26 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   googleRefreshToken String? @map("google_refresh_token")
+  googleChannelId String? @map("google_channel_id")
+  googleResourceId String? @map("google_resource_id")
+  googleId     String?  @unique @map("google_id")
+  
+  // Security
+  tokenVersion Int      @default(0) @map("token_version")
+  
+  // Profile & Settings
+  jobTitle     String?  @map("job_title")
+  bio          String?
+  timezone     String   @default("UTC")
+  settings     Json     @default("{}")
+
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   notes         Note[]
   aiGenerations AiGeneration[]
   todos         Todo[]
+  apiKeys       UserApiKeys?
 
   @@map("users")
 }
@@ -30,6 +44,8 @@ model Note {
   content    String   @default("")
   category   String?
   isArchived Boolean  @default(false) @map("is_archived")
+  isDeleted  Boolean  @default(false) @map("is_deleted")
+  deletedAt  DateTime? @map("deleted_at")
   isPublic   Boolean  @default(false) @map("is_public")
   shareId    String?  @unique @map("share_id")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -40,10 +56,13 @@ model Note {
   aiGenerations AiGeneration[]
   backups       NoteBackup[]
   linkedTodos   Todo[]
+  embedding     NoteEmbedding?
 
   @@index([userId])
   @@index([userId, isArchived])
+  @@index([userId, isDeleted])
   @@index([userId, category])
+  @@index([userId, updatedAt(sort: Desc)])
   @@map("notes")
 }
 
@@ -121,3 +140,27 @@ model Todo {
   @@index([userId, completed])
   @@map("todos")
 }
+
+model NoteEmbedding {
+  id        String   @id @default(uuid())
+  noteId    String   @unique @map("note_id")
+  vector    String   // JSON stringified float array representing embedding values
+  createdAt DateTime @default(now()) @map("created_at")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  @@map("note_embeddings")
+}
+
+model UserApiKeys {
+  userId         String   @id @map("user_id")
+  openAiKey      String?  @map("openai_key")
+  geminiKey      String?  @map("gemini_key")
+  groqKey        String?  @map("groq_key")
+  huggingFaceKey String?  @map("huggingface_key")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_api_keys")
+}
+

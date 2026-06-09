@@ -12,6 +12,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+    },
   },
   build: {
     chunkSizeWarningLimit: 2000,
@@ -20,7 +24,8 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           ui: ['lucide-react', 'framer-motion'],
-          utils: ['marked', 'axios', '@hello-pangea/dnd'],
+          editor: ['@blocknote/core', '@blocknote/mantine', '@blocknote/react', '@mantine/core', '@mantine/hooks'],
+          utils: ['marked', 'axios'],
           pdf: ['html2pdf.js']
         }
       }

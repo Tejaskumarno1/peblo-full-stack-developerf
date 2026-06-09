@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getNotes, getNote, createNote, updateNote, deleteNote, archiveNote, shareNote, getBackups, revertBackup } from '../controllers/notesController.js';
+import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, archiveNote, shareNote, getBackups, revertBackup } from '../controllers/notesController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { noteSchemas } from '../schemas/index.js';
@@ -13,6 +13,7 @@ router.post('/', validate(noteSchemas.create), createNote);
 router.get('/:id', getNote);
 router.patch('/:id', validate(noteSchemas.update), updateNote);
 router.delete('/:id', deleteNote);
+router.post('/:id/restore', restoreNote);
 router.post('/:id/archive', archiveNote);
 router.post('/:id/share', shareNote);
 router.get('/:id/backups', getBackups);

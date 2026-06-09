@@ -1,9 +1,12 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Keyboard, Bell, User, Settings, Sparkles, FileText, Calendar, ListTodo } from 'lucide-react';
+import { LogOut, Keyboard, Bell, User, Settings, Phone } from 'lucide-react';
+import SettingsModal from './SettingsModal';
+import AnimatedTabBar from './AnimatedTabBar';
+import { MAIN_NAV_TABS, MOBILE_NAV_TABS } from '../config/navTabs';
 
-export default function Navigation({ activeTab }) {
+export default function Navigation() {
   const { 
     user, 
     logout, 
@@ -94,35 +97,18 @@ export default function Navigation({ activeTab }) {
           </div>
 
           {/* Tab Switcher */}
-          <div className="navbar-tab-switcher">
-            <Link 
-              to="/" 
-              className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-            >
-              Dashboard
-            </Link>
-            <Link 
-              to="/notes" 
-              className={`tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
-            >
-              Notes
-            </Link>
-            <Link 
-              to="/calendar" 
-              className={`tab-btn ${activeTab === 'calendar' ? 'active' : ''}`}
-            >
-              Calendar
-            </Link>
-            <Link 
-              to="/todolist" 
-              className={`tab-btn ${activeTab === 'tasks' ? 'active' : ''}`}
-            >
-              Tasks
-            </Link>
-          </div>
+          <AnimatedTabBar tabs={MAIN_NAV_TABS} variant="navbar" className="navbar-tab-switcher" />
 
           {/* App Controls */}
           <div className="navbar-controls-section">
+            <button 
+              className="navbar-icon-btn" 
+              onClick={() => window.dispatchEvent(new CustomEvent('trigger_ai_call'))}
+              title="Test AI Call"
+              style={{ color: '#22c55e' }}
+            >
+              <Phone size={18} />
+            </button>
             <button 
               className="navbar-icon-btn" 
               onClick={() => setShortcutsOpen(true)}
@@ -204,25 +190,8 @@ export default function Navigation({ activeTab }) {
 
       {/* Mobile Bottom Tab Bar */}
       <nav className="mobile-bottom-nav premium-bottom-nav">
-        <Link to="/" className={`mobile-tab ${activeTab === 'dashboard' ? 'active' : ''}`}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-          </svg>
-          <span>Home</span>
-        </Link>
-        <Link to="/notes" className={`mobile-tab ${activeTab === 'notes' ? 'active' : ''}`}>
-          <FileText size={22} />
-          <span>Notes</span>
-        </Link>
-        <Link to="/calendar" className={`mobile-tab ${activeTab === 'calendar' ? 'active' : ''}`}>
-          <Calendar size={22} />
-          <span>Calendar</span>
-        </Link>
-        <Link to="/todolist" className={`mobile-tab ${activeTab === 'tasks' ? 'active' : ''}`}>
-          <ListTodo size={22} />
-          <span>Tasks</span>
-        </Link>
-        <button className="profile-trigger" style={{display: 'none'}} onClick={() => setProfileOpen(true)}></button>
+        <AnimatedTabBar tabs={MOBILE_NAV_TABS} variant="mobile" />
+        <button className="profile-trigger" style={{ display: 'none' }} onClick={() => setProfileOpen(true)} type="button" aria-hidden="true" />
       </nav>
 
 
@@ -259,158 +228,15 @@ export default function Navigation({ activeTab }) {
           </div>
         </div>
       )}
-      {/* Profile Modal */}
-      {profileOpen && (
-        <div className="shortcuts-overlay" onClick={() => setProfileOpen(false)}>
-          <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="shortcuts-modal-header">
-              <h3>Profile Settings</h3>
-              <button className="btn-icon-sm" onClick={() => setProfileOpen(false)}>×</button>
-            </div>
-            <form onSubmit={handleSaveProfile} className="shortcuts-list">
-              <div className="avatar-section">
-                <div className="avatar-large">{initial}</div>
-                <div className="avatar-details">
-                  <h4>{user?.name}</h4>
-                  <p>{user?.email}</p>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Display Name</label>
-                <input 
-                  type="text" 
-                  className="form-input"
-                  value={profileName} 
-                  onChange={(e) => setProfileName(e.target.value)} 
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Email Address (Read-only)</label>
-                <input 
-                  type="email" 
-                  className="form-input"
-                  value={profileEmail} 
-                  disabled
-                  title="Email address cannot be changed"
-                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
-                />
-              </div>
-              <div className="setting-section" style={{ padding: '0.5rem 0', borderTop: '1px solid var(--border-subtle)' }}>
-                <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>App Theme</label>
-                <div className="theme-toggle-group">
-                  <button 
-                    type="button"
-                    className={`theme-toggle-btn ${theme === 'light' ? 'active' : ''}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    Light
-                  </button>
-                  <button 
-                    type="button"
-                    className={`theme-toggle-btn ${theme === 'dark' ? 'active' : ''}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    Dark
-                  </button>
-                  <button 
-                    type="button"
-                    className={`theme-toggle-btn ${theme === 'system' ? 'active' : ''}`}
-                    onClick={() => setTheme('system')}
-                  >
-                    System
-                  </button>
-                </div>
-              </div>
-              <div className="modal-actions-row">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => setProfileOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary btn-sm">
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {settingsOpen && (
-        <div className="shortcuts-overlay" onClick={() => setSettingsOpen(false)}>
-          <div className="shortcuts-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="shortcuts-modal-header">
-              <h3>Preferences & Settings</h3>
-              <button className="btn-icon-sm" onClick={() => setSettingsOpen(false)}>×</button>
-            </div>
-            <div className="shortcuts-list">
-              <div className="setting-section">
-                <h4 className="setting-section-title">Theme Settings</h4>
-                <div className="theme-toggle-group">
-                  <button 
-                    type="button"
-                    className={`theme-toggle-btn ${theme === 'light' ? 'active' : ''}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    Light Mode
-                  </button>
-                  <button 
-                    type="button"
-                    className={`theme-toggle-btn ${theme === 'dark' ? 'active' : ''}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    Dark Mode
-                  </button>
-                </div>
-              </div>
-
-              <div className="setting-section">
-                <h4 className="setting-section-title">Workspace Editor</h4>
-                <div className="setting-row-flex">
-                  <label htmlFor="font-size-select" className="form-label">Editor Font Size</label>
-                  <select 
-                    id="font-size-select"
-                    className="form-select"
-                    value={settings.fontSize} 
-                    onChange={(e) => updateSettings({ fontSize: e.target.value })}
-                  >
-                    <option value="small">Small</option>
-                    <option value="medium">Medium</option>
-                    <option value="large">Large</option>
-                  </select>
-                </div>
-                <div className="setting-row-checkbox">
-                  <input 
-                    id="word-wrap-checkbox"
-                    type="checkbox" 
-                    checked={settings.wordWrap} 
-                    onChange={(e) => updateSettings({ wordWrap: e.target.checked })}
-                  />
-                  <label htmlFor="word-wrap-checkbox" className="checkbox-label">Enable word wrap in editor</label>
-                </div>
-              </div>
-
-              <div className="setting-section">
-                <h4 className="setting-section-title">AI Configuration</h4>
-                <div className="setting-row-checkbox">
-                  <input 
-                    id="auto-title-checkbox"
-                    type="checkbox" 
-                    checked={settings.autoTitle} 
-                    onChange={(e) => updateSettings({ autoTitle: e.target.checked })}
-                  />
-                  <label htmlFor="auto-title-checkbox" className="checkbox-label">Auto-suggest titles for drafts</label>
-                </div>
-              </div>
-
-              <div className="modal-actions-row">
-                <button type="button" className="btn btn-primary btn-full btn-sm" onClick={() => setSettingsOpen(false)}>
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Unified Settings Hub */}
+      {(profileOpen || settingsOpen) && (
+        <SettingsModal 
+          initialTab={profileOpen ? 'profile' : 'appearance'} 
+          onClose={() => {
+            setProfileOpen(false);
+            setSettingsOpen(false);
+          }} 
+        />
       )}
     </>
   );

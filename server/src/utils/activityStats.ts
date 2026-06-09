@@ -1,18 +1,20 @@
-/** @param {Date} date */
-export function toDateKey(date) {
+export function toDateKey(date: Date | string | number): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().split('T')[0];
 }
 
-/**
- * Build per-day activity from note created/updated timestamps.
- * @param {{ createdAt: Date, updatedAt: Date }[]} notes
- */
-export function buildDailyActivity(notes) {
-  const dayMap = {};
+interface ActivityDay {
+  date: string;
+  created: number;
+  updated: number;
+  total: number;
+}
 
-  const ensureDay = (key) => {
+export function buildDailyActivity(notes: { createdAt: Date | string; updatedAt: Date | string }[]): Record<string, ActivityDay> {
+  const dayMap: Record<string, ActivityDay> = {};
+
+  const ensureDay = (key: string): ActivityDay => {
     if (!dayMap[key]) {
       dayMap[key] = { date: key, created: 0, updated: 0, total: 0 };
     }
@@ -36,10 +38,7 @@ export function buildDailyActivity(notes) {
   return dayMap;
 }
 
-/**
- * @param {Record<string, { total: number }>} dayMap
- */
-export function calculateStreakStats(dayMap) {
+export function calculateStreakStats(dayMap: Record<string, ActivityDay>) {
   const activeDates = Object.keys(dayMap)
     .filter((key) => dayMap[key].total > 0)
     .sort();
@@ -96,8 +95,7 @@ export function calculateStreakStats(dayMap) {
   return { current, longest, activeDays, mostActiveDay, recentActiveDates };
 }
 
-/** Last 53 weeks of daily activity (GitHub-style grid). */
-export function buildYearHeatmap(dayMap) {
+export function buildYearHeatmap(dayMap: Record<string, ActivityDay>) {
   const end = new Date();
   end.setHours(0, 0, 0, 0);
 
@@ -130,7 +128,7 @@ export function buildYearHeatmap(dayMap) {
   return weeks;
 }
 
-export function getEditsThisMonth(dayMap) {
+export function getEditsThisMonth(dayMap: Record<string, ActivityDay>): number {
   const now = new Date();
   const month = now.getMonth();
   const year = now.getFullYear();

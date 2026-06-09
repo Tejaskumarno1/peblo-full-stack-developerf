@@ -10,9 +10,14 @@ export const useUIStore = create(
       setAiChatOpen: (isOpen) => set({ isAiChatOpen: isOpen }),
       
       aiChatMessages: [],
-      addAiChatMessage: (msg) => set((state) => ({ aiChatMessages: [...state.aiChatMessages, msg] })),
+      addAiChatMessage: (msg) => set((state) => ({ 
+        aiChatMessages: Array.isArray(state.aiChatMessages) ? [...state.aiChatMessages, msg] : [msg] 
+      })),
       clearAiChatMessages: () => set({ aiChatMessages: [] }),
-      setAiChatMessages: (messages) => set({ aiChatMessages: messages }),
+      setAiChatMessages: (messages) => set((state) => {
+        const nextMessages = typeof messages === 'function' ? messages(state.aiChatMessages) : messages;
+        return { aiChatMessages: Array.isArray(nextMessages) ? nextMessages : [] };
+      }),
       
       hasChatted: false,
       setHasChatted: (hasChatted) => set({ hasChatted }),
@@ -25,7 +30,7 @@ export const useUIStore = create(
     {
       name: 'peblo-ui-storage',
       partialize: (state) => ({ 
-        aiChatMessages: state.aiChatMessages.filter(m => !m.isError),
+        aiChatMessages: Array.isArray(state.aiChatMessages) ? state.aiChatMessages.filter(m => m && !m.isError) : [],
         hasChatted: state.hasChatted,
         isSidebarOpen: state.isSidebarOpen
       }),

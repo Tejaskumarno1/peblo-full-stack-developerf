@@ -18,7 +18,8 @@ import {
   GripHorizontal,
   Trash2,
   StopCircle,
-  Paperclip
+  Paperclip,
+  Mic
 } from 'lucide-react';
 import { marked } from 'marked';
 import { aiAPI, notesAPI } from '../api/index';
@@ -80,13 +81,15 @@ export default function AiChatPanel() {
   const { 
     isAiChatOpen: isOpen, 
     setAiChatOpen: setIsOpen, 
-    aiChatMessages: messages, 
+    aiChatMessages: rawMessages, 
     setAiChatMessages: setMessages, 
     addAiChatMessage,
     hasChatted, 
     setHasChatted,
     clearAiChatMessages
   } = useUIStore();
+
+  const messages = Array.isArray(rawMessages) ? rawMessages : [];
 
   const [input, setInput] = useState('');
   const [mode, setMode] = useState('intake'); // Default to Smart Intake
@@ -96,6 +99,69 @@ export default function AiChatPanel() {
   const [error, setError] = useState('');
   const [intakeTemplate, setIntakeTemplate] = useState('auto');
   const [attachedFile, setAttachedFile] = useState(null);
+  
+  const [isRecording, setIsRecording] = useState(false);
+  const [recognition, setRecognition] = useState(null);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+
+      rec.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        if (finalTranscript) {
+          setInput((prev) => {
+            const separator = prev.trim() ? ' ' : '';
+            return prev + separator + finalTranscript;
+          });
+        }
+      };
+
+      rec.onerror = (e) => {
+        console.error('Speech recognition error', e);
+        setIsRecording(false);
+      };
+
+      rec.onend = () => {
+        setIsRecording(false);
+      };
+
+      setRecognition(rec);
+    }
+  }, []);
+
+  const toggleRecording = () => {
+    if (!recognition) {
+      alert('Speech recognition is not supported in this browser. Please try using Google Chrome or Safari.');
+      return;
+    }
+
+    if (isRecording) {
+      recognition.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognition.start();
+        setIsRecording(true);
+      } catch (err) {
+        console.error('Failed to start recognition', err);
+      }
+    }
+  };
   
   // Dragging state
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -690,6 +756,21 @@ export default function AiChatPanel() {
                       title="Attach PDF or TXT file"
                     >
                       <Paperclip size={18} />
+                    </button>
+
+                    <button 
+                      type="button" 
+                      className={`ai-chat-send mic-btn ${isRecording ? 'recording' : ''}`}
+                      style={{ 
+                        background: 'transparent', 
+                        color: isRecording ? '#ef4444' : 'var(--ai-text-muted)',
+                        position: 'relative'
+                      }}
+                      onClick={toggleRecording}
+                      disabled={loading}
+                      title={isRecording ? 'Stop recording' : 'Dictate voice note'}
+                    >
+                      <Mic size={18} className={isRecording ? 'pulse-anim' : ''} />
                     </button>
 
                     {loading ? (

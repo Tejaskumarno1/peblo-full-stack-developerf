@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { notesAPI, aiAPI } from '../api/index';
@@ -9,35 +9,50 @@ import Navigation from '../components/Navigation';
 import ShareModal from '../components/ShareModal';
 import TodoListPanel from '../components/TodoListPanel';
 import { marked } from 'marked';
-import html2pdf from 'html2pdf.js';
 import {
-  Sparkles,
-  Archive,
-  Trash2,
   Link2,
-  Edit2,
-  Eye,
-  Check,
-  Loader2,
-  Search,
-  PanelLeftClose,
   PanelLeft,
-  Plus,
-  PenLine,
-  History,
-  Save,
-  MessageSquare,
-  X,
-  Download,
-  FileText,
-  Globe,
-  FileDown,
-  FileBadge,
-  File,
-  MoreHorizontal,
 } from 'lucide-react';
 import BlockEditor from '../components/BlockEditor';
 import '../styles/workspace.css';
+
+// Import subcomponents for cleaner SPA loading/rendering
+import {
+  NotesSidebar,
+  EditorToolbar,
+  AiWorkspacePanel,
+  BackupsPanel,
+  MobileEditorControls,
+  WelcomeScreen,
+} from '../components/workspace';
+import { useWorkspaceStore } from '../store/workspaceStore';
+
+class EditorErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Editor crashed:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-boundary-fallback" style={{ padding: '2rem', textAlign: 'center', background: 'var(--bg-elevated)', margin: '2rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>Failed to load note editor</h3>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>An error occurred while rendering this note's content.</p>
+          <button type="button" className="btn btn-primary" onClick={() => this.setState({ hasError: false })}>
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function countWords(text) {
   const trimmed = text?.trim();
@@ -45,26 +60,75 @@ function countWords(text) {
   return trimmed.split(/\s+/).filter(Boolean).length;
 }
 
+function getYouTubeEmbedUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./, '');
+    let videoId = '';
+
+    if (host === 'youtu.be') {
+      videoId = url.pathname.split('/').filter(Boolean)[0] || '';
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v') || '';
+      } else if (url.pathname.startsWith('/shorts/') || url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/').filter(Boolean)[1] || '';
+      }
+    }
+
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+  } catch {
+    return '';
+  }
+}
+
 export default function WorkspacePage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
-  const { settings } = useAuth();
+  const { user, settings } = useAuth();
   const queryClient = useQueryClient();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterTag, setFilterTag] = useState('');
-  const [sortBy, setSortBy] = useState('updated');
-  const [showArchived, setShowArchived] = useState(false);
-  const debouncedSearch = useDebounce(searchQuery, 400);
+  const {
+    searchQuery, setSearchQuery,
+    filterTag, setFilterTag,
+    sortBy, setSortBy,
+    showArchived, setShowArchived,
+    showDeleted, setShowDeleted,
+    sidebarOpen, setSidebarOpen,
+    isFocusMode, setFocusMode,
+    aiPanelOpen, setAiPanelOpen,
+    showTodoList, setShowTodoList,
+    showBackups, setShowBackups,
+    isShareModalOpen, setIsShareModalOpen,
+  } = useWorkspaceStore();
+  const [suggestedTag, setSuggestedTag] = useState('');
+  const [linkPreviews, setLinkPreviews] = useState([]);
+  const [showLinkPreviews, setShowLinkPreviews] = useState(false);
 
   const { data: notes = [], isLoading: listLoading } = useQuery({
-    queryKey: ['notes', { sort: sortBy, archived: showArchived, search: debouncedSearch, tag: filterTag }],
+    queryKey: ['notes', { sort: sortBy, archived: showArchived, deleted: showDeleted, tag: filterTag }],
     queryFn: () => {
-      const params = { sort: sortBy, archived: showArchived.toString() };
-      if (debouncedSearch) params.search = debouncedSearch;
+      const params = { sort: sortBy, archived: showArchived.toString(), deleted: showDeleted.toString() };
       if (filterTag) params.tag = filterTag;
-      return notesAPI.getAll(params).then(res => res.data.notes);
-    }
+      return notesAPI.getAll(params).then(res => {
+        if (!showArchived && !showDeleted && !filterTag) {
+          localStorage.setItem('peblo_cached_notes', JSON.stringify(res.data.notes));
+        }
+        return res.data.notes;
+      });
+    },
+    initialData: () => {
+      if (!showArchived && !showDeleted && !filterTag) {
+        try {
+          const cached = localStorage.getItem('peblo_cached_notes');
+          return cached ? JSON.parse(cached) : undefined;
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    },
+    initialDataUpdatedAt: () => 0
   });
 
   const [generating, setGenerating] = useState(false);
@@ -77,7 +141,6 @@ export default function WorkspacePage() {
   const [tagInput, setTagInput] = useState('');
   const [showPreview, setShowPreview] = useState(true);
 
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiPanelTab, setAiPanelTab] = useState('assist');
   const [aiResults, setAiResults] = useState({});
   const [aiError, setAiError] = useState('');
@@ -85,17 +148,12 @@ export default function WorkspacePage() {
   const [wsChatInput, setWsChatInput] = useState('');
   const [wsChatMessages, setWsChatMessages] = useState([]);
   const [wsChatLoading, setWsChatLoading] = useState(false);
-
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  
-  const [showBackups, setShowBackups] = useState(false);
   const [backupsList, setBackupsList] = useState([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
+  const [selectedBackupForDiff, setSelectedBackupForDiff] = useState(null);
 
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
-  const [todoPanelOpen, setTodoPanelOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const exportRef = useRef(null);
 
@@ -182,9 +240,6 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(false);
-    if (window.innerWidth <= 768) {
-      setSidebarOpen(false);
-    }
     navigate('/notes', { replace: true });
   }, [navigate]);
 
@@ -195,7 +250,7 @@ export default function WorkspacePage() {
   useKeyboardShortcut('j', () => setAiPanelOpen((p) => !p), { ctrl: true });
 
   useEffect(() => {
-    const handleGlobalUpdate = (e) => {
+    const handleNoteUpdatedEvent = (e) => {
       const updatedNote = e.detail;
       queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
         if (!old) return old;
@@ -208,8 +263,8 @@ export default function WorkspacePage() {
         setSelectedNote(updatedNote);
       }
     };
-    window.addEventListener('note-updated', handleGlobalUpdate);
-    return () => window.removeEventListener('note-updated', handleGlobalUpdate);
+    window.addEventListener('note-updated', handleNoteUpdatedEvent);
+    return () => window.removeEventListener('note-updated', handleNoteUpdatedEvent);
   }, [selectedNote]);
 
   useEffect(() => {
@@ -294,22 +349,30 @@ export default function WorkspacePage() {
 </body>
 </html>`;
     } else if (format === 'pdf') {
-      const container = document.createElement('div');
-      container.innerHTML = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
-          <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${noteTitle || 'Untitled'}</h1>
-          <div>${marked.parse(noteContent || '')}</div>
-        </div>
-      `;
-      const opt = {
-        margin:       10,
-        filename:     `${(noteTitle || 'Untitled').trim().replace(/[^a-zA-Z0-9-_\s]/g, '').replace(/\s+/g, '_')}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2 },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-      
-      html2pdf().set(opt).from(container).save();
+      import('html2pdf.js')
+        .then((html2pdfModule) => {
+          const html2pdf = html2pdfModule.default;
+          const container = document.createElement('div');
+          container.innerHTML = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
+              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${noteTitle || 'Untitled'}</h1>
+              <div>${marked.parse(noteContent || '')}</div>
+            </div>
+          `;
+          const opt = {
+            margin:       10,
+            filename:     `${(noteTitle || 'Untitled').trim().replace(/[^a-zA-Z0-9-_\s]/g, '').replace(/\s+/g, '_')}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2 },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+          
+          html2pdf().set(opt).from(container).save();
+        })
+        .catch((err) => {
+          console.error('Failed to load html2pdf dynamically:', err);
+          alert('Could not load PDF generation library. Please try again.');
+        });
       return;
     }
 
@@ -340,7 +403,6 @@ export default function WorkspacePage() {
     setNoteTags(note.tags || []);
     setNoteCategory(note.category || '');
     
-    // Parse and pre-populate previously persisted AI summaries and insights
     const loadedAI = {};
     if (note.aiGenerations && Array.isArray(note.aiGenerations)) {
       note.aiGenerations.forEach((gen) => {
@@ -354,16 +416,16 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(note.id !== '__draft__');
-
-    // Auto-close sidebar on mobile devices so the editor is visible immediately
-    if (window.innerWidth <= 768) {
-      setSidebarOpen(false);
-    }
+    setSelectedBackupForDiff(null);
+    setShowBackups(false);
   }, []);
 
   const selectNote = useCallback(
     (note) => {
-      forceSave(); // Safe background save, does not block routing
+      forceSave();
+      if (window.innerWidth <= 768) {
+        setSidebarOpen(false);
+      }
       if (note.id === '__draft__') {
         applyNoteToEditor(note);
         navigate('/notes', { replace: true });
@@ -371,10 +433,11 @@ export default function WorkspacePage() {
         navigate(`/notes/${note.id}`, { replace: true });
       }
     },
-    [applyNoteToEditor, navigate, forceSave]
+    [applyNoteToEditor, navigate, forceSave, setSidebarOpen]
   );
 
   const lastRouteIdRef = useRef(null);
+  const ignoredNoteIdsRef = useRef(new Set());
 
   useEffect(() => {
     if (!routeId) {
@@ -382,7 +445,10 @@ export default function WorkspacePage() {
       return;
     }
 
-    // Bypass if we are already actively editing or loaded this routeId
+    if (ignoredNoteIdsRef.current.has(routeId)) {
+      return;
+    }
+
     if (lastRouteIdRef.current === routeId && selectedNote?.id === routeId) {
       return;
     }
@@ -424,8 +490,17 @@ export default function WorkspacePage() {
   }, [routeId, notes, listLoading, selectedNote?.id, applyNoteToEditor, navigate]);
 
   const handleDeleteNote = async (noteId) => {
-    if (!confirm('Delete this note?')) return;
+    const targetNote = notes.find((n) => n.id === noteId) || (selectedNote?.id === noteId ? selectedNote : null);
+    const isAlreadyDeleted = targetNote?.isDeleted;
+
+    if (isAlreadyDeleted) {
+      if (!confirm('Permanently delete this note? This cannot be undone.')) return;
+    } else {
+      if (!confirm('Move this note to trash?')) return;
+    }
+
     try {
+      ignoredNoteIdsRef.current.add(noteId);
       await notesAPI.delete(noteId);
       queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
         if (!old) return old;
@@ -440,8 +515,26 @@ export default function WorkspacePage() {
     }
   };
 
+  const handleRestoreNote = async (noteId) => {
+    try {
+      ignoredNoteIdsRef.current.add(noteId);
+      await notesAPI.restore(noteId);
+      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
+        if (!old) return old;
+        return old.filter((n) => n.id !== noteId);
+      });
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(null);
+        navigate('/notes', { replace: true });
+      }
+    } catch (err) {
+      console.error('Failed to restore note:', err);
+    }
+  };
+
   const handleArchiveNote = async (noteId) => {
     try {
+      ignoredNoteIdsRef.current.add(noteId);
       await notesAPI.archive(noteId);
       queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
         if (!old) return old;
@@ -532,7 +625,6 @@ export default function WorkspacePage() {
 
       setAiResults((prev) => ({ ...prev, [type]: res.data }));
 
-      // Instantly propagate the new generation details to in-memory list & selection
       if (type === 'summary') {
         queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
           if (!old) return old;
@@ -621,6 +713,141 @@ export default function WorkspacePage() {
     }
   };
 
+  const filteredNotes = useMemo(() => {
+    if (!searchQuery.trim()) return notes;
+    const query = searchQuery.toLowerCase();
+    return notes.filter((note) => {
+      const titleMatch = note.title?.toLowerCase().includes(query);
+      const contentMatch = note.content?.toLowerCase().includes(query);
+      return titleMatch || contentMatch;
+    });
+  }, [notes, searchQuery]);
+
+
+
+  // Link Previews
+  useEffect(() => {
+    if (!noteContent) {
+      setLinkPreviews([]);
+      return;
+    }
+
+    const urlRegex = /(https?:\/\/[^\s\)]+)/gi;
+    const matches = noteContent.match(urlRegex) || [];
+    const uniqueUrls = Array.from(new Set(matches.map(url => url.replace(/[.,;:]$/, ''))));
+
+    if (uniqueUrls.length === 0) {
+      setLinkPreviews([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchPreviews = async () => {
+      const previews = await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const embedUrl = getYouTubeEmbedUrl(url);
+
+          try {
+            const existing = linkPreviews.find(p => p.url === url);
+            if (existing) return { ...existing, embedUrl: existing.embedUrl || embedUrl };
+
+            if (embedUrl) {
+              return {
+                url,
+                embedUrl,
+                title: 'YouTube video',
+                description: 'Playable embedded video',
+                domain: new URL(url).hostname.replace(/^www\./, '')
+              };
+            }
+
+            const res = await aiAPI.linkPreview(url);
+            return res.data;
+          } catch (err) {
+            console.warn('Failed to fetch link preview:', err?.response?.status || err?.message);
+            return {
+              url,
+              embedUrl,
+              title: embedUrl ? 'YouTube video' : url,
+              description: embedUrl ? 'Playable embedded video' : 'No description available.',
+              domain: new URL(url).hostname.replace(/^www\./, '')
+            };
+          }
+        })
+      );
+
+      if (isMounted) {
+        setLinkPreviews(previews.filter(Boolean));
+      }
+    };
+
+    fetchPreviews();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [noteContent]);
+
+  // Native-Feeling Mobile Swipe for Sidebar
+  useEffect(() => {
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    const handleTouchStart = (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    };
+
+    const handleTouchEnd = (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    };
+
+    const handleSwipe = () => {
+      const swipeDistance = touchEndX - touchStartX;
+      const minSwipeDistance = 50;
+      
+      if (window.innerWidth > 768) return;
+      
+      if (swipeDistance > minSwipeDistance && touchStartX < 80) {
+        setSidebarOpen(true);
+      }
+      
+      if (swipeDistance < -minSwipeDistance) {
+        setSidebarOpen(false);
+      }
+    };
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+  // Global Keyboard Hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleCreateNote();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCreateNote]);
+
   const allTags = useMemo(() => {
     const tags = new Set();
     notes.forEach((n) => n.tags?.forEach((t) => tags.add(t)));
@@ -632,163 +859,23 @@ export default function WorkspacePage() {
   const isDraft = selectedNote?.isDraft || selectedNote?.id === '__draft__';
 
   return (
-    <div className="workspace-page">
-      <Navigation activeTab="notes" />
+    <div className={`workspace-page ${settings?.compactMode ? 'compact-mode' : ''} ${isFocusMode ? 'focus-mode-active' : ''}`}>
+      {!isFocusMode && <Navigation activeTab="notes" />}
 
       <div className="ws-body">
         <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => { if (selectedNote) setSidebarOpen(false) }} />
-        <aside className={`ws-sidebar ${sidebarOpen ? '' : 'closed'}`}>
-          <div className="sidebar-header">
-            <div className="sidebar-header-title">
-              <h2>Notes</h2>
-              <span className="sidebar-note-count">
-                {listLoading ? 'Loading…' : `${notes.length} ${notes.length === 1 ? 'note' : 'notes'}`}
-              </span>
-            </div>
-            <button
-              type="button"
-              className={`sidebar-collapse-btn ${!selectedNote ? 'mobile-hidden' : ''}`}
-              onClick={() => { if (selectedNote) setSidebarOpen(false) }}
-              title="Hide sidebar"
-              aria-label="Hide sidebar"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          </div>
-
-          <button type="button" className="btn btn-primary new-note-btn" onClick={handleCreateNote}>
-            <Plus size={16} /> New Note
-          </button>
-
-          <div className="sidebar-search">
-            <Search size={14} className="sidebar-search-icon" />
-            <input
-              id="search-input"
-              type="text"
-              placeholder="Search notes…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search notes"
-            />
-          </div>
-
-          <div className="sidebar-filters">
-            <div className="filter-row">
-              <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} aria-label="Filter by tag">
-                <option value="">All tags</option>
-                {allTags.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort notes">
-                <option value="updated">Recent</option>
-                <option value="title">A–Z</option>
-                <option value="created">Created</option>
-              </select>
-            </div>
-            <div className="archive-toggle-row">
-              <button
-                type="button"
-                className={`toggle-archive-btn ${showArchived ? 'active' : ''}`}
-                onClick={() => setShowArchived(!showArchived)}
-              >
-                <Archive size={14} />
-                <span>{showArchived ? 'Showing archived' : 'Archived'}</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="notes-list">
-            {listLoading ? (
-              [1, 2, 3, 4, 5].map((n) => (
-                <div key={n} className="note-card skeleton-card">
-                  <div className="skeleton-title" />
-                  <div className="skeleton-text" />
-                  <div className="skeleton-text short" />
-                  <div className="skeleton-footer" />
-                </div>
-              ))
-            ) : notes.length === 0 ? (
-              <div className="empty-list">
-                <p>{showArchived ? 'No archived notes' : 'No notes yet'}</p>
-                {!showArchived && <p className="hint">Create your first note to get started</p>}
-              </div>
-            ) : (
-              notes.map((note) => (
-                <div
-                  key={note.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`note-card ${selectedNote?.id === note.id ? 'active' : ''}`}
-                  onClick={() => selectNote(note)}
-                  onKeyDown={(e) => e.key === 'Enter' && selectNote(note)}
-                >
-                  <div className="note-card-header">
-                    <div className="note-card-title-row">
-                      <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
-                    </div>
-                    <div className="note-card-actions">
-                      <button
-                        type="button"
-                        className="btn-icon-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleArchiveNote(note.id);
-                        }}
-                        title={note.isArchived ? 'Unarchive' : 'Archive'}
-                        style={{ opacity: 1 }}
-                      >
-                        <Archive size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-icon-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteNote(note.id);
-                        }}
-                        title="Delete"
-                        style={{ opacity: 1 }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="note-card-snippet">
-                    {stripMarkdown(note.content)?.substring(0, 90) || 'Empty note'}
-                  </p>
-                  <div className="note-card-footer">
-                    <div className="note-card-footer-left">
-                      <span className="note-card-date">{formatRelativeDate(note.updatedAt)}</span>
-                      {note.isPublic && (
-                        <span className="note-footer-badge shared" title="Publicly shared">
-                          <Link2 size={10} /> Shared
-                        </span>
-                      )}
-                      {note.hasSummary && (
-                        <span className="note-footer-badge ai" title="AI summary available">
-                          <Sparkles size={10} /> Summarized
-                        </span>
-                      )}
-                    </div>
-                    <div className="note-card-tags">
-                      {note.tags?.slice(0, 2).map((t) => (
-                        <span key={t} className={`mini-tag ${stringToColorClass(t)}`}>
-                          {t}
-                        </span>
-                      ))}
-                      {note.tags?.length > 2 && (
-                        <span className="mini-tag tag-default">+{note.tags.length - 2}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
+        
+        <NotesSidebar
+          selectedNote={selectedNote}
+          filteredNotes={filteredNotes}
+          listLoading={listLoading}
+          allTags={allTags}
+          handleCreateNote={handleCreateNote}
+          selectNote={selectNote}
+          handleArchiveNote={handleArchiveNote}
+          handleDeleteNote={handleDeleteNote}
+          handleRestoreNote={handleRestoreNote}
+        />
 
         {!sidebarOpen && (
           <button
@@ -806,543 +893,197 @@ export default function WorkspacePage() {
           {selectedNote ? (
             <>
               <div className="editor-container">
-              {/* Mobile Editor Header */}
-              <div className="mobile-editor-header mobile-only">
-                <button
-                  type="button"
-                  className="mobile-back-btn"
-                  onClick={() => setSidebarOpen(true)}
-                  title="Back to notes"
-                >
-                  <PanelLeft size={20} />
-                </button>
-                <div className="mobile-editor-title-wrap">
-                  {noteTitle || 'Untitled'}
-                </div>
-                <button
-                  type="button"
-                  className={`mobile-icon-btn ${showPreview ? 'active' : ''}`}
-                  onClick={() => setShowPreview(!showPreview)}
-                  title={showPreview ? 'Edit' : 'Preview'}
-                >
-                  {showPreview ? <Edit2 size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-
-              {/* Mobile Bottom Actions */}
-              <div className="mobile-bottom-actions mobile-only">
-                <button 
-                  type="button"
-                  className="mobile-action-btn"
-                  onClick={() => forceSave()}
-                  disabled={saveStatus === 'saving' || isDraft}
-                >
-                  <Save size={20} />
-                  <span>Save</span>
-                </button>
-                
-                {!isDraft && (
-                  <button
-                    type="button"
-                    className={`mobile-action-btn ${selectedNote?.isPublic ? 'active' : ''}`}
-                    onClick={() => setIsShareModalOpen(true)}
-                  >
-                    <Link2 size={20} />
-                    <span>Share</span>
-                  </button>
-                )}
-
-                {!isDraft && (
-                  <button
-                    type="button"
-                    className={`mobile-action-btn ${showBackups ? 'active' : ''}`}
-                    onClick={showBackups ? () => setShowBackups(false) : loadBackups}
-                  >
-                    <History size={20} />
-                    <span>Backups</span>
-                  </button>
-                )}
-
-                <div className="export-dropdown-wrapper" style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    className="mobile-action-btn"
-                    onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
-                  >
-                    <Download size={20} />
-                    <span>Export</span>
-                  </button>
-                  {exportDropdownOpen && (
-                    <div className="export-dropdown-menu" style={{ bottom: '100%', top: 'auto', right: '0', marginBottom: '10px' }}>
-                      <button type="button" onClick={() => { handleExport('md'); setExportDropdownOpen(false); }}>
-                        <FileDown size={14} /> Markdown (.md)
-                      </button>
-                      <button type="button" onClick={() => { handleExport('pdf'); setExportDropdownOpen(false); }}>
-                        <FileText size={14} /> PDF Document (.pdf)
-                      </button>
-                      <button type="button" onClick={() => { handleExport('doc'); setExportDropdownOpen(false); }}>
-                        <FileBadge size={14} /> Word Document (.doc)
-                      </button>
-                      <button type="button" onClick={() => { handleExport('html'); setExportDropdownOpen(false); }}>
-                        <Globe size={14} /> Rich HTML (.html)
-                      </button>
-                      <button type="button" onClick={() => { handleExport('txt'); setExportDropdownOpen(false); }}>
-                        <File size={14} /> Plain Text (.txt)
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Desktop Toolbar */}
-              <div className="editor-toolbar desktop-only">
-                <div className="editor-toolbar-left">
-                  {!sidebarOpen && (
-                    <button
-                      type="button"
-                      className="toolbar-btn"
-                      onClick={() => setSidebarOpen(true)}
-                      title="Show sidebar"
-                    >
-                      <PanelLeft size={14} />
-                    </button>
-                  )}
-                  <span className={`save-status ${saveStatus === 'saved' ? 'saved' : ''}`}>
-                    {saveStatus === 'saving' && (
-                      <>
-                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Saving…
-                      </>
-                    )}
-                    {saveStatus === 'saved' && (
-                      <>
-                        <Check size={12} /> Saved
-                      </>
-                    )}
-                    {saveStatus === 'error' && (
-                      <span className="save-status-error" title="Could not save — check server is running">
-                        Save failed
-                      </span>
-                    )}
-                    {isDraft && saveStatus !== 'saving' && saveStatus !== 'saved' && (
-                      <>Draft — start typing to save</>
-                    )}
-                  </span>
-                </div>
-                <div className="editor-toolbar-right">
-                  <div className="toolbar-group toolbar-primary-actions">
-                    {!aiPanelOpen && (
-                      <button
-                        type="button"
-                        className="toolbar-btn spark"
-                        onClick={() => setAiPanelOpen(true)}
-                        title="AI Assistant (Ctrl+J)"
-                      >
-                        <Sparkles size={14} /> AI
-                      </button>
-                    )}
-                    {!isDraft && (
-                      <button
-                        type="button"
-                        className={`toolbar-btn ${todoPanelOpen ? 'active' : ''}`}
-                        onClick={() => setTodoPanelOpen(!todoPanelOpen)}
-                        title="View To-Do List"
-                      >
-                        <Check size={14} /> Tasks
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="toolbar-group">
-                    <button
-                      type="button"
-                      className={`toolbar-btn ${showPreview ? 'active' : ''}`}
-                      onClick={() => setShowPreview(!showPreview)}
-                      title="Preview (Ctrl+P)"
-                    >
-                      {showPreview ? <Edit2 size={14} /> : <Eye size={14} />}
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
-                  </div>
-
-                  {!isDraft && (
-                    <div className="more-menu-wrapper" style={{ position: 'relative' }}>
-                      <button
-                        type="button"
-                        className={`toolbar-btn ${moreMenuOpen ? 'active' : ''}`}
-                        onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-                        title="More actions"
-                      >
-                        <MoreHorizontal size={14} />
-                      </button>
-                      {moreMenuOpen && (
-                        <div className="export-dropdown-menu">
-                          <button type="button" onClick={() => { setIsShareModalOpen(true); setMoreMenuOpen(false); }}>
-                            <Link2 size={14} /> {selectedNote?.isPublic ? 'Sharing Settings' : 'Share Note'}
-                          </button>
-                          <button type="button" onClick={() => { showBackups ? setShowBackups(false) : loadBackups(); setMoreMenuOpen(false); }}>
-                            <History size={14} /> Backups
-                          </button>
-                          <div style={{ height: '1px', background: 'var(--dash-border, var(--border-subtle))', margin: '0.25rem 0' }} />
-                          <button type="button" onClick={() => { handleExport('md'); setMoreMenuOpen(false); }}>
-                            <FileDown size={14} /> Export as Markdown
-                          </button>
-                          <button type="button" onClick={() => { handleExport('pdf'); setMoreMenuOpen(false); }}>
-                            <FileText size={14} /> Export as PDF
-                          </button>
-                          <button type="button" onClick={() => { handleExport('doc'); setMoreMenuOpen(false); }}>
-                            <FileBadge size={14} /> Export as Word
-                          </button>
-                          <button type="button" onClick={() => { handleExport('html'); setMoreMenuOpen(false); }}>
-                            <Globe size={14} /> Export as HTML
-                          </button>
-                          <button type="button" onClick={() => { handleExport('txt'); setMoreMenuOpen(false); }}>
-                            <File size={14} /> Export as Plain Text
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {showBackups && (
-                <div className="backups-banner">
-                  <div className="backups-header">
-                    <h4>AI Edit History</h4>
-                    <button type="button" onClick={() => setShowBackups(false)}>×</button>
-                  </div>
-                  {loadingBackups ? (
-                    <p>Loading backups...</p>
-                  ) : backupsList.length === 0 ? (
-                    <p className="no-backups">No backups available for this note. AI edits will appear here.</p>
-                  ) : (
-                    <div className="backups-list">
-                      {backupsList.map((backup) => (
-                        <div key={backup.id} className="backup-item">
-                          <span>{formatRelativeDate(backup.createdAt)}</span>
-                          <button 
-                            type="button" 
-                            className="btn btn-sm btn-outline"
-                            onClick={() => handleRestoreBackup(backup.id)}
-                          >
-                            Restore this version
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Linked Todo Indicator Removed */}
-
-              <div className="editor-header">
-                <input
-                  type="text"
-                  className="editor-title-input"
-                  value={noteTitle}
-                  onChange={(e) => setNoteTitle(e.target.value)}
-                  placeholder="Untitled note"
-                  aria-label="Note title"
+                <MobileEditorControls
+                  noteTitle={noteTitle}
+                  showPreview={showPreview}
+                  setShowPreview={setShowPreview}
+                  forceSave={forceSave}
+                  saveStatus={saveStatus}
+                  isDraft={isDraft}
+                  selectedNote={selectedNote}
+                  loadBackups={loadBackups}
+                  exportDropdownOpen={exportDropdownOpen}
+                  setExportDropdownOpen={setExportDropdownOpen}
+                  handleExport={handleExport}
                 />
-                <div className="editor-inline-tags">
-                  {noteTags.map((tag) => (
-                    <span key={tag} className={`tag-chip editable ${stringToColorClass(tag)}`}>
-                      {tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} aria-label={`Remove tag ${tag}`}>
-                        ×
+
+                <EditorToolbar
+                  saveStatus={saveStatus}
+                  isDraft={isDraft}
+                  wordCount={wordCount}
+                  showPreview={showPreview}
+                  setShowPreview={setShowPreview}
+                  moreMenuOpen={moreMenuOpen}
+                  setMoreMenuOpen={setMoreMenuOpen}
+                  selectedNote={selectedNote}
+                  loadBackups={loadBackups}
+                  handleExport={handleExport}
+                />
+
+                <BackupsPanel
+                  loadingBackups={loadingBackups}
+                  backupsList={backupsList}
+                  selectedBackupForDiff={selectedBackupForDiff}
+                  setSelectedBackupForDiff={setSelectedBackupForDiff}
+                  noteContent={noteContent}
+                  handleRestoreBackup={handleRestoreBackup}
+                />
+
+                {selectedNote?.isDeleted && (
+                  <div className="trash-banner">
+                    <span>This note is in the Trash. Restore it to view or edit.</span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" className="btn btn-sm btn-primary" onClick={() => handleRestoreNote(selectedNote.id)}>
+                        Restore
                       </button>
-                    </span>
-                  ))}
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDeleteNote(selectedNote.id)}>
+                        Delete permanently
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="editor-header">
                   <input
                     type="text"
-                    className="inline-tag-input"
-                    placeholder="Add tag…"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleAddTag}
-                    aria-label="Add tag"
+                    className="editor-title-input"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    placeholder="Untitled note"
+                    aria-label="Note title"
+                    disabled={selectedNote?.isDeleted}
                   />
-                </div>
-              </div>
-
-              <div className="editor-body">
-                <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
-                  <BlockEditor
-                    key={selectedNote?.id || 'new'}
-                    initialContent={noteContent}
-                    onChange={(content) => setNoteContent(content)}
-                    editable={!showPreview}
-                  />
-                  <div className="editor-footer">
-                    <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-                    <span>Ctrl+S save · Ctrl+K search</span>
-                  </div>
-                </div>
-
-                {aiPanelOpen && (
-                  <div className="ai-panel">
-                      <div className="ai-panel-header">
-                        <h3>
-                          <Sparkles size={16} className="sparkle-pulse" />
-                          <span>AI Workspace Copilot</span>
-                        </h3>
-                        <button type="button" className="close-ai-btn" onClick={() => setAiPanelOpen(false)} aria-label="Close panel">
-                          <X size={16} />
-                        </button>
-                      </div>
-
-                      <div className="ai-tabs-container">
-                        <div className="ai-tabs-pill">
-                          <button 
-                            className={`ai-tab-btn ${aiPanelTab === 'assist' ? 'active' : ''}`}
-                            onClick={() => setAiPanelTab('assist')}
-                          >
-                            <Sparkles size={14} />
-                            <span>Insights</span>
+                  <div className="editor-inline-tags">
+                    {noteTags.map((tag) => (
+                      <span key={tag} className={`tag-chip editable ${stringToColorClass(tag)}`}>
+                        {tag}
+                        {!selectedNote?.isDeleted && (
+                          <button type="button" onClick={() => handleRemoveTag(tag)} aria-label={`Remove tag ${tag}`}>
+                            ×
                           </button>
-                          <button 
-                            className={`ai-tab-btn ${aiPanelTab === 'chat' ? 'active' : ''}`}
-                            onClick={() => setAiPanelTab('chat')}
-                          >
-                            <MessageSquare size={14} />
-                            <span>Chat Copilot</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="ai-panel-content">
-                        {aiPanelTab === 'assist' && (
-                          <div className="ai-assist-tab">
-                            <div className="ai-actions">
-                              <button
-                                type="button"
-                                className={`ai-action-btn primary ${generating ? 'generating' : ''}`}
-                                onClick={() => generateAIContent('summary')}
-                                disabled={generating || !noteContent?.trim()}
-                              >
-                                <Sparkles size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                                <span>{generating ? 'Summarizing Document...' : 'Generate Summary'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
-                                onClick={() => generateAIContent('actions')}
-                                disabled={generating || !noteContent?.trim()}
-                              >
-                                <Check size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                                <span>{generating ? 'Extracting Tasks...' : 'Extract Action Items'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className={`ai-action-btn outline ${generating ? 'generating' : ''}`}
-                                onClick={() => generateAIContent('title')}
-                                disabled={generating || !noteContent?.trim()}
-                              >
-                                <PenLine size={16} className={`btn-icon ${generating ? 'spinning' : ''}`} />
-                                <span>{generating ? 'Brainstorming...' : 'Suggest Title'}</span>
-                              </button>
-                            </div>
-                            
-                            {aiError && (
-                              <div className="ai-error-container">
-                                <p className="ai-error">{aiError}</p>
-                              </div>
-                            )}
-                            
-                            {Object.keys(aiResults).length > 0 && (
-                              <div className="ai-results-card">
-                                <div className="ai-results-card-header">
-                                  <Sparkles size={14} className="ai-accent-color" />
-                                  <span>AI Insights & Analytics</span>
-                                </div>
-                                <div className="ai-results-content">
-                                  {aiResults.summary?.summary && (
-                                    <div className="ai-result-section">
-                                      <h5>Summary</h5>
-                                      <p>{aiResults.summary.summary}</p>
-                                    </div>
-                                  )}
-                                  {aiResults.actions?.action_items?.length > 0 && (
-                                    <div className="ai-result-section">
-                                      <h5>Action Items</h5>
-                                      <ul className="ai-action-list">
-                                        {aiResults.actions.action_items.map((item, i) => (
-                                          <li key={i}>{item}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {aiResults.title?.suggested_title && (
-                                    <div className="title-suggestion">
-                                      <div className="title-suggestion-info">
-                                        <h5>Suggested Title</h5>
-                                        <span>{aiResults.title.suggested_title}</span>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-primary apply-title-btn"
-                                        onClick={() => setNoteTitle(aiResults.title.suggested_title)}
-                                      >
-                                        Apply
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
                         )}
-
-                        {aiPanelTab === 'chat' && (
-                          <div className="ws-ai-chat-section">
-                            <div className="ws-ai-chat-messages">
-                              {wsChatMessages.length === 0 ? (
-                                <div className="chat-empty-state">
-                                  <div className="chat-empty-icon">
-                                    <MessageSquare size={24} />
-                                  </div>
-                                  <h4>Interactive AI Copilot</h4>
-                                  <p>Ask questions, brainstorm adjustments, or command the AI to edit your note.</p>
-                                  <div className="chat-suggestions-grid">
-                                    <button
-                                      type="button"
-                                      className="chat-suggestion-chip"
-                                      onClick={() => setWsChatInput("Summarize my note and list the core takeaways.")}
-                                    >
-                                      ✨ Summarize Takeaways
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="chat-suggestion-chip"
-                                      onClick={() => setWsChatInput("Convert this note into a clean checklist.")}
-                                    >
-                                      ✅ Make Checklist
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="chat-suggestion-chip"
-                                      onClick={() => setWsChatInput("Fix any grammar errors and make the tone professional.")}
-                                    >
-                                      ✍️ Improve Grammar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="chat-suggestion-chip"
-                                      onClick={() => setWsChatInput("Brainstorm 3 creative follow-up topics based on this.")}
-                                    >
-                                      💡 Brainstorm Ideas
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                wsChatMessages.map((m, i) => (
-                                  <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
-                                    <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
-                                  </div>
-                                ))
-                              )}
-                              {wsChatLoading && (
-                                <div className="ws-ai-chat-msg assistant">
-                                  <div className="ws-ai-chat-bubble typing">
-                                    <span className="dot"></span><span className="dot"></span><span className="dot"></span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <form className="ws-ai-chat-form" onSubmit={handleWsChatSubmit}>
-                              <div className="ws-ai-chat-input-wrapper">
-                                <input
-                                  type="text"
-                                  placeholder="Ask Copilot to write, edit, or analyze..."
-                                  value={wsChatInput}
-                                  onChange={e => setWsChatInput(e.target.value)}
-                                  disabled={wsChatLoading}
-                                />
-                                <button type="submit" className="ws-ai-chat-send" disabled={wsChatLoading || !wsChatInput.trim()}>
-                                  <Sparkles size={14} />
-                                </button>
-                              </div>
-                            </form>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                )}
-              </div>
-            </div>
-            
-            {todoPanelOpen && (
-              <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
-                <TodoListPanel onClose={() => setTodoPanelOpen(false)} />
-              </div>
-            )}
-            </>
-        ) : (
-          <div className="editor-empty">
-              <div className="ws-welcome">
-                <div className="ws-welcome-hero">
-                  <div className="ws-welcome-icon">
-                    <PenLine size={32} />
-                  </div>
-                  <h2>
-                    {notes.length > 0 ? 'Choose a note to open' : 'Your workspace is ready'}
-                  </h2>
-                  <p>
-                    {notes.length > 0
-                      ? 'Pick a note from the sidebar or below to start editing.'
-                      : 'Capture ideas, organize with tags, and let AI help you write.'}
-                  </p>
-                  <div className="ws-welcome-actions">
-                    <button type="button" className="btn btn-primary" onClick={handleCreateNote}>
-                      <Plus size={16} /> New Note
-                    </button>
-                    {notes.length > 0 && quickPickNotes[0] && (
-                      <button
-                        type="button"
-                        className="btn btn-outline"
-                        onClick={() => selectNote(quickPickNotes[0])}
-                      >
-                        Open latest
-                      </button>
+                      </span>
+                    ))}
+                    {!selectedNote?.isDeleted && (
+                      <input
+                        type="text"
+                        className="inline-tag-input"
+                        placeholder="Add tag…"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={handleAddTag}
+                        aria-label="Add tag"
+                      />
                     )}
-                  </div>
-                  <div className="ws-shortcuts-hint">
-                    <span>
-                      <kbd>Ctrl</kbd>+N new
-                    </span>
-                    <span>
-                      <kbd>Ctrl</kbd>+K search
-                    </span>
-                    <span>
-                      <kbd>Ctrl</kbd>+S save
-                    </span>
+
                   </div>
                 </div>
 
-                {notes.length > 0 && (
-                  <div className="ws-quick-pick">
-                    <h3>Recent notes</h3>
-                    <div className="ws-quick-pick-grid">
-                      {quickPickNotes.map((note) => (
+                <div className="editor-body">
+                  <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
+                    <EditorErrorBoundary key={selectedNote?.id || 'new'}>
+                      <BlockEditor
+                        initialContent={noteContent}
+                        onChange={(content) => setNoteContent(content)}
+                        editable={!showPreview && !selectedNote?.isDeleted}
+                      />
+                    </EditorErrorBoundary>
+
+                    {linkPreviews.length > 0 && (
+                      <div className="link-previews-control">
                         <button
-                          key={note.id}
                           type="button"
-                          className="ws-quick-card"
-                          onClick={() => selectNote(note)}
+                          className={`link-previews-toggle ${showLinkPreviews ? 'active' : ''}`}
+                          onClick={() => setShowLinkPreviews((open) => !open)}
+                          aria-expanded={showLinkPreviews}
                         >
-                          <div className="ws-quick-card-title">{note.title || 'Untitled'}</div>
-                          <div className="ws-quick-card-snippet">
-                            {stripMarkdown(note.content)?.substring(0, 100) || 'Empty note'}
-                          </div>
-                          <div className="ws-quick-card-meta">{formatRelativeDate(note.updatedAt)}</div>
+                          <Link2 size={14} />
+                          <span>{showLinkPreviews ? 'Hide links' : `Show links (${linkPreviews.length})`}</span>
                         </button>
-                      ))}
+
+                        {showLinkPreviews && (
+                          <div className="link-previews-panel">
+                            <div className="link-previews-grid">
+                              {linkPreviews.map((preview, i) => (
+                                preview.embedUrl ? (
+                                  <div key={preview.url || i} className="link-preview-card youtube-preview-card">
+                                    <div className="youtube-embed-frame">
+                                      <iframe
+                                        src={preview.embedUrl}
+                                        title={preview.title || 'YouTube video'}
+                                        loading="lazy"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                      />
+                                    </div>
+                                    <a href={preview.url} target="_blank" rel="noopener noreferrer" className="youtube-preview-meta">
+                                      <span>{preview.domain || 'youtube.com'}</span>
+                                      <strong>{preview.title || 'YouTube video'}</strong>
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <a key={preview.url || i} href={preview.url} target="_blank" rel="noopener noreferrer" className="link-preview-card">
+                                    {preview.image && (
+                                      <div className="link-preview-image" style={{ backgroundImage: `url(${preview.image})` }} />
+                                    )}
+                                    <div className="link-preview-content">
+                                      <h5>
+                                        {preview.title}
+                                      </h5>
+                                      <p>
+                                        {preview.description}
+                                      </p>
+                                      <span>
+                                        {preview.domain}
+                                      </span>
+                                    </div>
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="editor-footer">
+                      <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+                      <span>Ctrl+S save · Ctrl+K search</span>
                     </div>
                   </div>
-                )}
+
+                  <AiWorkspacePanel
+                    aiPanelTab={aiPanelTab}
+                    setAiPanelTab={setAiPanelTab}
+                    aiResults={aiResults}
+                    aiError={aiError}
+                    generating={generating}
+                    noteContent={noteContent}
+                    generateAIContent={generateAIContent}
+                    setNoteTitle={setNoteTitle}
+                    wsChatInput={wsChatInput}
+                    setWsChatInput={setWsChatInput}
+                    wsChatMessages={wsChatMessages}
+                    wsChatLoading={wsChatLoading}
+                    handleWsChatSubmit={handleWsChatSubmit}
+                  />
+                </div>
               </div>
-            </div>
+
+              {showTodoList && (
+                <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
+                  <TodoListPanel onClose={() => setShowTodoList(false)} />
+                </div>
+              )}
+            </>
+          ) : (
+            <WelcomeScreen
+              handleCreateNote={handleCreateNote}
+              selectNote={selectNote}
+              notes={notes}
+              quickPickNotes={quickPickNotes}
+              setSidebarOpen={setSidebarOpen}
+            />
           )}
         </main>
       </div>

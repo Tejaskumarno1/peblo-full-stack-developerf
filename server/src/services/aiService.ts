@@ -1,109 +1,91 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
+import prisma from '../db.js';
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
-// --- API Key Management ---
-let currentGeminiKeyIndex = 0;
-let geminiKeys = [];
-let geminiInstance = null;
-let openaiInstance = null;
+async function getUserSettings(userId: string) {
+  return await prisma.user.findUnique({ 
+    where: { id: userId },
+    include: { apiKeys: true }
+  });
+}
 
-function getOpenAI() {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key || key.includes('your-openai')) return null;
+function getOpenAIInstance(user: any) {
+  const settings = user?.settings as any || {};
+  const forceCustomModels = settings.forceCustomModels === true;
+  const key = user?.apiKeys?.openAiKey?.trim();
   
-  if (!openaiInstance) {
-    openaiInstance = new OpenAI({ apiKey: key });
-  }
-  return openaiInstance;
+  if (key) return new OpenAI({ apiKey: key });
+  if (forceCustomModels) return null;
+  
+  const envKey = process.env.OPENAI_API_KEY?.trim();
+  if (!envKey || envKey.includes('your-openai')) return null;
+  return new OpenAI({ apiKey: envKey });
 }
 
-function getGeminiKeys() {
-  if (geminiKeys.length === 0) {
-    const keysStr = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
-    geminiKeys = keysStr.split(',').map(k => k.trim()).filter(k => k && k !== 'your-gemini-api-key-here');
-  }
-  return geminiKeys;
-}
-
-function rotateGeminiKey() {
-  const keys = getGeminiKeys();
-  if (keys.length > 1) {
-    currentGeminiKeyIndex = (currentGeminiKeyIndex + 1) % keys.length;
-    geminiInstance = null;
-    console.log(`Rotated to Gemini API key index ${currentGeminiKeyIndex}`);
-  }
-}
-
-export function getGenAI() {
-  const keys = getGeminiKeys();
+function getGeminiInstance(user: any) {
+  const settings = user?.settings as any || {};
+  const forceCustomModels = settings.forceCustomModels === true;
+  const key = user?.apiKeys?.geminiKey?.trim();
+  
+  if (key) return new GoogleGenerativeAI(key);
+  if (forceCustomModels) return null;
+  
+  const keysStr = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
+  const keys = keysStr.split(',').map(k => k.trim()).filter(k => k && k !== 'your-gemini-api-key-here');
   if (keys.length === 0) return null;
-  if (!geminiInstance) {
-    geminiInstance = new GoogleGenerativeAI(keys[currentGeminiKeyIndex % keys.length]);
-  }
-  return geminiInstance;
-}
-
-// --- Mock Fallback System ---
-function getMockResponse(type, title, content) {
-  switch (type) {
-    case 'summary':
-      return { summary: `This note titled "${title}" discusses key topics. It covers important points that require attention and follow-up.` };
-    case 'action_items':
-      return { action_items: ['Review main points', 'Follow up on pending items', 'Schedule next session'] };
-    case 'title':
-      return { suggested_title: title || 'Untitled Note' };
-    default:
-      return {};
-  }
+  return new GoogleGenerativeAI(keys[0]);
 }
 
 // --- The Core Orchestrator (OpenAI -> Gemini -> Mock) ---
-async function runWithCascade(operationName, executeOpenAI, executeGemini) {
-  // Tier 1: Try OpenAI
-  const openai = getOpenAI();
-  if (openai) {
-    try {
-      console.log(`[${operationName}] Trying OpenAI...`);
-      return await executeOpenAI(openai);
-    } catch (error) {
-      console.warn(`[${operationName}] OpenAI failed: ${error.message}. Falling back to Gemini...`);
-    }
-  }
-
-  // Tier 2: Try Gemini (with key rotation)
-  const geminiKeys = getGeminiKeys();
-  const maxGeminiAttempts = Math.max(1, geminiKeys.length);
+async function runWithCascade(
+  operationName: string,
+  userId: string,
+  executeOpenAI: (openai: OpenAI) => Promise<any>,
+  executeGemini: (gemini: GoogleGenerativeAI) => Promise<any>
+): Promise<any> {
+  const user = await getUserSettings(userId);
+  const settings = user?.settings as any || {};
+  const defaultModel = settings.defaultAiModel || 'auto';
   
-  for (let attempt = 1; attempt <= maxGeminiAttempts; attempt++) {
-    const ai = getGenAI();
-    if (!ai) break;
+  const openai = getOpenAIInstance(user);
+  const gemini = getGeminiInstance(user);
+  
+  // Decide order based on defaultModel
+  const order = defaultModel === 'gemini' ? ['gemini', 'openai'] : ['openai', 'gemini'];
+  
+  for (const provider of order) {
+    if (provider === 'openai' && openai) {
+      try {
+        console.log(`[${operationName}] Trying OpenAI...`);
+        return await executeOpenAI(openai);
+      } catch (error: any) {
+        console.warn(`[${operationName}] OpenAI failed: ${error.message}.`);
+      }
+    }
     
-    try {
-      console.log(`[${operationName}] Trying Gemini (Attempt ${attempt})...`);
-      return await executeGemini(ai);
-    } catch (error) {
-      if (attempt < maxGeminiAttempts) {
-        console.warn(`[${operationName}] Gemini Error (${error.message}). Rotating key...`);
-        rotateGeminiKey();
-      } else {
-        console.warn(`[${operationName}] Gemini failed completely after ${maxGeminiAttempts} attempts.`);
+    if (provider === 'gemini' && gemini) {
+      try {
+        console.log(`[${operationName}] Trying Gemini...`);
+        return await executeGemini(gemini);
+      } catch (error: any) {
+        console.warn(`[${operationName}] Gemini Error (${error.message}).`);
       }
     }
   }
 
   // Tier 3: Mock Fallback
   console.warn(`[${operationName}] All AI providers failed. Using Mock Fallback.`);
-  throw new Error('All AI providers exhausted'); 
+  throw new Error('All AI providers exhausted or force custom models is enabled and keys are missing/invalid.'); 
 }
 
 // --- Specific Service Functions ---
 
-export async function generateSummary(title, content) {
+export async function generateSummary(userId: string, title: string, content: string) {
   try {
-    return await runWithCascade('AI Summary',
+    return await runWithCascade('AI Summary', userId,
       // OpenAI Implementation
       async (openai) => {
         const response = await openai.chat.completions.create({
@@ -114,7 +96,7 @@ export async function generateSummary(title, content) {
             { role: "user", content: `Analyze the following note and provide a concise summary in 2-3 sentences. Focus on the key points and main ideas.\n\nNote Title: ${title}\nNote Content: ${content}` }
           ]
         });
-        return JSON.parse(response.choices[0].message.content);
+        return JSON.parse(response.choices[0].message.content || '{}');
       },
       // Gemini Implementation
       async (gemini) => {
@@ -138,9 +120,9 @@ export async function generateSummary(title, content) {
   }
 }
 
-export async function extractActionItems(title, content) {
+export async function extractActionItems(userId: string, title: string, content: string) {
   try {
-    return await runWithCascade('AI Action Items',
+    return await runWithCascade('AI Action Items', userId,
       // OpenAI Implementation
       async (openai) => {
         const response = await openai.chat.completions.create({
@@ -151,7 +133,7 @@ export async function extractActionItems(title, content) {
             { role: "user", content: `Extract actionable items from the following note.\n\nNote Title: ${title}\nNote Content: ${content}` }
           ]
         });
-        return JSON.parse(response.choices[0].message.content);
+        return JSON.parse(response.choices[0].message.content || '{}');
       },
       // Gemini Implementation
       async (gemini) => {
@@ -175,7 +157,14 @@ export async function extractActionItems(title, content) {
   }
 }
 
-export async function chatPlanNotes({ message, mode, targetNote, existingNotes }) {
+interface ChatParams {
+  message: string;
+  mode: 'create' | 'append';
+  targetNote?: { id: string; title: string; content: string } | null;
+  existingNotes?: { id: string; title: string }[];
+}
+
+export async function chatPlanNotes(userId: string, { message, mode, targetNote, existingNotes }: ChatParams) {
   const contextList = existingNotes?.slice(0, 20).map(n => `ID: ${n.id} | Title: ${n.title}`).join('\n') || '';
   const titlesContext = contextList ? `Existing notes:\n${contextList}` : 'No existing notes.';
   
@@ -204,7 +193,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   const userPrompt = `Context:\n${titlesContext}\n\nUser message: "${message}"\n\nMode: ${modeHint}`;
 
   try {
-    return await runWithCascade('AI Chat',
+    return await runWithCascade('AI Chat', userId,
       // OpenAI Implementation
       async (openai) => {
         const response = await openai.chat.completions.create({
@@ -215,7 +204,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
             { role: "user", content: userPrompt }
           ]
         });
-        const parsed = JSON.parse(response.choices[0].message.content);
+        const parsed = JSON.parse(response.choices[0].message.content || '{}');
         return {
           reply: parsed.reply || 'Done! Your notes are ready.',
           notes: Array.isArray(parsed.notes) ? parsed.notes : [],
@@ -286,7 +275,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   }
 }
 
-export async function chatPlanNotesStream({ message, mode, targetNote, existingNotes }, res) {
+export async function chatPlanNotesStream(userId: string, { message, mode, targetNote, existingNotes }: ChatParams, res: any) {
   const contextList = existingNotes?.slice(0, 20).map(n => `ID: ${n.id} | Title: ${n.title}`).join('\n') || '';
   const titlesContext = contextList ? `Existing notes:\n${contextList}` : 'No existing notes.';
   
@@ -309,12 +298,12 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
 
   const userPrompt = `Context:\n${titlesContext}\n\nUser message: "${message}"\n\nMode: ${modeHint}`;
 
-  const gemini = getGenAI();
+  const user = await getUserSettings(userId);
+  const gemini = getGeminiInstance(user);
   if (!gemini) throw new Error('No Gemini API key available');
   
-  const SchemaType = require('@google/generative-ai').SchemaType;
   const model = gemini.getGenerativeModel({
-    model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
+    model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
     systemInstruction: systemPrompt
   });
 
@@ -382,9 +371,9 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   };
 }
 
-export async function suggestTitle(content) {
+export async function suggestTitle(userId: string, content: string) {
   try {
-    return await runWithCascade('AI Title',
+    return await runWithCascade('AI Title', userId,
       // OpenAI Implementation
       async (openai) => {
         const response = await openai.chat.completions.create({
@@ -395,7 +384,7 @@ export async function suggestTitle(content) {
             { role: "user", content: `Based on the following note content, suggest the perfect title.\n\nNote Content: ${content}` }
           ]
         });
-        return JSON.parse(response.choices[0].message.content);
+        return JSON.parse(response.choices[0].message.content || '{}');
       },
       // Gemini Implementation
       async (gemini) => {
@@ -420,11 +409,11 @@ export async function suggestTitle(content) {
 }
 
 // --- Smart Intake: Analyze raw data and extract notes + tasks ---
-export async function analyzeAndOrganize(rawData, template = 'auto') {
+export async function analyzeAndOrganize(userId: string, rawData: string, template: string = 'auto') {
   const today = new Date().toISOString().split('T')[0];
   const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-  const templateHints = {
+  const templateHints: Record<string, string> = {
     auto: 'Automatically detect the type of data and organize accordingly.',
     meeting: 'This is MEETING NOTES. Focus on: attendees, key decisions, action items with owners, follow-up meetings. Use a table for action items with columns: Owner, Task, Deadline.',
     email: 'This is an EMAIL THREAD. Focus on: sender/recipients, key requests, deadlines, required responses or approvals.',
@@ -464,7 +453,7 @@ For the note:
 Respond ONLY in valid JSON.`;
 
   try {
-    return await runWithCascade('Smart Intake',
+    return await runWithCascade('Smart Intake', userId,
       // OpenAI Implementation
       async (openai) => {
         const response = await openai.chat.completions.create({
@@ -475,7 +464,7 @@ Respond ONLY in valid JSON.`;
             { role: "user", content: `Analyze and organize the following raw data:\n\n---\n${rawData}\n---` }
           ]
         });
-        const parsed = JSON.parse(response.choices[0].message.content);
+        const parsed = JSON.parse(response.choices[0].message.content || '{}');
         return normalizeIntakeResult(parsed);
       },
       // Gemini Implementation
@@ -541,7 +530,7 @@ Respond ONLY in valid JSON.`;
   }
 }
 
-function normalizeIntakeResult(parsed) {
+function normalizeIntakeResult(parsed: any) {
   const validPriorities = ['high', 'medium', 'low'];
   return {
     reply: parsed.reply || 'Done! I organized your data into a note and extracted all tasks.',
@@ -551,14 +540,257 @@ function normalizeIntakeResult(parsed) {
       category: parsed.note?.category || 'Personal',
       tags: Array.isArray(parsed.note?.tags) ? parsed.note.tags : []
     },
-    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(t => ({
+    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map((t: any) => ({
       text: t.text || '',
       priority: validPriorities.includes(t.priority) ? t.priority : 'medium',
       deadline: t.deadline || null,
       startTime: t.startTime || null,
       endTime: t.endTime || null,
       tags: Array.isArray(t.tags) ? t.tags : []
-    })).filter(t => t.text.trim()) : []
+    })).filter((t: any) => t.text.trim()) : []
   };
 }
 
+export async function processTextCommand(userId: string, text: string, command: string): Promise<string> {
+  try {
+    return await runWithCascade('AI Text Command', userId,
+      // OpenAI
+      async (openai) => {
+        let systemInstruction = "You are a helpful AI writing assistant.";
+        let prompt = "";
+        if (command === 'summarize') {
+          systemInstruction = "You are a concise summaries writer. Summarize the text in 1-2 clear, dense sentences.";
+          prompt = `Summarize the following text:\n\n${text}`;
+        } else if (command === 'improve') {
+          systemInstruction = "You are an expert copyeditor. Rewrite the text to improve clarity, grammar, style, and flow while retaining original meaning.";
+          prompt = `Improve the following text:\n\n${text}`;
+        } else if (command === 'todo') {
+          systemInstruction = "You are a task extractor. Extract all actionable tasks from the text and list them with a '-' prefix. Write only the task list, nothing else.";
+          prompt = `Extract tasks from this text:\n\n${text}`;
+        } else {
+          prompt = `${command} the following text:\n\n${text}`;
+        }
+
+        const response = await openai.chat.completions.create({
+          model: DEFAULT_OPENAI_MODEL,
+          messages: [
+            { role: "system", content: systemInstruction },
+            { role: "user", content: prompt }
+          ]
+        });
+        return response.choices[0].message.content || '';
+      },
+      // Gemini
+      async (gemini) => {
+        let systemInstruction = "You are a helpful AI writing assistant.";
+        let prompt = "";
+        if (command === 'summarize') {
+          systemInstruction = "You are a concise summaries writer. Summarize the text in 1-2 clear, dense sentences.";
+          prompt = `Summarize the following text:\n\n${text}`;
+        } else if (command === 'improve') {
+          systemInstruction = "You are an expert copyeditor. Rewrite the text to improve clarity, grammar, style, and flow while retaining original meaning.";
+          prompt = `Improve the following text:\n\n${text}`;
+        } else if (command === 'todo') {
+          systemInstruction = "You are a task extractor. Extract all actionable tasks from the text and list them with a '-' prefix. Write only the task list, nothing else.";
+          prompt = `Extract tasks from this text:\n\n${text}`;
+        } else {
+          prompt = `${command} the following text:\n\n${text}`;
+        }
+
+        const model = gemini.getGenerativeModel({
+          model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+          systemInstruction,
+        });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        });
+        return result.response.text();
+      }
+    );
+  } catch (err) {
+    if (command === 'summarize') return `Summary: This is a placeholder summary of the text: "${text.substring(0, 30)}..."`;
+    if (command === 'improve') return `Improved: ${text}`;
+    if (command === 'todo') return `- Task 1: Check text content\n- Task 2: Follow up on items`;
+    return text;
+  }
+}
+
+export async function generateEmbedding(userId: string, text: string): Promise<number[]> {
+  try {
+    return await runWithCascade('AI Embedding', userId,
+      async (openai) => {
+        const response = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: text
+        });
+        return response.data[0].embedding;
+      },
+      async (gemini) => {
+        try {
+          const model = gemini.getGenerativeModel({ model: 'text-embedding-004' });
+          const result = await model.embedContent(text);
+          return result.embedding.values;
+        } catch {
+          const model = gemini.getGenerativeModel({ model: 'gemini-embedding-001' });
+          const result = await model.embedContent(text);
+          return result.embedding.values;
+        }
+      }
+    );
+  } catch (err) {
+    console.error('Failed to generate embedding:', err);
+    return [];
+  }
+}
+
+export async function extractSmartIntake(userId: string, text: string): Promise<any> {
+  const user = await getUserSettings(userId);
+  const model = getGeminiInstance(user);
+  if (!model) return { title: 'Unknown Import', category: 'uncategorized', summary: text.slice(0, 100), actionItems: [] };
+  
+  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
+  const prompt = `Analyze this text and return ONLY valid JSON:
+{
+  "title": "A concise title",
+  "category": "One of: work, personal, meeting, study",
+  "summary": "A 2-3 sentence summary",
+  "actionItems": ["action 1", "action 2", "etc (or empty array)"]
+}
+
+Text:
+${text}`;
+
+  try {
+    const result = await m.generateContent(prompt);
+    let output = result.response.text();
+    output = output.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(output);
+  } catch (err) {
+    console.error('Gemini Smart Intake Error:', err);
+    return { title: 'New Import', category: 'uncategorized', summary: 'Failed to process.', actionItems: [] };
+  }
+}
+
+export async function processVoiceCallCommand(
+  userId: string,
+  transcript: string, 
+  currentTasks: any[], 
+  currentNotes: any[], 
+  localTime?: string, 
+  timezone?: string
+): Promise<any> {
+  const user = await getUserSettings(userId);
+  const model = getGeminiInstance(user);
+  if (!model) return { message: "AI not configured." };
+  
+  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
+  const tasksContext = JSON.stringify(currentTasks.map(t => ({ id: t.id, text: t.text, deadline: t.deadline })));
+  const notesContext = JSON.stringify(currentNotes.map(n => ({ id: n.id, title: n.title })));
+  
+  const userLocalTime = localTime || new Date().toString();
+  const userTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const prompt = `You are a helpful AI voice assistant for a productivity app.
+The user has spoken this command over a voice call: "${transcript}"
+
+Here are the user's current tasks for today:
+${tasksContext}
+
+Here are the user's existing workspace notes:
+${notesContext}
+
+User's Local Time is: ${userLocalTime}
+User's Timezone is: ${userTimezone}
+
+Determine the user's intent. They can request any of the following:
+1. COMPLETE: Mark a task as done.
+2. RESCHEDULE: Move a task to a new time.
+3. CREATE: Create a new task.
+4. SNOOZE: Postpone the call.
+5. CREATE_NOTE: Create a new workspace note (e.g. "Create a note about setup" or "Write a note detailing project guidelines"). 
+6. READ_NOTE: Read/summarize an existing note. If the user asks to read/summarize a note (e.g. "What did I write in my workout note?" or "Read note about shopping list"), find the best matching note in the list of existing notes.
+7. CLARIFY: If user request is ambiguous.
+
+Return ONLY a valid JSON object matching this structure:
+{
+  "actions": [
+    { "type": "COMPLETE", "taskId": "the-uuid" },
+    { "type": "RESCHEDULE", "taskId": "the-uuid", "newDate": "ISO-date-string" },
+    { "type": "CREATE", "text": "task text content", "newDate": "ISO-date-string (if specified, otherwise null)" },
+    { "type": "SNOOZE", "minutes": 10 },
+    { "type": "CREATE_NOTE", "title": "Note Title", "content": "Clean, structured Markdown content of the note based on the user's speech", "tags": ["tag1", "tag2"] },
+    { "type": "READ_NOTE", "noteId": "the-note-uuid" }
+  ],
+  "needClarification": false,
+  "responseSpeech": "What you should say back to the user out loud. If CREATE_NOTE: 'Done! I created a note titled styling setup for your workspace.' If READ_NOTE: 'Let me fetch that note details for you.'"
+}`;
+
+  try {
+    const result = await m.generateContent(prompt);
+    let output = result.response.text();
+    output = output.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(output);
+  } catch (err) {
+    console.error('Gemini Voice Call Error:', err);
+    return { responseSpeech: "Sorry, I couldn't process that command.", actions: [], needClarification: false };
+  }
+}
+
+export async function generateVerbalNoteSummary(userId: string, title: string, content: string): Promise<string> {
+  const user = await getUserSettings(userId);
+  const model = getGeminiInstance(user);
+  if (!model) return "No content found.";
+  
+  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
+  const prompt = `You are a voice assistant summarizing a note for a user over a voice call.
+The note title is: "${title}"
+The note content is:
+${content}
+
+Please provide a highly concise, 1-2 sentence speech-friendly summary of this note to read back to the user. Do not include markdown formatting, bullet points, or special characters (like asterisks). Keep it clear and natural.`;
+
+  try {
+    const result = await m.generateContent(prompt);
+    return result.response.text().trim();
+  } catch (err) {
+    console.error('Gemini Note Summary Error:', err);
+    return "The note content could not be read.";
+  }
+}
+
+export async function suggestTag(userId: string, title: string, content: string): Promise<{ suggested_tag: string }> {
+  try {
+    return await runWithCascade('AI Suggest Tag', userId,
+      // OpenAI Implementation
+      async (openai) => {
+        const response = await openai.chat.completions.create({
+          model: DEFAULT_OPENAI_MODEL,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "Analyze the note content and suggest a single, most relevant one-word tag (like 'Work', 'Personal', 'Ideas', 'Finance', 'Study', 'Recipe', etc.) that best categorizes it. Respond in JSON format with a 'suggested_tag' key." },
+            { role: "user", content: `Note Title: ${title}\nNote Content: ${content}` }
+          ]
+        });
+        return JSON.parse(response.choices[0].message.content || '{}');
+      },
+      // Gemini Implementation
+      async (gemini) => {
+        const model = gemini.getGenerativeModel({
+          model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+          systemInstruction: "Analyze the note content and suggest a single, most relevant one-word tag (like 'Work', 'Personal', 'Ideas', 'Finance', 'Study', 'Recipe', etc.) that best categorizes it.",
+        });
+        const prompt = `Note Title: ${title}\nNote Content: ${content}`;
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: { type: SchemaType.OBJECT, properties: { suggested_tag: { type: SchemaType.STRING } }, required: ["suggested_tag"] }
+          }
+        });
+        return JSON.parse(result.response.text());
+      }
+    );
+  } catch (err) {
+    return { suggested_tag: 'Note' };
+  }
+}

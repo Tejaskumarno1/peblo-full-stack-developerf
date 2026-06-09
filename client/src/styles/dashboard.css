@@ -55,11 +55,17 @@
 }
 
 .dashboard-page .navbar-tab-switcher .tab-btn.active {
-  background: var(--dash-surface);
-  border-color: var(--dash-border);
-  color: var(--dash-text);
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  background: transparent;
+  border-color: transparent;
+  color: var(--dash-primary);
+  font-weight: 450;
+  box-shadow: none;
+}
+
+.dashboard-page .tab-slide-indicator {
+  background: rgba(79, 70, 229, 0.12);
+  border-color: rgba(79, 70, 229, 0.2);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
 }
 
 .dashboard-page .navbar-icon-btn {
@@ -1144,9 +1150,9 @@ html.theme-dark .dashboard-page .navbar-tab-switcher,
 
 html.theme-dark .dashboard-page .navbar-tab-switcher .tab-btn.active,
 .theme-dark .dashboard-page .navbar-tab-switcher .tab-btn.active {
-  background: var(--dash-surface-hover);
-  border-color: var(--dash-border);
-  color: var(--dash-text);
+  background: transparent;
+  border-color: transparent;
+  color: #a78bfa;
 }
 
 html.theme-dark .dashboard-page .navbar-icon-btn,
