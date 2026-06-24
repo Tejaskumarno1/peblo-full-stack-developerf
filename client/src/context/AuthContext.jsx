@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
     // Connect to backend server
     const socketURL = import.meta.env.VITE_API_URL 
       ? import.meta.env.VITE_API_URL.replace('/api', '') 
-      : 'http://localhost:3001';
+      : window.location.origin;
       
     const socket = io(socketURL);
     

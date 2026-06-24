@@ -330,7 +330,7 @@ export default function AiChatPanel() {
         setMessages(prev => [...prev, { id: tempId, role: 'assistant', text: '', isStreaming: true }]);
 
         const token = localStorage.getItem('token');
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const apiUrl = import.meta.env.VITE_API_URL || '/api';
         const response = await fetch(`${apiUrl}/ai/chat-stream`, {
           method: 'POST',
           headers: {
