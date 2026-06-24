@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm install && cd server && npm install && npx prisma generate && cd ../client && npm install",
+  "installCommand": "npm install && cd server && npm install && npx prisma generate && npx tsc && cd ../client && npm install",
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/dist",
   "functions": {
