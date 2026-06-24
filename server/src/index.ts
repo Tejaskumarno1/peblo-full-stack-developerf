@@ -79,7 +79,7 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/health-db', async (req, res) => {
   try {
-    const { PrismaClient } = await import('./generated/client/index.js');
+    const { PrismaClient } = await import('@prisma/client');
     const prisma = new PrismaClient();
     await prisma.$queryRawUnsafe('SELECT 1');
     res.json({ status: 'db_ok' });
