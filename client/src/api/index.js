@@ -1,15 +1,8 @@
 import api from './client';
 
-export const authAPI = {
-  signup: (data) => api.post('/auth/signup', data),
-  login: (data) => api.post('/auth/login', data),
-  googleLogin: (data) => api.post('/auth/google', data),
-  me: () => api.get('/auth/me'),
-  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
-  updateProfile: (data) => api.put('/auth/profile', data),
-  updatePassword: (data) => api.post('/auth/password', data),
-  logoutAll: () => api.post('/auth/logout-all'),
-  linkGoogle: (data) => api.post('/auth/google-link', data)
+export const profileAPI = {
+  me: () => api.get('/profile'),
+  updateProfile: (data) => api.put('/profile', data)
 };
 
 export const notesAPI = {
@@ -20,7 +13,6 @@ export const notesAPI = {
   delete: (id) => api.delete(`/notes/${id}`),
   restore: (id) => api.post(`/notes/${id}/restore`),
   archive: (id) => api.post(`/notes/${id}/archive`),
-  share: (id) => api.post(`/notes/${id}/share`),
   getBackups: (id) => api.get(`/notes/${id}/backups`),
   revertBackup: (id, backupId) => api.post(`/notes/${id}/backups/${backupId}/revert`)
 };
@@ -52,12 +44,4 @@ export const todosAPI = {
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   delete: (id) => api.delete(`/todos/${id}`)
-};
-
-export const sharedAPI = {
-  getNote: (shareId) => api.get(`/shared/${shareId}`)
-};
-
-export const calendarAPI = {
-  syncTodos: () => api.post('/calendar/sync')
 };

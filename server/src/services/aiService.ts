@@ -2,11 +2,11 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 function getMockResponse(type: string, title: string, content: string) {
-  if (type === 'summary') return { summary: 'AI service unavailable. Please check your API keys.' };
+  if (type === 'summary') return { summary: 'AI is not available. Add an OpenAI or Gemini API key in Settings → AI Providers.' };
   if (type === 'action_items') return { action_items: [] };
   if (type === 'title') return { title: 'Untitled Note' };
   return {};
@@ -83,9 +83,15 @@ async function runWithCascade(
     }
   }
 
-  // Tier 3: Mock Fallback
-  console.warn(`[${operationName}] All AI providers failed. Using Mock Fallback.`);
-  throw new Error('All AI providers exhausted or force custom models is enabled and keys are missing/invalid.'); 
+  if (!openai && !gemini) {
+    const err: any = new Error('No AI key set. Add an OpenAI or Gemini API key in Settings → AI Providers.');
+    err.statusCode = 400;
+    err.code = 'NO_AI_KEY';
+    throw err;
+  }
+
+  console.warn(`[${operationName}] All AI providers failed.`);
+  throw new Error('The AI request failed. Check that your API key in Settings → AI Providers is valid and has credit.');
 }
 
 // --- Specific Service Functions ---
@@ -310,7 +316,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   if (!gemini) throw new Error('No Gemini API key available');
   
   const model = gemini.getGenerativeModel({
-    model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
+    model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
     systemInstruction: systemPrompt
   });
 

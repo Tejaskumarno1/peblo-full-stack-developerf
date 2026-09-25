@@ -136,9 +136,6 @@ function EditorToolbar({
             </button>
             {moreMenuOpen && (
               <div className="export-dropdown-menu">
-                <button type="button" onClick={() => { setIsShareModalOpen(true); setMoreMenuOpen(false); }}>
-                  <Link2 size={14} /> {selectedNote?.isPublic ? 'Sharing Settings' : 'Share Note'}
-                </button>
                 <button type="button" onClick={() => { showBackups ? setShowBackups(false) : loadBackups(); setMoreMenuOpen(false); }}>
                   <History size={14} /> Backups
                 </button>

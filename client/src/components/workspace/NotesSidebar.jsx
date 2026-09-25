@@ -206,11 +206,6 @@ function NotesSidebar({
               <div className="note-card-footer">
                 <div className="note-card-footer-left">
                   <span className="note-card-date">{formatRelativeDate(note.updatedAt)}</span>
-                  {note.isPublic && (
-                    <span className="note-footer-badge shared" title="Publicly shared">
-                      <Link2 size={10} /> Shared
-                    </span>
-                  )}
                   {note.hasSummary && (
                     <span className="note-footer-badge ai" title="AI summary available">
                       <Sparkles size={10} /> Summarized

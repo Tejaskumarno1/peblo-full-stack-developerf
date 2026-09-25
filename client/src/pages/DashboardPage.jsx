@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardAPI, todosAPI } from '../api/index';
-import { FileText, Archive, Sparkles, Tag, Globe, Bell, Calendar, Sunrise, Sun, Moon, AlertTriangle, ChevronRight, PartyPopper } from 'lucide-react';
+import { FileText, Archive, Sparkles, Tag, Globe, Bell, Calendar, Sunrise, Sun, Moon, AlertTriangle, ChevronRight, PartyPopper, ListChecks } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Navigation from '../components/Navigation';
 import Heatmap from '../components/Heatmap';
@@ -310,11 +310,11 @@ export default function DashboardPage() {
           </div>
           <div className="stat-card">
             <div className="stat-icon-wrapper glow-emerald">
-              <Globe size={20} />
+              <ListChecks size={20} />
             </div>
             <div className="stat-text-wrap">
-              <span className="stat-value">{loading ? <div className="skeleton-block" style={{width:'40px', height:'32px', marginBottom:'4px'}}></div> : <span className="data-morph-enter delay-1" style={{display:'inline-block'}}>{data.publicNotes ?? 0}</span>}</span>
-              <span className="stat-label">public</span>
+              <span className="stat-value">{loading ? <div className="skeleton-block" style={{width:'40px', height:'32px', marginBottom:'4px'}}></div> : <span className="data-morph-enter delay-1" style={{display:'inline-block'}}>{data.openTasks ?? 0}</span>}</span>
+              <span className="stat-label">open tasks</span>
             </div>
           </div>
         </div>

@@ -1,12 +1,10 @@
 import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
-import { authAPI } from '../api';
-import { useGoogleLogin } from '@react-oauth/google';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
-  const { user, updateProfile, theme, setTheme, settings, updateSettings, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const { user, updateProfile, theme, setTheme, settings, updateSettings } = useAuth();
+  const [activeTab, setActiveTab] = useState(initialTab === 'security' ? 'data' : initialTab);
   
   // Profile specific states (saved to user obj in DB ideally, mocked here)
   const [profileName, setProfileName] = useState(user?.name || '');
@@ -40,64 +38,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
     setTimeout(() => setSaveSuccess(''), 3000);
   };
 
-  const handleLogoutDevices = async () => {
-    if (window.confirm('Are you sure you want to sign out of all other devices?')) {
-      try {
-        await authAPI.logoutAll();
-        alert('All other active sessions have been terminated.');
-      } catch (err) {
-        alert('Failed to sign out of other devices.');
-      }
-    }
-  };
-
-  const handleChangePassword = async () => {
-    const newPassword = window.prompt('Enter your new password (min 6 characters):');
-    if (!newPassword) return;
-    if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters.');
-      return;
-    }
-    try {
-      await authAPI.updatePassword({ newPassword });
-      alert('Password updated successfully.');
-    } catch (err) {
-      alert('Failed to update password.');
-    }
-  };
-
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
-
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
-
-  const googleLinkAction = useGoogleLogin({
-    flow: 'auth-code',
-    scope: 'openid email profile https://www.googleapis.com/auth/calendar.events',
-    onSuccess: async (tokenResponse) => {
-      setLoadingGoogle(true);
-      try {
-        await authAPI.linkGoogle({ code: tokenResponse.code });
-        updateSettings({ googleConnected: true });
-        alert('Google Account linked successfully!');
-      } catch (err) {
-        console.error('Failed to link Google account', err);
-        alert('Failed to link Google account');
-      } finally {
-        setLoadingGoogle(false);
-      }
-    },
-    onError: () => alert('Google login failed')
-  });
-
-  const handleToggleGoogle = () => {
-    if (settings.googleConnected) {
-      if (window.confirm('Are you sure you want to disconnect your Google Account?')) {
-        updateSettings({ googleConnected: false });
-      }
-    } else {
-      googleLinkAction();
-    }
-  };
 
   return (
     <div className="settings-hub-overlay" onClick={onClose}>
@@ -139,10 +80,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             <Cpu size={18} /> AI Providers
           </button>
           <button 
-            className={`settings-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
+            className={`settings-tab-btn ${activeTab === 'data' ? 'active' : ''}`}
+            onClick={() => setActiveTab('data')}
           >
-            <Shield size={18} /> Security
+            <Shield size={18} /> Your Data
           </button>
         </div>
 
@@ -408,88 +349,31 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             </div>
           )}
 
-          {activeTab === 'security' && (
+          {activeTab === 'data' && (
             <div className="settings-section fade-in">
-              <h2 className="settings-section-title">Security & Access</h2>
-              
-              <div className="settings-toggle-row" style={{ borderColor: settings.twoFactor ? 'var(--success)' : '' }}>
-                <div className="settings-toggle-info">
-                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Shield size={16} style={{ color: settings.twoFactor ? 'var(--success)' : 'inherit' }} /> 
-                    Two-Factor Authentication (2FA)
-                  </h4>
-                  <p>Add an extra layer of security to your account using an authenticator app.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.twoFactor ?? false} 
-                    onChange={(e) => updateSettings({ twoFactor: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Connected Accounts</h3>
-              
+              <h2 className="settings-section-title">Your Data</h2>
               <div className="settings-toggle-row">
                 <div className="settings-toggle-info">
                   <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                    Google Account
+                    <Monitor size={16} /> Stored on this computer
                   </h4>
-                  <p>Sign in quickly and sync contacts using your Google Account.</p>
+                  <p>
+                    Peblo has no accounts and no cloud sync. Your notes, tasks and settings are saved in a
+                    local database on this computer. To back them up, open <strong>Help → Open Data Folder</strong> from
+                    the menu bar and copy the <code>peblo.db</code> file.
+                  </p>
                 </div>
-                <button 
-                  type="button"
-                  className={`btn ${settings.googleConnected ? 'btn-outline' : 'btn-primary'}`}
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', opacity: loadingGoogle ? 0.7 : 1 }}
-                  onClick={handleToggleGoogle}
-                  disabled={loadingGoogle}
-                >
-                  {loadingGoogle ? 'Connecting...' : (settings.googleConnected ? 'Disconnect' : 'Connect Google')}
-                </button>
               </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Account Actions</h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <button 
-                  className="settings-field-input" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontWeight: 500 }}
-                  onClick={handleChangePassword}
-                >
-                  <Key size={18} className="text-muted" /> Change Account Password
-                </button>
-                
-                <button 
-                  className="settings-field-input" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontWeight: 500 }}
-                  onClick={handleLogoutDevices}
-                >
-                  <Monitor size={18} className="text-muted" /> Sign out of all other devices
-                </button>
-              </div>
-
-              <div style={{ marginTop: '3rem', padding: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)' }}>
-                <h4 style={{ color: '#ef4444', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <AlertTriangle size={18} /> Danger Zone
-                </h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                  Permanently delete your account and all of your content. This action cannot be undone.
-                </p>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ borderColor: '#ef4444', color: '#ef4444' }}
-                  onClick={() => {
-                    if(window.confirm('Are you absolutely sure you want to delete your account? This cannot be undone.')){
-                      logout();
-                      onClose();
-                    }
-                  }}
-                >
-                  <LogOut size={16} /> Delete Account
-                </button>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={16} /> AI keys stay local
+                  </h4>
+                  <p>
+                    API keys you add under AI Providers are kept in the same local database. They are only sent to
+                    OpenAI or Google when you use an AI feature.
+                  </p>
+                </div>
               </div>
             </div>
           )}

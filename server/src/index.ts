@@ -1,150 +1,90 @@
-import './env.js'; // trigger restart 3
+import './env.js';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import { rateLimit } from 'express-rate-limit';
+import path from 'path';
+import { existsSync } from 'fs';
+import { createServer, Server } from 'http';
+import { AddressInfo } from 'net';
 import { Server as SocketIOServer } from 'socket.io';
-import { createServer } from 'http';
+import { pathToFileURL } from 'url';
 
-import authRoutes from './routes/auth.js';
+import { initDatabase } from './db.js';
+import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
 import aiRoutes from './routes/ai.js';
 import aiChatRoutes from './routes/aiChat.js';
-import shareRoutes from './routes/share.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
-import calendarRoutes from './routes/calendar.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-const app = express();
-const httpServer = createServer(app);
-const PORT = process.env.PORT || 3001;
-
-// Trust Vercel's proxy so rate limiting works correctly and doesn't throw ValidationError
-app.set('trust proxy', 1);
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 requests per windowMs for auth routes
-  message: { error: 'Too many login attempts. Please wait a few minutes and try again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Middleware
-app.use(helmet());
-const isVercel = !!process.env.VERCEL;
-const corsOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
-  : isVercel
-    ? true // same-origin on Vercel, allow all
-    : [
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:5175',
-        'http://localhost:5176',
-        'http://localhost:3000',
-      ];
-
-app.use(cors({
-  origin: corsOrigins,
-  credentials: true,
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(limiter);
-
-// Routes
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/notes', notesRoutes);
-app.use('/api/notes', aiRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/ai', aiChatRoutes);
-app.use('/api/shared', shareRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/todos', todosRoutes);
-app.use('/api/calendar', calendarRoutes);
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.get('/api/health-db', async (req, res) => {
-  try {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-    await prisma.$queryRawUnsafe('SELECT 1');
-    res.json({ status: 'db_ok' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, stack: err.stack, details: err });
-  }
-});
-
-// Error handler
-app.use(errorHandler);
-
-// Only start listener locally — Vercel handles this as a serverless function
-if (!process.env.VERCEL) {
-  // Setup Socket.IO
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: corsOrigins,
-      methods: ['GET', 'POST']
-    }
-  });
-
-  io.on('connection', (socket) => {
-    // Clients should emit 'join' with their user ID after authentication
-    socket.on('join', (userId) => {
-      socket.join(userId);
-    });
-  });
-
-  // Export io so controllers can broadcast events
-  app.set('io', io);
-
-  const server = httpServer.listen(PORT, () => {
-    console.log(`🚀 Peblo Notes API running on http://localhost:${PORT}`);
-  });
-
-  server.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(
-        `\n❌ Port ${PORT} is already in use. Stop the other process first:\n` +
-          `   fuser -k ${PORT}/tcp   OR   kill $(lsof -t -i:${PORT})\n` +
-          `   Then run: npm run dev\n`
-      );
-      process.exit(1);
-    }
-    throw err;
-  });
-
-  // Graceful shutdown for tsx watch
-  const gracefulShutdown = () => {
-    console.log('Shutting down gracefully...');
-    server.close(async () => {
-      // If you exported prisma from db.js, you can disconnect here.
-      console.log('Closed out remaining connections.');
-      process.exit(0);
-    });
-
-    setTimeout(() => {
-      console.error('Could not close connections in time, forcefully shutting down');
-      process.exit(1);
-    }, 4000);
-  };
-
-  process.on('SIGTERM', gracefulShutdown);
-  process.on('SIGINT', gracefulShutdown);
+export interface StartOptions {
+  /** Port to listen on. 0 picks a free port (what the desktop app uses). */
+  port?: number;
+  /** Folder with the built React client. When set, it is served at `/`. */
+  staticDir?: string;
 }
 
-// Export for Vercel serverless
-export default app;
+export function createApp(staticDir?: string) {
+  const app = express();
+
+  // Only this machine talks to the server; allow the Vite dev server during development.
+  app.use(cors({ origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/] }));
+  app.use(express.json({ limit: '10mb' }));
+
+  app.use('/api/profile', profileRoutes);
+  app.use('/api/notes', notesRoutes);
+  app.use('/api/notes', aiRoutes);
+  app.use('/api/ai', aiRoutes);
+  app.use('/api/ai', aiChatRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/todos', todosRoutes);
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.use('/api', errorHandler);
+
+  if (staticDir && existsSync(staticDir)) {
+    app.use(express.static(staticDir, { index: false }));
+    // Single-page app: every non-API route returns index.html
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.sendFile(path.join(staticDir, 'index.html'));
+    });
+  }
+
+  app.use(errorHandler);
+  return app;
+}
+
+export async function startServer({ port = 0, staticDir }: StartOptions = {}): Promise<{ server: Server; port: number }> {
+  await initDatabase();
+
+  const app = createApp(staticDir);
+  const httpServer = createServer(app);
+
+  // Socket.IO lets the server tell the UI to refresh after AI creates notes/tasks.
+  const io = new SocketIOServer(httpServer);
+  io.on('connection', (socket) => {
+    socket.on('join', (userId) => socket.join(userId));
+  });
+  app.set('io', io);
+
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once('error', reject);
+    httpServer.listen(port, '127.0.0.1', () => resolve());
+  });
+
+  const actualPort = (httpServer.address() as AddressInfo).port;
+  console.log(`Peblo server running on http://127.0.0.1:${actualPort}`);
+  return { server: httpServer, port: actualPort };
+}
+
+// `npm run dev` inside /server runs this file directly.
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  startServer({ port: Number(process.env.PORT) || 3001 }).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

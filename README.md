@@ -1,96 +1,93 @@
-# Peblo Productivity Hub
+# Peblo
 
-Welcome to **Peblo**, an advanced, AI-powered productivity ecosystem. Peblo transitions beyond a standard note-taking app into a holistic workspace featuring a unified To-Do system, intelligent data intake, and an ever-present, context-aware AI assistant.
+**Peblo** is an AI-powered productivity app for **Windows, macOS and Linux**. It includes notes, to-dos, a calendar and a dashboard, plus an AI assistant that can summarize, pull out tasks and organize messy notes.
 
-This project demonstrates a production-grade full-stack application with a modern React frontend and a Node.js/Express backend.
-
----
-
-## 🚀 Key Features
-
-### 🧠 Intelligent AI Assistant
-- **Context-Aware Chat Panel:** A draggable, glassmorphic AI chat window that stays with you across the app. It auto-detects the current note you are reading to provide context-aware insights.
-- **Smart Intake Engine:** Paste raw meeting notes, sprawling emails, or braindumps. The AI automatically categorizes the data, creates organized notes, and extracts actionable To-Dos with deadlines.
-- **Slash Commands:** Type `/` in the AI chat to instantly access commands like `/summarize`, `/actions`, `/rewrite`, and `/fix`.
-- **Live Streaming & Persistence:** Cancel AI requests mid-generation with a stop button. Chat history is persisted locally so you never lose your context.
-
-### 📊 Productivity Dashboard
-- **Daily Briefing & Weekly Insights:** Your dashboard dynamically aggregates overdue tasks, today's focus, and provides a weekly AI-generated velocity report measuring task completion rates.
-- **Analytics Heatmap:** Visualize your productivity streak and note creation patterns over the year.
-
-### 📝 Workspace & To-Do System
-- **Unified Task Management:** A centralized To-Do list with prioritization, deadlines, and direct linking back to source notes.
-- **Global Command Palette:** Hit `Cmd + K` (or `Ctrl + K`) anywhere in the app to instantly search through your notes, navigate the workspace, or trigger the AI assistant without touching your mouse.
-- **Public Share:** Generate secure links to share your notes publicly.
+There are no accounts and no sign-in. Everything is stored on your computer, in a local database.
 
 ---
 
-## 💻 Tech Stack
+## Features
 
-- **Frontend**: React 18, Vite, React Router, Vanilla CSS (Custom Design System).
-- **Backend**: Node.js, Express.js.
-- **Database**: PostgreSQL (Supabase) via Prisma ORM.
-- **AI**: Multi-provider cascade — OpenAI (primary) → Google Gemini (fallback) → Mock responses (safety net).
-- **Security**: `bcryptjs`, `jsonwebtoken`, `express-rate-limit`.
+- **Notes workspace**: a block editor with tags, categories, archive, trash and version history. Export notes as Markdown, PDF, Word or HTML.
+- **To-dos and calendar**: priorities, deadlines, repeating tasks and links back to notes. There are month and day views.
+- **Dashboard**: daily briefing, weekly report, activity heatmap and writing streak.
+- **AI assistant**: context-aware chat, slash commands (`/summarize`, `/actions`, `/rewrite`, `/fix`), Smart Intake (paste a braindump and get organized notes and tasks back), and voice commands.
+- **Command palette**: `Ctrl + K` (or `Cmd + K` on Mac).
 
----
+### AI keys
 
-## ⚙️ Setup Instructions
+AI features need your own API key from **OpenAI** or **Google Gemini**. Add it in **Settings → AI Providers**. The key is saved in the local database and is only sent to that provider when you use an AI feature. Everything else works fully offline.
 
-### 1. Prerequisites
-- Node.js (v18+)
-- npm (v9+)
+### Where your data lives
 
-### 2. Installation
-Run the following command from the root directory to install all dependencies for the server, client, and root:
+Everything is kept in `peblo.db` inside the app's data folder. Open it from the menu with **Help → Open Data Folder**. To back up, copy that file.
 
-```bash
-npm run install:all
-```
-
-### 3. Environment Variables
-In the `server` directory, create a `.env` file (or copy `.env.example` to `.env`):
-
-```bash
-cp .env.example server/.env
-```
-
-Required environment variables:
-- `DATABASE_URL` — PostgreSQL connection string (Supabase)
-- `OPENAI_API_KEY` — OpenAI API key (Primary)
-- `GEMINI_API_KEYS` — Comma-separated Google Gemini API keys (Fallback)
-- `JWT_SECRET` / `JWT_REFRESH_SECRET` — JWT signing secrets
-
-### 4. Database Setup
-Push the Prisma schema and seed the database with initial demo data:
-
-```bash
-npm run db:push
-npm run db:seed
-```
-
-This will create a demo user with sample notes, tags, and tasks.
-- **Email**: demo@peblo.dev
-- **Password**: demo123
-
-### 5. Running the Application
-From the root directory, start both the client and server concurrently:
-
-```bash
-npm run dev
-```
-
-- **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:3001
+| OS      | Data folder                                   |
+|---------|-----------------------------------------------|
+| Windows | `%APPDATA%\Peblo`                             |
+| macOS   | `~/Library/Application Support/Peblo`         |
+| Linux   | `~/.config/Peblo`                             |
 
 ---
 
-## 🏛 Architecture Highlights
+## Tech stack
 
-- **Monorepo Structure**: Separate `/client` and `/server` directories with unified root commands.
-- **Atomic Transactions**: The dashboard and Smart Intake rely on `Prisma.$transaction` to guarantee data integrity across complex, multi-entity AI insertions (e.g., creating a note and 5 tasks simultaneously).
-- **Design System**: A dark-mode first design utilizing glassmorphism, floating shadows, and vibrant purple/violet accents without relying on heavy utility CSS frameworks. 
+- **App shell**: Electron (Chromium and Node.js in one app)
+- **UI**: React 19, Vite, React Router, TanStack Query, BlockNote editor
+- **Backend**: Express, which runs inside the app on a random `127.0.0.1` port and is never exposed to the network
+- **Database**: SQLite through Prisma; schema changes ship as SQL files in `server/prisma/sql/`
+- **AI**: OpenAI with Google Gemini as fallback, using the user's own keys
 
-## 🧪 Testing
+```
+electron/main.cjs        Electron main process: starts the API, opens the window
+server/src/              Express API (TypeScript)
+server/prisma/           Prisma schema + SQL migrations
+client/                  React UI (Vite)
+scripts/                 Build + smoke-test scripts
+.github/workflows/       CI that builds installers for all three OSes
+```
 
-Log in with `demo@peblo.dev` / `demo123` to immediately view the populated Daily Briefing dashboard, interact with the Command Palette (`Cmd+K`), and test the Smart Intake AI Chat (`Ctrl+Shift+A`).
+---
+
+## Development
+
+Requires **Node.js 20+**.
+
+```bash
+npm run install:all      # root (app + server) and client dependencies
+npm run dev              # API (tsx) + Vite + Electron window with hot reload
+```
+
+In dev mode the database is `peblo-dev.db` in the project folder. To have AI working without the Settings screen, you can copy `.env.example` to `server/.env` and add a key there.
+
+Other commands:
+
+```bash
+npm test                 # builds the server and runs the API smoke test on a throwaway database
+npm start                # builds everything and opens the production app locally
+```
+
+> **npm 11+ note:** newer npm versions block install scripts by default. If Prisma, Electron or esbuild complain after `npm install`, run
+> `npm approve-scripts @prisma/client @prisma/engines prisma electron esbuild electron-winstaller` and then `npm rebuild`.
+
+### Changing the database schema
+
+1. Edit `server/prisma/schema.prisma`.
+2. Run `npx prisma generate --schema server/prisma/schema.prisma`.
+3. Add a new SQL file with the next number, e.g. `server/prisma/sql/002_add_something.sql`. Write the `ALTER TABLE …` statements by hand, or generate them with `prisma migrate diff`.
+
+On launch the app applies any SQL files newer than the database's `PRAGMA user_version`, so existing users keep their data.
+
+---
+
+## Building installers
+
+```bash
+npm run dist:win         # release/Peblo Setup x.y.z.exe
+npm run dist:mac         # release/Peblo-x.y.z.dmg (Intel + Apple Silicon); must run on a Mac
+npm run dist:linux       # release/Peblo-x.y.z.AppImage and .deb; must run on Linux
+```
+
+Each OS has to be built on that OS, because Prisma's database engine is a native file. The GitHub Actions workflow **Build desktop app** handles this for you. Run it from the Actions tab and download the installers from the run, or push a tag like `v1.0.0` to publish them as a GitHub Release.
+
+The builds are **not code-signed**. Windows SmartScreen shows "Windows protected your PC" (click *More info → Run anyway*). On macOS, right-click the app and choose *Open* the first time.

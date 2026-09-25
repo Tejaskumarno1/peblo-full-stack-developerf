@@ -9,7 +9,6 @@ import { MAIN_NAV_TABS, MOBILE_NAV_TABS } from '../config/navTabs';
 export default function Navigation() {
   const { 
     user, 
-    logout, 
     updateProfile,
     theme,
     setTheme,
@@ -39,11 +38,6 @@ export default function Navigation() {
       setProfileEmail(user.email || '');
     }
   }, [user]);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
@@ -169,17 +163,13 @@ export default function Navigation() {
                 <div className="navbar-avatar-dropdown">
                   <div className="dropdown-header">
                     <span className="dropdown-name">{user?.name}</span>
-                    <span className="dropdown-email">{user?.email}</span>
+                    {user?.email ? <span className="dropdown-email">{user.email}</span> : null}
                   </div>
                   <button className="dropdown-item" onClick={(e) => { e.stopPropagation(); setDropdownOpen(false); setProfileOpen(true); }}>
                     <User size={14} /> Profile
                   </button>
                   <button className="dropdown-item" onClick={(e) => { e.stopPropagation(); setDropdownOpen(false); setSettingsOpen(true); }}>
                     <Settings size={14} /> Settings
-                  </button>
-                  <div className="dropdown-divider" />
-                  <button className="dropdown-item text-error" onClick={handleLogout}>
-                    <LogOut size={14} /> Log out
                   </button>
                 </div>
               )}

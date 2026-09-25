@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
-import { autoSyncTodoToGoogle } from './calendarController.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
@@ -57,24 +56,13 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
     const threeDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59, 999).toISOString();
 
-    // Single raw SQL query fetches ALL incomplete tasks with deadlines up to 3 days out
-    // We split them into today/overdue/upcoming in JS (zero extra round-trips)
-    const allTasks = await prisma.$queryRaw<any[]>`
-      SELECT t.id, t.text, t.is_completed AS "completed", t.priority, t.deadline,
-             t.tags AS "todoTags", t.start_time AS "startTime", t.end_time AS "endTime",
-             t.recurrence, t.created_at AS "createdAt", t.updated_at AS "updatedAt",
-             CASE WHEN t.linked_note_id IS NOT NULL
-               THEN json_build_object('id', n.id, 'title', n.title)
-               ELSE NULL
-             END AS note
-      FROM todos t
-      LEFT JOIN notes n ON n.id = t.linked_note_id
-      WHERE t.user_id = ${userId}
-        AND t.is_completed = false
-        AND t.deadline IS NOT NULL
-        AND t.deadline <= ${threeDaysLater}::timestamptz
-      ORDER BY t.deadline ASC
-    `;
+    // One query fetches all incomplete tasks due up to 3 days out;
+    // they are split into today/overdue/upcoming below.
+    const allTasks = await prisma.todo.findMany({
+      where: { userId, completed: false, deadline: { not: null, lte: new Date(threeDaysLater) } },
+      include: { note: { select: { id: true, title: true } } },
+      orderBy: { deadline: 'asc' },
+    }) as any[];
 
     const todayStartDate = new Date(todayStart);
     const todayEndDate = new Date(todayEnd);
@@ -126,7 +114,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
 
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, timezone } = req.body;
+    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence } = req.body;
     if (!text || text.trim() === '') {
       return res.status(400).json({ error: 'Text is required' });
     }
@@ -182,8 +170,6 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
         data: dataToInsert[0],
         include: { note: { select: { id: true, title: true } } }
       });
-      // Background sync
-      autoSyncTodoToGoogle(todo, req.user!.id, 'create', timezone);
       
       const io = req.app.get('io');
       if (io) io.to(req.user!.id).emit('todos_changed');
@@ -199,10 +185,6 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       include: { note: { select: { id: true, title: true } } }
     });
 
-    // Background sync the first recurrence instance
-    if (firstTodo) {
-      autoSyncTodoToGoogle(firstTodo, req.user!.id, 'create', timezone);
-    }
 
     const io = req.app.get('io');
     if (io) io.to(req.user!.id).emit('todos_changed');
@@ -216,7 +198,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 export async function updateTodo(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence, timezone } = req.body;
+    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence } = req.body;
 
     const todo = await prisma.todo.findFirst({
       where: { id: id as string, userId: req.user!.id }
@@ -259,8 +241,6 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       include: { note: { select: { id: true, title: true } } }
     });
 
-    // Background sync
-    autoSyncTodoToGoogle(updatedTodo, req.user!.id, 'update', timezone);
 
     const io = req.app.get('io');
     if (io) io.to(req.user!.id).emit('todos_changed');
@@ -276,7 +256,6 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
     const { id } = req.params;
     const userId = req.user!.id;
 
-    // Fetch todo data for Google sync before deleting (still needed for sync)
     const todo = await prisma.todo.findFirst({
       where: { id: id as string, userId }
     });
@@ -289,8 +268,6 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
       where: { id: id as string }
     });
 
-    // Background sync deletion (non-blocking)
-    autoSyncTodoToGoogle(todo, userId, 'delete');
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');

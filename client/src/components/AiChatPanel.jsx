@@ -329,13 +329,11 @@ export default function AiChatPanel() {
         const tempId = Date.now().toString();
         setMessages(prev => [...prev, { id: tempId, role: 'assistant', text: '', isStreaming: true }]);
 
-        const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || '/api';
         const response = await fetch(`${apiUrl}/ai/chat-stream`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined }),
           signal: abortControllerRef.current.signal

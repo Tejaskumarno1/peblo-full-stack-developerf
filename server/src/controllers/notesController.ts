@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
-import { v4 as uuidv4 } from 'uuid';
 import * as aiService from '../services/aiService.js';
 
 // prisma imported from db.js
@@ -40,8 +39,7 @@ export async function syncTags(noteId: any, tagNames: any) {
   if (missingTagNames.length > 0) {
     // Bulk create missing tags (Prisma createMany returns count, not records, so we re-fetch)
     await prisma.tag.createMany({
-      data: missingTagNames.map((name: any) => ({ name })),
-      skipDuplicates: true
+      data: missingTagNames.map((name: any) => ({ name }))
     });
     newTags = await prisma.tag.findMany({
       where: { name: { in: missingTagNames } }
@@ -134,7 +132,6 @@ export async function getNotes(req: any, res: any, next: any) {
         category: true,
         isArchived: true,
         isDeleted: true,
-        isPublic: true,
         createdAt: true,
         updatedAt: true,
         tags: {
@@ -203,14 +200,13 @@ export async function createNote(req: any, res: any, next: any) {
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
-    const { title, content, category, isArchived, isPublic, tags } = req.body;
+    const { title, content, category, isArchived, tags } = req.body;
 
     const data: any = {};
     if (title !== undefined) data.title = title;
     if (content !== undefined) data.content = content;
     if (category !== undefined) data.category = category || null;
     if (isArchived !== undefined) data.isArchived = isArchived;
-    if (isPublic !== undefined) data.isPublic = isPublic;
 
     // Use updateMany to enforce userId ownership safely in a single query
     const { count } = await prisma.note.updateMany({
@@ -308,41 +304,14 @@ export async function archiveNote(req: any, res: any, next: any) {
   }
 }
 
-export async function shareNote(req: any, res: any, next: any) {
-  try {
-    const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
-    });
-    if (!existing) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
-
-    // Toggle sharing
-    const isPublic = !existing.isPublic;
-    const shareId = isPublic ? uuidv4().slice(0, 12) : null;
-
-    const note = await prisma.note.update({
-      where: { id: req.params.id },
-      data: { isPublic, shareId },
-      include: noteInclude
-    });
-
-    res.json({ note: formatNote(note) });
-  } catch (error) {
-    next(error);
-  }
-}
-
 export async function getBackups(req: any, res: any, next: any) {
   try {
     // Single query — if the note doesn't belong to the user, the JOIN returns 0 rows
-    const backups = await prisma.$queryRaw<any[]>`
-      SELECT b.id, b.content, b.created_at AS "createdAt"
-      FROM note_backups b
-      JOIN notes n ON n.id = b.note_id
-      WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
-      ORDER BY b.created_at DESC
-    `;
+    const backups = await prisma.noteBackup.findMany({
+      where: { noteId: req.params.id, note: { userId: req.user.id } },
+      select: { id: true, content: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }
+    });
 
     res.json({ backups });
   } catch (error) {

@@ -1,21 +1,5 @@
 import { z } from 'zod';
 
-export const authSchemas = {
-  signup: {
-    body: z.object({
-      name: z.string().min(2, "Name must be at least 2 characters").max(50),
-      email: z.string().email("Invalid email address"),
-      password: z.string().min(6, "Password must be at least 6 characters")
-    })
-  },
-  login: {
-    body: z.object({
-      email: z.string().email("Invalid email address"),
-      password: z.string()
-    })
-  }
-};
-
 export const noteSchemas = {
   create: {
     body: z.object({
@@ -23,8 +7,7 @@ export const noteSchemas = {
       content: z.string().optional(),
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
-      isArchived: z.boolean().optional(),
-      isPublic: z.boolean().optional()
+      isArchived: z.boolean().optional()
     })
   },
   update: {
@@ -33,8 +16,7 @@ export const noteSchemas = {
       content: z.string().optional(),
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
-      isArchived: z.boolean().optional(),
-      isPublic: z.boolean().optional()
+      isArchived: z.boolean().optional()
     })
   }
 };

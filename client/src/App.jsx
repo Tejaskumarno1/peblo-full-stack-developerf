@@ -3,29 +3,21 @@ import { useAuth } from './context/AuthContext';
 import { Suspense, lazy } from 'react';
 
 // Lazy loaded routes for Code Splitting
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const SignupPage = lazy(() => import('./pages/SignupPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const TodoListPage = lazy(() => import('./pages/TodoListPage'));
-const SharedNotePage = lazy(() => import('./pages/SharedNotePage'));
 
 // Lazy loaded heavy components for the Authenticated Shell
 const AiChatPanel = lazy(() => import('./components/AiChatPanel'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
+// No accounts in the desktop app — just wait for the local profile to load.
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   if (loading) return <div className="page-loader"><div className="spinner" /></div>;
-  return user ? children : <Navigate to="/login" />;
-}
-
-function GuestRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="page-loader"><div className="spinner" /></div>;
-  return user ? <Navigate to="/" /> : children;
+  return children;
 }
 
 function AuthenticatedShell({ children }) {
@@ -48,8 +40,6 @@ export default function App() {
   return (
     <Suspense fallback={<div className="page-loader"><div className="spinner" /></div>}>
       <Routes>
-      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-      <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
       <Route
         path="/"
         element={
@@ -104,7 +94,6 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/shared/:shareId" element={<SharedNotePage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
     </Suspense>

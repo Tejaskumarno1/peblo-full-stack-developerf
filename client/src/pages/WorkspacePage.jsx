@@ -6,7 +6,6 @@ import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import Navigation from '../components/Navigation';
-import ShareModal from '../components/ShareModal';
 import TodoListPanel from '../components/TodoListPanel';
 import { marked } from 'marked';
 import {
@@ -549,23 +548,6 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleToggleShare = async () => {
-    if (!selectedNote || isDraft) return;
-    try {
-      const res = await notesAPI.share(selectedNote.id);
-      const updatedNote = res.data.note;
-      
-      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
-        if (!old) return old;
-        return old.map((n) => (n.id === updatedNote.id ? updatedNote : n));
-      });
-      setSelectedNote(updatedNote);
-    } catch (err) {
-      console.error('Failed to share note:', err);
-      alert('Failed to update sharing settings.');
-    }
-  };
-
   const handleAddTag = (e) => {
     if (e.key === 'Enter' && tagInput.trim()) {
       e.preventDefault();
@@ -1088,12 +1070,6 @@ export default function WorkspacePage() {
         </main>
       </div>
 
-      <ShareModal 
-        isOpen={isShareModalOpen} 
-        onClose={() => setIsShareModalOpen(false)} 
-        note={selectedNote} 
-        onToggleShare={handleToggleShare} 
-      />
     </div>
   );
 }

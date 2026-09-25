@@ -1,25 +1,19 @@
 generator client {
   provider = "prisma-client-js"
+  // Generated inside the project (not node_modules/.prisma) so the desktop packager ships it.
+  output   = "../generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model User {
   id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  googleRefreshToken String? @map("google_refresh_token")
-  googleChannelId String? @map("google_channel_id")
-  googleResourceId String? @map("google_resource_id")
-  googleId     String?  @unique @map("google_id")
-  
-  // Security
-  tokenVersion Int      @default(0) @map("token_version")
-  
+  name         String   @default("You")
+  email        String   @default("")
+
   // Profile & Settings
   jobTitle     String?  @map("job_title")
   bio          String?
@@ -46,8 +40,6 @@ model Note {
   isArchived Boolean  @default(false) @map("is_archived")
   isDeleted  Boolean  @default(false) @map("is_deleted")
   deletedAt  DateTime? @map("deleted_at")
-  isPublic   Boolean  @default(false) @map("is_public")
-  shareId    String?  @unique @map("share_id")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -123,12 +115,11 @@ model Todo {
   completed Boolean   @default(false) @map("is_completed")
   priority  String    @default("medium")
   deadline  DateTime? @map("deadline")
-  todoTags   String[]  @default([]) @map("tags")
+  todoTags   Json      @default("[]") @map("tags")
   noteId     String?   @map("linked_note_id")
   startTime  String?   @map("start_time")
   endTime    String?   @map("end_time")
   recurrence String?   @default("none") @map("recurrence")
-  googleEventId String? @map("google_event_id")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

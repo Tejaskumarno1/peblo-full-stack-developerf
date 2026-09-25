@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io } from 'socket.io-client';
-import { authAPI } from '../api/index';
+import { profileAPI } from '../api/index';
 
 const AuthContext = createContext(null);
 
@@ -45,20 +45,22 @@ export function AuthProvider({ children }) {
     }
   }, [theme]);
 
-  // Restore session on mount
+  // Desktop app: no login. Load the single local profile (and any settings saved in the database).
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      authAPI.me()
-        .then(res => setUser(res.data.user))
-        .catch(() => {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    profileAPI.me()
+      .then(res => {
+        const u = res.data.user;
+        setUser(u);
+        if (u?.settings && typeof u.settings === 'object') {
+          setSettings(prev => {
+            const merged = { ...u.settings, ...prev };
+            localStorage.setItem('peblo-settings', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      })
+      .catch(err => console.error('Failed to load profile:', err))
+      .finally(() => setLoading(false));
   }, []);
 
   // WebSockets for Real-Time Device Syncing
@@ -89,60 +91,12 @@ export function AuthProvider({ children }) {
     };
   }, [user, queryClient]);
 
-  // Silent background token refresh
-  useEffect(() => {
-    if (!user) return;
-    
-    const interval = setInterval(async () => {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        try {
-          const res = await authAPI.refresh(refreshToken);
-          localStorage.setItem('accessToken', res.data.accessToken);
-        } catch (err) {
-          console.error('Silent token refresh failed:', err);
-        }
-      }
-    }, 5 * 60 * 1000); // refresh every 5 minutes
-    
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const login = useCallback(async (email, password) => {
-    const { data } = await authAPI.login({ email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const googleLogin = useCallback(async (payload) => {
-    const { data } = await authAPI.googleLogin(payload);
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const signup = useCallback(async (name, email, password) => {
-    const { data } = await authAPI.signup({ name, email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
-  }, []);
   const updateProfile = useCallback(async (updatedUser) => {
     // Optimistic UI update
     setUser((prev) => ({ ...prev, ...updatedUser }));
     
     try {
-      await authAPI.updateProfile(updatedUser);
+      await profileAPI.updateProfile(updatedUser);
     } catch (err) {
       console.error('Failed to update profile to DB:', err);
     }
@@ -178,7 +132,7 @@ export function AuthProvider({ children }) {
       
       if (Object.keys(payload).length > 0) {
         // Fire and forget, no await to prevent UI blocking if network is slow
-        authAPI.updateProfile(payload).catch(err => {
+        profileAPI.updateProfile(payload).catch(err => {
           console.error('Failed to sync settings to DB:', err);
         });
       }
@@ -223,10 +177,6 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ 
       user, 
       loading, 
-      login, 
-      googleLogin,
-      signup, 
-      logout, 
       updateProfile,
       theme,
       setTheme,
