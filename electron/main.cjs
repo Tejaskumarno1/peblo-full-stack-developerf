@@ -101,7 +101,7 @@ function createWindow() {
     minHeight: 600,
     show: false,
     title: 'Peblo',
-    backgroundColor: '#f7f7f8',
+    backgroundColor: '#F6F5F2',
     icon: ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
@@ -152,7 +152,7 @@ function showMainWindow(route) {
 function createCaptureWindow() {
   captureWindow = new BrowserWindow({
     width: 620,
-    height: 230,
+    height: 256,
     show: false,
     frame: false,
     resizable: false,

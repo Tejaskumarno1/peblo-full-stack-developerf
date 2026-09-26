@@ -1,0 +1,67 @@
+/* Calendar inside the Peblo shell: map the older dashboard colours onto the
+   design tokens and tidy the grid so it matches Home and Tasks. */
+.pb-sheet .dashboard-page,
+.theme-dark .pb-sheet .dashboard-page {
+  color-scheme: inherit;
+  --dash-bg: var(--pb-surface-2);
+  --dash-surface: var(--pb-surface);
+  --dash-surface-hover: var(--pb-surface-2);
+  --dash-border: var(--pb-line);
+  --dash-text: var(--pb-fg);
+  --dash-text-secondary: var(--pb-fg-2);
+  --dash-text-muted: var(--pb-fg-3);
+  --dash-primary: var(--pb-solid);
+  --dash-primary-dim: var(--pb-soft);
+  --dash-primary-rgb: 79, 70, 229;
+  --dash-accent: var(--pb-local);
+  --dash-accent-dim: var(--pb-local-soft);
+  --dash-muted-color: var(--pb-fg-3);
+  --dash-muted-dim: var(--pb-surface-3);
+  --dash-cell-empty: var(--pb-surface-3);
+  background: var(--pb-surface);
+  color: var(--pb-fg);
+}
+.theme-dark .pb-sheet .dashboard-page { --dash-primary-rgb: 91, 87, 240; }
+
+.pb-sheet .cal-layout { max-width: none; min-height: 100%; height: 100%; grid-template-columns: minmax(0, 1fr) 360px; }
+.pb-sheet .cal-grid-section { padding: 22px 28px 28px; }
+.pb-sheet .cal-month-label { font-family: var(--pb-font-display); font-weight: 400; font-size: 34px; letter-spacing: -0.01em; }
+.pb-sheet .cal-nav-btn { border-radius: 9px; border: 1px solid var(--pb-line); background: var(--pb-surface); color: var(--pb-fg-2); }
+.pb-sheet .cal-today-btn { background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg); border-radius: 9px; }
+.pb-sheet .cal-today-btn:hover { background: var(--pb-surface-2); color: var(--pb-fg); }
+.pb-sheet .cal-view-toggle { background: var(--pb-surface-3); border: none; border-radius: 9px; padding: 3px; gap: 2px; }
+.pb-sheet .cal-view-toggle button { border-radius: 7px; color: var(--pb-fg-2); }
+.pb-sheet .cal-view-toggle button.active { background: var(--pb-surface); color: var(--pb-fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+
+.pb-sheet .cal-stat-chip { border-radius: 99px; background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg-2); }
+.pb-sheet .cal-stat-chip.done { background: var(--pb-local-soft); border-color: transparent; color: var(--pb-local); }
+.pb-sheet .cal-stat-chip.overdue { background: var(--pb-danger-soft); border-color: transparent; color: var(--pb-danger); }
+.pb-sheet .cal-stat-chip.high { background: var(--pb-warn-soft); border-color: transparent; color: var(--pb-warn); }
+
+.pb-sheet .cal-grid { border-radius: 14px; }
+.pb-sheet .cal-day-header { background: var(--pb-surface-2); color: var(--pb-fg-3); font-weight: 600; letter-spacing: 0.05em; }
+.pb-sheet .cal-cell { min-height: 92px; }
+.pb-sheet .cal-cell.outside { background: var(--pb-surface-2); opacity: 1; }
+.pb-sheet .cal-cell.outside .cal-day-num { color: var(--pb-fg-3); opacity: 0.6; font-weight: 500; }
+.pb-sheet .cal-cell.today { background: var(--pb-surface); }
+.pb-sheet .cal-cell.selected { background: var(--pb-soft); box-shadow: inset 0 0 0 1.5px var(--pb-solid); }
+.pb-sheet .cal-cell.overdue .cal-day-num:not(.today-badge) { color: var(--pb-danger); background: var(--pb-danger-soft); }
+.pb-sheet .cal-day-num.today-badge { background: var(--pb-solid); color: var(--pb-on-solid); box-shadow: none; }
+.pb-sheet .cal-task-count { background: var(--pb-soft); color: var(--pb-accent); }
+.pb-sheet .cal-dot.high { background: var(--pb-danger); box-shadow: none; }
+.pb-sheet .cal-dot.medium { background: var(--pb-warn); }
+.pb-sheet .cal-dot.low { background: var(--pb-local); }
+
+.pb-sheet .cal-sidebar { position: relative; top: 0; height: 100%; background: var(--pb-surface-2); border-left: 1px solid var(--pb-line); }
+.pb-sheet .cal-sidebar-date { font-family: var(--pb-font-display); font-weight: 400; font-size: 24px; letter-spacing: -0.01em; }
+.pb-sheet .cal-sidebar-day-badge { background: var(--pb-soft); color: var(--pb-accent); border: 1px solid var(--pb-soft-line); }
+.pb-sheet .cal-task-item { background: var(--pb-surface); border: 1px solid var(--pb-line); border-left-width: 1px; border-radius: 12px; box-shadow: none; }
+.pb-sheet .cal-task-item.priority-high { box-shadow: inset 3px 0 0 var(--pb-danger); }
+.pb-sheet .cal-task-item.priority-medium { box-shadow: inset 3px 0 0 var(--pb-warn); }
+.pb-sheet .cal-task-item.priority-low { box-shadow: inset 3px 0 0 var(--pb-local); }
+.pb-sheet .cal-priority-label.high { background: var(--pb-danger-soft); color: var(--pb-danger); }
+.pb-sheet .cal-priority-label.medium { background: var(--pb-warn-soft); color: var(--pb-warn); }
+.pb-sheet .cal-priority-label.low { background: var(--pb-local-soft); color: var(--pb-local); }
+.pb-sheet .cal-task-tag { background: var(--pb-surface-2); color: var(--pb-fg-2); border-color: var(--pb-line); }
+.pb-sheet .cal-add-task-btn { border-radius: 10px; color: var(--pb-accent); }
+.pb-sheet .cal-task-item.completed { box-shadow: none; }

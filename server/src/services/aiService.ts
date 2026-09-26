@@ -6,7 +6,7 @@ const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 function getMockResponse(type: string, title: string, content: string) {
-  if (type === 'summary') return { summary: 'AI is not available. Add an OpenAI or Gemini API key in Settings → AI Providers.' };
+  if (type === 'summary') return { summary: 'AI is not available. Add an OpenAI or Gemini API key in AI Hub → Connections.' };
   if (type === 'action_items') return { action_items: [] };
   if (type === 'title') return { title: 'Untitled Note' };
   return {};
@@ -79,14 +79,23 @@ function getGeminiInstance(user: any) {
  */
 function providerOrder(user: any): ProviderName[] {
   const choice = (user?.settings as any)?.defaultAiModel || 'auto';
-  if (choice === 'ollama') return ['ollama'];
+  // "Local only" and "Ask first" never send anything to the cloud from background features.
+  // (The AI Hub asks the user before using a cloud model under "Ask first".)
+  if (choice === 'ollama' || choice === 'ask') return ['ollama'];
   if (choice === 'openai') return ['openai', 'gemini', 'ollama'];
   if (choice === 'gemini') return ['gemini', 'openai', 'ollama'];
   return ['openai', 'gemini', 'ollama'];
 }
 
+function localOnlyError() {
+  const err: any = new Error('Local AI is off or not running, and your AI setting keeps notes on this device. Start Ollama, or change "When Peblo needs AI" in AI Hub → Connections.');
+  err.statusCode = 400;
+  err.code = 'LOCAL_ONLY';
+  return err;
+}
+
 function noKeyError() {
-  const err: any = new Error('No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in Settings → AI Providers.');
+  const err: any = new Error('No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in AI Hub → Connections.');
   err.statusCode = 400;
   err.code = 'NO_AI_KEY';
   return err;
@@ -107,7 +116,10 @@ async function runWithCascade(
   };
 
   const order = providerOrder(user);
-  if (!order.some((n) => providers[n])) throw noKeyError();
+  if (!order.some((n) => providers[n])) {
+    if (order.length === 1 && (providers.openai || providers.gemini)) throw localOnlyError();
+    throw noKeyError();
+  }
 
   for (const name of order) {
     try {
@@ -125,7 +137,7 @@ async function runWithCascade(
     }
   }
 
-  throw new Error('The AI request failed. Check Settings → AI Providers: your API key may be invalid or out of credit, or Ollama may not be running.');
+  throw new Error('The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
 }
 
 /** Ask for a JSON object from whichever provider is configured. */
@@ -912,4 +924,155 @@ export async function suggestTag(userId: string, title: string, content: string)
   } catch (err) {
     return { suggested_tag: 'Note' };
   }
+}
+
+
+// ─────────────────────────── AI Hub ───────────────────────────
+
+export interface HubMessage { role: 'user' | 'assistant'; content: string }
+
+export interface HubModelInfo {
+  routing: string;
+  local: { enabled: boolean; ok: boolean; url: string; chatModel: string; embedModel: string; models: string[]; error?: string };
+  cloud: { provider: 'openai' | 'gemini'; label: string; configured: boolean; model: string }[];
+}
+
+/** Everything the model picker and the Connections page need to know. */
+export async function listHubModels(userId: string): Promise<HubModelInfo> {
+  const user = await getUserSettings(userId);
+  const settings = (user?.settings as any) || {};
+  const ollama = getOllamaProvider(user);
+  const url = String(settings.ollamaUrl || DEFAULT_OLLAMA_URL);
+  const check = settings.ollamaEnabled === true ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
+  return {
+    routing: settings.defaultAiModel || 'auto',
+    local: {
+      enabled: settings.ollamaEnabled === true,
+      ok: check.ok,
+      url,
+      chatModel: ollama?.model || DEFAULT_OLLAMA_MODEL,
+      embedModel: ollama?.embedModel || DEFAULT_OLLAMA_EMBED_MODEL,
+      models: check.models,
+      error: check.error,
+    },
+    cloud: [
+      { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), model: DEFAULT_OPENAI_MODEL },
+      { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL },
+    ],
+  };
+}
+
+export interface HubRunOptions {
+  /** Force a provider ('ollama' | 'openai' | 'gemini'); otherwise follow the routing setting. */
+  provider?: ProviderName;
+  /** Override the model name (e.g. a specific Ollama model). */
+  model?: string;
+  /** The user said yes to using a cloud model for this message. */
+  allowCloud?: boolean;
+  signal?: AbortSignal;
+}
+
+export interface HubRunResult { provider: ProviderName; model: string; local: boolean }
+
+/**
+ * Streams one AI Hub answer. Calls onDelta with each piece of text.
+ * Throws an error with code CLOUD_CONSENT when only a cloud model could answer and the
+ * user's setting says to ask first; the UI then asks and retries with allowCloud.
+ */
+export async function streamHubChat(
+  userId: string,
+  system: string,
+  messages: HubMessage[],
+  opts: HubRunOptions,
+  onDelta: (text: string) => void
+): Promise<HubRunResult> {
+  const user = await getUserSettings(userId);
+  const routing = ((user?.settings as any)?.defaultAiModel) || 'auto';
+  const providers: Record<ProviderName, any> = {
+    openai: getOpenAIProvider(user),
+    ollama: getOllamaProvider(user),
+    gemini: getGeminiInstance(user),
+  };
+
+  let order: ProviderName[];
+  if (opts.provider) {
+    order = [opts.provider];
+  } else if (routing === 'ask') {
+    order = opts.allowCloud ? ['ollama', 'openai', 'gemini'] : ['ollama'];
+  } else {
+    order = providerOrder(user);
+  }
+
+  const isCloud = (n: ProviderName) => n !== 'ollama';
+  if (routing === 'ollama' && order.some(isCloud) && !opts.allowCloud) {
+    const err: any = new Error('Your AI setting is "Local only", so cloud models are switched off. Change it in Connections to use them.');
+    err.code = 'LOCAL_ONLY';
+    throw err;
+  }
+  if (routing === 'ask' && opts.provider && isCloud(opts.provider) && !opts.allowCloud) {
+    const err: any = new Error('This will send your question and the matching notes to ' + (opts.provider === 'openai' ? 'OpenAI' : 'Google') + '.');
+    err.code = 'CLOUD_CONSENT';
+    err.provider = opts.provider;
+    throw err;
+  }
+
+  const available = order.filter((n) => providers[n]);
+  if (!available.length) {
+    if (routing === 'ask' && !opts.allowCloud && (providers.openai || providers.gemini)) {
+      const err: any = new Error('Local AI isn\'t running. Answering this would send your question and the matching notes to ' + (providers.openai ? 'OpenAI' : 'Google') + '.');
+      err.code = 'CLOUD_CONSENT';
+      err.provider = providers.openai ? 'openai' : 'gemini';
+      throw err;
+    }
+    if (order.length === 1 && order[0] === 'ollama' && (providers.openai || providers.gemini)) throw localOnlyError();
+    throw noKeyError();
+  }
+
+  let lastError: any = null;
+  for (const name of available) {
+    let sent = false;
+    try {
+      if (name === 'gemini') {
+        const modelName = opts.model || process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+        const model = providers.gemini.getGenerativeModel({ model: modelName, systemInstruction: system });
+        const result = await model.generateContentStream({
+          contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        });
+        for await (const chunk of result.stream) {
+          if (opts.signal?.aborted) break;
+          const text = chunk.text();
+          if (text) { sent = true; onDelta(text); }
+        }
+        return { provider: 'gemini', model: modelName, local: false };
+      }
+      const p: OAIProvider = providers[name];
+      const modelName = opts.model && (opts.provider === name || name === 'ollama') ? opts.model : p.model;
+      const stream = await p.client.chat.completions.create(
+        { model: modelName, stream: true, messages: [{ role: 'system', content: system }, ...messages] },
+        { signal: opts.signal }
+      );
+      for await (const part of stream) {
+        const text = part.choices[0]?.delta?.content || '';
+        if (text) { sent = true; onDelta(text); }
+      }
+      return { provider: name, model: modelName, local: name === 'ollama' };
+    } catch (error: any) {
+      if (opts.signal?.aborted) throw error;
+      lastError = error;
+      console.warn(`[AI Hub] ${name} failed: ${error.message}`);
+      if (sent) throw error; // don't mix two models' answers
+    }
+  }
+  // "Ask first": local AI was tried and failed; offer the cloud instead of just failing.
+  if (routing === 'ask' && !opts.allowCloud && !opts.provider && (providers.openai || providers.gemini)) {
+    const err: any = new Error('Local AI didn\'t answer (is Ollama running?). Answering would send your question and the matching notes to ' + (providers.openai ? 'OpenAI' : 'Google') + '.');
+    err.code = 'CLOUD_CONSENT';
+    err.provider = providers.openai ? 'openai' : 'gemini';
+    throw err;
+  }
+  const err: any = new Error(lastError?.message?.includes('ECONNREFUSED') || lastError?.message?.includes('Connection error')
+    ? 'Could not reach the model. If you use Local AI, check that Ollama is running.'
+    : 'The AI request failed: ' + (lastError?.message || 'unknown error'));
+  err.code = 'AI_FAILED';
+  throw err;
 }

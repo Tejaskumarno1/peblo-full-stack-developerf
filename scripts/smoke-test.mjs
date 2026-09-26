@@ -88,7 +88,7 @@ try {
 
   r = await call('PUT', '/api/profile', { settings: { geminiKey: '', openAiKey: '' } });
   r = await call('POST', `/api/notes/${noteId}/ai/title`, { content: 'x' });
-  check('AI without key gives a clear answer (no crash)', r.status < 500 || /AI Providers/.test(JSON.stringify(r.json)), r);
+  check('AI without key gives a clear answer (no crash)', r.status < 500 || /Connections/.test(JSON.stringify(r.json)), r);
 
   r = await call('DELETE', `/api/notes/${noteId}`);
   check('move note to trash', r.status === 200, r.json);
@@ -194,13 +194,44 @@ try {
   seen.length = 0;
   r = await call('POST', `/api/notes/${noteId}/ai/title`, { content: 'Private text' });
   check('Local AI choice never falls back to the cloud', seen.length === 0 && r.json.title !== 'Local AI title', { r: r.json, seen });
+  // ── AI Hub: search, streamed answer with sources, and the "ask first" consent flow ──
+  const hubEvents = async (body) => {
+    const rr = await fetch(base + '/api/ai/hub/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return (await rr.text()).split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6)));
+  };
+  r = await call('POST', '/api/ai/hub/search', { query: 'book flights for the trip' });
+  check('AI Hub search finds the imported trip note', r.status === 200 && r.json.sources.some((s) => s.title === 'Trip plan'), r.json);
+
+  await call('PUT', '/api/profile', { settings: { ollamaEnabled: true, ollamaUrl: fakeUrl, defaultAiModel: 'ollama' } });
+  r = await call('GET', '/api/ai/hub/models');
+  check('AI Hub lists local models and routing', r.json.local?.ok === true && r.json.local.models.includes('llama3.2:latest') && r.json.routing === 'ollama', r.json);
+
+  let evs = await hubEvents({ messages: [{ role: 'user', content: 'When should I book flights for the trip?' }] });
+  let doneEv = evs.find((e) => e.type === 'done');
+  check('AI Hub answers locally with sources', evs[0]?.type === 'sources' && evs[0].sources.some((s) => s.title === 'Trip plan') && evs.some((e) => e.type === 'delta') && doneEv?.local === true && doneEv.provider === 'ollama', evs.slice(0, 3));
+
+  evs = await hubEvents({ messages: [{ role: 'user', content: 'hello' }], provider: 'openai', model: 'gpt-4o-mini' });
+  check('AI Hub refuses cloud models under "Local only"', evs.some((e) => e.type === 'error' && e.code === 'LOCAL_ONLY'), evs);
+
+  await call('PUT', '/api/profile', { settings: { ollamaUrl: 'http://127.0.0.1:1', defaultAiModel: 'ask' } });
+  seen.length = 0;
+  evs = await hubEvents({ messages: [{ role: 'user', content: 'What is due this week?' }] });
+  check('"Ask first" asks before using the cloud when local AI is down', evs.some((e) => e.type === 'consent' && e.provider === 'openai') && !seen.some((x) => x.model === 'gpt-4o-mini'), evs);
+
+  evs = await hubEvents({ messages: [{ role: 'user', content: 'What is due this week?' }], allowCloud: true });
+  doneEv = evs.find((e) => e.type === 'done');
+  check('after consent the cloud model answers', doneEv?.provider === 'openai' && doneEv.local === false && seen.some((x) => x.model === 'gpt-4o-mini'), evs.slice(-2));
+
+  r = await call('POST', `/api/notes/${noteId}/ai/title`, { content: 'Private text' });
+  check('"Ask first" never sends background AI to the cloud', !seen.some((x) => x.model === 'gpt-4o-mini' && !x.stream), seen);
+
   await call('PUT', '/api/profile', { settings: { openAiKey: '' } });
   delete process.env.OPENAI_BASE_URL;
 
   await call('PUT', '/api/profile', { settings: { ollamaEnabled: false, defaultAiModel: 'auto' } });
   res = await fetch(base + '/api/ai/chat-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hi' }) });
   const noKey = await res.text();
-  check('chat without any AI explains how to set it up', /AI Providers/.test(noKey), noKey.slice(0, 200));
+  check('chat without any AI explains how to set it up', /Connections/.test(noKey), noKey.slice(0, 200));
   fake.close();
 
   r = await call('GET', '/notes/some-id');

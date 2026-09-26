@@ -1,103 +1,56 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
+import { useAuth } from './context/AuthContext';
+import AppShell from './components/shell/AppShell';
 
-// Lazy loaded routes for Code Splitting
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+// Pages load on demand
+const HomePage = lazy(() => import('./pages/HomePage'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
-const TodoListPage = lazy(() => import('./pages/TodoListPage'));
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const AIHubPage = lazy(() => import('./pages/AIHubPage'));
+const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'));
 const QuickCapturePage = lazy(() => import('./pages/QuickCapturePage'));
 
-// Lazy loaded heavy components for the Authenticated Shell
-const AiChatPanel = lazy(() => import('./components/AiChatPanel'));
+// Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
-// No accounts in the desktop app — just wait for the local profile to load.
-function ProtectedRoute({ children }) {
-  const { loading } = useAuth();
-  if (loading) return <div className="page-loader"><div className="spinner" /></div>;
-  return children;
-}
+const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
-function AuthenticatedShell({ children }) {
-  const { user } = useAuth();
+/** No accounts in the desktop app: wait for the local profile, then show the app shell. */
+function ShellLayout() {
+  const { loading } = useAuth();
+  if (loading) return <Loader />;
   return (
-    <>
-      {children}
-      {user ? (
-        <Suspense fallback={null}>
-          <AiVoiceCallManager />
-          <AiChatPanel />
-          <CommandPalette />
-        </Suspense>
-      ) : null}
-    </>
+    <AppShell>
+      <Suspense fallback={<Loader />}><Outlet /></Suspense>
+      <Suspense fallback={null}>
+        <AiVoiceCallManager />
+        <CommandPalette />
+      </Suspense>
+    </AppShell>
   );
 }
 
 export default function App() {
   return (
-    <Suspense fallback={<div className="page-loader"><div className="spinner" /></div>}>
+    <Suspense fallback={<Loader />}>
       <Routes>
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <AuthenticatedShell>
-              <DashboardPage />
-            </AuthenticatedShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/workspace"
-        element={<Navigate to="/notes" />}
-      />
-      <Route
-        path="/notes"
-        element={
-          <ProtectedRoute>
-            <AuthenticatedShell>
-              <WorkspacePage />
-            </AuthenticatedShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/calendar"
-        element={
-          <ProtectedRoute>
-            <AuthenticatedShell>
-              <CalendarPage />
-            </AuthenticatedShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/todolist"
-        element={
-          <ProtectedRoute>
-            <AuthenticatedShell>
-              <TodoListPage />
-            </AuthenticatedShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/notes/:id"
-        element={
-          <ProtectedRoute>
-            <AuthenticatedShell>
-              <WorkspacePage />
-            </AuthenticatedShell>
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/quick-capture" element={<QuickCapturePage />} />
-      <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+        <Route element={<ShellLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/notes" element={<WorkspacePage />} />
+          <Route path="/notes/:id" element={<WorkspacePage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/ai" element={<AIHubPage />} />
+          <Route path="/ai/connections" element={<ConnectionsPage />} />
+        </Route>
+        <Route path="/quick-capture" element={<QuickCapturePage />} />
+        <Route path="/workspace" element={<Navigate to="/notes" replace />} />
+        <Route path="/todolist" element={<Navigate to="/tasks" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </Suspense>
   );
 }

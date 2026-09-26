@@ -15,10 +15,10 @@ import {
   Trash2,
   Edit2
 } from 'lucide-react';
-import Navigation from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
 import '../styles/dashboard.css';
 import '../styles/calendar.css';
+import '../styles/calendar-pb.css';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -322,7 +322,6 @@ export default function CalendarPage() {
 
   return (
     <div className="dashboard-page">
-      <Navigation activeTab="calendar" />
 
       <div className="cal-layout">
         {/* Left: Calendar Grid */}

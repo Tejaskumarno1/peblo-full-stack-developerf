@@ -1,31 +1,29 @@
 /**
- * EditorToolbar — Extracted from WorkspacePage.
- * Desktop-only toolbar with save status, AI toggle, focus mode, preview, and more menu.
+ * EditorToolbar: the note's top bar (breadcrumb, save state, view toggles, Ask AI, more menu).
  */
 import { memo } from 'react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import {
   PanelLeft,
   Loader2,
-  Check,
   Sparkles,
-  Monitor,
-  Edit2,
+  Maximize2,
+  Minimize2,
+  Pencil,
   Eye,
   MoreHorizontal,
   FileText,
-  Link2,
   History,
   FileDown,
   FileBadge,
   Globe,
   File,
+  ListChecks,
 } from 'lucide-react';
 
 function EditorToolbar({
   saveStatus,
   isDraft,
-  wordCount,
   showPreview,
   setShowPreview,
   moreMenuOpen,
@@ -33,132 +31,93 @@ function EditorToolbar({
   selectedNote,
   loadBackups,
   handleExport,
+  noteTitle,
+  noteTags,
 }) {
   const {
     sidebarOpen, setSidebarOpen,
     aiPanelOpen, setAiPanelOpen,
     showTodoList, setShowTodoList,
     isFocusMode, setFocusMode,
-    setIsShareModalOpen,
-    showBackups, setShowBackups
+    showBackups, setShowBackups,
   } = useWorkspaceStore();
 
+  const tag = noteTags?.[0];
+
+  let status;
+  if (saveStatus === 'saving') status = <span className="nt-save"><Loader2 size={12} className="nt-spin" /> Saving…</span>;
+  else if (saveStatus === 'error') status = <span className="nt-save bad" title="Could not save. Is Peblo still running?">Save failed</span>;
+  else if (isDraft) status = <span className="nt-save">Draft · start typing to save</span>;
+  else status = <span className="nt-save"><span className="pb-dot local" /> Saved on this device</span>;
+
   return (
-    <div className="editor-toolbar desktop-only">
-      <div className="editor-toolbar-left">
+    <div className="editor-toolbar nt-bar desktop-only">
+      <div className="nt-left">
         {!sidebarOpen && (
-          <button
-            type="button"
-            className="toolbar-btn"
-            onClick={() => setSidebarOpen(true)}
-            title="Show sidebar"
-          >
-            <PanelLeft size={14} />
+          <button type="button" className="pb-icon-btn" onClick={() => setSidebarOpen(true)} title="Show notes list" aria-label="Show notes list">
+            <PanelLeft size={16} />
           </button>
         )}
-        <span className={`save-status ${saveStatus === 'saved' ? 'saved' : ''}`}>
-          {saveStatus === 'saving' && (
-            <>
-              <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Saving…
-            </>
-          )}
-          {saveStatus === 'saved' && (
-            <>
-              <Check size={12} /> Saved
-            </>
-          )}
-          {saveStatus === 'error' && (
-            <span className="save-status-error" title="Could not save — check server is running">
-              Save failed
-            </span>
-          )}
-          {isDraft && saveStatus !== 'saving' && saveStatus !== 'saved' && (
-            <>Draft — start typing to save</>
-          )}
-        </span>
+        <nav className="nt-crumbs" aria-label="Breadcrumb">
+          <span>Notes</span>
+          {tag && <><span className="sep">/</span><span>#{tag}</span></>}
+          <span className="sep">/</span>
+          <span className="cur">{noteTitle || selectedNote?.title || 'Untitled'}</span>
+        </nav>
       </div>
-      <div className="editor-toolbar-right">
-        <div className="toolbar-group toolbar-primary-actions">
-          <div className="toolbar-stat-badge" style={{ padding: '0.25rem 0.5rem', background: 'var(--bg-elevated)', borderRadius: '6px', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.375rem', border: '1px solid var(--border-subtle)' }}>
-            <FileText size={12} /> {wordCount} words • {Math.max(1, Math.ceil(wordCount / 200))} min read
-          </div>
-          {!aiPanelOpen && (
-            <button
-              type="button"
-              className="toolbar-btn spark"
-              onClick={() => setAiPanelOpen(true)}
-              title="AI Assistant (Ctrl+J)"
-            >
-              <Sparkles size={14} /> AI
-            </button>
-          )}
-          {!isDraft && (
-            <button
-              type="button"
-              className={`toolbar-btn ${showTodoList ? 'active' : ''}`}
-              onClick={() => setShowTodoList(!showTodoList)}
-              title="View To-Do List"
-            >
-              <Check size={14} /> Tasks
-            </button>
-          )}
-        </div>
 
-        <div className="toolbar-group">
-          <button
-            type="button"
-            className={`toolbar-btn ${isFocusMode ? 'active' : ''}`}
-            onClick={() => { setFocusMode(!isFocusMode); if(!isFocusMode) setSidebarOpen(false); }}
-            title="Toggle Focus Mode"
-          >
-            <Monitor size={14} /> Focus
+      <div className="nt-right">
+        {status}
+        <span className="nt-divider" />
+        {!isDraft && (
+          <button type="button" className={`pb-btn ghost sm${showTodoList ? ' on' : ''}`} onClick={() => setShowTodoList(!showTodoList)} title="Show tasks">
+            <ListChecks size={14} /> Tasks
           </button>
-          <button
-            type="button"
-            className={`toolbar-btn ${showPreview ? 'active' : ''}`}
-            onClick={() => setShowPreview(!showPreview)}
-            title="Preview (Ctrl+P)"
-          >
-            {showPreview ? <Edit2 size={14} /> : <Eye size={14} />}
-            {showPreview ? 'Edit' : 'Preview'}
-          </button>
-        </div>
+        )}
+        <button
+          type="button"
+          className={`pb-icon-btn${isFocusMode ? ' on' : ''}`}
+          onClick={() => { setFocusMode(!isFocusMode); if (!isFocusMode) setSidebarOpen(false); }}
+          title={isFocusMode ? 'Leave focus mode' : 'Focus mode'}
+          aria-label={isFocusMode ? 'Leave focus mode' : 'Focus mode'}
+          aria-pressed={isFocusMode}
+        >
+          {isFocusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+        <button
+          type="button"
+          className={`pb-icon-btn${showPreview ? ' on' : ''}`}
+          onClick={() => setShowPreview(!showPreview)}
+          title={showPreview ? 'Edit (Ctrl+P)' : 'Preview (Ctrl+P)'}
+          aria-label={showPreview ? 'Edit note' : 'Preview note'}
+        >
+          {showPreview ? <Pencil size={15} /> : <Eye size={15} />}
+        </button>
 
         {!isDraft && (
           <div className="more-menu-wrapper" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              className={`toolbar-btn ${moreMenuOpen ? 'active' : ''}`}
-              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-              title="More actions"
-            >
-              <MoreHorizontal size={14} />
+            <button type="button" className={`pb-icon-btn${moreMenuOpen ? ' on' : ''}`} onClick={() => setMoreMenuOpen(!moreMenuOpen)} title="More" aria-label="More actions" aria-expanded={moreMenuOpen}>
+              <MoreHorizontal size={16} />
             </button>
             {moreMenuOpen && (
               <div className="export-dropdown-menu">
                 <button type="button" onClick={() => { showBackups ? setShowBackups(false) : loadBackups(); setMoreMenuOpen(false); }}>
-                  <History size={14} /> Backups
+                  <History size={14} /> Version history
                 </button>
-                <div style={{ height: '1px', background: 'var(--dash-border, var(--border-subtle))', margin: '0.25rem 0' }} />
-                <button type="button" onClick={() => { handleExport('md'); setMoreMenuOpen(false); }}>
-                  <FileDown size={14} /> Export as Markdown
-                </button>
-                <button type="button" onClick={() => { handleExport('pdf'); setMoreMenuOpen(false); }}>
-                  <FileText size={14} /> Export as PDF
-                </button>
-                <button type="button" onClick={() => { handleExport('doc'); setMoreMenuOpen(false); }}>
-                  <FileBadge size={14} /> Export as Word
-                </button>
-                <button type="button" onClick={() => { handleExport('html'); setMoreMenuOpen(false); }}>
-                  <Globe size={14} /> Export as HTML
-                </button>
-                <button type="button" onClick={() => { handleExport('txt'); setMoreMenuOpen(false); }}>
-                  <File size={14} /> Export as Plain Text
-                </button>
+                <div className="menu-sep" />
+                <button type="button" onClick={() => { handleExport('md'); setMoreMenuOpen(false); }}><FileDown size={14} /> Export as Markdown</button>
+                <button type="button" onClick={() => { handleExport('pdf'); setMoreMenuOpen(false); }}><FileText size={14} /> Export as PDF</button>
+                <button type="button" onClick={() => { handleExport('doc'); setMoreMenuOpen(false); }}><FileBadge size={14} /> Export as Word</button>
+                <button type="button" onClick={() => { handleExport('html'); setMoreMenuOpen(false); }}><Globe size={14} /> Export as HTML</button>
+                <button type="button" onClick={() => { handleExport('txt'); setMoreMenuOpen(false); }}><File size={14} /> Export as plain text</button>
               </div>
             )}
           </div>
         )}
+
+        <button type="button" className={`pb-btn soft sm${aiPanelOpen ? ' on' : ''}`} onClick={() => setAiPanelOpen(!aiPanelOpen)} title="Ask AI about this note (Ctrl+J)">
+          <Sparkles size={14} /> Ask AI
+        </button>
       </div>
     </div>
   );

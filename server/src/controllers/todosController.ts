@@ -3,8 +3,9 @@ import prisma from '../db.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
-    const { date, from, to, priority, completed } = req.query;
+    const { date, from, to, priority, completed, noteId } = req.query;
     const where: any = { userId: req.user!.id };
+    if (typeof noteId === 'string' && noteId) where.noteId = noteId;
 
     // Filter by single date
     if (date) {

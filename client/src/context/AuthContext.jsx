@@ -34,15 +34,21 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // Apply theme class to document
+  // Apply the theme: light (Paper), dark (Graphite), midnight (pure black) or follow the system.
   useEffect(() => {
-    if (theme === 'dark') {
-      document.body.classList.add('theme-dark');
-      document.documentElement.classList.add('theme-dark');
-    } else {
-      document.body.classList.remove('theme-dark');
-      document.documentElement.classList.remove('theme-dark');
-    }
+    const apply = () => {
+      const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const resolved = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
+      for (const el of [document.body, document.documentElement]) {
+        el.classList.toggle('theme-dark', resolved === 'dark' || resolved === 'midnight');
+        el.classList.toggle('theme-midnight', resolved === 'midnight');
+      }
+    };
+    apply();
+    if (theme !== 'system' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, [theme]);
 
   // Desktop app: no login. Load the single local profile (and any settings saved in the database).

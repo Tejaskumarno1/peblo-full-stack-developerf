@@ -1,44 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, CheckSquare, CornerDownLeft } from 'lucide-react';
+import { FileText, CheckSquare } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
+import { parseTask } from '../utils/parseTask';
 import '../styles/quick-capture.css';
-
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-/**
- * Pulls simple shortcuts out of a task line:
- *   "call mom tomorrow !high #family" → text "call mom", due tomorrow, high priority, tag family
- * Supports: today, tonight, tomorrow, weekday names ("friday", "next monday"), !high/!low, #tags.
- */
-export function parseTask(input) {
-  let text = ` ${input.trim()} `;
-  let priority = 'medium';
-  const tags = [];
-  let deadline = null;
-
-  text = text.replace(/\s!(high|h|urgent|low|l|medium|med|m)\b/gi, (_, p) => {
-    const v = p.toLowerCase();
-    priority = v.startsWith('h') || v === 'urgent' ? 'high' : v.startsWith('l') ? 'low' : 'medium';
-    return ' ';
-  });
-  text = text.replace(/\s#([\p{L}\p{N}_-]+)/gu, (_, t) => { tags.push(t.toLowerCase()); return ' '; });
-
-  const now = new Date();
-  const at = (d) => { const x = new Date(d); x.setHours(17, 0, 0, 0); return x; };
-  text = text.replace(/\s(today|tonight)\b/i, () => { deadline = at(now); return ' '; });
-  text = text.replace(/\s(tomorrow|tmrw|tmr)\b/i, () => { const d = new Date(now); d.setDate(d.getDate() + 1); deadline = at(d); return ' '; });
-  text = text.replace(/\s(?:on\s|next\s)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i, (m, day) => {
-    const target = WEEKDAYS.indexOf(day.toLowerCase());
-    const d = new Date(now);
-    let diff = (target - d.getDay() + 7) % 7;
-    if (diff === 0 || /next/i.test(m)) diff += diff === 0 ? 7 : 0;
-    d.setDate(d.getDate() + diff);
-    deadline = at(d);
-    return ' ';
-  });
-
-  return { text: text.replace(/\s+/g, ' ').trim(), priority, tags, deadline };
-}
 
 export default function QuickCapturePage() {
   const [mode, setMode] = useState('note'); // 'note' | 'task'
@@ -133,16 +97,25 @@ export default function QuickCapturePage() {
         autoFocus
       />
 
+      {preview && (preview.deadline || preview.priority !== 'medium' || preview.tags.length > 0) && (
+        <div className="qc-chips">
+          {preview.deadline && <span className="qc-chip accent">{preview.deadline.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · {preview.deadline.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}</span>}
+          {preview.priority !== 'medium' && <span className={`qc-chip ${preview.priority === 'high' ? 'danger' : ''}`}>{preview.priority === 'high' ? 'High priority' : 'Low priority'}</span>}
+          {preview.tags.map((t) => <span key={t} className="qc-chip">#{t}</span>)}
+        </div>
+      )}
+
       <div className="qc-footer">
         <span className={`qc-status ${status ? (status.ok ? 'ok' : 'error') : ''}`}>
           {status
             ? status.text
-            : preview
-              ? [preview.deadline && `Due ${preview.deadline.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`, preview.priority !== 'medium' && `${preview.priority} priority`, preview.tags.length && preview.tags.map((t) => `#${t}`).join(' ')].filter(Boolean).join(' · ') || 'Tip: add "tomorrow", "friday", !high or #tag'
-              : mode === 'note' ? 'Ctrl+Enter to save' : ''}
+            : mode === 'task'
+              ? 'Try "tomorrow", "friday", !high or #tag · understood on this device'
+              : 'First line is the title · Ctrl+Enter to save'}
         </span>
+        <button type="button" className="qc-cancel" onClick={close}>Cancel</button>
         <button type="button" className="qc-save" onClick={save} disabled={!value.trim() || saving}>
-          {saving ? 'Saving…' : <>Save <CornerDownLeft size={13} /></>}
+          {saving ? 'Saving…' : <>{mode === 'task' ? 'Add task' : 'Save note'} <span className="qc-kbd">{mode === 'task' ? 'Enter' : 'Ctrl Enter'}</span></>}
         </button>
       </div>
     </div>

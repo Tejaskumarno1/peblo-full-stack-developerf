@@ -240,6 +240,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     <div className="theme-preview dark"></div>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Dark</span>
                   </div>
+                  <div className={`theme-card ${theme === 'midnight' ? 'active' : ''}`} onClick={() => setTheme('midnight')}>
+                    <div className="theme-preview dark" style={{ background: '#000' }}></div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Midnight</span>
+                  </div>
                   <div className={`theme-card ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')}>
                     <div className="theme-preview system"></div>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Monitor size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> System</span>

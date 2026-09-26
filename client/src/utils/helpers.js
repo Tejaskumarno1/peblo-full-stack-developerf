@@ -15,9 +15,11 @@ export function stringToColorClass(str) {
 export function stripMarkdown(text) {
   if (!text) return '';
   return text
+    .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, ' ') // Drop table divider rows like |---|---|
+    .replace(/\|/g, ' ') // Drop table cell pipes
     .replace(/[#*_~`>]/g, '') // Remove simple markdown chars
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links but keep text
-    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Collapse newlines and runs of spaces
     .trim();
 }
 

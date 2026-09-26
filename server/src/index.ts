@@ -16,6 +16,7 @@ import aiChatRoutes from './routes/aiChat.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
 import transferRoutes from './routes/transfer.js';
+import hubRoutes from './routes/hub.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export interface StartOptions {
@@ -33,6 +34,7 @@ export function createApp(staticDir?: string) {
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/api/profile', profileRoutes);
+  app.use('/api/ai/hub', hubRoutes);
   app.use('/api/notes', notesRoutes);
   app.use('/api/notes', aiRoutes);
   app.use('/api/ai', aiRoutes);

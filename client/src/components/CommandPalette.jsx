@@ -49,23 +49,19 @@ export default function CommandPalette() {
   const navigationCommands = [
     { id: 'nav-dashboard', title: 'Go to Dashboard', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
     { id: 'nav-notes', title: 'Go to Workspace', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
-    { id: 'nav-tasks', title: 'Go to To-Do List', icon: <CheckSquare size={16} />, action: () => navigate('/todolist') },
+    { id: 'nav-tasks', title: 'Go to Tasks', icon: <CheckSquare size={16} />, action: () => navigate('/tasks') },
     { id: 'nav-cal', title: 'Go to Calendar', icon: <Calendar size={16} />, action: () => navigate('/calendar') },
-    { 
-      id: 'nav-ai', 
-      title: 'Open AI Assistant', 
-      icon: <Sparkles size={16} className="text-ai" />, 
-      action: () => {
-        // We trigger the global shortcut for AI Panel
-        const event = new KeyboardEvent('keydown', { key: 'A', shiftKey: true, metaKey: true });
-        window.dispatchEvent(event);
-      }
-    }
+    { id: 'nav-ai', title: 'Open AI Hub', icon: <Sparkles size={16} />, action: () => navigate('/ai') },
+    { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') }
   ];
 
-  const filteredCommands = query.trim()
+  const matchingCommands = query.trim()
     ? navigationCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
     : navigationCommands;
+  // Anything typed can also be asked in the AI Hub, answered from your notes.
+  const filteredCommands = query.trim().length > 2
+    ? [{ id: 'ask-ai', title: `Ask AI: "${query.trim()}"`, icon: <Sparkles size={16} />, action: () => navigate(`/ai?q=${encodeURIComponent(query.trim())}`) }, ...matchingCommands]
+    : matchingCommands;
 
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),

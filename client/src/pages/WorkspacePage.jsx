@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { notesAPI, aiAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
-import Navigation from '../components/Navigation';
 import TodoListPanel from '../components/TodoListPanel';
 import { marked } from 'marked';
 import {
@@ -13,7 +12,9 @@ import {
   PanelLeft,
 } from 'lucide-react';
 import BlockEditor from '../components/BlockEditor';
+import NoteContextPanel from '../components/workspace/NoteContextPanel';
 import '../styles/workspace.css';
+import '../styles/notes.css';
 
 // Import subcomponents for cleaner SPA loading/rendering
 import {
@@ -100,6 +101,12 @@ export default function WorkspacePage() {
     showBackups, setShowBackups,
     isShareModalOpen, setIsShareModalOpen,
   } = useWorkspaceStore();
+  // Sidebar links like /notes?tag=inbox open the list filtered by that tag.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const tag = searchParams.get('tag');
+    setFilterTag(tag || '');
+  }, [searchParams, setFilterTag]);
   const [suggestedTag, setSuggestedTag] = useState('');
   const [linkPreviews, setLinkPreviews] = useState([]);
   const [showLinkPreviews, setShowLinkPreviews] = useState(false);
@@ -842,7 +849,6 @@ export default function WorkspacePage() {
 
   return (
     <div className={`workspace-page ${settings?.compactMode ? 'compact-mode' : ''} ${isFocusMode ? 'focus-mode-active' : ''}`}>
-      {!isFocusMode && <Navigation activeTab="notes" />}
 
       <div className="ws-body">
         <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => { if (selectedNote) setSidebarOpen(false) }} />
@@ -900,6 +906,8 @@ export default function WorkspacePage() {
                   selectedNote={selectedNote}
                   loadBackups={loadBackups}
                   handleExport={handleExport}
+                  noteTitle={noteTitle}
+                  noteTags={noteTags}
                 />
 
                 <BackupsPanel
@@ -958,6 +966,13 @@ export default function WorkspacePage() {
                       />
                     )}
 
+                  </div>
+                  <div className="nt-meta">
+                    {isDraft ? 'New note' : `Edited ${formatRelativeDate(selectedNote.updatedAt)}`}
+                    <span aria-hidden="true">·</span>
+                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                    <span aria-hidden="true">·</span>
+                    {Math.max(1, Math.ceil(wordCount / 200))} min read
                   </div>
                 </div>
 
@@ -1029,8 +1044,7 @@ export default function WorkspacePage() {
                     )}
 
                     <div className="editor-footer">
-                      <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-                      <span>Ctrl+S save · Ctrl+K search</span>
+                      <span>Ctrl+S save · Ctrl+K search · Ctrl+J ask AI</span>
                     </div>
                   </div>
 
@@ -1049,6 +1063,19 @@ export default function WorkspacePage() {
                     wsChatLoading={wsChatLoading}
                     handleWsChatSubmit={handleWsChatSubmit}
                   />
+
+                  {!aiPanelOpen && !isFocusMode && (
+                    <NoteContextPanel
+                      note={selectedNote}
+                      noteTitle={noteTitle}
+                      notes={notes}
+                      isDraft={isDraft}
+                      onSummarise={() => { setAiPanelTab('assist'); setAiPanelOpen(true); generateAIContent('summary'); }}
+                      onGetTasks={() => { setAiPanelTab('assist'); setAiPanelOpen(true); generateAIContent('actions'); }}
+                      onSelectNote={selectNote}
+                      onHistory={loadBackups}
+                    />
+                  )}
                 </div>
               </div>
 

@@ -50,3 +50,8 @@ export const todosAPI = {
 export const transferAPI = {
   importFiles: (formData) => api.post('/import', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10 * 60 * 1000 })
 };
+
+export const hubAPI = {
+  models: () => api.get('/ai/hub/models'),
+  search: (query, noteIds) => api.post('/ai/hub/search', { query, noteIds })
+};
