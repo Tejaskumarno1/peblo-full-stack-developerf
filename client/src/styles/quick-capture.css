@@ -1,0 +1,119 @@
+/* Quick capture window — a small frameless box opened with Ctrl/Cmd+Shift+Space */
+body.quick-capture-body {
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.qc-root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem 0.8rem;
+  box-sizing: border-box;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: var(--border-strong);
+  border-radius: 12px;
+  -webkit-app-region: drag; /* move the frameless window by dragging empty space */
+}
+
+.qc-root button,
+.qc-root textarea {
+  -webkit-app-region: no-drag;
+}
+
+.qc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qc-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+}
+
+.qc-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.qc-tabs button.active {
+  background: var(--bg-surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.qc-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.qc-input {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.qc-input::placeholder {
+  color: var(--text-muted);
+}
+
+.qc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.qc-status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-status.ok { color: var(--success); font-weight: 600; }
+.qc-status.error { color: var(--error); font-weight: 600; }
+
+.qc-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qc-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

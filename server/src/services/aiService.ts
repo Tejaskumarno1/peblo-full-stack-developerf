@@ -19,79 +19,175 @@ async function getUserSettings(userId: string) {
   });
 }
 
-function getOpenAIInstance(user: any) {
+/** An OpenAI-compatible chat provider: OpenAI itself, or a local Ollama server. */
+export interface OAIProvider {
+  name: 'openai' | 'ollama';
+  client: OpenAI;
+  model: string;
+  embedModel: string;
+}
+
+type ProviderName = 'openai' | 'gemini' | 'ollama';
+
+function getOpenAIProvider(user: any): OAIProvider | null {
   const settings = user?.settings as any || {};
-  const forceCustomModels = settings.forceCustomModels === true;
   const key = user?.apiKeys?.openAiKey?.trim();
-  
-  if (key) return new OpenAI({ apiKey: key });
-  if (forceCustomModels) return null;
-  
-  const envKey = process.env.OPENAI_API_KEY?.trim();
-  if (!envKey || envKey.includes('your-openai')) return null;
-  return new OpenAI({ apiKey: envKey });
+  let apiKey = key;
+  if (!apiKey && settings.forceCustomModels !== true) {
+    const envKey = process.env.OPENAI_API_KEY?.trim();
+    if (envKey && !envKey.includes('your-openai')) apiKey = envKey;
+  }
+  if (!apiKey) return null;
+  return { name: 'openai', client: new OpenAI({ apiKey }), model: p.model, embedModel: 'text-embedding-3-small' };
+}
+
+export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
+export const DEFAULT_OLLAMA_MODEL = 'llama3.2';
+export const DEFAULT_OLLAMA_EMBED_MODEL = 'nomic-embed-text';
+
+/** Local AI through Ollama (https://ollama.com), which speaks the OpenAI API on /v1. Nothing leaves the computer. */
+function getOllamaProvider(user: any): OAIProvider | null {
+  const settings = user?.settings as any || {};
+  if (settings.ollamaEnabled !== true) return null;
+  const base = String(settings.ollamaUrl || DEFAULT_OLLAMA_URL).trim().replace(/\/+$/, '');
+  return {
+    name: 'ollama',
+    client: new OpenAI({ baseURL: `${base}/v1`, apiKey: 'ollama', timeout: 5 * 60 * 1000 }),
+    model: String(settings.ollamaModel || DEFAULT_OLLAMA_MODEL).trim(),
+    embedModel: String(settings.ollamaEmbedModel || DEFAULT_OLLAMA_EMBED_MODEL).trim(),
+  };
 }
 
 function getGeminiInstance(user: any) {
   const settings = user?.settings as any || {};
   const forceCustomModels = settings.forceCustomModels === true;
   const key = user?.apiKeys?.geminiKey?.trim();
-  
+
   if (key) return new GoogleGenerativeAI(key);
   if (forceCustomModels) return null;
-  
+
   const keysStr = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
   const keys = keysStr.split(',').map(k => k.trim()).filter(k => k && k !== 'your-gemini-api-key-here');
   if (keys.length === 0) return null;
   return new GoogleGenerativeAI(keys[0]);
 }
 
-// --- The Core Orchestrator (OpenAI -> Gemini -> Mock) ---
+/** Which providers to try, in order, based on Settings → AI Providers → default model. */
+function providerOrder(user: any): ProviderName[] {
+  const choice = (user?.settings as any)?.defaultAiModel || 'auto';
+  if (choice === 'ollama') return ['ollama', 'openai', 'gemini'];
+  if (choice === 'gemini') return ['gemini', 'openai', 'ollama'];
+  return ['openai', 'gemini', 'ollama'];
+}
+
+function noKeyError() {
+  const err: any = new Error('No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in Settings → AI Providers.');
+  err.statusCode = 400;
+  err.code = 'NO_AI_KEY';
+  return err;
+}
+
+// --- The Core Orchestrator: tries each configured provider in order ---
 async function runWithCascade(
   operationName: string,
   userId: string,
-  executeOpenAI: (openai: OpenAI) => Promise<any>,
+  executeOpenAI: (openai: OpenAI, p: OAIProvider) => Promise<any>,
   executeGemini: (gemini: GoogleGenerativeAI) => Promise<any>
 ): Promise<any> {
   const user = await getUserSettings(userId);
-  const settings = user?.settings as any || {};
-  const defaultModel = settings.defaultAiModel || 'auto';
-  
-  const openai = getOpenAIInstance(user);
-  const gemini = getGeminiInstance(user);
-  
-  // Decide order based on defaultModel
-  const order = defaultModel === 'gemini' ? ['gemini', 'openai'] : ['openai', 'gemini'];
-  
-  for (const provider of order) {
-    if (provider === 'openai' && openai) {
-      try {
-        console.log(`[${operationName}] Trying OpenAI...`);
-        return await executeOpenAI(openai);
-      } catch (error: any) {
-        console.warn(`[${operationName}] OpenAI failed: ${error.message}.`);
-      }
-    }
-    
-    if (provider === 'gemini' && gemini) {
-      try {
+  const providers = {
+    openai: getOpenAIProvider(user),
+    ollama: getOllamaProvider(user),
+    gemini: getGeminiInstance(user),
+  };
+
+  if (!providers.openai && !providers.ollama && !providers.gemini) throw noKeyError();
+
+  for (const name of providerOrder(user)) {
+    try {
+      if (name === 'gemini' && providers.gemini) {
         console.log(`[${operationName}] Trying Gemini...`);
-        return await executeGemini(gemini);
-      } catch (error: any) {
-        console.warn(`[${operationName}] Gemini Error (${error.message}).`);
+        return await executeGemini(providers.gemini);
       }
+      if ((name === 'openai' || name === 'ollama') && providers[name]) {
+        const p = providers[name]!;
+        console.log(`[${operationName}] Trying ${p.name} (${p.model})...`);
+        return await executeOpenAI(p.client, p);
+      }
+    } catch (error: any) {
+      console.warn(`[${operationName}] ${name} failed: ${error.message}`);
     }
   }
 
-  if (!openai && !gemini) {
-    const err: any = new Error('No AI key set. Add an OpenAI or Gemini API key in Settings → AI Providers.');
-    err.statusCode = 400;
-    err.code = 'NO_AI_KEY';
-    throw err;
-  }
+  throw new Error('The AI request failed. Check Settings → AI Providers: your API key may be invalid or out of credit, or Ollama may not be running.');
+}
 
-  console.warn(`[${operationName}] All AI providers failed.`);
-  throw new Error('The AI request failed. Check that your API key in Settings → AI Providers is valid and has credit.');
+/** Ask for a JSON object from whichever provider is configured. */
+async function completeJSON(operationName: string, userId: string, system: string, prompt: string): Promise<any> {
+  return runWithCascade(operationName, userId,
+    async (openai, p) => {
+      const response = await openai.chat.completions.create({
+        model: p.model,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: `${system}\nRespond with valid JSON only.` },
+          { role: 'user', content: prompt },
+        ],
+      });
+      return parseJSONLoose(response.choices[0].message.content || '{}');
+    },
+    async (gemini) => {
+      const model = gemini.getGenerativeModel({ model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL, systemInstruction: system });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      return parseJSONLoose(result.response.text());
+    }
+  );
+}
+
+/** Ask for plain text from whichever provider is configured. */
+async function completeText(operationName: string, userId: string, system: string, prompt: string): Promise<string> {
+  return runWithCascade(operationName, userId,
+    async (openai, p) => {
+      const response = await openai.chat.completions.create({
+        model: p.model,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+      });
+      return (response.choices[0].message.content || '').trim();
+    },
+    async (gemini) => {
+      const model = gemini.getGenerativeModel({ model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL, systemInstruction: system });
+      const result = await model.generateContent(prompt);
+      return result.response.text().trim();
+    }
+  );
+}
+
+function parseJSONLoose(text: string): any {
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error('AI returned invalid JSON');
+  }
+}
+
+/** Lists models installed in the user's Ollama, to check the connection from Settings. */
+export async function checkOllama(url?: string): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  const base = String(url || DEFAULT_OLLAMA_URL).trim().replace(/\/+$/, '');
+  try {
+    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return { ok: false, models: [], error: `Ollama answered with HTTP ${res.status}` };
+    const data: any = await res.json();
+    return { ok: true, models: (data.models || []).map((m: any) => m.name) };
+  } catch (err: any) {
+    return { ok: false, models: [], error: `Could not reach Ollama at ${base}. Is it installed and running?` };
+  }
 }
 
 // --- Specific Service Functions ---
@@ -100,9 +196,9 @@ export async function generateSummary(userId: string, title: string, content: st
   try {
     return await runWithCascade('AI Summary', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "You are an elite executive assistant. Your summaries must be extremely dense, removing all fluff, and providing only high-signal information. Respond in JSON format with a 'summary' key." },
@@ -137,9 +233,9 @@ export async function extractActionItems(userId: string, title: string, content:
   try {
     return await runWithCascade('AI Action Items', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "You are a ruthless project manager. Identify every single implicit or explicit task, assignment, or next step mentioned in the text. Be specific and action-oriented. Respond in JSON format with an 'action_items' array of strings." },
@@ -208,9 +304,9 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   try {
     return await runWithCascade('AI Chat', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
@@ -312,50 +408,13 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   const userPrompt = `Context:\n${titlesContext}\n\nUser message: "${message}"\n\nMode: ${modeHint}`;
 
   const user = await getUserSettings(userId);
-  const gemini = getGeminiInstance(user);
-  if (!gemini) throw new Error('No Gemini API key available');
-  
-  const model = gemini.getGenerativeModel({
-    model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
-    systemInstruction: systemPrompt
-  });
-
-  const result = await model.generateContentStream({
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: SchemaType.OBJECT,
-        properties: {
-          reply: { type: SchemaType.STRING },
-          notes: {
-            type: SchemaType.ARRAY,
-            items: {
-              type: SchemaType.OBJECT,
-              properties: {
-                title: { type: SchemaType.STRING },
-                content: { type: SchemaType.STRING },
-                category: { type: SchemaType.STRING },
-                tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
-              },
-              required: ["title", "content", "category", "tags"]
-            }
-          },
-          updateNote: {
-            type: SchemaType.OBJECT,
-            properties: {
-              noteId: { type: SchemaType.STRING },
-              appendContent: { type: SchemaType.STRING },
-              replaceContent: { type: SchemaType.STRING }
-            },
-            required: ["noteId"],
-            nullable: true
-          }
-        },
-        required: ["reply", "notes"]
-      }
-    }
-  });
+  const providers: Record<ProviderName, any> = {
+    openai: getOpenAIProvider(user),
+    ollama: getOllamaProvider(user),
+    gemini: getGeminiInstance(user),
+  };
+  const chosen = providerOrder(user).find((n) => providers[n]);
+  if (!chosen) throw noKeyError();
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -364,15 +423,77 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   });
 
   let fullResponse = '';
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    fullResponse += chunkText;
-    res.write(`data: ${JSON.stringify({ chunk: chunkText })}\n\n`);
+
+  if (chosen === 'gemini') {
+    const model = providers.gemini.getGenerativeModel({
+      model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+      systemInstruction: systemPrompt
+    });
+
+    const result = await model.generateContentStream({
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            reply: { type: SchemaType.STRING },
+            notes: {
+              type: SchemaType.ARRAY,
+              items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  title: { type: SchemaType.STRING },
+                  content: { type: SchemaType.STRING },
+                  category: { type: SchemaType.STRING },
+                  tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+                },
+                required: ["title", "content", "category", "tags"]
+              }
+            },
+            updateNote: {
+              type: SchemaType.OBJECT,
+              properties: {
+                noteId: { type: SchemaType.STRING },
+                appendContent: { type: SchemaType.STRING },
+                replaceContent: { type: SchemaType.STRING }
+              },
+              required: ["noteId"],
+              nullable: true
+            }
+          },
+          required: ["reply", "notes"]
+        }
+      }
+    });
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      fullResponse += chunkText;
+      res.write(`data: ${JSON.stringify({ chunk: chunkText })}\n\n`);
+    }
+  } else {
+    const p: OAIProvider = providers[chosen];
+    const stream = await p.client.chat.completions.create({
+      model: p.model,
+      stream: true,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+    for await (const part of stream) {
+      const chunkText = part.choices[0]?.delta?.content || '';
+      if (!chunkText) continue;
+      fullResponse += chunkText;
+      res.write(`data: ${JSON.stringify({ chunk: chunkText })}\n\n`);
+    }
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(fullResponse);
+    parsed = parseJSONLoose(fullResponse);
   } catch (e) {
     parsed = { reply: 'Error parsing AI response', notes: [], updateNote: null };
   }
@@ -388,9 +509,9 @@ export async function suggestTitle(userId: string, content: string) {
   try {
     return await runWithCascade('AI Title', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "You are an expert copywriter. Your titles must be extremely engaging, clear, concise (3-8 words), and perfectly capture the core essence of the note. Respond in JSON format with a 'suggested_title' string." },
@@ -468,9 +589,9 @@ Respond ONLY in valid JSON.`;
   try {
     return await runWithCascade('Smart Intake', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
@@ -568,7 +689,7 @@ export async function processTextCommand(userId: string, text: string, command: 
   try {
     return await runWithCascade('AI Text Command', userId,
       // OpenAI
-      async (openai) => {
+      async (openai, p) => {
         let systemInstruction = "You are a helpful AI writing assistant.";
         let prompt = "";
         if (command === 'summarize') {
@@ -585,7 +706,7 @@ export async function processTextCommand(userId: string, text: string, command: 
         }
 
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           messages: [
             { role: "system", content: systemInstruction },
             { role: "user", content: prompt }
@@ -631,9 +752,9 @@ export async function processTextCommand(userId: string, text: string, command: 
 export async function generateEmbedding(userId: string, text: string): Promise<number[]> {
   try {
     return await runWithCascade('AI Embedding', userId,
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.embeddings.create({
-          model: 'text-embedding-3-small',
+          model: p.embedModel,
           input: text
         });
         return response.data[0].embedding;
@@ -657,11 +778,6 @@ export async function generateEmbedding(userId: string, text: string): Promise<n
 }
 
 export async function extractSmartIntake(userId: string, text: string): Promise<any> {
-  const user = await getUserSettings(userId);
-  const model = getGeminiInstance(user);
-  if (!model) return { title: 'Unknown Import', category: 'uncategorized', summary: text.slice(0, 100), actionItems: [] };
-  
-  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
   const prompt = `Analyze this text and return ONLY valid JSON:
 {
   "title": "A concise title",
@@ -672,14 +788,11 @@ export async function extractSmartIntake(userId: string, text: string): Promise<
 
 Text:
 ${text}`;
-
   try {
-    const result = await m.generateContent(prompt);
-    let output = result.response.text();
-    output = output.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(output);
-  } catch (err) {
-    console.error('Gemini Smart Intake Error:', err);
+    return await completeJSON('Smart Intake Extract', userId, 'You extract structure from raw text.', prompt);
+  } catch (err: any) {
+    if (err?.code === 'NO_AI_KEY') return { title: 'Unknown Import', category: 'uncategorized', summary: text.slice(0, 100), actionItems: [] };
+    console.error('Smart Intake Error:', err);
     return { title: 'New Import', category: 'uncategorized', summary: 'Failed to process.', actionItems: [] };
   }
 }
@@ -692,11 +805,6 @@ export async function processVoiceCallCommand(
   localTime?: string, 
   timezone?: string
 ): Promise<any> {
-  const user = await getUserSettings(userId);
-  const model = getGeminiInstance(user);
-  if (!model) return { message: "AI not configured." };
-  
-  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
   const tasksContext = JSON.stringify(currentTasks.map(t => ({ id: t.id, text: t.text, deadline: t.deadline })));
   const notesContext = JSON.stringify(currentNotes.map(n => ({ id: n.id, title: n.title })));
   
@@ -739,22 +847,15 @@ Return ONLY a valid JSON object matching this structure:
 }`;
 
   try {
-    const result = await m.generateContent(prompt);
-    let output = result.response.text();
-    output = output.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(output);
-  } catch (err) {
-    console.error('Gemini Voice Call Error:', err);
+    return await completeJSON('Voice Command', userId, 'You are a helpful AI voice assistant for a productivity app.', prompt);
+  } catch (err: any) {
+    if (err?.code === 'NO_AI_KEY') return { responseSpeech: 'AI is not set up yet. Add a key or turn on Local AI in Settings.', actions: [], needClarification: false };
+    console.error('Voice Call Error:', err);
     return { responseSpeech: "Sorry, I couldn't process that command.", actions: [], needClarification: false };
   }
 }
 
 export async function generateVerbalNoteSummary(userId: string, title: string, content: string): Promise<string> {
-  const user = await getUserSettings(userId);
-  const model = getGeminiInstance(user);
-  if (!model) return "No content found.";
-  
-  const m = model.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
   const prompt = `You are a voice assistant summarizing a note for a user over a voice call.
 The note title is: "${title}"
 The note content is:
@@ -763,10 +864,9 @@ ${content}
 Please provide a highly concise, 1-2 sentence speech-friendly summary of this note to read back to the user. Do not include markdown formatting, bullet points, or special characters (like asterisks). Keep it clear and natural.`;
 
   try {
-    const result = await m.generateContent(prompt);
-    return result.response.text().trim();
+    return await completeText('Verbal Summary', userId, 'You are a concise voice assistant.', prompt);
   } catch (err) {
-    console.error('Gemini Note Summary Error:', err);
+    console.error('Note Summary Error:', err);
     return "The note content could not be read.";
   }
 }
@@ -775,9 +875,9 @@ export async function suggestTag(userId: string, title: string, content: string)
   try {
     return await runWithCascade('AI Suggest Tag', userId,
       // OpenAI Implementation
-      async (openai) => {
+      async (openai, p) => {
         const response = await openai.chat.completions.create({
-          model: DEFAULT_OPENAI_MODEL,
+          model: p.model,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "Analyze the note content and suggest a single, most relevant one-word tag (like 'Work', 'Personal', 'Ideas', 'Finance', 'Study', 'Recipe', etc.) that best categorizes it. Respond in JSON format with a 'suggested_tag' key." },

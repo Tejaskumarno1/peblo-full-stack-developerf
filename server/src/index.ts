@@ -15,6 +15,7 @@ import aiRoutes from './routes/ai.js';
 import aiChatRoutes from './routes/aiChat.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
+import transferRoutes from './routes/transfer.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export interface StartOptions {
@@ -38,6 +39,7 @@ export function createApp(staticDir?: string) {
   app.use('/api/ai', aiChatRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/todos', todosRoutes);
+  app.use('/api', transferRoutes);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

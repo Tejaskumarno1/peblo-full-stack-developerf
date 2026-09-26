@@ -2,7 +2,7 @@
 //
 // Runs the Express API in-process on a random localhost port, stores everything in a
 // SQLite file inside the OS app-data folder, and shows the React UI in a window.
-const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog, globalShortcut, Tray, nativeImage, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -20,7 +20,43 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let mainWindow = null;
+let captureWindow = null;
+let tray = null;
 let serverPort = null;
+let isQuitting = false;
+let trayHintShown = false;
+
+const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
+const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
+
+function appUrl(route = '/') {
+  const base = DEV_URL || `http://127.0.0.1:${serverPort}`;
+  return base.replace(/\/$/, '') + route;
+}
+
+function isInternal(target) {
+  try {
+    const u = new URL(target);
+    return u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+/** Shared safety settings for every window: external links open in the normal browser. */
+function secureWebContents(win) {
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (isInternal(target)) return { action: 'allow' };
+    if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, target) => {
+    if (!isInternal(target)) {
+      event.preventDefault();
+      if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
+    }
+  });
+}
 
 /** Path inside the app bundle, pointing at the unpacked copy for files that must live on disk. */
 function resourcePath(...parts) {
@@ -66,7 +102,7 @@ function createWindow() {
     show: false,
     title: 'Peblo',
     backgroundColor: '#f7f7f8',
-    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    icon: ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -77,38 +113,105 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
-
-  const url = DEV_URL || `http://127.0.0.1:${serverPort}/`;
-  mainWindow.loadURL(url);
-
-  // Links to other websites open in the user's normal browser, not inside the app.
-  const isInternal = (target) => {
-    try {
-      const u = new URL(target);
-      return (u.hostname === '127.0.0.1' || u.hostname === 'localhost');
-    } catch {
-      return false;
-    }
-  };
-  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (isInternal(target)) return { action: 'allow' };
-    if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
-    return { action: 'deny' };
-  });
-  mainWindow.webContents.on('will-navigate', (event, target) => {
-    if (!isInternal(target)) {
-      event.preventDefault();
-      if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
-    }
-  });
+  mainWindow.loadURL(appUrl('/'));
+  secureWebContents(mainWindow);
 
   // Microphone for voice notes / AI voice calls; nothing else is granted.
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(['media', 'clipboard-sanitized-write', 'notifications'].includes(permission));
   });
 
+  // Closing the window keeps Peblo running in the tray so quick capture keeps working.
+  mainWindow.on('close', (event) => {
+    if (isQuitting || !tray) return;
+    event.preventDefault();
+    mainWindow.hide();
+    if (!trayHintShown && Notification.isSupported()) {
+      trayHintShown = true;
+      new Notification({
+        title: 'Peblo is still running',
+        body: `Press ${process.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+Space anywhere to capture a note or task. Quit from the tray icon.`,
+        icon: ICON_PATH,
+      }).show();
+    }
+  });
+
   if (DEV_URL) mainWindow.webContents.openDevTools({ mode: 'detach' });
   mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+function showMainWindow(route) {
+  if (!mainWindow) createWindow();
+  if (route) mainWindow.loadURL(appUrl(route));
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+// ── Quick capture: a small always-on-top box, opened with a global shortcut ──
+function createCaptureWindow() {
+  captureWindow = new BrowserWindow({
+    width: 620,
+    height: 230,
+    show: false,
+    frame: false,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: '#ffffff',
+    title: 'Quick capture',
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
+  });
+  captureWindow.loadURL(appUrl('/quick-capture'));
+  secureWebContents(captureWindow);
+
+  // The page calls window.close() when done; keep the window around (hidden) so it opens instantly next time.
+  captureWindow.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    captureWindow.hide();
+  });
+  captureWindow.on('blur', () => {
+    if (captureWindow && !captureWindow.webContents.isDevToolsOpened()) captureWindow.hide();
+  });
+  captureWindow.on('closed', () => { captureWindow = null; });
+}
+
+function toggleCapture() {
+  if (!captureWindow) createCaptureWindow();
+  if (captureWindow.isVisible()) {
+    captureWindow.hide();
+    return;
+  }
+  // Center on the screen the mouse is on, a little above the middle.
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const { x, y, width, height } = display.workArea;
+  const [w, h] = captureWindow.getSize();
+  captureWindow.setPosition(Math.round(x + (width - w) / 2), Math.round(y + height * 0.28));
+  captureWindow.show();
+  captureWindow.focus();
+}
+
+function createTray() {
+  const image = nativeImage.createFromPath(ICON_PATH).resize({ width: process.platform === 'darwin' ? 18 : 16 });
+  tray = new Tray(image);
+  tray.setToolTip('Peblo');
+  const menu = Menu.buildFromTemplate([
+    { label: 'Open Peblo', click: () => showMainWindow() },
+    { label: 'Quick capture', accelerator: CAPTURE_SHORTCUT, click: () => toggleCapture() },
+    { type: 'separator' },
+    { label: 'Notes', click: () => showMainWindow('/notes') },
+    { label: 'To-dos', click: () => showMainWindow('/todolist') },
+    { label: 'Calendar', click: () => showMainWindow('/calendar') },
+    { type: 'separator' },
+    { label: 'Quit Peblo', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('click', () => showMainWindow());
 }
 
 function buildMenu() {
@@ -132,6 +235,11 @@ function buildMenu() {
       label: 'Help',
       submenu: [
         {
+          label: 'Quick Capture',
+          accelerator: CAPTURE_SHORTCUT,
+          click: () => toggleCapture(),
+        },
+        {
           label: 'Open Data Folder',
           click: () => shell.openPath(app.getPath('userData')),
         },
@@ -141,12 +249,9 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-});
+app.on('second-instance', () => showMainWindow());
+app.on('before-quit', () => { isQuitting = true; });
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.whenReady().then(async () => {
   try {
@@ -160,6 +265,16 @@ app.whenReady().then(async () => {
   }
   buildMenu();
   createWindow();
+  try {
+    createTray();
+  } catch (err) {
+    console.warn('Tray not available:', err.message); // some Linux desktops have no tray
+  }
+  if (!globalShortcut.register(CAPTURE_SHORTCUT, toggleCapture)) {
+    console.warn(`Could not register ${CAPTURE_SHORTCUT} (another app may be using it).`);
+  }
+  // Pre-load the capture box in the background so the shortcut feels instant.
+  setTimeout(() => { if (!captureWindow) createCaptureWindow(); }, 3000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -167,5 +282,6 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // With a tray icon Peblo keeps running in the background; without one, quit as usual.
+  if (process.platform !== 'darwin' && !tray) app.quit();
 });

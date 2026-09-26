@@ -279,7 +279,11 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    res.write(`data: ${JSON.stringify({ error: 'AI processing failed' })}\n\n`);
+    if (!res.headersSent) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+    }
+    const message = (error as any)?.code === 'NO_AI_KEY' ? (error as any).message : 'AI processing failed';
+    res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
     res.end();
   }
 }

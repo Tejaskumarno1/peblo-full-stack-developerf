@@ -23,6 +23,7 @@ export const aiAPI = {
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
   suggestTag: (id, data, config) => api.post(`/notes/${id}/ai/tags`, data, config),
   linkPreview: (url) => api.get('/ai/link-preview', { params: { url } }),
+  ollamaCheck: (url) => api.get('/ai/ollama/check', { params: { url } }),
   chat: (data, config) => api.post('/ai/chat', data, config),
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
   smartIntakeUpload: (formData, config) => api.post('/ai/smart-intake-upload', formData, config),
@@ -44,4 +45,8 @@ export const todosAPI = {
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   delete: (id) => api.delete(`/todos/${id}`)
+};
+
+export const transferAPI = {
+  importFiles: (formData) => api.post('/import', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10 * 60 * 1000 })
 };

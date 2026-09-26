@@ -13,10 +13,18 @@ There are no accounts and no sign-in. Everything is stored on your computer, in 
 - **Dashboard**: daily briefing, weekly report, activity heatmap and writing streak.
 - **AI assistant**: context-aware chat, slash commands (`/summarize`, `/actions`, `/rewrite`, `/fix`), Smart Intake (paste a braindump and get organized notes and tasks back), and voice commands.
 - **Command palette**: `Ctrl + K` (or `Cmd + K` on Mac).
+- **Quick capture, from anywhere**: press `Ctrl + Shift + Space` (`Cmd + Shift + Space` on Mac) in any app. A small box pops up for a note or a task. Tasks understand `tomorrow`, `friday`, `!high` and `#tag`. Press `Tab` to switch between note and task, and `Esc` to close. Peblo keeps running in the system tray so the shortcut always works; quit it from the tray icon.
+- **Import from Notion, Obsidian or Markdown**: **Settings → Your Data → Import**. Pick a Notion *Markdown & CSV* export (`.zip`), a zipped Obsidian vault, or `.md` files. Titles, tags and dates carry over, and Notion databases become tables. Images are skipped for now.
+- **Export everything**: **Settings → Your Data → Export** downloads every note as Markdown in a `.zip`.
 
-### AI keys
+### AI: your key, or fully local
 
-AI features need your own API key from **OpenAI** or **Google Gemini**. Add it in **Settings → AI Providers**. The key is saved in the local database and is only sent to that provider when you use an AI feature. Everything else works fully offline.
+In **Settings → AI Providers** you can:
+
+- paste an **OpenAI** or **Google Gemini** API key. It's saved in the local database and only sent to that provider when you use an AI feature; or
+- turn on **Local AI (Ollama)** to run models on your own computer, private and offline. Install [Ollama](https://ollama.com), run `ollama pull llama3.2` and `ollama pull nomic-embed-text`, then click **Test connection**.
+
+Pick which one Peblo tries first. If it fails, Peblo falls back to any other one you've set up. Everything that isn't AI works fully offline anyway.
 
 ### Where your data lives
 

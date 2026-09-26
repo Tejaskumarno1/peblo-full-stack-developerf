@@ -7,6 +7,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const TodoListPage = lazy(() => import('./pages/TodoListPage'));
+const QuickCapturePage = lazy(() => import('./pages/QuickCapturePage'));
 
 // Lazy loaded heavy components for the Authenticated Shell
 const AiChatPanel = lazy(() => import('./components/AiChatPanel'));
@@ -94,6 +95,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/quick-capture" element={<QuickCapturePage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
     </Suspense>

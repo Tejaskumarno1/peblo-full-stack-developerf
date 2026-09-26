@@ -1,5 +1,7 @@
 import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { aiAPI, transferAPI } from '../api';
+import { useQueryClient } from '@tanstack/react-query';
 import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
@@ -20,10 +22,56 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
   const [defaultAiModel, setDefaultAiModel] = useState(settings?.defaultAiModel || 'auto');
   const [forceCustomModels, setForceCustomModels] = useState(settings?.forceCustomModels || false);
   const [isAiDropdownOpen, setIsAiDropdownOpen] = useState(false);
+  const [ollamaEnabled, setOllamaEnabled] = useState(settings?.ollamaEnabled || false);
+  const [ollamaUrl, setOllamaUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
+  const [ollamaModel, setOllamaModel] = useState(settings?.ollamaModel || 'llama3.2');
+  const [ollamaEmbedModel, setOllamaEmbedModel] = useState(settings?.ollamaEmbedModel || 'nomic-embed-text');
+  const [ollamaStatus, setOllamaStatus] = useState(null); // { ok, models, error }
+  const [ollamaChecking, setOllamaChecking] = useState(false);
+  const queryClient = useQueryClient();
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { ok, text }
+
+  const handleImport = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      files.forEach((f) => form.append('files', f));
+      const { data } = await transferAPI.importFiles(form);
+      const extras = [];
+      if (data.skippedImages) extras.push(`${data.skippedImages} image${data.skippedImages === 1 ? '' : 's'} skipped`);
+      if (data.skippedFiles?.length) extras.push(`${data.skippedFiles.length} unsupported file${data.skippedFiles.length === 1 ? '' : 's'} skipped`);
+      setImportResult({
+        ok: true,
+        text: `Imported ${data.imported} note${data.imported === 1 ? '' : 's'}${extras.length ? ` (${extras.join(', ')})` : ''}. They're tagged "imported".`,
+      });
+      queryClient.invalidateQueries();
+    } catch (err) {
+      setImportResult({ ok: false, text: err.response?.data?.error || 'Import failed. Make sure it is a Notion "Markdown & CSV" export or Markdown files.' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const checkOllama = async () => {
+    setOllamaChecking(true);
+    try {
+      const { data } = await aiAPI.ollamaCheck(ollamaUrl);
+      setOllamaStatus(data);
+    } catch {
+      setOllamaStatus({ ok: false, models: [], error: 'Could not check Ollama.' });
+    } finally {
+      setOllamaChecking(false);
+    }
+  };
 
   const handleSaveApiKeys = (e) => {
     e.preventDefault();
-    updateSettings({ openAiKey, geminiKey, groqKey, huggingFaceKey, defaultAiModel, forceCustomModels });
+    updateSettings({ openAiKey, geminiKey, defaultAiModel, ollamaEnabled, ollamaUrl: ollamaUrl.trim(), ollamaModel: ollamaModel.trim(), ollamaEmbedModel: ollamaEmbedModel.trim() });
     setSaveSuccess('AI Settings saved successfully!');
     setTimeout(() => setSaveSuccess(''), 3000);
   };
@@ -375,6 +423,34 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   </p>
                 </div>
               </div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Import</h3>
+              <div className="settings-toggle-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-toggle-info">
+                  <h4>From Notion, Obsidian or Markdown</h4>
+                  <p>
+                    In Notion: <strong>Settings → Export all workspace content</strong> (or <em>••• → Export</em> on a page), choose
+                    <strong> Markdown &amp; CSV</strong>, then pick the downloaded <code>.zip</code> here. Obsidian vaults (zipped) and
+                    loose <code>.md</code> files work too. Pages keep their titles and tags; databases become tables. Images aren't imported yet.
+                  </p>
+                  {importResult && (
+                    <p style={{ marginTop: '0.5rem', fontWeight: 500, color: importResult.ok ? 'var(--success)' : '#ef4444' }}>{importResult.text}</p>
+                  )}
+                </div>
+                <label className="btn btn-primary" style={{ whiteSpace: 'nowrap', cursor: importing ? 'wait' : 'pointer', opacity: importing ? 0.7 : 1 }}>
+                  {importing ? 'Importing…' : 'Choose files…'}
+                  <input type="file" multiple accept=".zip,.md,.markdown,.txt,.csv" style={{ display: 'none' }} onChange={handleImport} disabled={importing} />
+                </label>
+              </div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Export</h3>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4>All notes as Markdown</h4>
+                  <p>Download every note as a <code>.md</code> file in one <code>.zip</code>. It opens in any editor, Obsidian or Notion, so you're never locked in.</p>
+                </div>
+                <a className="btn btn-outline" href="/api/export" download style={{ whiteSpace: 'nowrap' }}>Export .zip</a>
+              </div>
             </div>
           )}
 
@@ -382,7 +458,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">AI Providers & Models</h2>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Connect your own API keys to use custom models. Keys are stored securely in your browser and are never sent to our servers except when proxying requests.
+                Use your own OpenAI or Gemini key, or run AI completely on this computer with Ollama. Keys are stored in Peblo's local database and only sent to the provider you use.
               </p>
 
               <form onSubmit={handleSaveApiKeys}>
@@ -395,11 +471,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                       onClick={() => setIsAiDropdownOpen(!isAiDropdownOpen)}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {defaultAiModel === 'auto' && <><Zap size={16} /> Auto-Detect (Uses best available key)</>}
+                        {defaultAiModel === 'auto' && <><Zap size={16} /> Auto (OpenAI → Gemini → Local)</>}
                         {defaultAiModel === 'openai' && <><Bot size={16} /> OpenAI (GPT-4 / GPT-3.5)</>}
                         {defaultAiModel === 'gemini' && <><Sparkles size={16} /> Google Gemini</>}
-                        {defaultAiModel === 'groq' && <><Rocket size={16} /> Groq (Llama 3)</>}
-                        {defaultAiModel === 'huggingface' && <><Box size={16} /> Hugging Face</>}
+                        {defaultAiModel === 'ollama' && <><Cpu size={16} /> Local AI (Ollama): private, works offline</>}
                       </div>
                       <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
                     </div>
@@ -407,11 +482,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     {isAiDropdownOpen && (
                       <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '0.25rem', background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
                         {[
-                          { id: 'auto', icon: Zap, label: 'Auto-Detect (Uses best available key)' },
+                          { id: 'auto', icon: Zap, label: 'Auto (OpenAI → Gemini → Local)' },
                           { id: 'openai', icon: Bot, label: 'OpenAI (GPT-4 / GPT-3.5)' },
                           { id: 'gemini', icon: Sparkles, label: 'Google Gemini' },
-                          { id: 'groq', icon: Rocket, label: 'Groq (Llama 3)' },
-                          { id: 'huggingface', icon: Box, label: 'Hugging Face' }
+                          { id: 'ollama', icon: Cpu, label: 'Local AI (Ollama): private, works offline' }
                         ].map((option) => (
                           <div 
                             key={option.id}
@@ -428,24 +502,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     )}
                   </div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-                    Peblo will automatically route requests to the selected AI model when you provide the corresponding key.
+                    Peblo tries this provider first and falls back to any other one you've set up.
                   </p>
                 </div>
 
-                <div className="settings-toggle-row" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
-                  <div className="settings-toggle-info">
-                    <h4>Force Custom Models Only</h4>
-                    <p>Disable Peblo's fallback models. We will exclusively use your API keys across all features (including Voice Calls).</p>
-                  </div>
-                  <label className="toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={forceCustomModels} 
-                      onChange={(e) => setForceCustomModels(e.target.checked)} 
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
 
                 <div className="settings-field-group">
                   <label className="settings-field-label">OpenAI API Key {settings?.invalidKeys?.includes('openai') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
@@ -460,7 +520,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   {settings?.invalidKeys?.includes('openai') ? (
                     <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
                   ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for GPT-4, GPT-3.5, and DALL-E models.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Uses GPT-4o mini for chat and text-embedding-3-small for search.</p>
                   )}
                 </div>
 
@@ -477,44 +537,59 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   {settings?.invalidKeys?.includes('gemini') ? (
                     <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
                   ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for Gemini Pro and Ultra models.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Uses Gemini 2.5 Flash. Free keys are available at aistudio.google.com.</p>
                   )}
                 </div>
 
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Groq API Key {settings?.invalidKeys?.includes('groq') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
-                  <input 
-                    type="password" 
-                    className="settings-field-input"
-                    style={settings?.invalidKeys?.includes('groq') ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' } : {}}
-                    value={groqKey} 
-                    onChange={(e) => setGroqKey(e.target.value)} 
-                    placeholder="gsk_..."
-                  />
-                  {settings?.invalidKeys?.includes('groq') ? (
-                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
-                  ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for ultra-fast Llama 3 inferences.</p>
-                  )}
-                </div>
 
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Hugging Face Access Token {settings?.invalidKeys?.includes('huggingface') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
-                  <input 
-                    type="password" 
-                    className="settings-field-input"
-                    style={settings?.invalidKeys?.includes('huggingface') ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' } : {}}
-                    value={huggingFaceKey} 
-                    onChange={(e) => setHuggingFaceKey(e.target.value)} 
-                    placeholder="hf_..."
-                  />
-                  {settings?.invalidKeys?.includes('huggingface') ? (
-                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
-                  ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for open-source models.</p>
-                  )}
-                </div>
                 
+                <div className="settings-field-group" style={{ marginTop: '1.5rem', background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: '12px', border: 'var(--border-subtle)' }}>
+                  <div className="settings-toggle-row" style={{ border: 'none', padding: 0, margin: 0, background: 'transparent' }}>
+                    <div className="settings-toggle-info">
+                      <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Cpu size={16} /> Local AI (Ollama)</h4>
+                      <p>Run AI models on this computer. Nothing is sent to the internet and it works offline. Install Ollama from ollama.com, then run <code>ollama pull {ollamaModel || 'llama3.2'}</code> and <code>ollama pull {ollamaEmbedModel || 'nomic-embed-text'}</code>.</p>
+                    </div>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={ollamaEnabled} onChange={(e) => setOllamaEnabled(e.target.checked)} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  {ollamaEnabled && (
+                    <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+                      <div>
+                        <label className="settings-field-label">Ollama address</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input className="settings-field-input" value={ollamaUrl} onChange={(e) => { setOllamaUrl(e.target.value); setOllamaStatus(null); }} placeholder="http://127.0.0.1:11434" />
+                          <button type="button" className="btn btn-outline" style={{ whiteSpace: 'nowrap' }} onClick={checkOllama} disabled={ollamaChecking}>
+                            {ollamaChecking ? 'Checking…' : 'Test connection'}
+                          </button>
+                        </div>
+                        {ollamaStatus && (
+                          <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: ollamaStatus.ok ? 'var(--success)' : '#ef4444' }}>
+                            {ollamaStatus.ok
+                              ? (ollamaStatus.models.length ? `Connected. Installed models: ${ollamaStatus.models.join(', ')}` : 'Connected, but no models are installed yet. Run "ollama pull llama3.2".')
+                              : ollamaStatus.error}
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div>
+                          <label className="settings-field-label">Chat model</label>
+                          <input className="settings-field-input" list="ollama-models" value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)} placeholder="llama3.2" />
+                        </div>
+                        <div>
+                          <label className="settings-field-label">Search (embedding) model</label>
+                          <input className="settings-field-input" list="ollama-models" value={ollamaEmbedModel} onChange={(e) => setOllamaEmbedModel(e.target.value)} placeholder="nomic-embed-text" />
+                        </div>
+                        <datalist id="ollama-models">
+                          {(ollamaStatus?.models || []).map((m) => <option key={m} value={m} />)}
+                        </datalist>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button type="submit" className="btn btn-primary">Save AI Settings</button>
                   {saveSuccess && <span style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 500 }}>{saveSuccess}</span>}

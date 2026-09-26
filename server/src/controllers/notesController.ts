@@ -141,8 +141,8 @@ export async function getNotes(req: any, res: any, next: any) {
           select: { type: true }
         }
       },
-      orderBy,
-      take: 50 // Limit notes returned to optimize Workspace sidebar loading speed
+      orderBy
+      // No limit: data is local, and the sidebar and editor need every note.
     });
 
     res.json({ notes: notes.map(formatNote) });
@@ -191,6 +191,10 @@ export async function createNote(req: any, res: any, next: any) {
       where: { id: note.id },
       include: noteInclude
     });
+
+    // Lets other open windows (e.g. after quick capture) refresh their note list.
+    const io = req.app.get('io');
+    if (io) io.to(req.user.id).emit('notes_changed');
 
     res.status(201).json({ note: formatNote(updated) });
   } catch (error) {
