@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1960 800" width="1960" height="800" font-family="Inter, Segoe UI, Arial, sans-serif" role="img" aria-labelledby="t d"><title id="t">Peblo first-run onboarding: four steps</title><desc id="d">Mid-fidelity wireframe of Peblo's first-run flow in four frames: 1) welcome, name and theme, no account; 2) choose AI setup: local with Ollama, cloud with your own key, or skip; 3) import from Notion, Obsidian or Markdown; 4) learn quick capture with a live try-it box.</desc><defs><filter id="blur" x="-10%" y="-10%" width="120%" height="140%"><feGaussianBlur stdDeviation="8"/></filter></defs><rect width="1960" height="800" fill="#f8fafc"/>
+<text x="40" y="44" font-size="20" fill="#0f172a" font-weight="700">First run: about 90 seconds, every step can be skipped</text>
+<text x="40" y="70" font-size="13" fill="#475569">No account, no email. Enter moves forward, Esc skips a step, and everything can be changed later.</text>
+<rect x="40" y="102" width="440" height="640" rx="12" fill="#0f172a" opacity="0.08" filter="url(#blur)"/>
+<rect x="40" y="96" width="440" height="640" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="40" y="96" width="440" height="34" rx="12" fill="#f1f5f9" />
+<rect x="40" y="116" width="440" height="14" rx="0" fill="#f1f5f9" />
+<line x1="40" y1="130" x2="480" y2="130" stroke="#e2e8f0" stroke-width="1"/>
+<circle cx="58" cy="113" r="5" fill="#fca5a5"/>
+<circle cx="74" cy="113" r="5" fill="#fcd34d"/>
+<circle cx="90" cy="113" r="5" fill="#86efac"/>
+<text x="260.0" y="118" font-size="12" fill="#64748b" text-anchor="middle">Peblo: welcome</text>
+<text x="460" y="118" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Skip</text>
+<text x="68" y="172" font-size="20" fill="#0f172a" font-weight="700">Welcome to Peblo</text>
+<text x="68" y="198" font-size="13" fill="#475569">Notes, tasks and your calendar in one calm place. Everything</text>
+<text x="68" y="218" font-size="13" fill="#475569">stays on this computer. No account needed.</text>
+<circle cx="72" cy="704" r="4" fill="#4f46e5"/>
+<circle cx="88" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="104" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="120" cy="704" r="4" fill="#cbd5e1"/>
+<text x="68" y="256" font-size="13" fill="#0f172a" font-weight="600">What should we call you?</text>
+<rect x="68" y="266" width="384" height="38" rx="8" fill="#ffffff" stroke="#4f46e5" stroke-width="2" />
+<text x="80" y="289.68" font-size="13" fill="#0f172a">Aarav</text>
+<text x="68" y="332" font-size="13" fill="#0f172a" font-weight="600">Theme</text>
+<rect x="68.0" y="344" width="120.0" height="96" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="78.0" y="354" width="100.0" height="48" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="86.0" y="364" width="30" height="6" rx="3" fill="#4f46e5" />
+<rect x="86.0" y="376" width="50" height="5" rx="2.5" fill="#e2e8f0" />
+<text x="128.0" y="426" font-size="13" fill="#0f172a" text-anchor="middle">Light</text>
+<rect x="200.0" y="344" width="120.0" height="96" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="210.0" y="354" width="100.0" height="48" rx="6" fill="#111118" stroke="#e2e8f0" stroke-width="1" />
+<rect x="218.0" y="364" width="30" height="6" rx="3" fill="#4f46e5" />
+<rect x="218.0" y="376" width="50" height="5" rx="2.5" fill="#2a2a3d" />
+<text x="260.0" y="426" font-size="13" fill="#0f172a" text-anchor="middle">Dark</text>
+<rect x="332.0" y="344" width="120.0" height="96" rx="10" fill="#ffffff" stroke="#4f46e5" stroke-width="2" />
+<rect x="342.0" y="354" width="100.0" height="48" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="392.0" y="354" width="50.0" height="48" rx="0" fill="#111118" />
+<rect x="350.0" y="364" width="30" height="6" rx="3" fill="#4f46e5" />
+<rect x="350.0" y="376" width="50" height="5" rx="2.5" fill="#111118" />
+<text x="392.0" y="426" font-size="13" fill="#0f172a" font-weight="600" text-anchor="middle">System</text>
+<rect x="68" y="472" width="16" height="16" rx="4" fill="#4f46e5" />
+<path d="M72 480.5 L75 483.5 L80.5 477" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="94" y="485" font-size="13" fill="#0f172a">Keep Peblo in the tray so quick capture</text>
+<text x="94" y="503" font-size="13" fill="#0f172a">always works</text>
+<rect x="68" y="520" width="16" height="16" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="94" y="533" font-size="13" fill="#0f172a">Start Peblo when my computer starts</text>
+<rect x="68" y="568" width="384" height="64" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<rect x="83" y="590" width="10" height="8" rx="2" fill="none" stroke="#047857" stroke-width="1.6" />
+<path d="M85 590 V588 A3 3 0 0 1 91 588 V590" fill="none" stroke="#047857" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="104" y="596" font-size="12" fill="#047857" font-weight="600">Your data lives in one file on this computer.</text>
+<text x="104" y="616" font-size="12" fill="#047857">Back it up or export it any time.</text>
+<rect x="368" y="686" width="84" height="34" rx="8" fill="#4f46e5" />
+<text x="410" y="707.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">Continue</text>
+<rect x="520" y="102" width="440" height="640" rx="12" fill="#0f172a" opacity="0.08" filter="url(#blur)"/>
+<rect x="520" y="96" width="440" height="640" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="520" y="96" width="440" height="34" rx="12" fill="#f1f5f9" />
+<rect x="520" y="116" width="440" height="14" rx="0" fill="#f1f5f9" />
+<line x1="520" y1="130" x2="960" y2="130" stroke="#e2e8f0" stroke-width="1"/>
+<circle cx="538" cy="113" r="5" fill="#fca5a5"/>
+<circle cx="554" cy="113" r="5" fill="#fcd34d"/>
+<circle cx="570" cy="113" r="5" fill="#86efac"/>
+<text x="740.0" y="118" font-size="12" fill="#64748b" text-anchor="middle">Peblo: welcome</text>
+<text x="940" y="118" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Skip</text>
+<text x="548" y="172" font-size="20" fill="#0f172a" font-weight="700">How should the AI work?</text>
+<text x="548" y="198" font-size="13" fill="#475569">Pick one. You can change it later in AI Hub, Connections.</text>
+<circle cx="552" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="568" cy="704" r="4" fill="#4f46e5"/>
+<circle cx="584" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="600" cy="704" r="4" fill="#cbd5e1"/>
+<rect x="548" y="246" width="384" height="102" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="2" />
+<circle cx="570" cy="268" r="7.5" fill="#ffffff" stroke="#4f46e5" stroke-width="1.5"/>
+<circle cx="570" cy="268" r="4" fill="#4f46e5"/>
+<text x="588" y="273" font-size="14" fill="#0f172a" font-weight="700">On this computer</text>
+<rect x="715" y="258" width="62" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<circle cx="727" cy="268.0" r="3.5" fill="#10b981"/>
+<text x="736" y="272.32" font-size="12" fill="#047857" font-weight="500">Local</text>
+<text x="588" y="296" font-size="12" fill="#475569">Private, works offline. Uses Ollama.</text>
+<rect x="588" y="318" width="328" height="28" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1" />
+<circle cx="602" cy="332" r="4" fill="#10b981"/>
+<text x="614" y="336" font-size="12" fill="#047857" font-weight="600">Found Ollama with llama3.2 3B installed</text>
+<rect x="548" y="360" width="384" height="80" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<circle cx="570" cy="382" r="7.5" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="588" y="387" font-size="14" fill="#0f172a" font-weight="700">Cloud model, your own key</text>
+<rect x="786" y="372" width="50" height="20" rx="10.0" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1" />
+<text x="795" y="386.32" font-size="12" fill="#0369a1" font-weight="500">Cloud</text>
+<text x="588" y="410" font-size="12" fill="#475569">Fast on any laptop. Your question and the</text>
+<text x="588" y="428" font-size="12" fill="#475569">notes it uses are sent to the provider.</text>
+<rect x="548" y="452" width="384" height="80" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<circle cx="570" cy="474" r="7.5" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="588" y="479" font-size="14" fill="#0f172a" font-weight="700">Skip AI for now</text>
+<text x="588" y="502" font-size="12" fill="#475569">Notes, tasks and calendar all work</text>
+<text x="588" y="520" font-size="12" fill="#475569">without AI.</text>
+<rect x="548" y="550" width="16" height="16" rx="4" fill="#4f46e5" />
+<path d="M552 558.5 L555 561.5 L560.5 555" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="574" y="563" font-size="13" fill="#0f172a">Build a local search index so you can</text>
+<text x="574" y="581" font-size="13" fill="#0f172a">ask your notes (about 1 minute)</text>
+<text x="548" y="616" font-size="12" fill="#4f46e5" font-weight="600">No Ollama? Install guide  ·  Use another local app</text>
+<rect x="848" y="686" width="84" height="34" rx="8" fill="#4f46e5" />
+<text x="890" y="707.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">Continue</text>
+<text x="800" y="707.68" font-size="13" fill="#475569" font-weight="600" text-anchor="middle">Back</text>
+<rect x="1000" y="102" width="440" height="640" rx="12" fill="#0f172a" opacity="0.08" filter="url(#blur)"/>
+<rect x="1000" y="96" width="440" height="640" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="1000" y="96" width="440" height="34" rx="12" fill="#f1f5f9" />
+<rect x="1000" y="116" width="440" height="14" rx="0" fill="#f1f5f9" />
+<line x1="1000" y1="130" x2="1440" y2="130" stroke="#e2e8f0" stroke-width="1"/>
+<circle cx="1018" cy="113" r="5" fill="#fca5a5"/>
+<circle cx="1034" cy="113" r="5" fill="#fcd34d"/>
+<circle cx="1050" cy="113" r="5" fill="#86efac"/>
+<text x="1220.0" y="118" font-size="12" fill="#64748b" text-anchor="middle">Peblo: welcome</text>
+<text x="1420" y="118" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Skip</text>
+<text x="1028" y="172" font-size="20" fill="#0f172a" font-weight="700">Bring your notes</text>
+<text x="1028" y="198" font-size="13" fill="#475569">Import now, or later from Settings, Your data. Nothing is</text>
+<text x="1028" y="218" font-size="13" fill="#475569">deleted from the original app.</text>
+<circle cx="1032" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="1048" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="1064" cy="704" r="4" fill="#4f46e5"/>
+<circle cx="1080" cy="704" r="4" fill="#cbd5e1"/>
+<rect x="1028" y="246" width="384" height="56" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="2" />
+<rect x="1042" y="258" width="32" height="32" rx="8" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+<text x="1058" y="279" font-size="14" fill="#475569" font-weight="700" text-anchor="middle">N</text>
+<text x="1088" y="271" font-size="14" fill="#0f172a" font-weight="700">Notion</text>
+<text x="1088" y="290" font-size="12" fill="#64748b">Markdown &amp; CSV export (.zip)</text>
+<rect x="1028" y="312" width="384" height="56" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="1042" y="324" width="32" height="32" rx="8" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+<text x="1058" y="345" font-size="14" fill="#475569" font-weight="700" text-anchor="middle">O</text>
+<text x="1088" y="337" font-size="14" fill="#0f172a" font-weight="700">Obsidian</text>
+<text x="1088" y="356" font-size="12" fill="#64748b">Pick your vault folder</text>
+<rect x="1028" y="378" width="384" height="56" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="1042" y="390" width="32" height="32" rx="8" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+<text x="1058" y="411" font-size="14" fill="#475569" font-weight="700" text-anchor="middle">M</text>
+<text x="1088" y="403" font-size="14" fill="#0f172a" font-weight="700">Markdown files</text>
+<text x="1088" y="422" font-size="12" fill="#64748b">.md files or a folder</text>
+<rect x="1028" y="450" width="384" height="118" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="1042" y="476" font-size="13" fill="#0f172a" font-weight="600">notion-export.zip</text>
+<text x="1398" y="476" font-size="12" fill="#64748b" text-anchor="end">117 of 182 pages</text>
+<rect x="1042" y="490" width="356" height="8" rx="4" fill="#f1f5f9" />
+<rect x="1042" y="490" width="228" height="8" rx="4" fill="#4f46e5" />
+<text x="1042" y="522" font-size="12" fill="#475569">Keeping titles, tags, dates and links.</text>
+<text x="1042" y="542" font-size="12" fill="#b45309">3 images skipped (not supported yet).</text>
+<text x="1042" y="558" font-size="12" fill="#64748b">Imported notes are tagged #imported.</text>
+<text x="1028" y="590" font-size="12" fill="#4f46e5" font-weight="600">How to export from Notion (3 steps)</text>
+<text x="1028" y="620" font-size="13" fill="#64748b">Or:</text>
+<rect x="1056" y="600" width="145" height="30" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="1128" y="619.32" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Try 3 sample notes</text>
+<rect x="1226" y="600" width="97" height="30" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="1274" y="619.32" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Start empty</text>
+<rect x="1328" y="686" width="84" height="34" rx="8" fill="#4f46e5" />
+<text x="1370" y="707.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">Continue</text>
+<text x="1280" y="707.68" font-size="13" fill="#475569" font-weight="600" text-anchor="middle">Back</text>
+<rect x="1480" y="102" width="440" height="640" rx="12" fill="#0f172a" opacity="0.08" filter="url(#blur)"/>
+<rect x="1480" y="96" width="440" height="640" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<rect x="1480" y="96" width="440" height="34" rx="12" fill="#f1f5f9" />
+<rect x="1480" y="116" width="440" height="14" rx="0" fill="#f1f5f9" />
+<line x1="1480" y1="130" x2="1920" y2="130" stroke="#e2e8f0" stroke-width="1"/>
+<circle cx="1498" cy="113" r="5" fill="#fca5a5"/>
+<circle cx="1514" cy="113" r="5" fill="#fcd34d"/>
+<circle cx="1530" cy="113" r="5" fill="#86efac"/>
+<text x="1700.0" y="118" font-size="12" fill="#64748b" text-anchor="middle">Peblo: welcome</text>
+<text x="1900" y="118" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Skip</text>
+<text x="1508" y="172" font-size="20" fill="#0f172a" font-weight="700">Catch a thought in 2 seconds</text>
+<text x="1508" y="198" font-size="13" fill="#475569">Press this from any app, even when Peblo is closed to the</text>
+<text x="1508" y="218" font-size="13" fill="#475569">tray.</text>
+<circle cx="1512" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="1528" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="1544" cy="704" r="4" fill="#cbd5e1"/>
+<circle cx="1560" cy="704" r="4" fill="#4f46e5"/>
+<rect x="1530" y="246" width="66" height="48" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="1530" y="288" width="66" height="6" rx="3" fill="#cbd5e1" />
+<text x="1563.0" y="276" font-size="16" fill="#0f172a" font-weight="700" text-anchor="middle">Ctrl</text>
+<text x="1605" y="276" font-size="16" fill="#64748b" text-anchor="middle">+</text>
+<rect x="1616" y="246" width="71" height="48" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="1616" y="288" width="71" height="6" rx="3" fill="#cbd5e1" />
+<text x="1651.5" y="276" font-size="16" fill="#0f172a" font-weight="700" text-anchor="middle">Shift</text>
+<text x="1696" y="276" font-size="16" fill="#64748b" text-anchor="middle">+</text>
+<rect x="1707" y="246" width="85" height="48" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<rect x="1707" y="288" width="85" height="6" rx="3" fill="#cbd5e1" />
+<text x="1749.5" y="276" font-size="16" fill="#0f172a" font-weight="700" text-anchor="middle">Space</text>
+<text x="1700.0" y="320" font-size="12" fill="#64748b" text-anchor="middle">On Mac: ⌘ Cmd + ⇧ Shift + Space</text>
+<text x="1508" y="344" font-size="13" fill="#0f172a" font-weight="600">Try it now</text>
+<rect x="1508" y="356" width="384" height="140" rx="12" fill="#ffffff" stroke="#4f46e5" stroke-width="1.5" />
+<rect x="1522" y="368" width="43" height="24" rx="12.0" fill="#f1f5f9" />
+<text x="1531" y="384.32" font-size="12" fill="#475569" font-weight="500">Note</text>
+<rect x="1569" y="368" width="46" height="24" rx="12.0" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1" />
+<text x="1578" y="384.32" font-size="12" fill="#3730a3" font-weight="500">Task</text>
+<text x="1878" y="384" font-size="12" fill="#64748b" text-anchor="end">Tab switches · Esc closes</text>
+<text x="1522" y="426" font-size="15"><tspan fill="#0f172a">Revise BCNF </tspan><tspan fill="#4f46e5" font-weight="600">tomorrow</tspan><tspan fill="#0f172a"> </tspan><tspan fill="#b91c1c" font-weight="600">!high</tspan><tspan fill="#0f172a"> </tspan><tspan fill="#4f46e5" font-weight="600">#exams</tspan></text>
+<line x1="1522" y1="440" x2="1878" y2="440" stroke="#f1f5f9" stroke-width="1"/>
+<text x="1522" y="472" font-size="12" fill="#475569">Due Sat 26 Sep · high · #exams</text>
+<rect x="1802" y="452" width="76" height="30" rx="8" fill="#4f46e5" />
+<text x="1840" y="471.32" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">Save</text>
+<rect x="1508" y="516" width="384" height="36" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<path d="M1522 534 L1526 538 L1533 530" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1542" y="539" font-size="12" fill="#047857" font-weight="600">Nice. It is in Tasks, due tomorrow.</text>
+<text x="1508" y="572" font-size="12" fill="#475569" font-weight="600">Two more to remember:</text>
+<rect x="1508" y="584" width="55" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="1535.5" y="598" font-size="12" fill="#475569" text-anchor="middle" font-family="Consolas, Menlo, monospace">Ctrl K</text>
+<text x="1571" y="598" font-size="12" fill="#475569">search, commands, or ask your notes</text>
+<rect x="1508" y="612" width="55" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="1535.5" y="626" font-size="12" fill="#475569" text-anchor="middle" font-family="Consolas, Menlo, monospace">Ctrl 5</text>
+<text x="1571" y="626" font-size="12" fill="#475569">open the AI Hub</text>
+<rect x="1792" y="686" width="100" height="34" rx="8" fill="#4f46e5" />
+<text x="1842" y="707.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">Open Peblo</text>
+<text x="1744" y="707.68" font-size="13" fill="#475569" font-weight="600" text-anchor="middle">Back</text>
+<path d="M486 416.0 H514" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M508 410.0 L514 416.0 L508 422.0" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M966 416.0 H994" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M988 410.0 L994 416.0 L988 422.0" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1446 416.0 H1474" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1468 410.0 L1474 416.0 L1468 422.0" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="260.0" y="770" font-size="14" fill="#475569" font-weight="600" text-anchor="middle">1 · Welcome: name and theme</text>
+<text x="740.0" y="770" font-size="14" fill="#475569" font-weight="600" text-anchor="middle">2 · AI: local, cloud or skip</text>
+<text x="1220.0" y="770" font-size="14" fill="#475569" font-weight="600" text-anchor="middle">3 · Import from Notion or Obsidian</text>
+<text x="1700.0" y="770" font-size="14" fill="#475569" font-weight="600" text-anchor="middle">4 · Learn quick capture</text>
+</svg>

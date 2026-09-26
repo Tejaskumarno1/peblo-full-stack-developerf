@@ -38,7 +38,7 @@ function getOpenAIProvider(user: any): OAIProvider | null {
     if (envKey && !envKey.includes('your-openai')) apiKey = envKey;
   }
   if (!apiKey) return null;
-  return { name: 'openai', client: new OpenAI({ apiKey }), model: p.model, embedModel: 'text-embedding-3-small' };
+  return { name: 'openai', client: new OpenAI({ apiKey }), model: DEFAULT_OPENAI_MODEL, embedModel: 'text-embedding-3-small' };
 }
 
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
@@ -72,10 +72,15 @@ function getGeminiInstance(user: any) {
   return new GoogleGenerativeAI(keys[0]);
 }
 
-/** Which providers to try, in order, based on Settings → AI Providers → default model. */
+/**
+ * Which providers to try, in order, based on Settings → AI Providers → default model.
+ * Choosing Local AI means local only: we never silently fall back to a cloud provider,
+ * because that would send the user's notes off the computer against their choice.
+ */
 function providerOrder(user: any): ProviderName[] {
   const choice = (user?.settings as any)?.defaultAiModel || 'auto';
-  if (choice === 'ollama') return ['ollama', 'openai', 'gemini'];
+  if (choice === 'ollama') return ['ollama'];
+  if (choice === 'openai') return ['openai', 'gemini', 'ollama'];
   if (choice === 'gemini') return ['gemini', 'openai', 'ollama'];
   return ['openai', 'gemini', 'ollama'];
 }
@@ -101,9 +106,10 @@ async function runWithCascade(
     gemini: getGeminiInstance(user),
   };
 
-  if (!providers.openai && !providers.ollama && !providers.gemini) throw noKeyError();
+  const order = providerOrder(user);
+  if (!order.some((n) => providers[n])) throw noKeyError();
 
-  for (const name of providerOrder(user)) {
+  for (const name of order) {
     try {
       if (name === 'gemini' && providers.gemini) {
         console.log(`[${operationName}] Trying Gemini...`);

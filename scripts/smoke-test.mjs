@@ -182,6 +182,21 @@ try {
   const done = sse.split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6))).find((e) => e.done);
   check('streaming AI chat via local model creates notes', !!done && done.notes?.[0]?.title === 'From local AI' && seen.some((x) => x.stream), sse.slice(0, 300));
 
+  // OpenAI key path (the SDK honours OPENAI_BASE_URL, so it talks to the fake server too)
+  process.env.OPENAI_BASE_URL = `${fakeUrl}/v1`;
+  await call('PUT', '/api/profile', { settings: { ollamaEnabled: false, defaultAiModel: 'openai', openAiKey: 'sk-test' } });
+  seen.length = 0;
+  r = await call('POST', `/api/notes/${noteId}/ai/title`, { content: 'Some text about trips' });
+  check('AI title via an OpenAI key', r.status === 200 && r.json.title === 'Local AI title' && seen.some((x) => x.model === 'gpt-4o-mini'), { r: r.json, seen });
+
+  // Local-only must never fall back to a cloud key, even when Ollama is down
+  await call('PUT', '/api/profile', { settings: { ollamaEnabled: true, ollamaUrl: 'http://127.0.0.1:1', defaultAiModel: 'ollama' } });
+  seen.length = 0;
+  r = await call('POST', `/api/notes/${noteId}/ai/title`, { content: 'Private text' });
+  check('Local AI choice never falls back to the cloud', seen.length === 0 && r.json.title !== 'Local AI title', { r: r.json, seen });
+  await call('PUT', '/api/profile', { settings: { openAiKey: '' } });
+  delete process.env.OPENAI_BASE_URL;
+
   await call('PUT', '/api/profile', { settings: { ollamaEnabled: false, defaultAiModel: 'auto' } });
   res = await fetch(base + '/api/ai/chat-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'hi' }) });
   const noKey = await res.text();

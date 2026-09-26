@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" font-family="Inter, Segoe UI, Arial, sans-serif" role="img" aria-labelledby="t d"><title id="t">Peblo AI Hub: MCP tool call waiting for approval</title><desc id="d">Mid-fidelity wireframe of an AI Hub chat where the model has run a read tool automatically, the user approved a write to a Peblo task, and a Google Calendar create_event call (via Peblo Connect) waits for approval with its exact arguments and what data leaves the device. Right: the Tools in this chat panel with per-tool permissions and an activity timeline.</desc><defs><filter id="blur" x="-10%" y="-10%" width="120%" height="140%"><feGaussianBlur stdDeviation="8"/></filter></defs><rect width="1440" height="900" fill="#f8fafc"/>
+<rect x="0" y="0" width="64" height="900" rx="0" fill="#ffffff" />
+<line x1="64" y1="0" x2="64" y2="900" stroke="#e2e8f0" stroke-width="1"/>
+<rect x="18" y="16" width="28" height="28" rx="8" fill="#4f46e5" />
+<text x="32" y="35" font-size="17" fill="#fff" font-weight="700" text-anchor="middle">p</text>
+<rect x="14" y="60" width="36" height="36" rx="8" fill="#f1f5f9" />
+<circle cx="31" cy="77" r="5" fill="none" stroke="#475569" stroke-width="1.6"/>
+<path d="M35 81 L39 85" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M26 132 L32 126 L38 132 M28 131 V138 H36 V131" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27 173 H34 L37 176 V187 H27 Z M29.5 179 H34.5 M29.5 182.5 H34.5" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="26" y="222" width="12" height="12" rx="3" fill="none" stroke="#475569" stroke-width="1.6" />
+<path d="M29 228 L31.5 230.5 L35 225.5" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="26" y="271" width="12" height="11" rx="2" fill="none" stroke="#475569" stroke-width="1.6" />
+<path d="M26 275 H38 M29 269 V272 M35 269 V272" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="12" y="304" width="40" height="40" rx="10" fill="#eef2ff" />
+<rect x="0" y="312" width="3" height="24" rx="1.5" fill="#4f46e5" />
+<path d="M32 317 L33.6 322.4 L39 324 L33.6 325.6 L32 331 L30.4 325.6 L25 324 L30.4 322.4 Z" fill="none" stroke="#4f46e5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="32" cy="796" r="5" fill="#10b981"/>
+<text x="32" y="816" font-size="12" fill="#047857" font-weight="600" text-anchor="middle">Local</text>
+<circle cx="32" cy="856" r="2.5" fill="none" stroke="#475569" stroke-width="1.6"/>
+<circle cx="32" cy="856" r="6" fill="none" stroke="#475569" stroke-width="1.6"/>
+<path d="M32.0 850.0 L32 848" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M32.0 862.0 L32 864" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M26.0 856.0 L24 856" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M38.0 856.0 L40 856" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="64" y="0" width="264" height="900" rx="0" fill="#f8fafc" />
+<line x1="328" y1="0" x2="328" y2="900" stroke="#e2e8f0" stroke-width="1"/>
+<text x="84" y="38" font-size="18" fill="#0f172a" font-weight="700">AI Hub</text>
+<rect x="80" y="56" width="232" height="34" rx="8" fill="#4f46e5" />
+<path d="M162.555 67.0 V79.0 M156.555 73.0 H168.555" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="204" y="77.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">New chat</text>
+<rect x="80" y="104" width="52" height="26" rx="13.0" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1" />
+<text x="89" y="121.68" font-size="13" fill="#3730a3" font-weight="500">Chats</text>
+<rect x="138" y="104" width="93" height="26" rx="13.0" fill="#f8fafc" />
+<text x="147" y="121.68" font-size="13" fill="#475569" font-weight="500">Connections</text>
+<rect x="237" y="104" width="60" height="26" rx="13.0" fill="#f8fafc" />
+<text x="246" y="121.68" font-size="13" fill="#475569" font-weight="500">Agents</text>
+<rect x="80" y="142" width="232" height="32" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<circle cx="97" cy="157" r="5" fill="none" stroke="#64748b" stroke-width="1.6"/>
+<path d="M101 161 L105 165" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="112" y="163" font-size="13" fill="#64748b">Search chats</text>
+<text x="84" y="200" font-size="12" fill="#64748b" font-weight="600">TODAY</text>
+<rect x="74" y="212" width="244" height="50" rx="8" fill="#ffffff" stroke="#c7d2fe" stroke-width="1" />
+<text x="86" y="233" font-size="13" fill="#0f172a" font-weight="600">Reschedule lab viva</text>
+<circle cx="89" cy="248" r="3.5" fill="#10b981"/>
+<text x="98" y="252" font-size="12" fill="#64748b">qwen2.5 7B · Local</text>
+<text x="86" y="287" font-size="13" fill="#0f172a" font-weight="500">Summarise internship feedback</text>
+<circle cx="89" cy="302" r="3.5" fill="#0369a1"/>
+<text x="98" y="306" font-size="12" fill="#64748b">GPT-4o mini · Cloud</text>
+<text x="84" y="334" font-size="12" fill="#64748b" font-weight="600">YESTERDAY</text>
+<text x="86" y="367" font-size="13" fill="#0f172a" font-weight="500">Lab viva: likely questions</text>
+<circle cx="89" cy="382" r="3.5" fill="#10b981"/>
+<text x="98" y="386" font-size="12" fill="#64748b">llama3.2 3B · Local</text>
+<text x="86" y="421" font-size="13" fill="#0f172a" font-weight="500">Plan my week around exams</text>
+<circle cx="89" cy="436" r="3.5" fill="#10b981"/>
+<text x="98" y="440" font-size="12" fill="#64748b">qwen2.5 7B · Local</text>
+<text x="84" y="468" font-size="12" fill="#64748b" font-weight="600">PREVIOUS 7 DAYS</text>
+<text x="86" y="501" font-size="13" fill="#0f172a" font-weight="500">Explain BCNF simply</text>
+<circle cx="89" cy="516" r="3.5" fill="#10b981"/>
+<text x="98" y="520" font-size="12" fill="#64748b">llama3.2 3B · Local</text>
+<text x="86" y="555" font-size="13" fill="#0f172a" font-weight="500">Draft email to Prof. Rao</text>
+<circle cx="89" cy="570" r="3.5" fill="#0369a1"/>
+<text x="98" y="574" font-size="12" fill="#64748b">GPT-4o mini · Cloud</text>
+<rect x="76" y="752" width="240" height="132" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="90" y="776" font-size="13" fill="#0f172a" font-weight="700">Connections</text>
+<text x="302" y="776" font-size="12" fill="#4f46e5" text-anchor="end">Manage</text>
+<circle cx="94" cy="800" r="4" fill="#10b981"/>
+<text x="106" y="804" font-size="12" fill="#475569">Ollama running · 3 models</text>
+<circle cx="94" cy="826" r="4" fill="#4f46e5"/>
+<text x="106" y="830" font-size="12" fill="#475569">Peblo MCP Server · 2 clients</text>
+<circle cx="94" cy="852" r="4" fill="#4f46e5"/>
+<text x="106" y="856" font-size="12" fill="#475569">Peblo Connect · 2 servers</text>
+<rect x="328" y="0" width="752" height="900" rx="0" fill="#ffffff" />
+<line x1="328" y1="56" x2="1080" y2="56" stroke="#e2e8f0" stroke-width="1"/>
+<rect x="344" y="12" width="210" height="32" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" />
+<circle cx="360" cy="28" r="4" fill="#10b981"/>
+<text x="372" y="33" font-size="13" fill="#0f172a" font-weight="600">qwen2.5 7B</text>
+<rect x="456" y="18" width="62" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<circle cx="468" cy="28.0" r="3.5" fill="#10b981"/>
+<text x="477" y="32.32" font-size="12" fill="#047857" font-weight="500">Local</text>
+<path d="M532 27 L536 31 L540 27" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="574" y="33" font-size="14" fill="#0f172a" font-weight="600">Reschedule lab viva</text>
+<rect x="940" y="12" width="90" height="32" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1" />
+<path d="M960 22 A4 4 0 1 0 963 27 L961 25 Z M959 26 L953 33 L954.5 34.5 L960.5 28.5" fill="none" stroke="#4f46e5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="972" y="33" font-size="13" fill="#3730a3" font-weight="600">Tools 3</text>
+<circle cx="1047" cy="28" r="1.5" fill="#64748b"/>
+<circle cx="1052" cy="28" r="1.5" fill="#64748b"/>
+<circle cx="1057" cy="28" r="1.5" fill="#64748b"/>
+<rect x="684" y="76" width="360" height="58" rx="12" fill="#eef2ff" />
+<text x="698" y="100" font-size="13" fill="#0f172a">Move my DBMS lab viva to Thursday 2 pm, update</text>
+<text x="698" y="120" font-size="13" fill="#0f172a">the task, and add it to my Google Calendar.</text>
+<circle cx="376" cy="166" r="12" fill="#eef2ff"/>
+<path d="M376 159 L377.6 164.4 L383 166 L377.6 167.6 L376 173 L374.4 167.6 L369 166 L374.4 164.4 Z" fill="none" stroke="#4f46e5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="396" y="171" font-size="13" fill="#0f172a" font-weight="600">qwen2.5 7B</text>
+<rect x="480" y="156" width="62" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<circle cx="492" cy="166.0" r="3.5" fill="#10b981"/>
+<text x="501" y="170.32" font-size="12" fill="#047857" font-weight="500">Local</text>
+<text x="550" y="171" font-size="12" fill="#64748b">· using 3 tools</text>
+<text x="364" y="202" font-size="14" fill="#0f172a">I found the viva in your tasks. Three steps: find it, move it, then add it to Google Calendar.</text>
+<rect x="364" y="226" width="680" height="44" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+<circle cx="384" cy="248" r="9" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+<path d="M380 248 L383 251 L388.5 245" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="404" y="253" font-size="13" fill="#64748b">Peblo ·</text>
+<text x="454" y="253" font-size="13" fill="#0f172a" font-weight="700" font-family="Consolas, Menlo, monospace">list_tasks</text>
+<rect x="544" y="238" width="46" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<text x="553" y="252.32" font-size="12" fill="#047857" font-weight="500">Read</text>
+<text x="600" y="253" font-size="12" fill="#64748b">Auto-approved · 0.2 s · 1 result</text>
+<text x="1028" y="253" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Details</text>
+<rect x="364" y="280" width="680" height="70" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+<circle cx="384" cy="302" r="9" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+<path d="M380 302 L383 305 L388.5 299" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="404" y="307" font-size="13" fill="#64748b">Peblo ·</text>
+<text x="454" y="307" font-size="13" fill="#0f172a" font-weight="700" font-family="Consolas, Menlo, monospace">update_task</text>
+<rect x="552" y="292" width="49" height="20" rx="10.0" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
+<text x="561" y="306.32" font-size="12" fill="#b45309" font-weight="500">Write</text>
+<text x="611" y="307" font-size="12" fill="#64748b">Approved by you at 10:42</text>
+<text x="1028" y="307" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Details</text>
+<text x="404" y="333" font-size="12"><tspan fill="#475569">Lab viva: DBMS   Due </tspan><tspan fill="#b91c1c">Wed 30 Sep 11:00</tspan><tspan fill="#64748b">  →  </tspan><tspan fill="#047857" font-weight="600">Thu 1 Oct 14:00</tspan></text>
+<rect x="361" y="361" width="686" height="342" rx="15" fill="#eef2ff" />
+<rect x="364" y="364" width="680" height="336" rx="12" fill="#ffffff" stroke="#4f46e5" stroke-width="1.5" />
+<circle cx="384" cy="390" r="9" fill="#fffbeb" stroke="#fde68a" stroke-width="1"/>
+<text x="384" y="395" font-size="13" fill="#b45309" font-weight="700" text-anchor="middle">!</text>
+<text x="404" y="395" font-size="13" fill="#64748b">Google Calendar ·</text>
+<text x="521" y="395" font-size="13" fill="#0f172a" font-weight="700" font-family="Consolas, Menlo, monospace">create_event</text>
+<rect x="654" y="380" width="49" height="20" rx="10.0" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
+<text x="663" y="394.32" font-size="12" fill="#b45309" font-weight="500">Write</text>
+<rect x="709" y="380" width="67" height="20" rx="10.0" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1" />
+<text x="718" y="394.32" font-size="12" fill="#0369a1" font-weight="500">External</text>
+<text x="786" y="395" font-size="12" fill="#64748b">via Peblo Connect</text>
+<rect x="894" y="378" width="138" height="24" rx="12.0" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
+<text x="903" y="394.32" font-size="12" fill="#b45309" font-weight="500">Needs your approval</text>
+<text x="404" y="422" font-size="14" fill="#0f172a">The assistant wants to create this event in your Google Calendar:</text>
+<rect x="404" y="438" width="624" height="132" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+<text x="418" y="462" font-size="12" fill="#64748b" font-family="Consolas, Menlo, monospace">calendar</text>
+<text x="524" y="462" font-size="13" fill="#0f172a">College</text>
+<text x="418" y="486" font-size="12" fill="#64748b" font-family="Consolas, Menlo, monospace">title</text>
+<text x="524" y="486" font-size="13" fill="#0f172a">DBMS lab viva</text>
+<text x="418" y="510" font-size="12" fill="#64748b" font-family="Consolas, Menlo, monospace">start</text>
+<text x="524" y="510" font-size="13" fill="#0f172a">Thu 1 Oct 2026, 14:00 (IST)</text>
+<text x="418" y="534" font-size="12" fill="#64748b" font-family="Consolas, Menlo, monospace">end</text>
+<text x="524" y="534" font-size="13" fill="#0f172a">Thu 1 Oct 2026, 14:30 (IST)</text>
+<text x="418" y="558" font-size="12" fill="#64748b" font-family="Consolas, Menlo, monospace">description</text>
+<text x="524" y="558" font-size="13" fill="#0f172a">Bring record book. Created from Peblo.</text>
+<text x="1014" y="462" font-size="12" fill="#4f46e5" font-weight="600" text-anchor="end">Edit arguments</text>
+<rect x="404" y="584" width="624" height="36" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1" />
+<path d="M422 595 L428 597.5 V602 C428 606 425 608 422 609.5 C419 608 416 606 416 602 V597.5 Z" fill="none" stroke="#0369a1" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="438" y="607" font-size="12" fill="#0369a1" font-weight="500">Leaves this device: only the 5 fields above are sent to Google. No notes are attached.</text>
+<rect x="404" y="636" width="139" height="34" rx="8" fill="#4f46e5" />
+<text x="474" y="657.68" font-size="13" fill="#ffffff" font-weight="600" text-anchor="middle">Approve (Enter)</text>
+<rect x="551" y="636" width="190" height="34" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="646" y="657.68" font-size="13" fill="#0f172a" font-weight="600" text-anchor="middle">Always allow in this chat</text>
+<rect x="749" y="636" width="103" height="34" rx="8" fill="#ffffff" stroke="#fecaca" stroke-width="1" />
+<text x="800" y="657.68" font-size="13" fill="#b91c1c" font-weight="600" text-anchor="middle">Deny (Esc)</text>
+<text x="1028" y="658" font-size="12" fill="#64748b" text-anchor="end">Trust: Ask every time · Change</text>
+<rect x="356" y="780" width="696" height="104" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1" />
+<circle cx="378" cy="810" r="5" fill="#b45309"/>
+<text x="392" y="815" font-size="14" fill="#475569">Paused: waiting for your approval. The model will continue after you decide.</text>
+<text x="372" y="860" font-size="12" fill="#64748b">Tab to move between Approve, Always allow and Deny</text>
+<rect x="956" y="840" width="72" height="30" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+<text x="992" y="859.32" font-size="12" fill="#0f172a" font-weight="600" text-anchor="middle">Stop</text>
+<rect x="1080" y="0" width="360" height="900" rx="0" fill="#f8fafc" />
+<line x1="1080" y1="0" x2="1080" y2="900" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1100" y="34" font-size="16" fill="#0f172a" font-weight="700">Tools in this chat</text>
+<path d="M1408 26 L1416 34 M1416 26 L1408 34" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1100" y="56" font-size="12" fill="#64748b">What the AI may use here. Defaults live in Connections.</text>
+<rect x="1096" y="72" width="328" height="148" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="1110" y="96" font-size="13" fill="#0f172a" font-weight="700">Peblo</text>
+<rect x="1152" y="82" width="62" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<circle cx="1164" cy="92.0" r="3.5" fill="#10b981"/>
+<text x="1173" y="96.32" font-size="12" fill="#047857" font-weight="500">Local</text>
+<rect x="1376" y="84" width="34" height="20" rx="10" fill="#4f46e5" />
+<circle cx="1400" cy="94" r="7" fill="#ffffff"/>
+<text x="1110" y="116" font-size="12" fill="#64748b">Built-in · your notes, tasks, calendar</text>
+<text x="1110" y="142" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">search_notes</text>
+<rect x="1250" y="128" width="46" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<text x="1259" y="142.32" font-size="12" fill="#047857" font-weight="500">Read</text>
+<text x="1398" y="142" font-size="12" fill="#475569" font-weight="600" text-anchor="end">Auto</text>
+<path d="M1402 136 L1406 140 L1410 136" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1110" y="172" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">update_task</text>
+<rect x="1250" y="158" width="49" height="20" rx="10.0" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
+<text x="1259" y="172.32" font-size="12" fill="#b45309" font-weight="500">Write</text>
+<text x="1398" y="172" font-size="12" fill="#475569" font-weight="600" text-anchor="end">Ask</text>
+<path d="M1402 166 L1406 170 L1410 166" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1110" y="202" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">delete_note</text>
+<rect x="1250" y="188" width="54" height="20" rx="10.0" fill="#fef2f2" stroke="#fecaca" stroke-width="1" />
+<text x="1259" y="202.32" font-size="12" fill="#b91c1c" font-weight="500">Delete</text>
+<text x="1398" y="202" font-size="12" fill="#475569" font-weight="600" text-anchor="end">Off</text>
+<path d="M1402 196 L1406 200 L1410 196" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="1096" y="230" width="328" height="118" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="1110" y="254" font-size="13" fill="#0f172a" font-weight="700">Google Calendar</text>
+<rect x="1223" y="240" width="67" height="20" rx="10.0" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1" />
+<text x="1232" y="254.32" font-size="12" fill="#0369a1" font-weight="500">External</text>
+<rect x="1376" y="242" width="34" height="20" rx="10" fill="#4f46e5" />
+<circle cx="1400" cy="252" r="7" fill="#ffffff"/>
+<text x="1110" y="274" font-size="12" fill="#64748b">Peblo Connect · remote · signed in</text>
+<text x="1110" y="300" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">list_events</text>
+<rect x="1250" y="286" width="46" height="20" rx="10.0" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+<text x="1259" y="300.32" font-size="12" fill="#047857" font-weight="500">Read</text>
+<text x="1398" y="300" font-size="12" fill="#475569" font-weight="600" text-anchor="end">Auto</text>
+<path d="M1402 294 L1406 298 L1410 294" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1110" y="330" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">create_event</text>
+<rect x="1250" y="316" width="49" height="20" rx="10.0" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
+<text x="1259" y="330.32" font-size="12" fill="#b45309" font-weight="500">Write</text>
+<text x="1398" y="330" font-size="12" fill="#475569" font-weight="600" text-anchor="end">Ask</text>
+<path d="M1402 324 L1406 328 L1410 324" fill="none" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="1096" y="358" width="328" height="50" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="1110" y="388" font-size="13" fill="#64748b" font-weight="700">GitHub</text>
+<text x="1170" y="388" font-size="12" fill="#64748b">Off for this chat · 26 tools</text>
+<rect x="1376" y="373" width="34" height="20" rx="10" fill="#cbd5e1" />
+<circle cx="1386" cy="383" r="7" fill="#ffffff"/>
+<rect x="1096" y="418" width="328" height="50" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+<text x="1110" y="448" font-size="13" fill="#64748b" font-weight="700">Files: ~/College</text>
+<text x="1230" y="448" font-size="12" fill="#64748b">Off · read-only</text>
+<rect x="1376" y="433" width="34" height="20" rx="10" fill="#cbd5e1" />
+<circle cx="1386" cy="443" r="7" fill="#ffffff"/>
+<text x="1100" y="498" font-size="12" fill="#64748b" font-weight="600">ACTIVITY IN THIS CHAT</text>
+<circle cx="1106" cy="524" r="4" fill="#10b981"/>
+<text x="1120" y="528" font-size="12" fill="#64748b">10:41</text>
+<text x="1164" y="528" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">list_tasks</text>
+<text x="1266" y="528" font-size="12" fill="#475569">auto-approved (read)</text>
+<circle cx="1106" cy="550" r="4" fill="#10b981"/>
+<text x="1120" y="554" font-size="12" fill="#64748b">10:42</text>
+<text x="1164" y="554" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">update_task</text>
+<text x="1266" y="554" font-size="12" fill="#475569">approved by you</text>
+<circle cx="1106" cy="576" r="4" fill="#b45309"/>
+<text x="1120" y="580" font-size="12" fill="#64748b">10:42</text>
+<text x="1164" y="580" font-size="12" fill="#0f172a" font-family="Consolas, Menlo, monospace">create_event</text>
+<text x="1266" y="580" font-size="12" fill="#475569">waiting for you</text>
+<text x="1100" y="622" font-size="12" fill="#4f46e5" font-weight="600">Open full activity log</text>
+</svg>
