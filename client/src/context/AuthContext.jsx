@@ -11,6 +11,10 @@ export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
 
   const [theme, setThemeState] = useState(() => localStorage.getItem('peblo-theme') || 'light');
+  // Style: 'studio' (sidebar), 'console' (keyboard-first) or 'soft' (friendly, with a dock).
+  const [uiStyle, setUiStyleState] = useState(() => {
+    try { return localStorage.getItem('peblo-style') || 'studio'; } catch { return 'studio'; }
+  });
   
   const [settings, setSettings] = useState(() => {
     try {
@@ -50,6 +54,10 @@ export function AuthProvider({ children }) {
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, [theme]);
+
+  useEffect(() => {
+    for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
+  }, [uiStyle]);
 
   // Desktop app: no login. Load the single local profile (and any settings saved in the database).
   useEffect(() => {
@@ -106,6 +114,11 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Failed to update profile to DB:', err);
     }
+  }, []);
+
+  const setUiStyle = useCallback((style) => {
+    setUiStyleState(style);
+    try { localStorage.setItem('peblo-style', style); } catch { /* ignore */ }
   }, []);
 
   const setTheme = useCallback((newTheme) => {
@@ -186,6 +199,8 @@ export function AuthProvider({ children }) {
       updateProfile,
       theme,
       setTheme,
+      uiStyle,
+      setUiStyle,
       settings,
       updateSettings,
       notifications,

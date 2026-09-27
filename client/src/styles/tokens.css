@@ -8,6 +8,17 @@
   --pb-font: 'Geist', 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --pb-font-display: 'Instrument Serif', Georgia, serif;
   --pb-font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --pb-display-weight: 400;
+  --pb-display-tracking: -0.01em;
+  --pb-r-card: 16px;
+  --pb-r-box: 12px;
+  --pb-r-ctl: 9px;
+  --pb-r-pill: 99px;
+  --pb-tile-1: var(--pb-surface);
+  --pb-tile-2: var(--pb-surface);
+  --pb-tile-3: var(--pb-surface);
+  --pb-tile-4: var(--pb-surface);
+  --pb-tile-5: var(--pb-surface);
 
   --pb-bg: #F6F5F2;
   --pb-surface: #FFFFFF;
@@ -170,4 +181,167 @@ body {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ==========================================================
+   Styles (Settings → Appearance → Style). Each style swaps type,
+   shape and colour; light, dark and midnight still apply on top.
+   data-style sits on <html> and <body>, next to the theme classes.
+   ========================================================== */
+
+/* ---- Console: keyboard-first, mono details, lime accent ---- */
+[data-style="console"] {
+  --pb-font: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+  --pb-font-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+  --pb-font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  --pb-display-weight: 600;
+  --pb-display-tracking: -0.035em;
+  --pb-r-card: 6px;
+  --pb-r-box: 6px;
+  --pb-r-ctl: 5px;
+  --pb-r-pill: 4px;
+
+  --pb-bg: #E8EAED;
+  --pb-surface: #FFFFFF;
+  --pb-surface-2: #F3F4F6;
+  --pb-surface-3: #E6E9ED;
+  --pb-line: #D6DADF;
+  --pb-line-2: #BCC2CA;
+  --pb-fg: #0D1014;
+  --pb-fg-2: #3A414B;
+  --pb-fg-3: #5C6470;
+  --pb-accent: #4A6600;
+  --pb-solid: #C6EF3A;
+  --pb-on-solid: #0D1014;
+  --pb-soft: #F0F9D2;
+  --pb-soft-line: #D9ED9C;
+  --pb-local: #3F6B00;
+  --pb-local-soft: #EEF7DC;
+  --pb-kbd: #EEF0F3;
+  --pb-heat-0: #E4E7EB;
+  --pb-heat-1: #D9ED9C;
+  --pb-heat-2: #B9DE52;
+  --pb-heat-3: #8DB51F;
+  --pb-heat-4: #4A6600;
+  --pb-shadow: none;
+  --pb-shadow-lg: 0 16px 40px rgba(13, 16, 20, 0.18);
+  --pb-focus: 0 0 0 2px #4A6600;
+}
+[data-style="console"].theme-dark {
+  --pb-bg: #08090B;
+  --pb-surface: #0F1114;
+  --pb-surface-2: #14171B;
+  --pb-surface-3: #1C2026;
+  --pb-line: #1F232A;
+  --pb-line-2: #2E343D;
+  --pb-fg: #E7EAEE;
+  --pb-fg-2: #A9B0BA;
+  --pb-fg-3: #7F8793;
+  --pb-accent: #C6EF3A;
+  --pb-solid: #C6EF3A;
+  --pb-on-solid: #0D1014;
+  --pb-soft: #1B220B;
+  --pb-soft-line: #35431A;
+  --pb-local: #C6EF3A;
+  --pb-local-soft: #1B220B;
+  --pb-kbd: #1A1D22;
+  --pb-heat-0: #171A1F;
+  --pb-heat-1: #2F3D12;
+  --pb-heat-2: #4F6A14;
+  --pb-heat-3: #86AE21;
+  --pb-heat-4: #C6EF3A;
+  --pb-shadow: none;
+  --pb-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.7);
+  --pb-focus: 0 0 0 2px #C6EF3A;
+}
+[data-style="console"].theme-dark.theme-midnight {
+  --pb-bg: #000000;
+  --pb-surface: #07080A;
+  --pb-surface-2: #0C0D10;
+  --pb-surface-3: #15171B;
+  --pb-line: #181B20;
+  --pb-line-2: #262A31;
+}
+
+/* ---- Soft Studio: rounded, friendly, pastel tiles ---- */
+[data-style="soft"] {
+  --pb-font: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --pb-font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --pb-display-weight: 800;
+  --pb-display-tracking: -0.035em;
+  --pb-r-card: 28px;
+  --pb-r-box: 20px;
+  --pb-r-ctl: 14px;
+  --pb-r-pill: 999px;
+
+  --pb-bg: #FBF6EE;
+  --pb-surface: #FFFFFF;
+  --pb-surface-2: #F7F0E6;
+  --pb-surface-3: #EFE6D9;
+  --pb-line: #EADFD0;
+  --pb-line-2: #D9CBB8;
+  --pb-fg: #241F1A;
+  --pb-fg-2: #564D43;
+  --pb-fg-3: #6E6559;
+  --pb-accent: #A8380F;
+  --pb-solid: #C4441C;
+  --pb-on-solid: #FFFFFF;
+  --pb-soft: #FFE4D6;
+  --pb-soft-line: #F6C8B2;
+  --pb-local: #1E7A46;
+  --pb-local-soft: #CDEBD9;
+  --pb-kbd: #F3ECE2;
+  --pb-heat-0: #EFE6D9;
+  --pb-heat-1: #FFD9C4;
+  --pb-heat-2: #F7A98A;
+  --pb-heat-3: #E0703F;
+  --pb-heat-4: #C4441C;
+  --pb-tile-1: #FFD9C4;
+  --pb-tile-2: #CDEBD9;
+  --pb-tile-3: #FFE9A6;
+  --pb-tile-4: #DDD8FF;
+  --pb-tile-5: #CFE5F8;
+  --pb-shadow: 0 10px 24px rgba(70, 45, 20, 0.08);
+  --pb-shadow-lg: 0 24px 60px rgba(70, 45, 20, 0.22);
+  --pb-focus: 0 0 0 3px rgba(196, 68, 28, 0.3);
+}
+[data-style="soft"].theme-dark {
+  --pb-bg: #120F17;
+  --pb-surface: #1F1A27;
+  --pb-surface-2: #1A1621;
+  --pb-surface-3: #2A2433;
+  --pb-line: #2F2839;
+  --pb-line-2: #3E3549;
+  --pb-fg: #F5F0F7;
+  --pb-fg-2: #CFC6D8;
+  --pb-fg-3: #A59BB0;
+  --pb-accent: #FFA585;
+  --pb-solid: #FF8F6B;
+  --pb-on-solid: #1A1210;
+  --pb-soft: #3A261E;
+  --pb-soft-line: #5A3A2C;
+  --pb-local: #6FE0A0;
+  --pb-local-soft: #18302A;
+  --pb-kbd: #2A2433;
+  --pb-heat-0: #241E2C;
+  --pb-heat-1: #4A2A20;
+  --pb-heat-2: #7A3F2A;
+  --pb-heat-3: #C0613D;
+  --pb-heat-4: #FF8F6B;
+  --pb-tile-1: #3A261E;
+  --pb-tile-2: #18302A;
+  --pb-tile-3: #332B13;
+  --pb-tile-4: #2A2549;
+  --pb-tile-5: #162739;
+  --pb-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  --pb-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.7);
+  --pb-focus: 0 0 0 3px rgba(255, 143, 107, 0.35);
+}
+[data-style="soft"].theme-dark.theme-midnight {
+  --pb-bg: #07050A;
+  --pb-surface: #120F17;
+  --pb-surface-2: #0F0C14;
+  --pb-surface-3: #1D1824;
+  --pb-line: #211B29;
+  --pb-line-2: #2F2839;
 }

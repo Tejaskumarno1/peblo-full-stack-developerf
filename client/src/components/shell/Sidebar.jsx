@@ -68,7 +68,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, onOpenSettings }
         {!collapsed && (
           <div className="pb-brand-text">
             <strong>Peblo</strong>
-            <span>{user?.name ? `${user.name.split(' ')[0]}'s workspace` : 'Your workspace'}</span>
+            <span>{user?.name && user.name !== 'You' ? `${user.name.split(' ')[0]}'s workspace` : 'Your workspace'}</span>
           </div>
         )}
         {!collapsed && (

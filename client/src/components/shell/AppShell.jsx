@@ -1,7 +1,11 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import ConsoleShell from './ConsoleShell';
+import SoftShell from './SoftShell';
+import { useAuth } from '../../context/AuthContext';
 import '../../styles/shell.css';
+import '../../styles/shell-styles.css';
 
 const SettingsModal = lazy(() => import('../SettingsModal'));
 
@@ -13,6 +17,7 @@ function readCollapsed() {
 export default function AppShell({ children }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { uiStyle } = useAuth();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -44,15 +49,24 @@ export default function AppShell({ children }) {
     return () => window.removeEventListener('peblo:open-settings', open);
   }, []);
 
+  const openSettings = () => setSettingsOpen(true);
+  const settings = settingsOpen && (
+    <Suspense fallback={null}>
+      <SettingsModal onClose={() => setSettingsOpen(false)} />
+    </Suspense>
+  );
+
+  if (uiStyle === 'console') {
+    return <><ConsoleShell onOpenSettings={openSettings}>{children}</ConsoleShell>{settings}</>;
+  }
+  if (uiStyle === 'soft') {
+    return <><SoftShell onOpenSettings={openSettings}>{children}</SoftShell>{settings}</>;
+  }
   return (
     <div className="pb-shell">
-      <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} onOpenSettings={() => setSettingsOpen(true)} />
+      <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} onOpenSettings={openSettings} />
       <main className="pb-sheet">{children}</main>
-      {settingsOpen && (
-        <Suspense fallback={null}>
-          <SettingsModal onClose={() => setSettingsOpen(false)} />
-        </Suspense>
-      )}
+      {settings}
     </div>
   );
 }

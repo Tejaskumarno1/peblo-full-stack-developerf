@@ -16,6 +16,9 @@ import NoteContextPanel from '../components/workspace/NoteContextPanel';
 import '../styles/workspace.css';
 import '../styles/notes.css';
 
+// New notes are stored as "Untitled"; show that as an empty title with a placeholder.
+const editableTitle = (title) => (!title || title === 'Untitled' ? '' : title);
+
 // Import subcomponents for cleaner SPA loading/rendering
 import {
   NotesSidebar,
@@ -148,6 +151,9 @@ export default function WorkspacePage() {
   const [showPreview, setShowPreview] = useState(true);
 
   const [aiPanelTab, setAiPanelTab] = useState('assist');
+  // Which document the editor shows. A new note keeps its key when it is first saved,
+  // so the editor (and an open / menu) is not reloaded mid-typing.
+  const [editorKey, setEditorKey] = useState('empty');
   const [aiResults, setAiResults] = useState({});
   const [aiError, setAiError] = useState('');
   
@@ -238,6 +244,7 @@ export default function WorkspacePage() {
       updatedAt: new Date().toISOString(),
     };
     setSelectedNote(draftNote);
+    setEditorKey(`draft-${Date.now()}`);
     setNoteTitle('');
     setNoteContent('');
     setNoteTags([]);
@@ -264,7 +271,8 @@ export default function WorkspacePage() {
       });
       if (selectedNote?.id === updatedNote.id) {
         setNoteContent(updatedNote.content || '');
-        setNoteTitle(updatedNote.title || '');
+        setEditorKey(`${updatedNote.id}-${Date.now()}`);
+        setNoteTitle(editableTitle(updatedNote.title));
         setNoteTags(updatedNote.tags || []);
         setSelectedNote(updatedNote);
       }
@@ -404,7 +412,8 @@ export default function WorkspacePage() {
 
   const applyNoteToEditor = useCallback((note) => {
     setSelectedNote(note);
-    setNoteTitle(note.title || '');
+    setEditorKey(note.id === '__draft__' ? `draft-${Date.now()}` : note.id);
+    setNoteTitle(editableTitle(note.title));
     setNoteContent(note.content || '');
     setNoteTags(note.tags || []);
     setNoteCategory(note.category || '');
@@ -421,7 +430,7 @@ export default function WorkspacePage() {
     
     setAiError('');
     setAiPanelOpen(false);
-    setShowPreview(note.id !== '__draft__');
+    setShowPreview(false);
     setSelectedBackupForDiff(null);
     setShowBackups(false);
   }, []);
@@ -686,7 +695,8 @@ export default function WorkspacePage() {
       
       if (updatedNote) {
         setNoteContent(updatedNote.content);
-        setNoteTitle(updatedNote.title);
+        setEditorKey(`${updatedNote.id}-${Date.now()}`);
+        setNoteTitle(editableTitle(updatedNote.title));
         setNoteTags(updatedNote.tags || []);
         queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
           if (!old) return old;
@@ -880,6 +890,7 @@ export default function WorkspacePage() {
         <main className="ws-main">
           {selectedNote ? (
             <>
+              <div className="nt-layout">
               <div className="editor-container">
                 <MobileEditorControls
                   noteTitle={noteTitle}
@@ -978,7 +989,7 @@ export default function WorkspacePage() {
 
                 <div className="editor-body">
                   <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
-                    <EditorErrorBoundary key={selectedNote?.id || 'new'}>
+                    <EditorErrorBoundary key={editorKey}>
                       <BlockEditor
                         initialContent={noteContent}
                         onChange={(content) => setNoteContent(content)}
@@ -1064,7 +1075,9 @@ export default function WorkspacePage() {
                     handleWsChatSubmit={handleWsChatSubmit}
                   />
 
-                  {!aiPanelOpen && !isFocusMode && (
+                </div>
+              </div>
+                {!aiPanelOpen && !isFocusMode && (
                     <NoteContextPanel
                       note={selectedNote}
                       noteTitle={noteTitle}
@@ -1076,7 +1089,6 @@ export default function WorkspacePage() {
                       onHistory={loadBackups}
                     />
                   )}
-                </div>
               </div>
 
               {showTodoList && (

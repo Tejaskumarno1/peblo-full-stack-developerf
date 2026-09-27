@@ -25,20 +25,20 @@
 
 .pb-sheet .cal-layout { max-width: none; min-height: 100%; height: 100%; grid-template-columns: minmax(0, 1fr) 360px; }
 .pb-sheet .cal-grid-section { padding: 22px 28px 28px; }
-.pb-sheet .cal-month-label { font-family: var(--pb-font-display); font-weight: 400; font-size: 34px; letter-spacing: -0.01em; }
-.pb-sheet .cal-nav-btn { border-radius: 9px; border: 1px solid var(--pb-line); background: var(--pb-surface); color: var(--pb-fg-2); }
-.pb-sheet .cal-today-btn { background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg); border-radius: 9px; }
+.pb-sheet .cal-month-label { font-family: var(--pb-font-display); font-weight: var(--pb-display-weight); font-size: 34px; letter-spacing: var(--pb-display-tracking); }
+.pb-sheet .cal-nav-btn { border-radius: var(--pb-r-ctl); border: 1px solid var(--pb-line); background: var(--pb-surface); color: var(--pb-fg-2); }
+.pb-sheet .cal-today-btn { background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg); border-radius: var(--pb-r-ctl); }
 .pb-sheet .cal-today-btn:hover { background: var(--pb-surface-2); color: var(--pb-fg); }
-.pb-sheet .cal-view-toggle { background: var(--pb-surface-3); border: none; border-radius: 9px; padding: 3px; gap: 2px; }
+.pb-sheet .cal-view-toggle { background: var(--pb-surface-3); border: none; border-radius: var(--pb-r-ctl); padding: 3px; gap: 2px; }
 .pb-sheet .cal-view-toggle button { border-radius: 7px; color: var(--pb-fg-2); }
 .pb-sheet .cal-view-toggle button.active { background: var(--pb-surface); color: var(--pb-fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 
-.pb-sheet .cal-stat-chip { border-radius: 99px; background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg-2); }
+.pb-sheet .cal-stat-chip { border-radius: var(--pb-r-pill); background: var(--pb-surface); border: 1px solid var(--pb-line); color: var(--pb-fg-2); }
 .pb-sheet .cal-stat-chip.done { background: var(--pb-local-soft); border-color: transparent; color: var(--pb-local); }
 .pb-sheet .cal-stat-chip.overdue { background: var(--pb-danger-soft); border-color: transparent; color: var(--pb-danger); }
 .pb-sheet .cal-stat-chip.high { background: var(--pb-warn-soft); border-color: transparent; color: var(--pb-warn); }
 
-.pb-sheet .cal-grid { border-radius: 14px; }
+.pb-sheet .cal-grid { border-radius: var(--pb-r-card); }
 .pb-sheet .cal-day-header { background: var(--pb-surface-2); color: var(--pb-fg-3); font-weight: 600; letter-spacing: 0.05em; }
 .pb-sheet .cal-cell { min-height: 92px; }
 .pb-sheet .cal-cell.outside { background: var(--pb-surface-2); opacity: 1; }
@@ -53,9 +53,9 @@
 .pb-sheet .cal-dot.low { background: var(--pb-local); }
 
 .pb-sheet .cal-sidebar { position: relative; top: 0; height: 100%; background: var(--pb-surface-2); border-left: 1px solid var(--pb-line); }
-.pb-sheet .cal-sidebar-date { font-family: var(--pb-font-display); font-weight: 400; font-size: 24px; letter-spacing: -0.01em; }
+.pb-sheet .cal-sidebar-date { font-family: var(--pb-font-display); font-weight: var(--pb-display-weight); font-size: 24px; letter-spacing: var(--pb-display-tracking); }
 .pb-sheet .cal-sidebar-day-badge { background: var(--pb-soft); color: var(--pb-accent); border: 1px solid var(--pb-soft-line); }
-.pb-sheet .cal-task-item { background: var(--pb-surface); border: 1px solid var(--pb-line); border-left-width: 1px; border-radius: 12px; box-shadow: none; }
+.pb-sheet .cal-task-item { background: var(--pb-surface); border: 1px solid var(--pb-line); border-left-width: 1px; border-radius: var(--pb-r-box); box-shadow: none; }
 .pb-sheet .cal-task-item.priority-high { box-shadow: inset 3px 0 0 var(--pb-danger); }
 .pb-sheet .cal-task-item.priority-medium { box-shadow: inset 3px 0 0 var(--pb-warn); }
 .pb-sheet .cal-task-item.priority-low { box-shadow: inset 3px 0 0 var(--pb-local); }
@@ -63,5 +63,5 @@
 .pb-sheet .cal-priority-label.medium { background: var(--pb-warn-soft); color: var(--pb-warn); }
 .pb-sheet .cal-priority-label.low { background: var(--pb-local-soft); color: var(--pb-local); }
 .pb-sheet .cal-task-tag { background: var(--pb-surface-2); color: var(--pb-fg-2); border-color: var(--pb-line); }
-.pb-sheet .cal-add-task-btn { border-radius: 10px; color: var(--pb-accent); }
+.pb-sheet .cal-add-task-btn { border-radius: var(--pb-r-ctl); color: var(--pb-accent); }
 .pb-sheet .cal-task-item.completed { box-shadow: none; }

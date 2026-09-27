@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Repeat, FileText } from 'lucide-react';
 import { todosAPI } from '../api';
@@ -27,6 +27,14 @@ function dueLabel(t) {
 }
 
 export default function TasksPage() {
+  // "Capture" buttons open this page with ?add=1: jump straight to the add box.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('add') !== '1') return;
+    document.getElementById('task-add')?.focus();
+    setParams({}, { replace: true });
+  }, [params, setParams]);
+
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [draft, setDraft] = useState('');

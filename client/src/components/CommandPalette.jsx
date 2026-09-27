@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen } from 'lucide-react';
+import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api/index';
 import '../styles/command-palette.css';
 
@@ -11,6 +12,7 @@ export default function CommandPalette() {
   const [notes, setNotes] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const navigate = useNavigate();
+  const { uiStyle, setUiStyle } = useAuth();
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -47,12 +49,15 @@ export default function CommandPalette() {
     : [];
 
   const navigationCommands = [
-    { id: 'nav-dashboard', title: 'Go to Dashboard', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
-    { id: 'nav-notes', title: 'Go to Workspace', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
+    { id: 'nav-dashboard', title: 'Go to Home', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
+    { id: 'nav-notes', title: 'Go to Notes', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
     { id: 'nav-tasks', title: 'Go to Tasks', icon: <CheckSquare size={16} />, action: () => navigate('/tasks') },
     { id: 'nav-cal', title: 'Go to Calendar', icon: <Calendar size={16} />, action: () => navigate('/calendar') },
     { id: 'nav-ai', title: 'Open AI Hub', icon: <Sparkles size={16} />, action: () => navigate('/ai') },
-    { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') }
+    { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') },
+    ...[['studio', 'Studio'], ['console', 'Console'], ['soft', 'Soft Studio']]
+      .filter(([id]) => id !== uiStyle)
+      .map(([id, name]) => ({ id: `style-${id}`, title: `Change style to ${name}`, icon: <Palette size={16} />, action: () => setUiStyle(id) }))
   ];
 
   const matchingCommands = query.trim()

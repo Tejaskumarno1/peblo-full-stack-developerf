@@ -33,7 +33,7 @@ function NoteContextPanel({ note, noteTitle, notes, isDraft, onSummarise, onGetT
   });
 
   const backlinks = useMemo(() => {
-    const title = (noteTitle || note?.title || '').trim();
+    const title = (noteTitle || '').trim();
     if (!title || title.length < 4 || !notes?.length) return [];
     const needle = title.toLowerCase();
     return notes
@@ -114,7 +114,7 @@ function NoteContextPanel({ note, noteTitle, notes, isDraft, onSummarise, onGetT
       <section className="nc-section">
         <h3>Backlinks {backlinks.length > 0 && <span className="pb-muted">{backlinks.length}</span>}</h3>
         {backlinks.length === 0 ? (
-          <p className="nc-empty">No other note mentions “{noteTitle || note?.title || 'this note'}” yet.</p>
+          <p className="nc-empty">{(noteTitle || '').trim().length < 4 ? 'Give this note a title to see which notes mention it.' : `No other note mentions “${noteTitle.trim()}” yet.`}</p>
         ) : backlinks.map((n) => (
           <button key={n.id} type="button" className="nc-link" onClick={() => onSelectNote(n)}>
             <Link2 size={12} aria-hidden="true" /> <span>{n.title || 'Untitled'}</span>

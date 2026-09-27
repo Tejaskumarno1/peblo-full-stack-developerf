@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
-  const { user, updateProfile, theme, setTheme, settings, updateSettings } = useAuth();
+  const { user, updateProfile, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab === 'security' ? 'data' : initialTab);
   
   // Profile specific states (saved to user obj in DB ideally, mocked here)
@@ -228,9 +228,36 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           {activeTab === 'appearance' && (
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">Appearance</h2>
+
+              <div className="settings-field-group">
+                <label className="settings-field-label" id="style-label">Style</label>
+                <p className="style-hint">Changes the layout, type and colours of the whole app. Light, dark and midnight work with every style.</p>
+                <div className="style-grid" role="radiogroup" aria-labelledby="style-label">
+                  {[
+                    { id: 'studio', name: 'Studio', desc: 'Sidebar and calm serif headings' },
+                    { id: 'console', name: 'Console', desc: 'Keyboard-first, command bar, dense' },
+                    { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock' },
+                  ].map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={uiStyle === o.id}
+                      className={`style-card${uiStyle === o.id ? ' active' : ''}`}
+                      onClick={() => setUiStyle(o.id)}
+                    >
+                      <span className={`style-preview ${o.id}`} aria-hidden="true">
+                        <i className="a" /><i className="b" /><i className="c" /><i className="d" /><i className="e" />
+                      </span>
+                      <span className="style-name">{o.name}</span>
+                      <span className="style-desc">{o.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               
               <div className="settings-field-group">
-                <label className="settings-field-label">Theme Preference</label>
+                <label className="settings-field-label">Theme</label>
                 <div className="settings-theme-grid">
                   <div className={`theme-card ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')}>
                     <div className="theme-preview light"></div>

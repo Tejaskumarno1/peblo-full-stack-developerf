@@ -21,7 +21,7 @@
   align-items: center;
   gap: 10px;
   padding: 6px 6px 6px 14px;
-  border-radius: 12px;
+  border-radius: var(--pb-r-box);
   border: 1px solid var(--pb-line);
   background: var(--pb-surface);
   box-shadow: var(--pb-shadow);
@@ -90,7 +90,7 @@
   align-items: center;
   gap: 4px;
   padding: 8px 0;
-  border-radius: 10px;
+  border-radius: var(--pb-r-ctl);
   border: none;
   background: transparent;
   color: var(--pb-fg);
@@ -100,7 +100,7 @@
 .tasks-day:hover { background: var(--pb-surface-3); }
 .tasks-day .dow { font-size: 11px; font-weight: 600; opacity: 0.8; }
 .tasks-day .num { font-size: 15px; font-weight: 600; }
-.tasks-day .dot { width: 5px; height: 5px; border-radius: 99px; background: var(--pb-accent); }
+.tasks-day .dot { width: 5px; height: 5px; border-radius: var(--pb-r-pill); background: var(--pb-accent); }
 .tasks-day.today .num { color: var(--pb-accent); }
 .tasks-day.sel { background: var(--pb-solid); color: var(--pb-on-solid); }
 .tasks-day.sel .num { color: var(--pb-on-solid); }
@@ -121,7 +121,7 @@
 .tasks-untimed { display: flex; flex-direction: column; gap: 6px; }
 .tasks-untimed-item {
   padding: 7px 10px;
-  border-radius: 9px;
+  border-radius: var(--pb-r-ctl);
   background: var(--pb-surface);
   border: 1px solid var(--pb-line);
   font-size: 12.5px;
@@ -153,7 +153,7 @@
   right: 0;
   box-sizing: border-box;
   padding: 6px 10px;
-  border-radius: 9px;
+  border-radius: var(--pb-r-ctl);
   background: var(--pb-soft);
   border: 1px solid var(--pb-soft-line);
   display: flex;
