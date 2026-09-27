@@ -94,9 +94,11 @@ async function startBackend() {
 }
 
 function createWindow() {
+  // Open at the size the designs are drawn for (1440 × 900 of content) when the screen allows.
+  const work = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: Math.min(1456, work.width),
+    height: Math.min(940, work.height),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -181,12 +183,21 @@ function createCaptureWindow() {
   captureWindow.on('closed', () => { captureWindow = null; });
 }
 
-function toggleCapture() {
+async function toggleCapture() {
   if (!captureWindow) createCaptureWindow();
   if (captureWindow.isVisible()) {
     captureWindow.hide();
     return;
   }
+  // Soft Studio's capture card is bigger; every other style keeps the compact box.
+  let style = 'studio';
+  try {
+    style = await captureWindow.webContents.executeJavaScript("localStorage.getItem('peblo-style') || 'studio'", true);
+  } catch { /* page still loading: use the default size */ }
+  const [cw, ch] = style === 'soft' ? [760, 400] : [620, 256];
+  captureWindow.setResizable(true);
+  captureWindow.setSize(cw, ch);
+  captureWindow.setResizable(false);
   // Center on the screen the mouse is on, a little above the middle.
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.workArea;

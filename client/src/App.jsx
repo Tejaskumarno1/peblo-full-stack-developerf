@@ -12,11 +12,25 @@ const AIHubPage = lazy(() => import('./pages/AIHubPage'));
 const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'));
 const QuickCapturePage = lazy(() => import('./pages/QuickCapturePage'));
 
+// Soft Studio has its own screens (only used when Settings > Style is Soft Studio)
+const SoftHome = lazy(() => import('./soft/SoftHome'));
+const SoftNotes = lazy(() => import('./soft/SoftNotes'));
+const SoftTasks = lazy(() => import('./soft/SoftTasks'));
+const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
+const SoftAI = lazy(() => import('./soft/SoftAI'));
+const SoftConnections = lazy(() => import('./soft/SoftConnections'));
+
 // Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
+
+/** Picks the screen for the current style. Studio and Console share pages; Soft Studio has its own. */
+function Styled({ soft: Soft, other: Other }) {
+  const { uiStyle } = useAuth();
+  return uiStyle === 'soft' ? <Soft /> : <Other />;
+}
 
 /** No accounts in the desktop app: wait for the local profile, then show the app shell. */
 function ShellLayout() {
@@ -38,13 +52,13 @@ export default function App() {
     <Suspense fallback={<Loader />}>
       <Routes>
         <Route element={<ShellLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/notes" element={<WorkspacePage />} />
-          <Route path="/notes/:id" element={<WorkspacePage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/ai" element={<AIHubPage />} />
-          <Route path="/ai/connections" element={<ConnectionsPage />} />
+          <Route path="/" element={<Styled soft={SoftHome} other={HomePage} />} />
+          <Route path="/notes" element={<Styled soft={SoftNotes} other={WorkspacePage} />} />
+          <Route path="/notes/:id" element={<Styled soft={SoftNotes} other={WorkspacePage} />} />
+          <Route path="/tasks" element={<Styled soft={SoftTasks} other={TasksPage} />} />
+          <Route path="/calendar" element={<Styled soft={SoftCalendar} other={CalendarPage} />} />
+          <Route path="/ai" element={<Styled soft={SoftAI} other={AIHubPage} />} />
+          <Route path="/ai/connections" element={<Styled soft={SoftConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<QuickCapturePage />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />

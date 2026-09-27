@@ -2,7 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import ConsoleShell from './ConsoleShell';
-import SoftShell from './SoftShell';
+import SoftShell from '../../soft/SoftShell';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/shell.css';
 import '../../styles/shell-styles.css';

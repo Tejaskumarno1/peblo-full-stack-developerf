@@ -3,8 +3,19 @@ import { FileText, CheckSquare } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import '../styles/quick-capture.css';
+import { useAuth } from '../context/AuthContext';
+import SoftCapture from '../soft/SoftCapture';
 
-export default function QuickCapturePage() {
+/** Ctrl+Shift+Space window: Soft Studio has its own capture card. */
+export default function QuickCaptureWindow() {
+  const { uiStyle } = useAuth();
+  if (uiStyle === 'soft') {
+    return <div className="soft soft-window"><SoftCapture windowMode /></div>;
+  }
+  return <QuickCapturePage />;
+}
+
+function QuickCapturePage() {
   const [mode, setMode] = useState('note'); // 'note' | 'task'
   const [value, setValue] = useState('');
   const [status, setStatus] = useState(null); // { ok, text }

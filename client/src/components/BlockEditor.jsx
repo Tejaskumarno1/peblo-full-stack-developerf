@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems } from '@blocknote/react';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
@@ -8,10 +8,12 @@ import { aiAPI } from '../api/index';
 
 import { useAuth } from '../context/AuthContext';
 
-export default function BlockEditor({ initialContent, onChange, editable = true }) {
+export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true }) {
   // Initialize the editor
   const editor = useCreateBlockNote();
   const { theme } = useAuth();
+  // True while the saved content is being loaded, so opening a note doesn't count as an edit
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     async function loadContent() {
@@ -20,7 +22,9 @@ export default function BlockEditor({ initialContent, onChange, editable = true 
       }
       try {
         const newBlocks = await editor.tryParseMarkdownToBlocks(initialContent);
+        loadingRef.current = true;
         editor.replaceBlocks(editor.document, newBlocks);
+        setTimeout(() => { loadingRef.current = false; }, 0);
       } catch (err) {
         console.error('Failed to parse markdown:', err);
       }
@@ -30,7 +34,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true 
   }, [editor]); // Intentionally ignore initialContent to prevent cursor reset on every keystroke
 
   const handleChange = async () => {
-    if (!onChange) return;
+    if (!onChange || loadingRef.current) return;
     const markdown = await editor.blocksToMarkdownLossy(editor.document);
     onChange(markdown);
   };
@@ -178,8 +182,9 @@ export default function BlockEditor({ initialContent, onChange, editable = true 
         editor={editor}
         editable={editable}
         onChange={handleChange}
-        theme={theme === 'dark' ? 'dark' : 'light'}
+        theme={theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'}
         slashMenu={false}
+        formattingToolbar={formattingToolbar}
       >
         <SuggestionMenuController
           triggerCharacter={'/'}
