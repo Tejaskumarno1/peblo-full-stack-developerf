@@ -26,6 +26,7 @@ import { aiAPI, notesAPI } from '../api/index';
 import { useUIStore } from '../store/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
 import '../styles/ai-chat.css';
+import { canvasWidth } from '../design/canvas';
 
 const SUGGESTIONS = [
   { label: 'Sprint planning notes', prompt: 'Create meeting notes for sprint planning with action items' },
@@ -228,7 +229,7 @@ export default function AiChatPanel() {
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('keydown', onShortcut);
-    document.body.style.overflow = window.innerWidth <= 520 ? 'hidden' : '';
+    document.body.style.overflow = canvasWidth() <= 520 ? 'hidden' : '';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keydown', onShortcut);

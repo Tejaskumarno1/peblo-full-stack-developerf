@@ -175,7 +175,7 @@ body.ai-panel-open .ai-chat-overlay {
 .ai-chat-window {
   width: 100%;
   max-width: 500px;
-  height: min(650px, calc(100vh - var(--ai-fab-size) - 3rem));
+  height: min(650px, calc(var(--pb-canvas-h) - var(--ai-fab-size) - 3rem));
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.9);
@@ -822,7 +822,7 @@ html.theme-dark .ai-chat-chip,
   border-radius: 8px;
   overflow-x: auto;
   margin: 0.5rem 0;
-  font-family: monospace;
+  font-family: var(--pb-font-mono);
   font-size: 0.75rem;
 }
 
@@ -834,7 +834,7 @@ html.theme-dark .ai-chat-chip,
   background: rgba(0, 0, 0, 0.08);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
-  font-family: monospace;
+  font-family: var(--pb-font-mono);
   font-size: 0.75rem;
 }
 
@@ -1036,7 +1036,7 @@ html.theme-dark .ai-chat-chip,
 }
 
 .slash-cmd {
-  font-family: monospace;
+  font-family: var(--pb-font-mono);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--ai-accent);

@@ -1,0 +1,91 @@
+/* ==========================================================
+   Design canvas
+
+   Every screen is designed at 1440 × 900 (the size of the mockups).
+   The app is scaled as one piece so the design's 900px height always
+   fills the window's height: text, spacing and heights keep exactly
+   the design's proportions. When the window is wider than the
+   design's 16:10 shape (a maximized 16:9 or ultrawide screen), the
+   extra width goes to the flexible columns instead of empty bars.
+   A window taller than 16:10 does the same with the height.
+   So the window size, the screen's DPI, the OS display scaling
+   (100–200%) and Ctrl + / Ctrl − never change the design, only how
+   big it is drawn and how wide its stretchy columns are.
+
+   Who does what:
+   - electron/main.cjs: picks the scale so 1440 × 900 just fits the
+     window, and keeps that scale when the user presses Ctrl + / −.
+     The page then always sees a viewport of at least 1440 × 900.
+   - This file: makes the canvas fill that viewport (up to a very
+     wide 2160px, beyond which the page background shows).
+
+   Use var(--pb-canvas-w) and var(--pb-canvas-h) instead of vw/vh.
+   The quick capture window has its own fixed canvas.
+   ========================================================== */
+
+:root {
+  --pb-canvas-w: clamp(1440px, 100vw, 2160px);
+  --pb-canvas-h: max(900px, 100vh);
+  /* A font's "normal" line height, as an exact number. The browser rounds "normal"
+     differently at each zoom and DPI, which moved text by a pixel or two; a number
+     doesn't. Values are each style's body font's own metrics. */
+  --pb-lh-normal: 1.3;             /* Geist, Instrument Serif */
+}
+[data-style="console"] { --pb-lh-normal: 1.276; }  /* Space Grotesk */
+[data-style="soft"] { --pb-lh-normal: 1.2; }       /* Figtree, Bricolage Grotesque */
+
+/* Quick capture window (set on <html> before the first paint, see main.jsx) */
+html.pb-canvas-capture { --pb-canvas-w: 620px; --pb-canvas-h: 256px; }
+html.pb-canvas-capture[data-style="soft"] { --pb-canvas-w: 760px; --pb-canvas-h: 400px; }
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--pb-bg);
+  /* Same text rendering rules on every OS */
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  position: relative;
+  min-height: 0;
+}
+
+/* Libraries bring their own font stacks: the editor (BlockNote) defaults to Inter and its
+   menus (Mantine) to the OS font, so on each OS they fell back to a different font.
+   Point them at the fonts bundled with the app. */
+:root,
+.bn-root,
+.bn-container,
+.bn-editor,
+.bn-default-styles,
+.bn-mantine,
+[data-mantine-color-scheme] {
+  --bn-font-family: var(--pb-font) !important;
+  --mantine-font-family: var(--pb-font) !important;
+  --mantine-font-family-headings: var(--pb-font) !important;
+  --mantine-font-family-monospace: var(--pb-font-mono) !important;
+}
+
+/* Form controls and buttons otherwise use the browser's default "normal" line height */
+:where(input, textarea, select, button) { line-height: var(--pb-lh-normal); }
+
+/* The canvas: fills the window (never smaller than the design), centred if capped */
+#root {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--pb-canvas-w);
+  height: var(--pb-canvas-h);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Scrollbars are drawn by the app, not the OS, so they look the same everywhere */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-corner { background: transparent; }

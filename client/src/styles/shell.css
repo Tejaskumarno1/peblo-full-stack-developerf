@@ -3,7 +3,7 @@
    ========================================================== */
 
 .pb-shell {
-  height: 100vh;
+  height: var(--pb-canvas-h);
   display: flex;
   background: var(--pb-bg);
   color: var(--pb-fg);

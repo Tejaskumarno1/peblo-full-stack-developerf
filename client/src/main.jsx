@@ -31,6 +31,10 @@ import '@fontsource/bricolage-grotesque/700.css';
 import '@fontsource/bricolage-grotesque/800.css';
 import './styles/index.css';
 import './styles/tokens.css';
+import './styles/canvas.css';
+
+// The quick capture window uses its own, smaller design canvas (see styles/canvas.css).
+if (window.location.pathname === '/quick-capture') document.documentElement.classList.add('pb-canvas-capture');
 
 const queryClient = new QueryClient({
   defaultOptions: {

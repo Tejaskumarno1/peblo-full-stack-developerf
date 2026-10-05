@@ -27,6 +27,50 @@ let isQuitting = false;
 let trayHintShown = false;
 
 const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
+
+// ── Design canvas ──
+// Every screen is designed at 1440 × 900 (client/src/styles/canvas.css). Here we pick one
+// zoom factor so 1440 × 900 just fits the window, and apply it to the whole page: the design's
+// height (or width, in a tall window) fills the window exactly and the other side gets the
+// extra room. Window size, screen DPI, OS display scaling and Ctrl + / Ctrl − then only change
+// how big the design is drawn, never its proportions.
+// Keep these sizes in sync with client/src/styles/canvas.css.
+const CANVAS = { width: 1440, height: 900 };
+const CAPTURE_CANVAS = { soft: { width: 760, height: 400 }, other: { width: 620, height: 256 } };
+let uiScale = 1;
+
+/** The largest zoom at which the whole canvas fits in the window's content area. */
+function fitScale(win) {
+  const [w, h] = win.getContentSize();
+  const fit = Math.min(w / CANVAS.width, h / CANVAS.height);
+  // Round down a little so rounding never leaves the canvas 1px too big for the window.
+  return Math.max(0.25, Math.floor(fit * 1000) / 1000);
+}
+
+function applyScale() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  uiScale = fitScale(mainWindow);
+  mainWindow.webContents.setZoomFactor(uiScale);
+  // Pages from the same address share one zoom in Chromium, so the capture window follows too.
+  if (captureWindow && !captureWindow.isDestroyed()) captureWindow.webContents.setZoomFactor(uiScale);
+}
+
+/** The user can't zoom the page: Ctrl/Cmd + / − / 0, Ctrl + wheel and pinch all keep our scale. */
+function lockZoom(win) {
+  const wc = win.webContents;
+  const keep = () => {
+    if (wc.isDestroyed()) return;
+    wc.setZoomFactor(uiScale);
+    wc.setVisualZoomLevelLimits(1, 1).catch(() => {});
+  };
+  wc.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
+    if (['+', '=', '-', '_', '0'].includes(input.key)) event.preventDefault();
+  });
+  wc.on('zoom-changed', keep);
+  wc.on('dom-ready', keep);
+  wc.on('did-finish-load', keep);
+}
 const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
 
 function appUrl(route = '/') {
@@ -94,13 +138,15 @@ async function startBackend() {
 }
 
 function createWindow() {
-  // Open at the size the designs are drawn for (1440 × 900 of content) when the screen allows.
+  // Open at the design size (1440 × 900 of content), or smaller with the same shape if the screen is smaller.
   const work = screen.getPrimaryDisplay().workAreaSize;
+  const fit = Math.min(1, (work.width - 16) / CANVAS.width, (work.height - 56) / CANVAS.height);
   mainWindow = new BrowserWindow({
-    width: Math.min(1456, work.width),
-    height: Math.min(940, work.height),
-    minWidth: 900,
-    minHeight: 600,
+    useContentSize: true,
+    width: Math.round(CANVAS.width * fit),
+    height: Math.round(CANVAS.height * fit),
+    minWidth: 720,
+    minHeight: 450,
     show: false,
     title: 'Peblo',
     backgroundColor: '#F6F5F2',
@@ -114,7 +160,11 @@ function createWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  lockZoom(mainWindow);
+  for (const ev of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'moved']) mainWindow.on(ev, applyScale);
+  applyScale();
+
+  mainWindow.once('ready-to-show', () => { applyScale(); mainWindow.show(); });
   mainWindow.loadURL(appUrl('/'));
   secureWebContents(mainWindow);
 
@@ -153,8 +203,9 @@ function showMainWindow(route) {
 // ── Quick capture: a small always-on-top box, opened with a global shortcut ──
 function createCaptureWindow() {
   captureWindow = new BrowserWindow({
-    width: 620,
-    height: 256,
+    useContentSize: true,
+    width: CAPTURE_CANVAS.other.width,
+    height: CAPTURE_CANVAS.other.height,
     show: false,
     frame: false,
     resizable: false,
@@ -168,6 +219,7 @@ function createCaptureWindow() {
     title: 'Quick capture',
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
+  lockZoom(captureWindow);
   captureWindow.loadURL(appUrl('/quick-capture'));
   secureWebContents(captureWindow);
 
@@ -194,10 +246,12 @@ async function toggleCapture() {
   try {
     style = await captureWindow.webContents.executeJavaScript("localStorage.getItem('peblo-style') || 'studio'", true);
   } catch { /* page still loading: use the default size */ }
-  const [cw, ch] = style === 'soft' ? [760, 400] : [620, 256];
+  // The capture box has its own design canvas, drawn at the same scale as the main window.
+  const canvas = style === 'soft' ? CAPTURE_CANVAS.soft : CAPTURE_CANVAS.other;
   captureWindow.setResizable(true);
-  captureWindow.setSize(cw, ch);
+  captureWindow.setContentSize(Math.round(canvas.width * uiScale), Math.round(canvas.height * uiScale));
   captureWindow.setResizable(false);
+  captureWindow.webContents.setZoomFactor(uiScale);
   // Center on the screen the mouse is on, a little above the middle.
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.workArea;
@@ -237,8 +291,6 @@ function buildMenu() {
         { role: 'reload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
-        { type: 'separator' },
         { role: 'togglefullscreen' },
       ],
     },
@@ -276,6 +328,8 @@ app.whenReady().then(async () => {
   }
   buildMenu();
   createWindow();
+  // Moving to another monitor or changing Windows/macOS display scaling can change the content size.
+  screen.on('display-metrics-changed', applyScale);
   try {
     createTray();
   } catch (err) {
@@ -296,3 +350,6 @@ app.on('window-all-closed', () => {
   // With a tray icon Peblo keeps running in the background; without one, quit as usual.
   if (process.platform !== 'darwin' && !tray) app.quit();
 });
+
+// Design canvas check (npm run check:canvas). Only runs when the check starts the app.
+if (process.env.PEBLO_CANVAS_CHECK) require('../scripts/canvas-check.cjs')({ getMainWindow: () => mainWindow });

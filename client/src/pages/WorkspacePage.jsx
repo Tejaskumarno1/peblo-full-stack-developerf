@@ -29,6 +29,7 @@ import {
   WelcomeScreen,
 } from '../components/workspace';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { canvasWidth } from '../design/canvas';
 
 class EditorErrorBoundary extends Component {
   constructor(props) {
@@ -438,7 +439,7 @@ export default function WorkspacePage() {
   const selectNote = useCallback(
     (note) => {
       forceSave();
-      if (window.innerWidth <= 768) {
+      if (canvasWidth() <= 768) {
         setSidebarOpen(false);
       }
       if (note.id === '__draft__') {
@@ -806,7 +807,7 @@ export default function WorkspacePage() {
       const swipeDistance = touchEndX - touchStartX;
       const minSwipeDistance = 50;
       
-      if (window.innerWidth > 768) return;
+      if (canvasWidth() > 768) return;
       
       if (swipeDistance > minSwipeDistance && touchStartX < 80) {
         setSidebarOpen(true);

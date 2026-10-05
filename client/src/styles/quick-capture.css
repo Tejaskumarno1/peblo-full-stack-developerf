@@ -5,7 +5,7 @@ body.quick-capture-body {
 }
 
 .qc-root {
-  height: 100vh;
+  height: var(--pb-canvas-h);
   display: flex;
   flex-direction: column;
   gap: 12px;

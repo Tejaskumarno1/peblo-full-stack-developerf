@@ -1,7 +1,7 @@
 /* Split Layout */
 .auth-split-layout {
   display: flex;
-  min-height: 100vh;
+  min-height: var(--pb-canvas-h);
   background: var(--bg-base);
 }
 

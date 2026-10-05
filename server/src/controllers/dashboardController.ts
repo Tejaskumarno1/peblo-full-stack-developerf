@@ -246,7 +246,9 @@ function getDailyTip() {
     "Listen to instrumental music for better focus during complex tasks.",
     "Eat the frog first — tackle your most dreaded task before anything else.",
   ];
-  return tips[Math.floor(Math.random() * tips.length)];
+  // One tip per day, so it doesn't change every time the home screen refreshes.
+  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  return tips[day % tips.length];
 }
 
 export async function getWeeklyReport(req: Request, res: Response, next: NextFunction) {

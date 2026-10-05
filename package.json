@@ -26,7 +26,8 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "db:sql": "prisma migrate diff --from-empty --to-schema-datamodel server/prisma/schema.prisma --script",
-    "test": "npm run build:server && node scripts/smoke-test.mjs"
+    "test": "npm run build:server && node scripts/smoke-test.mjs",
+    "check:canvas": "node scripts/run-canvas-check.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

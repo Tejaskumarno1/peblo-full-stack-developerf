@@ -2,7 +2,7 @@
    Workspace Page
    ============================ */
 .workspace-page {
-  height: 100vh;
+  height: var(--pb-canvas-h);
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -1835,8 +1835,8 @@
 
 @media (max-width: 768px) {
   .workspace-page {
-    height: 100dvh;
-    min-height: 100dvh;
+    height: var(--pb-canvas-h);
+    min-height: var(--pb-canvas-h);
     overflow: hidden;
   }
 
@@ -1857,9 +1857,9 @@
   .ws-sidebar {
     position: absolute;
     z-index: 50;
-    height: 100dvh;
+    height: var(--pb-canvas-h);
     width: 320px !important;
-    max-width: min(88vw, 360px);
+    max-width: min(calc(var(--pb-canvas-w) * 88 / 100), 360px);
     box-shadow: 20px 0 40px rgba(0, 0, 0, 0.15); /* Deep shadow over content */
   }
 
@@ -2193,7 +2193,7 @@
   }
 
   .markdown-preview, .editor-textarea {
-    min-height: calc(100vh - 120px);
+    min-height: calc(var(--pb-canvas-h) - 120px);
   }
 
   .mobile-action-btn {
@@ -2418,7 +2418,7 @@
     bottom: 0;
     z-index: 200;
     transform: translateX(-100%);
-    width: min(88vw, 360px) !important;
+    width: min(calc(var(--pb-canvas-w) * 88 / 100), 360px) !important;
     min-width: 0;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
@@ -2497,8 +2497,8 @@
   }
 
   .ws-sidebar {
-    width: min(92vw, 380px) !important;
-    max-width: min(92vw, 380px) !important;
+    width: min(calc(var(--pb-canvas-w) * 92 / 100), 380px) !important;
+    max-width: min(calc(var(--pb-canvas-w) * 92 / 100), 380px) !important;
     background: #f8fafc;
     border-right: 1px solid rgba(15, 23, 42, 0.08);
     box-shadow: 24px 0 48px rgba(15, 23, 42, 0.18);
@@ -2681,7 +2681,7 @@
 
   .bn-editor h1,
   .bn-editor [data-content-type="heading"] h1 {
-    font-size: clamp(1.65rem, 8vw, 2.15rem) !important;
+    font-size: clamp(1.65rem, calc(var(--pb-canvas-w) * 8 / 100), 2.15rem) !important;
     line-height: 1.12 !important;
     margin: 0.45rem 0 0.35rem !important;
     letter-spacing: 0 !important;
@@ -2689,7 +2689,7 @@
 
   .bn-editor h2,
   .bn-editor [data-content-type="heading"] h2 {
-    font-size: clamp(1.35rem, 6.4vw, 1.75rem) !important;
+    font-size: clamp(1.35rem, calc(var(--pb-canvas-w) * 6.4 / 100), 1.75rem) !important;
     line-height: 1.18 !important;
     margin: 0.65rem 0 0.25rem !important;
     letter-spacing: 0 !important;
@@ -2697,7 +2697,7 @@
 
   .bn-editor h3,
   .bn-editor [data-content-type="heading"] h3 {
-    font-size: clamp(1.12rem, 5.3vw, 1.35rem) !important;
+    font-size: clamp(1.12rem, calc(var(--pb-canvas-w) * 5.3 / 100), 1.35rem) !important;
     line-height: 1.2 !important;
     margin: 0.55rem 0 0.2rem !important;
     letter-spacing: 0 !important;
@@ -2740,7 +2740,7 @@
   }
 
   .link-previews-section {
-    max-height: 38dvh;
+    max-height: calc(var(--pb-canvas-h) * 38 / 100);
     margin-top: 0.25rem !important;
     padding: 0.55rem 0.75rem 0.75rem !important;
     overflow-y: auto;

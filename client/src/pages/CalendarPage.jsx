@@ -731,7 +731,7 @@ export default function CalendarPage() {
                 <button className="cal-mobile-close" onClick={() => setSelectedDay(null)}>✕</button>
               </div>
 
-              <div className="cal-sidebar-tasks" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              <div className="cal-sidebar-tasks" style={{ maxHeight: 'calc(var(--pb-canvas-h) * 50 / 100)', overflowY: 'auto' }}>
                 {selectedDayTasks.length === 0 ? (
                   <div className="cal-sidebar-empty compact">
                     <p>No tasks scheduled</p>
