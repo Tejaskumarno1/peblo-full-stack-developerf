@@ -10,9 +10,12 @@ const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const SIZES = [[1440, 900], [1920, 1080], [1600, 900], [1440, 810], [1280, 720], [1024, 576], [1200, 900], [960, 600]];
-const STYLES = ['soft', 'studio', 'console'];
-const ROUTES = ['/', '/notes', '/tasks', '/calendar', '/ai', '/ai/connections'];
+// PEBLO_CANVAS_QUICK=1 only takes a screenshot of each screen at 1440 × 900 (for reviewing a design).
+const QUICK = process.env.PEBLO_CANVAS_QUICK === '1';
+const SIZES = QUICK ? [[1440, 900]] : [[1440, 900], [1920, 1080], [1600, 900], [1440, 810], [1280, 720], [1024, 576], [1200, 900], [960, 600]];
+const STYLES = (process.env.PEBLO_CANVAS_STYLES || 'soft,studio,console,river,orbit').split(',');
+const ROUTES = (process.env.PEBLO_CANVAS_ROUTES || '/,/notes,/tasks,/calendar,/ai,/ai/connections').split(',');
+const THEME = process.env.PEBLO_CANVAS_THEME || 'light';
 const ZOOM_STEPS = [
   ['Ctrl +', { keyCode: '=', modifiers: ['control'] }, 3],
   ['Ctrl −', { keyCode: '-', modifiers: ['control'] }, 6],
@@ -96,24 +99,65 @@ async function load(win, url) {
 
 async function seed(wc) {
   await wc.executeJavaScript(`(async () => {
-    const api = (u, body, method = 'POST') => fetch('/api' + u, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const api = (u, body, method = 'POST') => fetch('/api' + u, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+    const pause = () => new Promise((r) => setTimeout(r, 20));
     await api('/profile', { name: 'Aarav Reddy' }, 'PUT');
-    const day = (o, h) => { const d = new Date(); d.setDate(d.getDate() + o); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    const day = (o, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + o); d.setHours(h, m, 0, 0); return d.toISOString(); };
     const notes = [
-      ['DBMS · Unit 3 Normalization', '## Normal forms at a glance\\n\\n| Form | Rule |\\n|---|---|\\n| 2NF | No partial dependency |\\n| 3NF | No transitive dependency |\\n| BCNF | Every determinant is a candidate key |\\n\\n> Revisit: decomposition example 2.\\n\\n## Worked example\\n\\nR(A, B, C, D) with AB → C and C → D.', ['exams']],
-      ['Internship · weekly log', 'Fixed the token refresh bug in the login API.', ['internship']],
+      ['DBMS · Unit 3 Normalization', '## Normal forms at a glance\\n\\n| Form | Rule |\\n|---|---|\\n| 2NF | No partial dependency |\\n| 3NF | No transitive dependency |\\n| BCNF | Every determinant is a candidate key |\\n\\n> Revisit: decomposition example 2.\\n\\n## Worked example\\n\\nR(A, B, C, D) with AB → C and C → D.', ['dbms', 'normalization']],
+      ['1NF to BCNF, in plain words', 'Normal forms are a checklist for one question: does every fact live in exactly one place? Vikram will send the solved examples by Thursday.', ['dbms', 'normalization']],
+      ['Transactions and ACID', 'Atomicity, consistency, isolation, durability. Deadlock vs rollback.', ['dbms', 'transactions']],
+      ['B+ tree indexing', 'Why B+ trees keep range scans fast. Leaf nodes are linked.', ['dbms', 'indexing']],
+      ['SQL joins cheat sheet', 'Inner, left, right, full outer and self joins with examples.', ['dbms', 'sql-joins']],
+      ['Hospital ER diagram', 'Entities: patient, doctor, ward. Relationships and cardinality.', ['dbms', 'er-diagrams']],
+      ['Internship · weekly log', 'Fixed the token refresh bug in the login API. I told Ananya I would send the metrics dashboard date by Tuesday.', ['internship']],
       ['Startup idea · campus ride-share', 'Talk to 10 hostel students first.', ['ideas']],
+      ['OS · process scheduling', 'Round robin, SJF, priority scheduling.', ['os']],
     ];
-    for (const [title, content, tags] of notes) { await api('/notes', { title, content, tags }); await new Promise((r) => setTimeout(r, 20)); }
+    for (const [title, content, tags] of notes) { await api('/notes', { title, content, tags }); await pause(); }
     const tasks = [
-      ['Revise normalization (3NF, BCNF)', 'high', day(0, 19), ['exams']],
+      ['Revise normalization (3NF, BCNF)', 'high', day(0, 19), ['dbms', 'normalization']],
       ['Push login API fix for review', 'medium', day(0, 18), ['internship']],
-      ['Solve 5 questions from the 2024 paper', 'high', day(1, 10), ['exams']],
-      ['DBMS mid-sem exam', 'high', day(2, 10), ['exams']],
+      ['Solve PYQ 2024 Q3', 'high', day(1, 10), ['dbms', 'normalization']],
+      ['DBMS mid-sem exam', 'high', day(2, 10), ['dbms']],
+      ['Lab 6 file', 'medium', day(3, 17), ['dbms', 'sql-joins']],
       ['Reply to Priya about the mini-project', 'medium', day(3, 17), ['college']],
+      ['Read chapter 4 of the OS book', 'low', null, ['os']],
     ];
-    for (const [text, priority, deadline, tags] of tasks) { await api('/todos', { text, priority, deadline, tags }); await new Promise((r) => setTimeout(r, 20)); }
+    for (const [text, priority, deadline, tags] of tasks) { await api('/todos', { text, priority, deadline, tags }); await pause(); }
+    const meetings = [
+      ['1:1 with Ananya', 0, '11:00', '11:45', ['internship']],
+      ['Design crit', 0, '13:00', '14:00', ['internship']],
+      ['Focus: DBMS revision', 0, '14:15', '15:30', ['focus']],
+      ['Internship standup', 0, '17:00', '17:30', ['internship']],
+      ['Gym', 0, '19:30', '20:30', ['personal']],
+      ['Sprint planning', 1, '09:30', '11:00', ['internship']],
+    ];
+    for (const [text, o, s, e, tags] of meetings) {
+      const [h, m] = s.split(':').map(Number);
+      await api('/todos', { text, priority: 'medium', deadline: day(o, h, m), startTime: s, endTime: e, tags }); await pause();
+    }
   })()`);
+}
+
+/** Orbit needs mastery scores, which normally come from AI quizzes. Write a few directly. */
+async function seedMastery() {
+  try {
+    const dir = path.join(__dirname, '../server/generated/prisma');
+    const { PrismaClient } = require(dir);
+    const prisma = new PrismaClient();
+    const rows = [['normalization', 40, 4, 10, [{ concept: '3NF vs BCNF', n: 3 }, { concept: 'functional dependencies', n: 2 }]], ['sql-joins', 30, 3, 10, [{ concept: 'outer joins', n: 4 }]], ['transactions', 65, 7, 10, []], ['indexing', 85, 9, 10, []], ['er-diagrams', 90, 9, 10, []]];
+    for (const [topic, score, c, t, missed] of rows) {
+      await prisma.topicMastery.upsert({
+        where: { userId_topic: { userId: 'local-user', topic } },
+        create: { userId: 'local-user', topic, score, quizzes: 1, lastCorrect: c, lastTotal: t, missed: JSON.stringify(missed) },
+        update: {},
+      });
+    }
+    await prisma.$disconnect();
+  } catch (err) {
+    console.warn('[canvas-check] could not seed mastery:', err.message);
+  }
 }
 
 async function probe(win) {
@@ -152,6 +196,7 @@ module.exports = function canvasCheck({ getMainWindow }) {
 
   app.whenReady().then(async () => {
     const results = [];
+    const pageErrors = [];
     try {
       const win = await waitForWindow(getMainWindow);
       win.setAspectRatio(0); // let the check try window shapes other than the design's
@@ -159,10 +204,16 @@ module.exports = function canvasCheck({ getMainWindow }) {
       win.show();
       win.webContents.setBackgroundThrottling(false);
       const base = new URL(win.webContents.getURL()).origin;
+      // Page errors go into the results, so a broken screen is reported, not just photographed
+      win.webContents.on('console-message', (...args) => {
+        const e = args[0] && typeof args[0] === 'object' && 'message' in args[0] ? args[0] : { level: args[1], message: args[2] };
+        if (e.level === 3 || e.level === 'error') pageErrors.push(`${win.webContents.getURL()} ${String(e.message).slice(0, 300)}`);
+      });
       await seed(win.webContents);
+      await seedMastery();
 
       for (const style of STYLES) {
-        await win.webContents.executeJavaScript(`localStorage.setItem('peblo-style', '${style}'); localStorage.setItem('peblo-theme', 'light'); 1`);
+        await win.webContents.executeJavaScript(`localStorage.setItem('peblo-style', '${style}'); localStorage.setItem('peblo-theme', '${THEME}'); 1`);
         for (const route of ROUTES) {
           await setSize(win, 1440, 900);
           await load(win, base + route);
@@ -170,14 +221,14 @@ module.exports = function canvasCheck({ getMainWindow }) {
             await setSize(win, w, h);
             const p = await probe(win);
             results.push({ style, route, size: `${w}x${h}`, action: 'resize', ...p });
-            const key = `${style}${route === '/' ? '/home' : route}@${w}x${h}`.replace(/\//g, '_');
+            const key = `${style}${route === '/' ? '/home' : route}@${w}x${h}`.replace(/[/?&=,]/g, '_');
             if (shots.has('all') || (route === '/' && shots.has(style))) {
               const img = await win.webContents.capturePage();
               fs.writeFileSync(path.join(out, `${key}.png`), img.toPNG());
             }
           }
           // Zoom keys and Ctrl + wheel at two window sizes
-          for (const [w, h] of [[1440, 900], [1280, 720]]) {
+          for (const [w, h] of QUICK ? [] : [[1440, 900], [1280, 720]]) {
             await setSize(win, w, h);
             await sleep(300);
             for (const step of ZOOM_STEPS) {
@@ -192,6 +243,7 @@ module.exports = function canvasCheck({ getMainWindow }) {
       results.push({ error: String(err && err.stack ? err.stack : err) });
     }
     fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify(results));
+    fs.writeFileSync(path.join(out, 'page-errors.txt'), pageErrors.join('\n'));
     app.exit(0);
   });
 };

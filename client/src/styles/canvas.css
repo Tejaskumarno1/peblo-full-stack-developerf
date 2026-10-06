@@ -33,10 +33,14 @@
 }
 [data-style="console"] { --pb-lh-normal: 1.276; }  /* Space Grotesk */
 [data-style="soft"] { --pb-lh-normal: 1.2; }       /* Figtree, Bricolage Grotesque */
+[data-style="river"] { --pb-lh-normal: 1.3; }      /* Hanken Grotesk, Sora */
+[data-style="orbit"] { --pb-lh-normal: 1.2; }      /* Familjen Grotesk, Fragment Mono */
 
 /* Quick capture window (set on <html> before the first paint, see main.jsx) */
 html.pb-canvas-capture { --pb-canvas-w: 620px; --pb-canvas-h: 256px; }
 html.pb-canvas-capture[data-style="soft"] { --pb-canvas-w: 760px; --pb-canvas-h: 400px; }
+html.pb-canvas-capture[data-style="river"] { --pb-canvas-w: 640px; --pb-canvas-h: 200px; }
+html.pb-canvas-capture[data-style="orbit"] { --pb-canvas-w: 640px; --pb-canvas-h: 220px; }
 
 html,
 body {

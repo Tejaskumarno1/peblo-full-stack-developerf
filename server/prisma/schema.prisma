@@ -27,6 +27,8 @@ model User {
   aiGenerations AiGeneration[]
   todos         Todo[]
   apiKeys       UserApiKeys?
+  quizRuns      QuizRun[]
+  mastery       TopicMastery[]
 
   @@map("users")
 }
@@ -155,3 +157,38 @@ model UserApiKeys {
   @@map("user_api_keys")
 }
 
+
+// Orbit style: a quiz made from one topic's notes (questions and answers as JSON).
+model QuizRun {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  topic      String
+  questions  String
+  answers    String?
+  correct    Int?
+  total      Int
+  createdAt  DateTime  @default(now()) @map("created_at")
+  finishedAt DateTime? @map("finished_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, topic])
+  @@map("quiz_runs")
+}
+
+// How well a topic (a tag) is known, 0–100, from the quizzes taken on it.
+model TopicMastery {
+  userId      String   @map("user_id")
+  topic       String
+  score       Int
+  quizzes     Int      @default(0)
+  lastCorrect Int      @default(0) @map("last_correct")
+  lastTotal   Int      @default(0) @map("last_total")
+  missed      String   @default("[]")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, topic])
+  @@map("topic_mastery")
+}

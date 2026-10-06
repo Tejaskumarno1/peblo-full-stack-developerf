@@ -17,6 +17,8 @@ import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
 import transferRoutes from './routes/transfer.js';
 import hubRoutes from './routes/hub.js';
+import studyRoutes from './routes/study.js';
+import riverRoutes from './routes/river.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export interface StartOptions {
@@ -41,6 +43,8 @@ export function createApp(staticDir?: string) {
   app.use('/api/ai', aiChatRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/todos', todosRoutes);
+  app.use('/api/study', studyRoutes);
+  app.use('/api/river', riverRoutes);
   app.use('/api', transferRoutes);
 
   app.get('/api/health', (_req, res) => {

@@ -215,3 +215,15 @@
 .style-preview.soft .c { left: 36%; top: 26px; width: 28%; height: 38px; border-radius: 10px; background: #CDEBD9; }
 .style-preview.soft .d { left: 67%; right: 8px; top: 26px; height: 38px; border-radius: 10px; background: #DDD8FF; }
 .style-preview.soft .e { left: 30%; right: 30%; bottom: 7px; height: 12px; border-radius: 99px; background: #241F1A; }
+.style-preview.river { background: #ECEEF1; }
+.style-preview.river .a { left: 6px; right: 6px; top: 8px; height: 44px; border-radius: 6px; background: #FFFFFF; }
+.style-preview.river .b { left: 14%; top: 14px; width: 22%; height: 12px; border-radius: 3px; background: #DCE4FF; }
+.style-preview.river .c { left: 44%; top: 30px; width: 26%; height: 12px; border-radius: 3px; background: #101418; }
+.style-preview.river .d { left: 40%; top: 6px; width: 2px; height: 48px; background: #E2501A; }
+.style-preview.river .e { left: 6px; right: 6px; top: 58px; bottom: 6px; border-radius: 6px; background: #FFFFFF; }
+.style-preview.orbit { background: #F7F7F4 radial-gradient(#D3D3CC 1px, transparent 1.2px) 0 0 / 8px 8px; }
+.style-preview.orbit .a { left: calc(50% - 16px); top: calc(50% - 16px); width: 32px; height: 32px; border-radius: 50%; background: #141414; }
+.style-preview.orbit .b { left: 16%; top: 12px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; border: 3px solid #FF6B4A; }
+.style-preview.orbit .c { right: 16%; top: 16px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; border: 3px solid #F2B33D; }
+.style-preview.orbit .d { right: 22%; bottom: 10px; width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; border: 3px solid #2FB67C; }
+.style-preview.orbit .e { left: 18%; bottom: 12px; width: 30%; height: 3px; border-radius: 2px; background: #2350FF; transform: rotate(-24deg); }

@@ -1076,3 +1076,71 @@ export async function streamHubChat(
   err.code = 'AI_FAILED';
   throw err;
 }
+
+// --- River and Orbit styles ---
+
+export interface QuizQuestion { q: string; options: string[]; answer: number; explain: string; concept: string; note: number | null }
+
+/**
+ * Multiple-choice questions written only from the given notes.
+ * Each question says which note it came from (its number in the list) and the short concept it tests.
+ */
+export async function makeQuiz(userId: string, topic: string, notes: { title: string; content: string }[], count = 10): Promise<QuizQuestion[]> {
+  const material = notes
+    .map((n, i) => `[${i + 1}] ${n.title}\n${n.content.slice(0, 2500)}`)
+    .join('\n\n')
+    .slice(0, 12000);
+  const system = 'You write fair, exam-style multiple-choice quizzes for a student, using only the notes given. Never test facts that are not in the notes.';
+  const prompt = `Topic: ${topic}\n\nWrite ${count} questions from these notes. Mix easy and hard. Each question has exactly 4 options and one correct answer.\n` +
+    'Return JSON: {"questions":[{"q":"question","options":["a","b","c","d"],"answer":0,"explain":"one sentence on why","concept":"2-4 word concept it tests","note":1}]}\n' +
+    '"answer" is the index (0-3) of the correct option. "note" is the number of the note the question comes from.\n\n' +
+    `Notes:\n${material}`;
+  const out = await completeJSON('Quiz', userId, system, prompt);
+  const list: any[] = Array.isArray(out?.questions) ? out.questions : [];
+  return list
+    .filter((x) => x && typeof x.q === 'string' && Array.isArray(x.options) && x.options.length >= 2)
+    .slice(0, count)
+    .map((x) => {
+      const options = x.options.slice(0, 4).map((o: any) => String(o));
+      const answer = Number.isInteger(x.answer) && x.answer >= 0 && x.answer < options.length ? x.answer : 0;
+      const note = Number.isInteger(x.note) && x.note >= 1 && x.note <= notes.length ? x.note : null;
+      return { q: String(x.q), options, answer, explain: String(x.explain || ''), concept: String(x.concept || topic).slice(0, 60), note };
+    });
+}
+
+export interface Promise_ { text: string; owner: string; due: string | null }
+
+/** Commitments in a note: who promised what, and by when (ISO date, or null). */
+export async function findPromises(userId: string, title: string, content: string, writtenAt: Date): Promise<Promise_[]> {
+  const system = 'You find commitments in meeting notes and documents: things someone said they would do. Ignore general ideas and facts.';
+  const prompt = `The note was written on ${writtenAt.toISOString()} (use it to turn "Thursday" or "tomorrow" into a date).\n` +
+    'Return JSON: {"promises":[{"text":"short action, starting with a verb","owner":"name, or \\"you\\" if the writer","due":"ISO 8601 date-time or null"}]}\n' +
+    'At most 6. If there are none, return {"promises":[]}.\n\n' +
+    `Title: ${title}\n\n${content.slice(0, 8000)}`;
+  const out = await completeJSON('Promises', userId, system, prompt);
+  const list: any[] = Array.isArray(out?.promises) ? out.promises : [];
+  return list
+    .filter((x) => x && typeof x.text === 'string' && x.text.trim())
+    .slice(0, 6)
+    .map((x) => {
+      const d = x.due ? new Date(x.due) : null;
+      return { text: x.text.trim().slice(0, 160), owner: String(x.owner || 'you').slice(0, 40), due: d && !isNaN(d.getTime()) ? d.toISOString() : null };
+    });
+}
+
+/** Three to five short points to read before a meeting, from the notes that mention it. */
+export async function meetingBrief(userId: string, meeting: string, when: string, sources: string): Promise<{ points: { text: string; cite: number[] }[] }> {
+  const system = "You prepare a busy person for a meeting using only their own notes. Be specific and short.";
+  const prompt = `Meeting: ${meeting} (${when}).\n` +
+    'Write 3 to 5 points to read before it: decisions, numbers, what people asked for, and open questions. Cite the notes each point uses by their numbers.\n' +
+    'Return JSON: {"points":[{"text":"one sentence","cite":[1]}]}. If the notes say nothing useful about this meeting, return {"points":[]}.\n' +
+    sources;
+  const out = await completeJSON('Meeting brief', userId, system, prompt);
+  const points: any[] = Array.isArray(out?.points) ? out.points : [];
+  return {
+    points: points
+      .filter((p) => p && typeof p.text === 'string' && p.text.trim())
+      .slice(0, 5)
+      .map((p) => ({ text: p.text.trim(), cite: Array.isArray(p.cite) ? p.cite.filter((n: any) => Number.isInteger(n)).slice(0, 3) : [] })),
+  };
+}

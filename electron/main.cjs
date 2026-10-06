@@ -36,7 +36,12 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
 // how big the design is drawn, never its proportions.
 // Keep these sizes in sync with client/src/styles/canvas.css.
 const CANVAS = { width: 1440, height: 900 };
-const CAPTURE_CANVAS = { soft: { width: 760, height: 400 }, other: { width: 620, height: 256 } };
+const CAPTURE_CANVAS = {
+  soft: { width: 760, height: 400 },
+  river: { width: 640, height: 200 },
+  orbit: { width: 640, height: 220 },
+  other: { width: 620, height: 256 },
+};
 let uiScale = 1;
 
 /** The largest zoom at which the whole canvas fits in the window's content area. */
@@ -241,13 +246,13 @@ async function toggleCapture() {
     captureWindow.hide();
     return;
   }
-  // Soft Studio's capture card is bigger; every other style keeps the compact box.
+  // Soft Studio, River and Orbit have their own capture cards; Studio and Console share the compact box.
   let style = 'studio';
   try {
     style = await captureWindow.webContents.executeJavaScript("localStorage.getItem('peblo-style') || 'studio'", true);
   } catch { /* page still loading: use the default size */ }
   // The capture box has its own design canvas, drawn at the same scale as the main window.
-  const canvas = style === 'soft' ? CAPTURE_CANVAS.soft : CAPTURE_CANVAS.other;
+  const canvas = CAPTURE_CANVAS[style] || CAPTURE_CANVAS.other;
   captureWindow.setResizable(true);
   captureWindow.setContentSize(Math.round(canvas.width * uiScale), Math.round(canvas.height * uiScale));
   captureWindow.setResizable(false);

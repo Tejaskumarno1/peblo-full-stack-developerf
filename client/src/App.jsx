@@ -20,16 +20,35 @@ const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
 const SoftAI = lazy(() => import('./soft/SoftAI'));
 const SoftConnections = lazy(() => import('./soft/SoftConnections'));
 
+// River: one timeline. Tasks and Calendar are the river itself, at Day and Week zoom.
+const RiverHome = lazy(() => import('./river/RiverHome'));
+const RiverNotes = lazy(() => import('./river/RiverNotes'));
+const RiverAI = lazy(() => import('./river/RiverAI').then((m) => ({ default: m.RiverAI })));
+const RiverConnections = lazy(() => import('./river/RiverAI').then((m) => ({ default: m.RiverConnections })));
+const RiverTasks = lazy(() => import('./river/RiverHome').then((m) => ({ default: () => <m.default initialZoom="day" /> })));
+const RiverCalendar = lazy(() => import('./river/RiverHome').then((m) => ({ default: () => <m.default initialZoom="week" /> })));
+
+// Orbit: a map of what you know. Notes, quizzes and the due list open as sheets over the map.
+const OrbitHome = lazy(() => import('./orbit/OrbitAI').then((m) => ({ default: m.OrbitHome })));
+const OrbitNotes = lazy(() => import('./orbit/OrbitNotes'));
+const OrbitQuiz = lazy(() => import('./orbit/OrbitQuiz'));
+const OrbitTasks = lazy(() => import('./orbit/OrbitDue').then((m) => ({ default: () => <m.default view="list" /> })));
+const OrbitCalendar = lazy(() => import('./orbit/OrbitDue').then((m) => ({ default: () => <m.default view="week" /> })));
+const OrbitAI = lazy(() => import('./orbit/OrbitAI').then((m) => ({ default: m.OrbitAI })));
+const OrbitConnections = lazy(() => import('./orbit/OrbitAI').then((m) => ({ default: m.OrbitConnections })));
+const GoHome = () => <Navigate to="/" replace />;
+
 // Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
-/** Picks the screen for the current style. Studio and Console share pages; Soft Studio has its own. */
-function Styled({ soft: Soft, other: Other }) {
+/** Picks the screen for the current style. Studio and Console share pages; the others have their own. */
+function Styled({ other: Other, ...byStyle }) {
   const { uiStyle } = useAuth();
-  return uiStyle === 'soft' ? <Soft /> : <Other />;
+  const Screen = byStyle[uiStyle] || Other;
+  return <Screen />;
 }
 
 /** No accounts in the desktop app: wait for the local profile, then show the app shell. */
@@ -52,13 +71,14 @@ export default function App() {
     <Suspense fallback={<Loader />}>
       <Routes>
         <Route element={<ShellLayout />}>
-          <Route path="/" element={<Styled soft={SoftHome} other={HomePage} />} />
-          <Route path="/notes" element={<Styled soft={SoftNotes} other={WorkspacePage} />} />
-          <Route path="/notes/:id" element={<Styled soft={SoftNotes} other={WorkspacePage} />} />
-          <Route path="/tasks" element={<Styled soft={SoftTasks} other={TasksPage} />} />
-          <Route path="/calendar" element={<Styled soft={SoftCalendar} other={CalendarPage} />} />
-          <Route path="/ai" element={<Styled soft={SoftAI} other={AIHubPage} />} />
-          <Route path="/ai/connections" element={<Styled soft={SoftConnections} other={ConnectionsPage} />} />
+          <Route path="/" element={<Styled soft={SoftHome} river={RiverHome} orbit={OrbitHome} other={HomePage} />} />
+          <Route path="/notes" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
+          <Route path="/notes/:id" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
+          <Route path="/tasks" element={<Styled soft={SoftTasks} river={RiverTasks} orbit={OrbitTasks} other={TasksPage} />} />
+          <Route path="/calendar" element={<Styled soft={SoftCalendar} river={RiverCalendar} orbit={OrbitCalendar} other={CalendarPage} />} />
+          <Route path="/quiz/:topic" element={<Styled orbit={OrbitQuiz} other={GoHome} />} />
+          <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />
+          <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<QuickCapturePage />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />

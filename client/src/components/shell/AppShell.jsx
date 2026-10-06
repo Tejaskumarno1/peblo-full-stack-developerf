@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import ConsoleShell from './ConsoleShell';
 import SoftShell from '../../soft/SoftShell';
+import RiverShell from '../../river/RiverShell';
+import OrbitShell from '../../orbit/OrbitShell';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/shell.css';
 import '../../styles/shell-styles.css';
@@ -61,6 +63,12 @@ export default function AppShell({ children }) {
   }
   if (uiStyle === 'soft') {
     return <><SoftShell onOpenSettings={openSettings}>{children}</SoftShell>{settings}</>;
+  }
+  if (uiStyle === 'river') {
+    return <><RiverShell>{children}</RiverShell>{settings}</>;
+  }
+  if (uiStyle === 'orbit') {
+    return <><OrbitShell>{children}</OrbitShell>{settings}</>;
   }
   return (
     <div className="pb-shell">

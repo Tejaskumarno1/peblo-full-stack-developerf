@@ -31,7 +31,7 @@ function runOnce(scale) {
         PEBLO_CANVAS_CHECK: '1',
         PEBLO_DATA_DIR: data,
         PEBLO_CANVAS_OUT: out,
-        PEBLO_CANVAS_SHOTS: scale === 1 || scale === 1.5 ? 'soft,studio,console' : '',
+        PEBLO_CANVAS_SHOTS: process.env.PEBLO_CANVAS_SHOTS || (scale === 1 || scale === 1.5 ? 'soft,studio,console,river,orbit' : ''),
       },
     });
     const timer = setTimeout(() => child.kill(), 15 * 60 * 1000);

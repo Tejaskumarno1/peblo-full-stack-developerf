@@ -237,6 +237,8 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     { id: 'studio', name: 'Studio', desc: 'Sidebar and calm serif headings' },
                     { id: 'console', name: 'Console', desc: 'Keyboard-first, command bar, dense' },
                     { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock' },
+                    { id: 'river', name: 'River', desc: 'Your day as one timeline, past to future' },
+                    { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying' },
                   ].map((o) => (
                     <button
                       key={o.id}

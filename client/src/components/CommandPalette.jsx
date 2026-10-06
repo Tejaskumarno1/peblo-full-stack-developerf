@@ -55,7 +55,7 @@ export default function CommandPalette() {
     { id: 'nav-cal', title: 'Go to Calendar', icon: <Calendar size={16} />, action: () => navigate('/calendar') },
     { id: 'nav-ai', title: 'Open AI Hub', icon: <Sparkles size={16} />, action: () => navigate('/ai') },
     { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') },
-    ...[['studio', 'Studio'], ['console', 'Console'], ['soft', 'Soft Studio']]
+    ...[['studio', 'Studio'], ['console', 'Console'], ['soft', 'Soft Studio'], ['river', 'River'], ['orbit', 'Orbit']]
       .filter(([id]) => id !== uiStyle)
       .map(([id, name]) => ({ id: `style-${id}`, title: `Change style to ${name}`, icon: <Palette size={16} />, action: () => setUiStyle(id) }))
   ];

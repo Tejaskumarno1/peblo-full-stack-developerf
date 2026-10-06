@@ -5,12 +5,20 @@ import { parseTask } from '../utils/parseTask';
 import '../styles/quick-capture.css';
 import { useAuth } from '../context/AuthContext';
 import SoftCapture from '../soft/SoftCapture';
+import RiverCapture from '../river/RiverCapture';
+import OrbitCapture from '../orbit/OrbitCapture';
 
 /** Ctrl+Shift+Space window: Soft Studio has its own capture card. */
 export default function QuickCaptureWindow() {
   const { uiStyle } = useAuth();
   if (uiStyle === 'soft') {
     return <div className="soft soft-window"><SoftCapture windowMode /></div>;
+  }
+  if (uiStyle === 'river') {
+    return <div className="river river-window"><RiverCapture windowMode /></div>;
+  }
+  if (uiStyle === 'orbit') {
+    return <div className="orbit orbit-window"><OrbitCapture windowMode /></div>;
   }
   return <QuickCapturePage />;
 }

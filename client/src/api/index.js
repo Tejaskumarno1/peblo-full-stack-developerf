@@ -55,3 +55,19 @@ export const hubAPI = {
   models: () => api.get('/ai/hub/models'),
   search: (query, noteIds) => api.post('/ai/hub/search', { query, noteIds })
 };
+
+// Orbit style: quizzes and how well each topic is known
+export const studyAPI = {
+  mastery: () => api.get('/study/mastery'),
+  quiz: (topic, count) => api.post('/study/quiz', { topic, count }, { timeout: 5 * 60 * 1000 }),
+  answer: (id, answers) => api.post(`/study/quiz/${id}/answers`, { answers }),
+  noteQuestions: (noteId) => api.get(`/study/notes/${noteId}/questions`),
+};
+
+// River style: meeting briefs and promises found in notes
+export const riverAPI = {
+  brief: (todoId) => api.post('/river/brief', { todoId }, { timeout: 5 * 60 * 1000 }),
+  findPromises: (noteId) => api.post(`/river/notes/${noteId}/promises`, null, { timeout: 5 * 60 * 1000 }),
+  promises: (noteId) => api.get('/river/promises', { params: noteId ? { noteId } : {} }),
+  setPromise: (id, index, status, todoId) => api.patch(`/river/promises/${id}`, { index, status, todoId }),
+};
