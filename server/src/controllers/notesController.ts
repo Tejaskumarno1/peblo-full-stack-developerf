@@ -4,8 +4,9 @@ import * as aiService from '../services/aiService.js';
 
 // prisma imported from db.js
 
-// Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions
-export async function syncTags(noteId: any, tagNames: any) {
+// Optimized helper to sync tags: checks for changes first, resolves concurrently, and uses bulk insertions.
+// Tags are scoped per user (userId), so two users can each have their own "work" tag.
+export async function syncTags(userId: any, noteId: any, tagNames: any) {
   const normalizedInput = Array.from(
     new Set((tagNames || []).map((t: any) => t.trim().toLowerCase()).filter(Boolean))
   ).sort() as string[];
@@ -27,11 +28,11 @@ export async function syncTags(noteId: any, tagNames: any) {
 
   if (normalizedInput.length === 0) return;
 
-  // Bulk fetch existing tags to avoid N+1 sequential queries
+  // Bulk fetch existing tags (this user's own) to avoid N+1 sequential queries
   const existingTags = await prisma.tag.findMany({
-    where: { name: { in: normalizedInput } }
+    where: { userId, name: { in: normalizedInput } }
   });
-  
+
   const existingTagNames = existingTags.map((t: any) => t.name);
   const missingTagNames = normalizedInput.filter((name: any) => !existingTagNames.includes(name)) as string[];
 
@@ -39,10 +40,10 @@ export async function syncTags(noteId: any, tagNames: any) {
   if (missingTagNames.length > 0) {
     // Bulk create missing tags (Prisma createMany returns count, not records, so we re-fetch)
     await prisma.tag.createMany({
-      data: missingTagNames.map((name: any) => ({ name }))
+      data: missingTagNames.map((name: any) => ({ userId, name }))
     });
     newTags = await prisma.tag.findMany({
-      where: { name: { in: missingTagNames } }
+      where: { userId, name: { in: missingTagNames } }
     });
   }
 
@@ -183,7 +184,7 @@ export async function createNote(req: any, res: any, next: any) {
     });
 
     if (tags && tags.length > 0) {
-      await syncTags(note.id, tags);
+      await syncTags(req.user.id, note.id, tags);
     }
 
     // Re-fetch with tags
@@ -223,7 +224,7 @@ export async function updateNote(req: any, res: any, next: any) {
     }
 
     if (tags !== undefined) {
-      await syncTags(req.params.id, tags);
+      await syncTags(req.user.id, req.params.id, tags);
     }
 
     // Return early to save an extra sequential database lookup

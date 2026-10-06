@@ -18,15 +18,16 @@ function formatNote(note: any) {
   };
 }
 
-async function syncTags(noteId: string, tagNames: string[] | undefined) {
+// Tags are scoped per user, so two users can each have their own tag of the same name.
+async function syncTags(userId: string, noteId: string, tagNames: string[] | undefined) {
   await prisma.noteTag.deleteMany({ where: { noteId } });
   if (!tagNames?.length) return;
 
   for (const name of tagNames) {
     const trimmed = name.trim().toLowerCase();
     if (!trimmed) continue;
-    let tag = await prisma.tag.findUnique({ where: { name: trimmed } });
-    if (!tag) tag = await prisma.tag.create({ data: { name: trimmed } });
+    let tag = await prisma.tag.findUnique({ where: { userId_name: { userId, name: trimmed } } });
+    if (!tag) tag = await prisma.tag.create({ data: { userId, name: trimmed } });
     await prisma.noteTag.create({ data: { noteId, tagId: tag.id } });
   }
 }
@@ -42,7 +43,7 @@ async function createNoteForUser(userId: string, { title, content, category, tag
     include: noteInclude,
   });
 
-  if (tags?.length) await syncTags(note.id, tags);
+  if (tags?.length) await syncTags(userId, note.id, tags);
 
   const updated = await prisma.note.findUnique({
     where: { id: note.id },
@@ -392,7 +393,7 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
     });
 
     if (result.note.tags && result.note.tags.length > 0) {
-      await syncTags(note.id, result.note.tags);
+      await syncTags(userId, note.id, result.note.tags);
     }
 
     await prisma.aiGeneration.create({

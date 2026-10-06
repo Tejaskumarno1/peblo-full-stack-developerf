@@ -170,7 +170,7 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
             }
           });
           if (action.tags && action.tags.length > 0) {
-            await syncTags(newNote.id, action.tags);
+            await syncTags(req.user!.id, newNote.id, action.tags);
           }
           saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
         } else if (action.type === 'READ_NOTE' && action.noteId) {

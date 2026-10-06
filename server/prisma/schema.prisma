@@ -5,14 +5,15 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
   id           String   @id @default(uuid())
   name         String   @default("You")
-  email        String   @default("")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
 
   // Profile & Settings
   jobTitle     String?  @map("job_title")
@@ -24,6 +25,7 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   notes         Note[]
+  tags          Tag[]
   aiGenerations AiGeneration[]
   todos         Todo[]
   apiKeys       UserApiKeys?
@@ -60,13 +62,17 @@ model Note {
   @@map("notes")
 }
 
+// Each user has their own tags, so two people can both have a "work" tag without colliding.
 model Tag {
   id        String   @id @default(uuid())
-  name      String   @unique
+  userId    String   @map("user_id")
+  name      String
   createdAt DateTime @default(now()) @map("created_at")
 
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   notes NoteTag[]
 
+  @@unique([userId, name])
   @@map("tags")
 }
 

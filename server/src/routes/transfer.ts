@@ -33,7 +33,7 @@ router.post('/import', upload.array('files'), async (req, res, next) => {
         },
         select: { id: true, title: true },
       });
-      await syncTags(note.id, [...n.tags, 'imported']);
+      await syncTags(userId, note.id, [...n.tags, 'imported']);
       created.push(note);
     }
 

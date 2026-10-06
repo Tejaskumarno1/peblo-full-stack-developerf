@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { pathToFileURL } from 'url';
 
 import { initDatabase } from './db.js';
+import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
 import aiRoutes from './routes/ai.js';
@@ -31,10 +32,20 @@ export interface StartOptions {
 export function createApp(staticDir?: string) {
   const app = express();
 
-  // Only this machine talks to the server; allow the Vite dev server during development.
-  app.use(cors({ origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/] }));
+  // Desktop app (Electron) sends no Origin header, so it's always allowed. The Vite dev
+  // server and, once ALLOWED_ORIGINS is set (comma-separated), a hosted web client too.
+  const extraOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (/^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return cb(null, true);
+      if (extraOrigins.includes(origin)) return cb(null, true);
+      cb(new Error('Not allowed by CORS'));
+    },
+  }));
   app.use(express.json({ limit: '10mb' }));
 
+  app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);
   app.use('/api/notes', notesRoutes);

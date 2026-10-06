@@ -4,11 +4,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// The desktop shell (Electron) sets DATABASE_URL to a SQLite file inside the
-// user's app-data folder before this module loads. Fall back to a local file
-// for `npm run dev` (peblo-dev.db in the project folder).
+// The database is a hosted Postgres instance (e.g. a free Supabase/Neon project), shared
+// by every user. DATABASE_URL must be set — in the Electron app's own .env next to the
+// packaged server, or in the hosting platform's environment once this is deployed.
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'file:' + path.resolve('peblo-dev.db').replace(/\\/g, '/');
+  throw new Error(
+    'DATABASE_URL is not set. Point it at your Postgres connection string ' +
+    '(e.g. from Supabase: Project Settings → Database → Connection string).'
+  );
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,8 +32,6 @@ function loadPrismaClient(): typeof PrismaClientType {
 const PrismaClient = loadPrismaClient();
 const prisma = new PrismaClient();
 
-export const LOCAL_USER_ID = 'local-user';
-
 function findSqlDir(): string {
   const candidates = [
     process.env.PEBLO_SQL_DIR,
@@ -44,11 +45,16 @@ function findSqlDir(): string {
 
 /**
  * Applies any pending SQL migrations (prisma/sql/NNN_name.sql) in order.
- * The applied version is tracked with SQLite's built-in `PRAGMA user_version`,
- * so no separate migrations table or Prisma migrate engine is needed at runtime.
+ * The applied version is tracked in its own tiny table (`_peblo_migrations`) rather than
+ * SQLite's `PRAGMA user_version`, since Postgres has no equivalent pragma.
  */
 async function migrate() {
-  const [{ user_version: current }] = await prisma.$queryRawUnsafe<any[]>('PRAGMA user_version');
+  await prisma.$executeRawUnsafe(
+    'CREATE TABLE IF NOT EXISTS "_peblo_migrations" ("version" INTEGER PRIMARY KEY, "name" TEXT NOT NULL, "applied_at" TIMESTAMPTZ NOT NULL DEFAULT now())'
+  );
+  const applied = await prisma.$queryRawUnsafe<{ version: number }[]>('SELECT version FROM "_peblo_migrations"');
+  const current = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
+
   const dir = findSqlDir();
   const files = readdirSync(dir)
     .filter((f) => /^\d+_.*\.sql$/.test(f))
@@ -56,7 +62,7 @@ async function migrate() {
 
   for (const file of files) {
     const version = parseInt(file.split('_')[0], 10);
-    if (version <= Number(current)) continue;
+    if (version <= current) continue;
 
     const sql = readFileSync(path.join(dir, file), 'utf8');
     const statements = sql
@@ -68,7 +74,7 @@ async function migrate() {
       for (const stmt of statements) {
         await tx.$executeRawUnsafe(stmt);
       }
-      await tx.$executeRawUnsafe(`PRAGMA user_version = ${version}`);
+      await tx.$executeRawUnsafe(`INSERT INTO "_peblo_migrations" (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}')`);
     });
     console.log(`[db] applied migration ${file}`);
   }
@@ -76,19 +82,10 @@ async function migrate() {
 
 let ready: Promise<void> | null = null;
 
-/** Creates/updates the local database and makes sure the single local user exists. */
+/** Applies any pending migrations to the shared Postgres database. Call once at startup. */
 export function initDatabase(): Promise<void> {
   if (!ready) {
-    ready = (async () => {
-      await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
-      await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
-      await migrate();
-      await prisma.user.upsert({
-        where: { id: LOCAL_USER_ID },
-        update: {},
-        create: { id: LOCAL_USER_ID, name: 'You' },
-      });
-    })();
+    ready = migrate();
   }
   return ready;
 }
