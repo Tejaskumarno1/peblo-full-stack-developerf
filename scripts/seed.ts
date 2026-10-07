@@ -186,7 +186,7 @@ for (const t of tasks) {
       userId, text: t.text, priority: t.priority ?? 'medium', deadline: t.deadline ?? null,
       todoTags: t.tags ?? [], completed: !!t.done, noteId: t.note ? notes[t.note].id : null,
       startTime: t.start ?? null, endTime: t.end ?? null, recurrence: t.recurrence ?? 'none',
-      createdAt: at(-7, 12), updatedAt: t.doneAt ?? at(-1, 12),
+      createdAt: at(-6, 9), updatedAt: t.doneAt ?? at(-1, 12),
     },
   });
 }
