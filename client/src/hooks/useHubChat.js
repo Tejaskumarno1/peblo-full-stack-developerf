@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { marked } from 'marked';
 import { hubAPI, notesAPI } from '../api';
+import { authHeaders, signOutIfRejected } from '../api/token';
 
 /*
  * AI Hub chat state and streaming, shared by every style's AI Hub screen.
@@ -138,12 +139,12 @@ export default function useHubChat() {
     const patchBot = (fn) => updateChat(chatId, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === botId ? fn(m) : m)) }));
 
     try {
-      const res = await fetch(`${API_BASE}/ai/hub/chat`, {
+      const res = signOutIfRejected(await fetch(`${API_BASE}/ai/hub/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
         signal: controller.signal,
-      });
+      }));
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';

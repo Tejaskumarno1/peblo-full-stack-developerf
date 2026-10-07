@@ -27,6 +27,7 @@ import { useUIStore } from '../store/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
 import '../styles/ai-chat.css';
 import { canvasWidth } from '../design/canvas';
+import { authHeaders, signOutIfRejected } from '../api/token';
 
 const SUGGESTIONS = [
   { label: 'Sprint planning notes', prompt: 'Create meeting notes for sprint planning with action items' },
@@ -331,14 +332,12 @@ export default function AiChatPanel() {
         setMessages(prev => [...prev, { id: tempId, role: 'assistant', text: '', isStreaming: true }]);
 
         const apiUrl = import.meta.env.VITE_API_URL || '/api';
-        const response = await fetch(`${apiUrl}/ai/chat-stream`, {
+        const response = signOutIfRejected(await fetch(`${apiUrl}/ai/chat-stream`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined }),
           signal: abortControllerRef.current.signal
-        });
+        }));
 
         if (!response.ok) {
           throw new Error('Failed to reach AI streaming endpoint');

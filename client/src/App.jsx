@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { useAuth } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
+import AuthScreen from './components/AuthScreen';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -51,10 +52,11 @@ function Styled({ other: Other, ...byStyle }) {
   return <Screen />;
 }
 
-/** No accounts in the desktop app: wait for the local profile, then show the app shell. */
+/** Wait for the account to load, then show the app shell (or the sign-in screen when nobody is signed in). */
 function ShellLayout() {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   if (loading) return <Loader />;
+  if (!user) return <AuthScreen />;
   return (
     <AppShell>
       <Suspense fallback={<Loader />}><Outlet /></Suspense>
@@ -64,6 +66,21 @@ function ShellLayout() {
       </Suspense>
     </AppShell>
   );
+}
+
+/** The quick-capture window needs an account to save into. */
+function CaptureGate() {
+  const { loading, user } = useAuth();
+  if (loading) return null;
+  if (!user) {
+    return (
+      <div style={{ padding: 24, font: '14px/1.45 var(--pb-font)', color: 'var(--pb-fg-2)', background: 'var(--pb-bg)', height: '100%', boxSizing: 'border-box' }}>
+        <strong style={{ color: 'var(--pb-fg)' }}>Sign in to Peblo first.</strong><br />
+        Open the Peblo window, sign in, then press this shortcut again.
+      </div>
+    );
+  }
+  return <QuickCapturePage />;
 }
 
 export default function App() {
@@ -80,7 +97,7 @@ export default function App() {
           <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />
           <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
-        <Route path="/quick-capture" element={<QuickCapturePage />} />
+        <Route path="/quick-capture" element={<CaptureGate />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />
         <Route path="/todolist" element={<Navigate to="/tasks" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

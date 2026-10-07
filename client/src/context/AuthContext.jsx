@@ -1,13 +1,17 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io } from 'socket.io-client';
-import { profileAPI } from '../api/index';
+import { profileAPI, authAPI } from '../api/index';
+import { getToken, setToken, clearToken } from '../api/token';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 'offline' when the Peblo server can't be reached (so we don't mistake it for being signed out)
+  const [connectError, setConnectError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const queryClient = useQueryClient();
 
   const [theme, setThemeState] = useState(() => localStorage.getItem('peblo-theme') || 'light');
@@ -59,23 +63,72 @@ export function AuthProvider({ children }) {
     for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
   }, [uiStyle]);
 
-  // Desktop app: no login. Load the single local profile (and any settings saved in the database).
-  useEffect(() => {
-    profileAPI.me()
-      .then(res => {
-        const u = res.data.user;
-        setUser(u);
-        if (u?.settings && typeof u.settings === 'object') {
-          setSettings(prev => {
-            const merged = { ...u.settings, ...prev };
-            localStorage.setItem('peblo-settings', JSON.stringify(merged));
-            return merged;
-          });
-        }
-      })
-      .catch(err => console.error('Failed to load profile:', err))
-      .finally(() => setLoading(false));
+  // Merge the settings saved on the account into this device's settings.
+  const adoptProfile = useCallback((u) => {
+    setUser(u);
+    if (u?.settings && typeof u.settings === 'object') {
+      setSettings(prev => {
+        const merged = { ...u.settings, ...prev };
+        try { localStorage.setItem('peblo-settings', JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
+    }
   }, []);
+
+  // On start: if this device has a sign-in token, load that account. Otherwise show the sign-in screen.
+  useEffect(() => {
+    if (!getToken()) { setUser(null); setLoading(false); return undefined; }
+    let cancelled = false;
+    setLoading(true);
+    setConnectError(null);
+    profileAPI.me()
+      .then(res => { if (!cancelled) adoptProfile(res.data.user); })
+      .catch(err => {
+        if (cancelled) return;
+        // A 401 already cleared the token (the interceptor); anything else is a connection problem.
+        if (!err.response) setConnectError('offline');
+        else if (err.response.status !== 401) setConnectError('error');
+        console.error('Failed to load profile:', err);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [adoptProfile, reloadKey]);
+
+  // Signed out from anywhere (an expired token, or another window): back to the sign-in screen.
+  useEffect(() => {
+    const out = () => { setUser(null); queryClient.clear(); };
+    window.addEventListener('peblo:signed-out', out);
+    // Signing in or out in another window (e.g. quick capture) changes the shared token.
+    const onStorage = (e) => { if (e.key === 'peblo-token') setReloadKey(k => k + 1); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.removeEventListener('peblo:signed-out', out); window.removeEventListener('storage', onStorage); };
+  }, [queryClient]);
+
+  const signIn = useCallback(async (mode, form) => {
+    const call = mode === 'signup' ? authAPI.signup : authAPI.login;
+    const res = await call(form);
+    queryClient.clear();
+    setToken(res.data.token);
+    setConnectError(null);
+    adoptProfile(res.data.user);
+    return res.data.user;
+  }, [adoptProfile, queryClient]);
+
+  const logout = useCallback(() => {
+    clearToken();
+    // Chats, notifications and settings kept on this device belong to the account that just left.
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('peblo-') && !['peblo-theme', 'peblo-style'].includes(k))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    setSettings({ fontSize: 'medium', wordWrap: true, autoTitle: true });
+    setNotifications([]);
+    queryClient.clear();
+    setUser(null);
+  }, [queryClient]);
+
+  const retryConnect = useCallback(() => setReloadKey(k => k + 1), []);
 
   // WebSockets for Real-Time Device Syncing
   useEffect(() => {
@@ -86,11 +139,8 @@ export function AuthProvider({ children }) {
       ? import.meta.env.VITE_API_URL.replace('/api', '') 
       : window.location.origin;
       
-    const socket = io(socketURL);
-    
-    socket.on('connect', () => {
-      socket.emit('join', user.id);
-    });
+    // The server reads who we are from the token and puts us in our own room.
+    const socket = io(socketURL, { auth: { token: getToken() } });
 
     socket.on('todos_changed', () => {
       queryClient.invalidateQueries(['todos']);
@@ -196,6 +246,10 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ 
       user, 
       loading, 
+      connectError,
+      signIn,
+      logout,
+      retryConnect,
       updateProfile,
       theme,
       setTheme,

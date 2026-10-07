@@ -17,16 +17,24 @@ export function signToken(user: AuthedUser): string {
   return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
 }
 
+/** Who a token belongs to, or null if it is missing, forged or expired. */
+export function verifyToken(token: string | null | undefined): AuthedUser | null {
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; email: string };
+    return { id: payload.sub, email: payload.email };
+  } catch {
+    return null;
+  }
+}
+
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Sign in to continue.' });
 
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; email: string };
-    req.user = { id: payload.sub, email: payload.email } as any;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
-  }
+  const user = verifyToken(token);
+  if (!user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+  req.user = user;
+  next();
 }

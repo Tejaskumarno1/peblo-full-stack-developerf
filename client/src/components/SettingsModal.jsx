@@ -1,11 +1,12 @@
 import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, transferAPI } from '../api';
+import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
-  const { user, updateProfile, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
+  const { user, updateProfile, logout, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab === 'security' ? 'data' : initialTab);
   
   // Profile specific states (saved to user obj in DB ideally, mocked here)
@@ -31,6 +32,27 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null); // { ok, text }
+
+  // The export is a signed-in download, so it can't be a plain link: fetch it with the token, then save it.
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = signOutIfRejected(await fetch(`${import.meta.env.VITE_API_URL || '/api'}/export`, { headers: authHeaders() }));
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'peblo-notes.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setImportResult({ ok: false, text: 'Could not export your notes. Try again.' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleImport = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -132,6 +154,14 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             onClick={() => setActiveTab('data')}
           >
             <Shield size={18} /> Your Data
+          </button>
+
+          <h3 style={{ marginTop: '1.5rem' }}>Account</h3>
+          <button
+            className="settings-tab-btn"
+            onClick={() => { onClose(); logout(); }}
+          >
+            <LogOut size={18} /> Sign out
           </button>
         </div>
 
@@ -436,22 +466,22 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
               <div className="settings-toggle-row">
                 <div className="settings-toggle-info">
                   <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Monitor size={16} /> Stored on this computer
+                    <Monitor size={16} /> Saved to your account
                   </h4>
                   <p>
-                    Peblo has no accounts and no cloud sync. Your notes, tasks and settings are saved in a
-                    local database on this computer. To back them up, open <strong>Help → Open Data Folder</strong> from
-                    the menu bar and copy the <code>peblo.db</code> file.
+                    Your notes, tasks and settings belong to your account{user?.email ? <> (<strong>{user.email}</strong>)</> : null} and
+                    are saved in Peblo's database, so they follow you to any device you sign in on. Other people's accounts
+                    can't see them. The export below gives you a copy any time.
                   </p>
                 </div>
               </div>
               <div className="settings-toggle-row">
                 <div className="settings-toggle-info">
                   <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Key size={16} /> AI keys stay local
+                    <Key size={16} /> Your AI keys are yours
                   </h4>
                   <p>
-                    API keys you add under AI Providers are kept in the same local database. They are only sent to
+                    API keys you add under AI Providers are saved with your account only. They are only sent to
                     OpenAI or Google when you use an AI feature.
                   </p>
                 </div>
@@ -482,7 +512,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   <h4>All notes as Markdown</h4>
                   <p>Download every note as a <code>.md</code> file in one <code>.zip</code>. It opens in any editor, Obsidian or Notion, so you're never locked in.</p>
                 </div>
-                <a className="btn btn-outline" href="/api/export" download style={{ whiteSpace: 'nowrap' }}>Export .zip</a>
+                <button type="button" className="btn btn-outline" onClick={handleExport} disabled={exporting} style={{ whiteSpace: 'nowrap' }}>{exporting ? 'Preparing…' : 'Export .zip'}</button>
               </div>
             </div>
           )}

@@ -21,6 +21,7 @@ import hubRoutes from './routes/hub.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { verifyToken } from './middleware/auth.js';
 
 export interface StartOptions {
   /** Port to listen on. 0 picks a free port (what the desktop app uses). */
@@ -83,9 +84,16 @@ export async function startServer({ port = 0, staticDir }: StartOptions = {}): P
   const httpServer = createServer(app);
 
   // Socket.IO lets the server tell the UI to refresh after AI creates notes/tasks.
+  // Each connection must carry a valid sign-in token; it only ever hears its own account's events.
   const io = new SocketIOServer(httpServer);
+  io.use((socket, next) => {
+    const user = verifyToken(socket.handshake.auth?.token);
+    if (!user) return next(new Error('Sign in to continue.'));
+    socket.data.userId = user.id;
+    next();
+  });
   io.on('connection', (socket) => {
-    socket.on('join', (userId) => socket.join(userId));
+    socket.join(socket.data.userId);
   });
   app.set('io', io);
 

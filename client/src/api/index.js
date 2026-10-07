@@ -1,5 +1,10 @@
 import api from './client';
 
+export const authAPI = {
+  signup: (data) => api.post('/auth/signup', data),
+  login: (data) => api.post('/auth/login', data)
+};
+
 export const profileAPI = {
   me: () => api.get('/profile'),
   updateProfile: (data) => api.put('/profile', data)

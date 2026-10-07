@@ -1,7 +1,7 @@
 // Peblo desktop — Electron main process.
 //
-// Runs the Express API in-process on a random localhost port, stores everything in a
-// SQLite file inside the OS app-data folder, and shows the React UI in a window.
+// Runs the Express API in-process on a random localhost port and shows the React UI in a window.
+// Everything is stored in the shared Postgres database named by DATABASE_URL (see loadEnvFile).
 const { app, BrowserWindow, shell, Menu, dialog, globalShortcut, Tray, nativeImage, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -121,13 +121,28 @@ function configurePrismaEngine() {
   if (engine) process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(dir, engine);
 }
 
-async function startBackend() {
-  const dataDir = app.getPath('userData');
-  fs.mkdirSync(dataDir, { recursive: true });
-  const dbFile = path.join(dataDir, 'peblo.db');
+/**
+ * The database is a Postgres server shared by every account, so the app needs its address
+ * (DATABASE_URL) and the secret that signs sign-ins (JWT_SECRET). They come from the environment,
+ * or from the first .env file found: PEBLO_ENV_FILE, one in the app-data folder, or server/.env
+ * when running from the project folder.
+ */
+function loadEnvFile() {
+  const candidates = [
+    process.env.PEBLO_ENV_FILE,
+    path.join(app.getPath('userData'), '.env'),
+    path.join(app.getAppPath(), 'server', '.env'),
+  ].filter(Boolean);
+  const file = candidates.find((f) => fs.existsSync(f));
+  if (file) require('dotenv').config({ path: file });
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is not set. Put your Postgres connection string in server/.env (or set PEBLO_ENV_FILE), then start Peblo again.');
+  }
+}
 
-  // Prisma wants forward slashes in file: URLs, also on Windows.
-  process.env.DATABASE_URL = 'file:' + dbFile.replace(/\\/g, '/');
+async function startBackend() {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  loadEnvFile();
   process.env.PEBLO_SQL_DIR = resourcePath('server', 'prisma', 'sql');
   process.env.NODE_ENV = isDev ? 'development' : 'production';
   if (!isDev) configurePrismaEngine();
