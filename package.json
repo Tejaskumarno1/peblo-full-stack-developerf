@@ -26,6 +26,7 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "db:sql": "node scripts/make-sql.mjs",
+    "seed": "tsx scripts/seed.ts",
     "test": "npm run build:server && node scripts/smoke-test.mjs",
     "check:canvas": "node scripts/run-canvas-check.mjs"
   },
