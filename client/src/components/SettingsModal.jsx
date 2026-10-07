@@ -264,25 +264,28 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 <p className="style-hint">Changes the layout, type and colours of the whole app. Light, dark and midnight work with every style.</p>
                 <div className="style-grid" role="radiogroup" aria-labelledby="style-label">
                   {[
-                    { id: 'studio', name: 'Studio', desc: 'Sidebar and calm serif headings' },
-                    { id: 'console', name: 'Console', desc: 'Keyboard-first, command bar, dense' },
-                    { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock' },
-                    { id: 'river', name: 'River', desc: 'Your day as one timeline, past to future' },
-                    { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying' },
+                    { id: 'studio', name: 'Studio', desc: 'Sidebar and calm serif headings', tags: ['Everyday', 'Writers'], tip: 'For most people. A familiar sidebar with lists and a big writing area, so there is nothing new to learn.' },
+                    { id: 'console', name: 'Console', desc: 'Keyboard-first, command bar, dense', tags: ['Developers', 'Power users'], tip: 'For people who live on the keyboard. Dense lists and a command bar let you do everything without the mouse.' },
+                    { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock', tags: ['Beginners', 'Visual'], tip: 'For people who like light, friendly screens. Big tiles show your day at a glance, with less to read.' },
+                    { id: 'river', name: 'River', desc: 'Your day as one timeline, past to future', tags: ['Meetings', 'Planners'], tip: 'For days run by meetings and deadlines. Notes, meetings and tasks sit on one timeline where they happened, and Peblo finds promises made in meetings.' },
+                    { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying', tags: ['Students', 'Exams'], tip: 'For students preparing for exams. Topics become a map with mastery scores, and quizzes come from your own notes.' },
                   ].map((o) => (
                     <button
                       key={o.id}
                       type="button"
                       role="radio"
                       aria-checked={uiStyle === o.id}
+                      aria-describedby={`style-tip-${o.id}`}
                       className={`style-card${uiStyle === o.id ? ' active' : ''}`}
                       onClick={() => setUiStyle(o.id)}
                     >
                       <span className={`style-preview ${o.id}`} aria-hidden="true">
                         <i className="a" /><i className="b" /><i className="c" /><i className="d" /><i className="e" />
                       </span>
+                      <span id={`style-tip-${o.id}`} className="style-tip" role="tooltip">{o.tip}</span>
                       <span className="style-name">{o.name}</span>
                       <span className="style-desc">{o.desc}</span>
+                      <span className="style-tags">{o.tags.map((t) => <span key={t}>{t}</span>)}</span>
                     </button>
                   ))}
                 </div>

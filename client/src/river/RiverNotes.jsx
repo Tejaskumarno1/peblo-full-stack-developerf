@@ -7,7 +7,7 @@ import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
 import { RiverHeader, useDismiss } from './RiverShell';
 import { snippetOf } from '../soft/softUtils';
-import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord } from './riverUtils';
+import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -248,8 +248,56 @@ function RiverNote({ note }) {
 
 /* ------------------------------------------------------------------ */
 
+const VIEW_KEY = 'peblo-river-notes-view';
+const readView = () => { try { return localStorage.getItem(VIEW_KEY) === 'day' ? 'day' : 'recent'; } catch { return 'recent'; } };
+const saveView = (v) => { try { localStorage.setItem(VIEW_KEY, v); } catch { /* storage blocked */ } };
+
+/** "2 h ago" for the last day, then a plain date ("6 Oct", "6 Oct 2025"): never "Tue". */
+function whenLabel(d) {
+  const date = new Date(d);
+  if (Date.now() - date.getTime() < 86400000) return fromNow(date);
+  const opts = { day: 'numeric', month: 'short' };
+  if (date.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return date.toLocaleDateString('en-GB', opts);
+}
+const monthOf = (d) => new Date(d).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+/** A short piece of the note around the first word that matched. */
+function matchSnippet(content, words, size = 150) {
+  const text = snippetOf(content, 100000);
+  const low = text.toLowerCase();
+  let at = -1;
+  for (const w of words) { at = low.indexOf(w); if (at >= 0) break; }
+  if (at < 0) return text.slice(0, size);
+  const from = Math.max(0, at - 40);
+  return (from > 0 ? '…' : '') + text.slice(from, from + size) + (from + size < text.length ? '…' : '');
+}
+function Marked({ text, words }) {
+  if (!words.length) return text;
+  const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
+}
+
+function NoteRow({ n, words = [] }) {
+  return (
+    <Link to={`/notes/${n.id}`} className="r-row flat">
+      <span className="tm">{whenLabel(n.updatedAt)}<small>edited</small></span>
+      <span style={{ minWidth: 0 }}>
+        <span className="t"><Marked text={n.title || 'Untitled'} words={words} /></span>
+        <span className="s" style={{ display: 'block' }}>
+          <Marked text={(words.length ? matchSnippet(n.content, words) : snippetOf(n.content, 140)) || 'Empty note'} words={words} />
+        </span>
+        {(n.tags || []).length > 0 && (
+          <span className="r-row-tags">{n.tags.slice(0, 4).map((t) => <span key={t}>#{t}</span>)}</span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
 function RiverNoteList({ onNew }) {
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState(readView);
   const [q, setQ] = useState('');
   const params = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
   const { data: all = [] } = useQuery({
@@ -267,11 +315,48 @@ function RiverNoteList({ onNew }) {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [all]);
 
+  const words = useMemo(() => q.trim().toLowerCase().split(/\s+/).filter(Boolean), [q]);
+  const searching = words.length > 0;
+  const inBin = filter === 'archive' || filter === 'trash';
+
+  // Search looks in titles, tags and the text of every note (the Archive and Trash only search themselves),
+  // best match first: a title that starts with the word, then a title that has it, then a tag, then the text.
+  const results = useMemo(() => {
+    if (!searching) return [];
+    const pool = inBin ? listed : all;
+    const hits = [];
+    for (const n of pool) {
+      const title = (n.title || '').toLowerCase();
+      const tagText = (n.tags || []).join(' ').toLowerCase();
+      const body = (n.content || '').toLowerCase();
+      let score = 0;
+      let every = true;
+      for (const w of words) {
+        const s = title.startsWith(w) ? 4 : title.includes(w) ? 3 : tagText.includes(w) ? 2 : body.includes(w) ? 1 : 0;
+        if (!s) { every = false; break; }
+        score += s;
+      }
+      if (every) hits.push({ n, score });
+    }
+    return hits.sort((a, b) => b.score - a.score || new Date(b.n.updatedAt) - new Date(a.n.updatedAt)).map((h) => h.n);
+  }, [searching, words, all, listed, inBin]);
+
+  const byEdit = useMemo(() => [...listed].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)), [listed]);
+  const latest = filter === 'all' ? byEdit.slice(0, 4) : [];
+  const months = useMemo(() => {
+    const rest = filter === 'all' ? byEdit.slice(4) : byEdit;
+    const groups = [];
+    for (const n of rest) {
+      const label = monthOf(n.updatedAt);
+      let g = groups[groups.length - 1];
+      if (!g || g.label !== label) { g = { label, notes: [] }; groups.push(g); }
+      g.notes.push(n);
+    }
+    return groups;
+  }, [byEdit, filter]);
+
   const days = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    const list = listed
-      .filter((n) => !s || (n.title || '').toLowerCase().includes(s) || (n.content || '').toLowerCase().includes(s))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const list = [...listed].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const groups = [];
     for (const n of list) {
       const d = startOfDay(n.createdAt);
@@ -280,39 +365,91 @@ function RiverNoteList({ onNew }) {
       g.notes.push(n);
     }
     return groups;
-  }, [listed, q]);
+  }, [listed]);
+
+  const pickView = (v) => { setView(v); saveView(v); };
+  const title = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : filter === 'all' ? 'Every note' : `#${filter}`;
+  const empty = filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes yet. Write one and it lands on the river at the time you wrote it.';
 
   return (
     <>
       <RiverHeader>
-        <div className="r-when"><h1>Notes</h1><span>{all.length} on the river · newest first</span></div>
+        <div className="r-when"><h1>Notes</h1><span>{all.length} on the river</span></div>
       </RiverHeader>
       <div className="r-list-grid">
-        <section className="r-list" aria-label="Notes by day">
+        <section className="r-list" aria-label="Notes">
           <div className="r-list-head">
-            <h1>{filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : filter === 'all' ? 'Every note' : `#${filter}`}</h1>
+            <h1>{title}</h1>
+            {!searching && (
+              <div className="r-seg" role="tablist" aria-label="How to list notes">
+                <button type="button" role="tab" aria-selected={view === 'recent'} onClick={() => pickView('recent')}>Recently edited</button>
+                <button type="button" role="tab" aria-selected={view === 'day'} onClick={() => pickView('day')}>By day written</button>
+              </div>
+            )}
             <span className="grow" />
             <label htmlFor="r-note-search" className="r-sr">Search notes</label>
-            <input id="r-note-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" />
+            <input
+              id="r-note-search"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }}
+              placeholder="Search titles, tags and text…"
+            />
             <button type="button" className="r-btn" onClick={onNew}>New note</button>
           </div>
-          {days.length === 0 && <p className="r-quiet">{q ? 'No notes match.' : filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes yet. Write one and it lands on the river at the time you wrote it.'}</p>}
-          {days.map((g) => (
-            <div key={g.d.toISOString()} className="r-day">
-              <span className={`r-day-label${sameDay(g.d, new Date()) ? ' today' : ''}`}>{dayWord(g.d)}</span>
-              <div className="r-day-items">
-                {g.notes.map((n) => (
-                  <Link key={n.id} to={`/notes/${n.id}`} className="r-row">
-                    <span className="tm">{clock(n.createdAt)}</span>
-                    <span style={{ minWidth: 0 }}>
-                      <span className="t">{n.title || 'Untitled'}</span>
-                      <span className="s" style={{ display: 'block' }}>{snippetOf(n.content, 140) || 'Empty note'}</span>
-                    </span>
-                  </Link>
-                ))}
+
+          {searching ? (
+            <>
+              <p className="r-quiet small">
+                {results.length === 0 ? 'No notes match' : `${results.length} note${results.length === 1 ? '' : 's'} match`} “{q.trim()}”
+                {inBin ? ` in ${title}` : ' in every note'} · best match first · <button type="button" className="r-link" onClick={() => setQ('')}>Clear</button>
+              </p>
+              <div className="r-flat">{results.map((n) => <NoteRow key={n.id} n={n} words={words} />)}</div>
+            </>
+          ) : listed.length === 0 ? (
+            <p className="r-quiet">{empty}</p>
+          ) : view === 'recent' ? (
+            <>
+              {latest.length > 0 && (
+                <div>
+                  <h2 className="r-h3" style={{ marginBottom: 10 }}>PICK UP WHERE YOU LEFT OFF</h2>
+                  <div className="r-recent">
+                    {latest.map((n) => (
+                      <Link key={n.id} to={`/notes/${n.id}`} className="r-recent-card">
+                        <span className="w">{whenLabel(n.updatedAt)}</span>
+                        <span className="t">{n.title || 'Untitled'}</span>
+                        <span className="s">{snippetOf(n.content, 90) || 'Empty note'}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {months.map((g) => (
+                <div key={g.label}>
+                  <h2 className="r-h3" style={{ margin: '4px 0 8px' }}>{g.label.toUpperCase()}</h2>
+                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} />)}</div>
+                </div>
+              ))}
+            </>
+          ) : (
+            days.map((g) => (
+              <div key={g.d.toISOString()} className="r-day">
+                <span className={`r-day-label${sameDay(g.d, new Date()) ? ' today' : ''}`}>{dayWord(g.d)}</span>
+                <div className="r-day-items">
+                  {g.notes.map((n) => (
+                    <Link key={n.id} to={`/notes/${n.id}`} className="r-row">
+                      <span className="tm">{clock(n.createdAt)}</span>
+                      <span style={{ minWidth: 0 }}>
+                        <span className="t">{n.title || 'Untitled'}</span>
+                        <span className="s" style={{ display: 'block' }}>{snippetOf(n.content, 140) || 'Empty note'}</span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </section>
         <aside className="r-side">
           <section className="r-card">
@@ -329,8 +466,8 @@ function RiverNoteList({ onNew }) {
             </div>
           </section>
           <section className="r-card">
-            <h2 className="r-h3">HOW NOTES WORK HERE</h2>
-            <p className="r-quiet small">Every note sits on the river at the moment you wrote it, next to the meetings and tasks around it. Open one and Peblo can find the promises in it.</p>
+            <h2 className="r-h3">TWO WAYS TO LOOK</h2>
+            <p className="r-quiet small"><b>Recently edited</b> puts the notes you touched last at the top, whatever day you first wrote them. <b>By day written</b> is the river: each note sits at the moment you wrote it. Open one and Peblo can find the promises in it.</p>
           </section>
         </aside>
       </div>

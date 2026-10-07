@@ -486,6 +486,26 @@
 .r-filters button { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--r-line); background: transparent; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--r-fg2); }
 .r-filters button[aria-pressed="true"] { background: var(--r-ink); color: var(--r-on-ink); border-color: transparent; }
 
+/* Notes list: recently edited view, flat rows, search highlights */
+.r-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--r-lane); border: 1px solid var(--r-line); }
+.r-seg button { height: 30px; padding: 0 14px; border: none; border-radius: 999px; background: transparent; color: var(--r-fg2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.r-seg button[aria-selected="true"] { background: var(--r-ink); color: var(--r-on-ink); }
+.r-flat { display: flex; flex-direction: column; gap: 6px; }
+.r-row.flat { grid-template-columns: 78px minmax(0, 1fr); }
+.r-row.flat::before { display: none; }
+.r-row.flat .tm small { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--r-fg3); }
+.r-row-tags { display: flex; gap: 6px; margin-top: 6px; }
+.r-row-tags span { font-size: 11.5px; font-weight: 600; color: var(--r-fg2); }
+.r-recent { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.r-recent-card { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--r-lane); border: 1px solid var(--r-line); text-decoration: none; color: inherit; min-width: 0; }
+.r-recent-card:hover { background: var(--r-meet); }
+.r-recent-card .w { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--r-now-ink); }
+.r-recent-card .t { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-recent-card .s { font-size: 13px; color: var(--r-fg2); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.r-row mark { background: var(--r-meet); color: inherit; border-radius: 3px; box-shadow: 0 0 0 2px var(--r-meet); font-weight: inherit; }
+.r-row:hover mark { background: var(--r-surface); box-shadow: 0 0 0 2px var(--r-surface); }
+.r-link { border: none; padding: 0; background: none; font: inherit; font-weight: 700; color: var(--r-now-ink); cursor: pointer; text-decoration: underline; }
+
 /* ---------- Ask Peblo (AI Hub) ---------- */
 .r-ai { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; gap: 22px; }
 .r-chats { min-height: 0; overflow-y: auto; padding: 18px 14px; border-radius: 20px; background: var(--r-surface); border: 1px solid var(--r-line); display: flex; flex-direction: column; gap: 4px; }
