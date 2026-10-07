@@ -340,8 +340,9 @@ export async function smartIntake(req: Request, res: Response, next: NextFunctio
 
     let createdTodos: any[] = [];
     if (todosData.length > 0) {
-      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
-      createdTodos = inserted.map(t => ({
+      // MySQL has no createManyAndReturn, so create them in one transaction and keep the rows.
+      const inserted = await prisma.$transaction(todosData.map((data: any) => prisma.todo.create({ data })));
+      createdTodos = inserted.map((t) => ({
         ...t,
         note: { id: note.id, title: note.title }
       }));
@@ -430,8 +431,9 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
 
     let createdTodos: any[] = [];
     if (todosData.length > 0) {
-      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
-      createdTodos = inserted.map(t => ({
+      // MySQL has no createManyAndReturn, so create them in one transaction and keep the rows.
+      const inserted = await prisma.$transaction(todosData.map((data: any) => prisma.todo.create({ data })));
+      createdTodos = inserted.map((t) => ({
         ...t,
         note: { id: note.id, title: note.title }
       }));

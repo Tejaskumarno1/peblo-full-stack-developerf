@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -17,9 +17,9 @@ model User {
 
   // Profile & Settings
   jobTitle     String?  @map("job_title")
-  bio          String?
+  bio          String?  @db.Text
   timezone     String   @default("UTC")
-  settings     Json     @default("{}")
+  settings     Json
 
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -38,8 +38,8 @@ model User {
 model Note {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
-  title      String   @default("Untitled")
-  content    String   @default("")
+  title      String   @default("Untitled") @db.Text
+  content    String   @default("") @db.LongText
   category   String?
   isArchived Boolean  @default(false) @map("is_archived")
   isDeleted  Boolean  @default(false) @map("is_deleted")
@@ -93,7 +93,7 @@ model AiGeneration {
   noteId    String   @map("note_id")
   userId    String   @map("user_id")
   type      String
-  result    String
+  result    String   @db.LongText
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -107,7 +107,7 @@ model AiGeneration {
 model NoteBackup {
   id        String   @id @default(uuid())
   noteId    String   @map("note_id")
-  content   String
+  content   String   @db.LongText
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -119,11 +119,11 @@ model NoteBackup {
 model Todo {
   id        String    @id @default(uuid())
   userId    String    @map("user_id")
-  text      String
+  text      String    @db.Text
   completed Boolean   @default(false) @map("is_completed")
   priority  String    @default("medium")
   deadline  DateTime? @map("deadline")
-  todoTags   Json      @default("[]") @map("tags")
+  todoTags   Json      @map("tags")
   noteId     String?   @map("linked_note_id")
   startTime  String?   @map("start_time")
   endTime    String?   @map("end_time")
@@ -143,7 +143,7 @@ model Todo {
 model NoteEmbedding {
   id        String   @id @default(uuid())
   noteId    String   @unique @map("note_id")
-  vector    String   // JSON stringified float array representing embedding values
+  vector    String   @db.LongText // JSON stringified float array representing embedding values
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -169,8 +169,8 @@ model QuizRun {
   id         String    @id @default(uuid())
   userId     String    @map("user_id")
   topic      String
-  questions  String
-  answers    String?
+  questions  String    @db.LongText
+  answers    String?   @db.LongText
   correct    Int?
   total      Int
   createdAt  DateTime  @default(now()) @map("created_at")
@@ -190,7 +190,7 @@ model TopicMastery {
   quizzes     Int      @default(0)
   lastCorrect Int      @default(0) @map("last_correct")
   lastTotal   Int      @default(0) @map("last_total")
-  missed      String   @default("[]")
+  missed      String   @default("[]") @db.LongText
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

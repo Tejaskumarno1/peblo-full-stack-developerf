@@ -157,7 +157,8 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
               text: action.text,
               completed: false,
               deadline: action.newDate ? new Date(action.newDate) : null,
-              priority: 'medium'
+              priority: 'medium',
+              todoTags: []
             }
           });
         } else if (action.type === 'CREATE_NOTE' && action.content) {

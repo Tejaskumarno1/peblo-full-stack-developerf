@@ -4,13 +4,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// The database is a hosted Postgres instance (e.g. a free Supabase/Neon project), shared
-// by every user. DATABASE_URL must be set — in the Electron app's own .env next to the
+// The database is a MySQL server (local MySQL 8 while developing, a hosted one in production),
+// shared by every user. DATABASE_URL must be set — in the Electron app's own .env next to the
 // packaged server, or in the hosting platform's environment once this is deployed.
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    'DATABASE_URL is not set. Point it at your Postgres connection string ' +
-    '(e.g. from Supabase: Project Settings → Database → Connection string).'
+    'DATABASE_URL is not set. Point it at your MySQL connection string ' +
+    '(e.g. mysql://user:password@localhost:3306/peblo).'
   );
 }
 
@@ -45,14 +45,15 @@ function findSqlDir(): string {
 
 /**
  * Applies any pending SQL migrations (prisma/sql/NNN_name.sql) in order.
- * The applied version is tracked in its own tiny table (`_peblo_migrations`) rather than
- * SQLite's `PRAGMA user_version`, since Postgres has no equivalent pragma.
+ * The applied version is tracked in its own tiny table (`_peblo_migrations`).
+ * MySQL commits each CREATE TABLE on its own, so a migration file is not one transaction:
+ * the version row is written last, once every statement in the file has run.
  */
 async function migrate() {
   await prisma.$executeRawUnsafe(
-    'CREATE TABLE IF NOT EXISTS "_peblo_migrations" ("version" INTEGER PRIMARY KEY, "name" TEXT NOT NULL, "applied_at" TIMESTAMPTZ NOT NULL DEFAULT now())'
+    'CREATE TABLE IF NOT EXISTS `_peblo_migrations` (`version` INT NOT NULL PRIMARY KEY, `name` VARCHAR(191) NOT NULL, `applied_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))'
   );
-  const applied = await prisma.$queryRawUnsafe<{ version: number }[]>('SELECT version FROM "_peblo_migrations"');
+  const applied = await prisma.$queryRawUnsafe<{ version: number }[]>('SELECT version FROM `_peblo_migrations`');
   const current = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
 
   const dir = findSqlDir();
@@ -70,19 +71,17 @@ async function migrate() {
       .map((s) => s.replace(/^\s*--.*$/gm, '').trim())
       .filter(Boolean);
 
-    await prisma.$transaction(async (tx) => {
-      for (const stmt of statements) {
-        await tx.$executeRawUnsafe(stmt);
-      }
-      await tx.$executeRawUnsafe(`INSERT INTO "_peblo_migrations" (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}')`);
-    });
+    for (const stmt of statements) {
+      await prisma.$executeRawUnsafe(stmt);
+    }
+    await prisma.$executeRawUnsafe(`INSERT INTO \`_peblo_migrations\` (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}')`);
     console.log(`[db] applied migration ${file}`);
   }
 }
 
 let ready: Promise<void> | null = null;
 
-/** Applies any pending migrations to the shared Postgres database. Call once at startup. */
+/** Applies any pending migrations to the shared MySQL database. Call once at startup. */
 export function initDatabase(): Promise<void> {
   if (!ready) {
     ready = migrate();
