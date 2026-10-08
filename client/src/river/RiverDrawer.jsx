@@ -86,13 +86,13 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
-  const takeNotes = async () => {
+  // Opens a blank draft linked to this task. The note is only created (and the task linked) once
+  // you type something, so clicking "Take notes" and walking away leaves nothing behind.
+  const takeNotes = () => {
     if (linkedNote) { navigate(`/notes/${linkedNote.id}`); return; }
-    const { data } = await notesAPI.create({ title: `${selected.text} · notes`, content: '', tags });
-    await todosAPI.update(selected.id, { noteId: data.note.id });
-    refresh();
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    navigate(`/notes/${data.note.id}`);
+    const qs = new URLSearchParams({ new: '1', forTask: selected.id, forTaskText: selected.text });
+    if (tags.length) qs.set('tag', tags.join(','));
+    navigate(`/notes?${qs.toString()}`);
   };
 
   const sourceTitle = (n) => brief.data?.sources.find((s) => s.n === n);

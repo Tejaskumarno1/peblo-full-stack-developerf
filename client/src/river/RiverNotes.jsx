@@ -306,7 +306,7 @@ function RiverNoteList({ onNew }) {
   });
   const { data: listed = [] } = useQuery({
     queryKey: ['notes', 'river', filter],
-    queryFn: () => notesAPI.getAll({ sort: 'updated', ...params }).then((r) => r.data.notes || []),
+    queryFn: () => notesAPI.getAll({ sort: 'updated', ...(filter === 'archive' || filter === 'trash' ? {} : { snippet: '1' }), ...params }).then((r) => r.data.notes || []),
   });
 
   const tags = useMemo(() => {

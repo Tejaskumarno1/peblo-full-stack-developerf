@@ -2,7 +2,9 @@ import api from './client';
 
 export const authAPI = {
   signup: (data) => api.post('/auth/signup', data),
-  login: (data) => api.post('/auth/login', data)
+  login: (data) => api.post('/auth/login', data),
+  changePassword: (data) => api.post('/auth/change-password', data),
+  logoutAll: () => api.post('/auth/logout-all')
 };
 
 export const profileAPI = {

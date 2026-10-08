@@ -80,8 +80,10 @@ function formatNote(note: any) {
 
 export async function getNotes(req: any, res: any, next: any) {
   try {
-    const { search, tag, category, sort = 'updated', archived, deleted } = req.query;
+    const { search, tag, category, sort = 'updated', archived, deleted, snippet } = req.query;
     const userId = req.user.id;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? ''), 10) || 0, 0), 500);
+    const offset = Math.max(parseInt(String(req.query.offset ?? ''), 10) || 0, 0);
 
     const where: any = { userId };
 
@@ -105,9 +107,12 @@ export async function getNotes(req: any, res: any, next: any) {
 
     // Search filter
     if (search) {
+      // Title, text and tags. (MySQL's collation makes `contains` case-insensitive.)
+      const q = String(search).trim();
       where.OR = [
-        { title: { contains: search } },
-        { content: { contains: search } }
+        { title: { contains: q } },
+        { content: { contains: q } },
+        { tags: { some: { tag: { name: { contains: q.replace(/^#/, '') } } } } }
       ];
     }
 
@@ -142,11 +147,23 @@ export async function getNotes(req: any, res: any, next: any) {
           select: { type: true }
         }
       },
-      orderBy
-      // No limit: data is local, and the sidebar and editor need every note.
+      orderBy,
+      // Optional paging. Without `limit` every note comes back: the sidebar and the editor
+      // open notes from that full list, so it must stay complete.
+      ...(limit ? { take: limit, skip: offset } : {})
     });
 
-    res.json({ notes: notes.map(formatNote) });
+    let out: any[] = notes.map(formatNote);
+    // `snippet=1`: list views that only show a preview get the first 400 characters, not whole notes.
+    // Never open or save a note from a snippet list (it is cut short) — use GET /notes/:id.
+    if (snippet === '1' || snippet === 'true') {
+      out = out.map((n) => ({
+        ...n,
+        content: n.content && n.content.length > 400 ? n.content.slice(0, 400) : n.content,
+        truncated: !!n.content && n.content.length > 400,
+      }));
+    }
+    res.json({ notes: out, ...(limit ? { limit, offset } : {}) });
   } catch (error) {
     next(error);
   }

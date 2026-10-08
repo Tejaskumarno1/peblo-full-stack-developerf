@@ -175,8 +175,8 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
           }
           saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
         } else if (action.type === 'READ_NOTE' && action.noteId) {
-          const note = await prisma.note.findUnique({
-            where: { id: action.noteId }
+          const note = await prisma.note.findFirst({
+            where: { id: action.noteId, userId: req.user!.id }
           });
           if (note) {
             const summaryText = await aiService.generateVerbalNoteSummary(req.user!.id, note.title, note.content);

@@ -1,8 +1,8 @@
 // "Ask your notes" retrieval for the AI Hub.
 //
-// Phase-1 version: keyword scoring over notes and tasks in SQLite (no embeddings yet).
+// Phase-1 version: keyword scoring over notes and tasks in the database (no embeddings yet).
 // The shape of what it returns (numbered sources with snippets) is what the AI Hub,
-// citations and the Sources panel depend on, so a later hybrid FTS5 + vector search
+// citations and the Sources panel depend on, so a later hybrid full-text + vector search
 // (docs/04-ai-hub.md) can replace the scoring without touching callers.
 import prisma from '../db.js';
 

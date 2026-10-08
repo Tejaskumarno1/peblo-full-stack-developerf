@@ -10,7 +10,6 @@ import {
 // prisma imported from db.js
 
 export async function getInsights(req: Request, res: Response, next: NextFunction) {
-  console.time('getInsights');
   try {
     const userId = req.user!.id;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -145,9 +144,7 @@ export async function getInsights(req: Request, res: Response, next: NextFunctio
         count: c.count,
       })),
     });
-    console.timeEnd('getInsights');
   } catch (error) {
-    console.timeEnd('getInsights');
     next(error);
   }
 }
@@ -258,7 +255,7 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const [tasksCreated, completedTodos, notesCreated, editedNotes, aiUsage] = await Promise.all([
+    const [tasksCreated, completedTodos, notesCreated, editedNotes, aiUsage, openTasks] = await Promise.all([
       prisma.todo.count({ where: { userId, createdAt: { gte: weekAgo } } }),
       prisma.todo.findMany({
         where: { userId, completed: true, updatedAt: { gte: weekAgo, lte: now } },
@@ -270,6 +267,7 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
         select: { updatedAt: true, tags: { select: { tag: { select: { name: true } } } } },
       }),
       prisma.aiGeneration.count({ where: { userId, createdAt: { gte: weekAgo } } }),
+      prisma.todo.count({ where: { userId, completed: false } }),
     ]);
 
     const countRow = {
@@ -300,9 +298,9 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
     for (const t of completedTodos) { const b = byKey.get(dayKey(t.updatedAt)); if (b) b.tasksCompleted++; }
     for (const n of editedNotes) { const b = byKey.get(dayKey(n.updatedAt)); if (b) b.notesEdited++; }
 
-    const completionRate = countRow.tasksCreated > 0 
-      ? Math.round((countRow.tasksCompleted / countRow.tasksCreated) * 100) 
-      : 0;
+    // Of everything on your plate this week (finished this week + still open), how much you finished.
+    const onPlate = countRow.tasksCompleted + openTasks;
+    const completionRate = onPlate > 0 ? Math.round((countRow.tasksCompleted / onPlate) * 100) : 0;
 
     res.json({
       period: {

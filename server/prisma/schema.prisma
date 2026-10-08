@@ -14,6 +14,7 @@ model User {
   name         String   @default("You")
   email        String   @unique
   passwordHash String   @map("password_hash")
+  tokenVersion Int      @default(0) @map("token_version")
 
   // Profile & Settings
   jobTitle     String?  @map("job_title")
@@ -152,10 +153,10 @@ model NoteEmbedding {
 
 model UserApiKeys {
   userId         String   @id @map("user_id")
-  openAiKey      String?  @map("openai_key")
-  geminiKey      String?  @map("gemini_key")
-  groqKey        String?  @map("groq_key")
-  huggingFaceKey String?  @map("huggingface_key")
+  openAiKey      String?  @map("openai_key") @db.Text
+  geminiKey      String?  @map("gemini_key") @db.Text
+  groqKey        String?  @map("groq_key") @db.Text
+  huggingFaceKey String?  @map("huggingface_key") @db.Text
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

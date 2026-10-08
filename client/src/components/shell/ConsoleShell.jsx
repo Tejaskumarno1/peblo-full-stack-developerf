@@ -81,7 +81,7 @@ export default function ConsoleShell({ children, onOpenSettings }) {
         <main className="pb-sheet">{children}</main>
 
         <div className="cs-status">
-          <span className="cs-status-left"><span className="cs-sq local" />saved on this computer · {notesCount} notes · {openTasks} open tasks</span>
+          <span className="cs-status-left"><span className="cs-sq local" />saved to your account · {notesCount} notes · {openTasks} open tasks</span>
           <span className="cs-status-keys"><span>ctrl k  commands</span><span>ctrl j  ask</span><span>ctrl shift space  capture</span></span>
         </div>
       </div>

@@ -224,7 +224,7 @@ export default function SoftNotes() {
   const saved = saveStatus === 'saving' ? { text: 'Saving…', icon: <Loader2 size={14} className="s-spin" /> }
     : saveStatus === 'unsaved' ? { text: 'Editing…', icon: null }
       : saveStatus === 'error' ? { text: "Couldn't save", icon: null, bad: true }
-        : { text: 'Saved on this computer', icon: <Check size={14} strokeWidth={2.4} /> };
+        : { text: 'Saved to your account', icon: <Check size={14} strokeWidth={2.4} /> };
 
   const listTitle = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : 'Notes';
 

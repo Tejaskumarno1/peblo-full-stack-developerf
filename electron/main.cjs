@@ -23,6 +23,17 @@ let mainWindow = null;
 let captureWindow = null;
 let tray = null;
 let serverPort = null;
+// Hosted mode: when set, the app is just a window onto a Peblo server running elsewhere.
+// Set PEBLO_API_URL (e.g. https://peblo.example.com), or put the address in server-url.txt in the app-data folder.
+let REMOTE_URL = null;
+function readRemoteUrl() {
+  let url = process.env.PEBLO_API_URL;
+  if (!url) {
+    try { url = fs.readFileSync(path.join(app.getPath('userData'), 'server-url.txt'), 'utf8'); } catch { /* none */ }
+  }
+  url = (url || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(url) ? url : null;
+}
 let isQuitting = false;
 let trayHintShown = false;
 
@@ -79,7 +90,7 @@ function lockZoom(win) {
 const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
 
 function appUrl(route = '/') {
-  const base = DEV_URL || `http://127.0.0.1:${serverPort}`;
+  const base = DEV_URL || REMOTE_URL || `http://127.0.0.1:${serverPort}`;
   return base.replace(/\/$/, '') + route;
 }
 
@@ -135,6 +146,17 @@ function loadEnvFile() {
   ].filter(Boolean);
   const file = candidates.find((f) => fs.existsSync(f));
   if (file) require('dotenv').config({ path: file });
+  // The secret that signs sign-ins: use the configured one, or make one on first run and keep it.
+  if (!process.env.JWT_SECRET) {
+    const secretFile = path.join(app.getPath('userData'), '.jwt-secret');
+    let secret = '';
+    try { secret = fs.readFileSync(secretFile, 'utf8').trim(); } catch { /* first run */ }
+    if (secret.length < 32) {
+      secret = require('crypto').randomBytes(48).toString('hex');
+      fs.writeFileSync(secretFile, secret, { mode: 0o600 });
+    }
+    process.env.JWT_SECRET = secret;
+  }
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not set. Put your MySQL connection string in server/.env (or set PEBLO_ENV_FILE), then start Peblo again.');
   }
@@ -339,7 +361,8 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 app.whenReady().then(async () => {
   try {
     // With PEBLO_DEV_URL set (`npm run dev`), the API already runs separately via tsx + Vite.
-    if (!DEV_URL) serverPort = await startBackend();
+    REMOTE_URL = DEV_URL ? null : readRemoteUrl();
+    if (!DEV_URL && !REMOTE_URL) serverPort = await startBackend();
   } catch (err) {
     console.error(err);
     dialog.showErrorBox('Peblo could not start', String(err && err.stack ? err.stack : err));

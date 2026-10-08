@@ -25,6 +25,7 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
+    "serve": "node dist/server/index.js",
     "db:sql": "node scripts/make-sql.mjs",
     "seed": "tsx scripts/seed.ts",
     "test": "npm run build:server && node scripts/smoke-test.mjs",

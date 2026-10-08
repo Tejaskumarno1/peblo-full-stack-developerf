@@ -1,13 +1,15 @@
-// Starts the compiled server against a throwaway SQLite file and exercises the main API routes.
-// Usage: npm run build:server && node scripts/smoke-test.mjs
-import { mkdtempSync, rmSync } from 'fs';
-import os from 'os';
+// Starts the compiled server against the MySQL database in server/.env and exercises the main API routes
+// with a throwaway account (created at the start, deleted at the end).
+// Usage: npm test      (or: npm run build:server && node scripts/smoke-test.mjs)
 import path from 'path';
+import dotenv from 'dotenv';
 import { pathToFileURL } from 'url';
 
-const tmp = mkdtempSync(path.join(os.tmpdir(), 'peblo-smoke-'));
-process.env.DATABASE_URL = 'file:' + path.join(tmp, 'test.db').replace(/\\/g, '/');
+dotenv.config({ path: path.resolve('server/.env') });
+if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is not set (server/.env).'); process.exit(1); }
 process.env.PEBLO_SQL_DIR = path.resolve('server/prisma/sql');
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-test-secret-smoke-test-secret';
+process.env.SIGNUP_RATE_MAX = '1000'; // the test makes several accounts; the sign-in limit is still tested
 delete process.env.OPENAI_API_KEY;
 delete process.env.GEMINI_API_KEY;
 delete process.env.GEMINI_API_KEYS;
@@ -17,6 +19,15 @@ const { server, port } = await startServer({ port: 0, staticDir: path.resolve('c
 const base = `http://127.0.0.1:${port}`;
 
 let failures = 0;
+let token = null;
+const runId = Date.now();
+const emailA = `smoke-a-${runId}@peblo.test`;
+const emailB = `smoke-b-${runId}@peblo.test`;
+// Requests to our own server carry the current account's sign-in token (also the raw fetch() calls below).
+const rawFetch = globalThis.fetch;
+globalThis.fetch = (u, o = {}) => (token && String(u).startsWith(base)
+  ? rawFetch(u, { ...o, headers: { Authorization: `Bearer ${token}`, ...(o.headers || {}) } })
+  : rawFetch(u, o));
 async function call(method, url, body) {
   const res = await fetch(base + url, {
     method,
@@ -37,10 +48,35 @@ try {
   check('health', r.status === 200, r.json);
 
   r = await call('GET', '/api/profile');
-  check('profile loads without login', r.status === 200 && r.json.user?.id === 'local-user', r.json);
+  check('profile needs a sign-in', r.status === 401, r);
+
+  r = await call('POST', '/api/auth/signup', { email: emailA, password: 'correct horse battery', name: 'Smoke A' });
+  check('sign up', r.status === 201 && !!r.json.token && r.json.user.email === emailA, r.json);
+  token = r.json.token;
+  const userAId = r.json.user?.id;
+
+  r = await call('POST', '/api/auth/signup', { email: emailA.toUpperCase(), password: 'correct horse battery' });
+  check('duplicate email is refused (any case)', r.status === 409, r.json);
+  r = await call('POST', '/api/auth/signup', { email: 'nope', password: 'correct horse battery' });
+  check('invalid email is refused', r.status === 400, r.json);
+  r = await call('POST', '/api/auth/login', { email: emailA, password: 'wrong password' });
+  check('wrong password is refused', r.status === 401, r.json);
+
+  r = await call('GET', '/api/profile');
+  check('profile loads when signed in', r.status === 200 && r.json.user?.id === userAId, r.json);
 
   r = await call('PUT', '/api/profile', { name: 'Tejas', settings: { fontSize: 'large', geminiKey: 'test-key' } });
-  check('profile update + key saved', r.status === 200 && r.json.user.name === 'Tejas' && r.json.user.settings.fontSize === 'large', r.json);
+  check('profile update + key saved', r.status === 200 && r.json.user.name === 'Tejas' && r.json.user.settings.fontSize === 'large' && r.json.user.settings.geminiKey === 'test-key', r.json);
+
+  // API keys are encrypted at rest and kept out of the settings JSON.
+  const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  const keyRow = await prisma.userApiKeys.findUnique({ where: { userId: userAId } });
+  const userRow = await prisma.user.findUnique({ where: { id: userAId } });
+  check('API key is encrypted in the database', !!keyRow?.geminiKey && keyRow.geminiKey.startsWith('enc:v1:') && !keyRow.geminiKey.includes('test-key'), keyRow);
+  check('API key is not duplicated in the settings JSON', userRow.settings.geminiKey === undefined && userRow.settings.fontSize === 'large', userRow.settings);
+
+  r = await call('PUT', '/api/profile', { email: 'not-an-email' });
+  check('profile rejects an invalid email', r.status === 400, r.json);
 
   r = await call('POST', '/api/notes', { title: 'First note', content: 'Hello desktop', tags: ['Work', 'ideas'], category: 'Personal' });
   check('create note', r.status === 201 && r.json.note.tags.length === 2, r.json);
@@ -234,6 +270,61 @@ try {
   check('chat without any AI explains how to set it up', /Connections/.test(noKey), noKey.slice(0, 200));
   fake.close();
 
+  // ── Another account can't see or use this account's notes ──
+  r = await call('POST', '/api/auth/signup', { email: emailB, password: 'another long password' });
+  const tokenA = token;
+  const tokenB = r.json.token;
+  token = tokenB;
+  r = await call('GET', `/api/notes/${noteId}`);
+  check("another account can't read a note", r.status === 404, r);
+  r = await call('GET', '/api/notes');
+  check("another account's list is empty", r.status === 200 && r.json.notes.length === 0, r.json.notes?.length);
+  r = await call('PUT', '/api/profile', { email: emailA });
+  check("an email already in use can't be taken", r.status === 409, r.json);
+  token = tokenA;
+
+  // ── Search covers tags; snippet and paging options ──
+  r = await call('GET', '/api/notes?search=obsidian');
+  check('search finds notes by tag name', r.status === 200 && r.json.notes.some((n) => n.title === 'Vault idea'), r.json.notes?.length);
+  await call('POST', '/api/notes', { title: 'Long one', content: 'y'.repeat(2000) });
+  r = await call('GET', '/api/notes?snippet=1&search=Long%20one');
+  check('snippet=1 shortens content', r.status === 200 && r.json.notes[0]?.content.length === 400 && r.json.notes[0].truncated === true, r.json.notes?.[0]?.content?.length);
+  r = await call('GET', '/api/notes?limit=5&offset=0');
+  check('limit/offset page the list', r.status === 200 && r.json.notes.length === 5, r.json.notes?.length);
+
+  // ── Change password, and sign out everywhere ──
+  r = await call('POST', '/api/auth/change-password', { currentPassword: 'nope nope nope', newPassword: 'a brand new password' });
+  check('change password needs the current password (403, not 401)', r.status === 403, r.json);
+  r = await call('POST', '/api/auth/change-password', { currentPassword: 'correct horse battery', newPassword: 'short' });
+  check('new password must be 8+ characters', r.status === 400, r.json);
+  r = await call('POST', '/api/auth/change-password', { currentPassword: 'correct horse battery', newPassword: 'a brand new password' });
+  check('change password returns a fresh token', r.status === 200 && !!r.json.token && r.json.token !== tokenA, r.json);
+  const tokenA2 = r.json.token;
+  r = await call('GET', '/api/profile');
+  check('the old token stops working after a password change', r.status === 401, r.status);
+  token = tokenA2;
+  r = await call('GET', '/api/profile');
+  check('the new token works', r.status === 200, r.status);
+  r = await call('POST', '/api/auth/login', { email: emailA, password: 'a brand new password' });
+  check('login with the new password', r.status === 200 && !!r.json.token, r.json);
+  const tokenA3 = r.json.token;
+  r = await call('POST', '/api/auth/logout-all');
+  check('sign out everywhere', r.status === 200, r.json);
+  r = await call('GET', '/api/profile');
+  check('every token stops working after "sign out everywhere"', r.status === 401, r.status);
+  token = tokenA3;
+  r = await call('GET', '/api/profile');
+  check('(and that includes tokens from other devices)', r.status === 401, r.status);
+
+  // ── Sign-in attempts are rate limited ──
+  let limited = false;
+  for (let i = 0; i < 14 && !limited; i++) {
+    r = await call('POST', '/api/auth/login', { email: emailA, password: 'wrong wrong' });
+    limited = r.status === 429;
+  }
+  check('repeated bad sign-ins are rate limited (429)', limited);
+
+
   r = await call('GET', '/notes/some-id');
   check('SPA route serves index.html', r.status === 200 && String(r.json).includes('<div id="root">'));
 } catch (err) {
@@ -242,8 +333,8 @@ try {
 } finally {
   server.close();
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB] } } }); } catch {} // cascades to everything they created
   await prisma.$disconnect();
-  try { rmSync(tmp, { recursive: true, force: true }); } catch {}
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
   process.exit(failures ? 1 : 0);
 }

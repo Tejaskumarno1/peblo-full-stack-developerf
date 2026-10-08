@@ -128,7 +128,7 @@ export default function SoftConnections() {
 
         <section className="s-conn-card" aria-labelledby="s-keys">
           <h2 id="s-keys" className="s-conn-h2">Cloud keys</h2>
-          <span className="s-empty small">Saved on this computer. {routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
+          <span className="s-empty small">Saved encrypted in your account. {routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
           <KeyInput id="s-openai" label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput id="s-gemini" label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
         </section>

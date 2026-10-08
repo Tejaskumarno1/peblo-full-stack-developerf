@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notesAPI } from '../api';
+import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
@@ -18,6 +18,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const queryClient = useQueryClient();
   const [doc, setDoc] = useState(null);
   const [editorKey, setEditorKey] = useState('none');
+  const docRef = useRef(null);
 
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes', 'sidebar'],
@@ -29,8 +30,9 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
     setEditorKey(`${note.id}-${Date.now()}`);
   }, []);
 
-  const startDraft = useCallback((tags) => {
-    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  // `forTask`: the draft belongs to a task (River's "Take notes"); the task is linked when the note is first saved.
+  const startDraft = useCallback((tags, forTask) => {
+    setDoc({ id: '__draft__', isDraft: true, forTask: forTask || null, title: '', content: '', tags: tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
   }, [draftTags]);
 
@@ -38,7 +40,11 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
     if (params.get('new') === '1') {
       const tag = params.get('tag');
       setParams({}, { replace: true });
-      startDraft(tag ? tag.split(',').map((t) => t.trim()).filter(Boolean) : undefined);
+      const forTask = params.get('forTask');
+      startDraft(
+        tag ? tag.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
+        forTask ? { id: forTask, text: params.get('forTaskText') || '' } : undefined,
+      );
       return;
     }
     if (!routeId) {
@@ -60,8 +66,14 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
 
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {
-      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled' });
+      const forTask = docRef.current?.forTask;
+      const fallback = forTask?.text ? `${forTask.text} · notes` : 'Untitled';
+      const { data } = await notesAPI.create({ ...payload, title: payload.title || fallback });
       const created = data.note;
+      if (forTask?.id) {
+        try { await todosAPI.update(forTask.id, { noteId: created.id }); } catch { /* the note is saved either way */ }
+        queryClient.invalidateQueries({ queryKey: ['todos'] });
+      }
       setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate(`/notes/${created.id}`, { replace: true });
@@ -76,6 +88,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   }, [navigate, queryClient]);
 
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
+  docRef.current = doc;
   const patch = (p) => setDoc((d) => ({ ...d, ...p }));
 
   const refreshLists = () => {
@@ -117,7 +130,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const saved = saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'unsaved' ? 'Editing…'
       : saveStatus === 'error' ? "Couldn't save"
-        : 'Saved on this computer';
+        : 'Saved to your account';
 
   return {
     routeId, doc, setDoc, editorKey, allNotes, open, startDraft, patch, forceSave,

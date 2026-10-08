@@ -1,24 +1,25 @@
 // Runs the built app in a normal browser with sample data, for UI work and screenshots.
 // Usage: npm run build && node scripts/demo-server.mjs [port]
-// Data goes to a throwaway database in your temp folder, never your real Peblo data.
-import { mkdtempSync } from 'fs';
-import os from 'os';
+// Uses the database in server/.env, but only through a throwaway demo account that is deleted
+// when you stop the script (Ctrl+C), so your own notes are never touched.
 import path from 'path';
+import dotenv from 'dotenv';
 import { pathToFileURL } from 'url';
 
+dotenv.config({ path: path.resolve('server/.env') });
 const port = Number(process.argv[2]) || 4777;
-const tmp = mkdtempSync(path.join(os.tmpdir(), 'peblo-demo-'));
-process.env.DATABASE_URL = 'file:' + path.join(tmp, 'demo.db').replace(/\\/g, '/');
 process.env.PEBLO_SQL_DIR = path.resolve('server/prisma/sql');
 
 const { startServer } = await import(pathToFileURL(path.resolve('dist/server/index.js')).href);
 await startServer({ port, staticDir: path.resolve('client/dist') });
 const base = `http://127.0.0.1:${port}/api`;
-const post = (url, body, method = 'POST') => fetch(base + url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+const email = `demo-${Date.now()}@peblo.test`;
+const signup = await fetch(base + '/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'demo-password', name: 'Aarav Reddy' }) }).then((r) => r.json());
+const post = (url, body, method = 'POST') => fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${signup.token}` }, body: JSON.stringify(body) }).then((r) => r.json());
 
 const day = (offset, h = 17, m = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(h, m, 0, 0); return d.toISOString(); };
 
-await post('/profile', { name: 'Aarav Reddy', settings: { defaultAiModel: 'ask' } }, 'PUT');
+await post('/profile', { settings: { defaultAiModel: 'ask' } }, 'PUT');
 
 const notes = [
   ['DBMS · Unit 3 Normalization', '## Normal forms at a glance\n\n| Form | Rule |\n|---|---|\n| 2NF | No partial dependency on a composite key |\n| 3NF | No transitive dependency |\n| BCNF | Every determinant is a candidate key |\n\n> Revisit: decomposition example 2. I keep losing C → D when splitting.\n\n## Worked example\n\nR(A, B, C, D) with AB → C and C → D. The key is AB, so C → D is transitive and R is not in 3NF.', ['exams', 'dbms']],
@@ -45,4 +46,13 @@ for (const [text, priority, deadline, tags] of tasks) await post('/todos', { tex
 const done = await post('/todos', { text: 'Submit lab record', priority: 'medium', deadline: day(0, 9), tags: ['college'] });
 await post(`/todos/${done.todo.id}`, { completed: true }, 'PATCH');
 
-console.log(`Peblo demo running at http://127.0.0.1:${port}  (data: ${tmp})`);
+console.log(`Peblo demo running at http://127.0.0.1:${port}`);
+console.log(`Sign in with  ${email}  /  demo-password   (the account is deleted when you press Ctrl+C)`);
+
+const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+const cleanup = async () => {
+  try { await prisma.user.deleteMany({ where: { email } }); await prisma.$disconnect(); } catch { /* ignore */ }
+  process.exit(0);
+};
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);

@@ -48,7 +48,7 @@ function EditorToolbar({
   if (saveStatus === 'saving') status = <span className="nt-save"><Loader2 size={12} className="nt-spin" /> Saving…</span>;
   else if (saveStatus === 'error') status = <span className="nt-save bad" title="Could not save. Is Peblo still running?">Save failed</span>;
   else if (isDraft) status = <span className="nt-save">Draft · start typing to save</span>;
-  else status = <span className="nt-save"><span className="pb-dot local" /> Saved on this device</span>;
+  else status = <span className="nt-save"><span className="pb-dot local" /> Saved to your account</span>;
 
   return (
     <div className="editor-toolbar nt-bar desktop-only">

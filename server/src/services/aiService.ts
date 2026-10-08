@@ -1,3 +1,4 @@
+import { decryptSecret } from '../secrets.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -31,7 +32,7 @@ type ProviderName = 'openai' | 'gemini' | 'ollama';
 
 function getOpenAIProvider(user: any): OAIProvider | null {
   const settings = user?.settings as any || {};
-  const key = user?.apiKeys?.openAiKey?.trim();
+  const key = decryptSecret(user?.apiKeys?.openAiKey)?.trim();
   let apiKey = key;
   if (!apiKey && settings.forceCustomModels !== true) {
     const envKey = process.env.OPENAI_API_KEY?.trim();
@@ -61,7 +62,7 @@ function getOllamaProvider(user: any): OAIProvider | null {
 function getGeminiInstance(user: any) {
   const settings = user?.settings as any || {};
   const forceCustomModels = settings.forceCustomModels === true;
-  const key = user?.apiKeys?.geminiKey?.trim();
+  const key = decryptSecret(user?.apiKeys?.geminiKey)?.trim();
 
   if (key) return new GoogleGenerativeAI(key);
   if (forceCustomModels) return null;

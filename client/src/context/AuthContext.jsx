@@ -140,7 +140,7 @@ export function AuthProvider({ children }) {
       : window.location.origin;
       
     // The server reads who we are from the token and puts us in our own room.
-    const socket = io(socketURL, { auth: { token: getToken() } });
+    const socket = io(socketURL, { auth: (cb) => cb({ token: getToken() }) });
 
     socket.on('todos_changed', () => {
       queryClient.invalidateQueries(['todos']);

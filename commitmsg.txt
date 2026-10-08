@@ -1,0 +1,18 @@
+Add product, technical, design and GTM docs; fix OpenAI key bug
+
+Docs (docs/):
+- 00 vision & strategy (4 strategic paths with pros/cons), 01 PRD,
+  02 TRD (Peblo Core, storage/model adapters, ADRs), 03 MCP server +
+  Peblo Connect spec, 04 AI Hub spec, 05 design (audit, IA, screen specs,
+  design system) with 5 SVG wireframes, 06 go-to-market
+- README index with cross-team gap analysis, resolved conflicts,
+  paths forward and founder decisions
+
+Fixes found during the review:
+- Saving an OpenAI key broke all AI (undefined variable in provider setup)
+- Choosing Local AI no longer silently falls back to cloud providers
+- API errors no longer include stack traces outside development
+- Smoke test covers the OpenAI-key path and local-only routing (33 checks)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01B9GpWaduMaqknHFdWAqMR9

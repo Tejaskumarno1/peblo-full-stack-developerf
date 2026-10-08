@@ -262,7 +262,7 @@ export default function AIHubPage() {
             {lastAssistant?.searched && (
               <div className="hub-src-note">
                 <strong>Found by local search</strong><br />
-                Searched {lastAssistant.searched.notes} notes and {lastAssistant.searched.tasks} open tasks on this device.
+                Searched {lastAssistant.searched.notes} notes and {lastAssistant.searched.tasks} open tasks in your account.
               </div>
             )}
             {panelSources.length === 0 ? (

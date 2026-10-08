@@ -97,9 +97,14 @@ async function load(win, url) {
   await sleep(1500); // lazy screens + first data
 }
 
+// Throwaway account for the run (removed again at the end). The database is the one in server/.env.
+const TEST_EMAIL = `canvas-check-${Date.now()}@peblo.test`;
+
 async function seed(wc) {
   await wc.executeJavaScript(`(async () => {
-    const api = (u, body, method = 'POST') => fetch('/api' + u, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+    const su = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ${JSON.stringify(TEST_EMAIL)}, password: 'canvas-check-pw', name: 'Aarav Reddy' }) }).then((r) => r.json());
+    localStorage.setItem('peblo-token', su.token);
+    const api = (u, body, method = 'POST') => fetch('/api' + u, { method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + su.token }, body: JSON.stringify(body) }).then((r) => r.json());
     const pause = () => new Promise((r) => setTimeout(r, 20));
     await api('/profile', { name: 'Aarav Reddy' }, 'PUT');
     const day = (o, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + o); d.setHours(h, m, 0, 0); return d.toISOString(); };
@@ -146,11 +151,12 @@ async function seedMastery() {
     const dir = path.join(__dirname, '../server/generated/prisma');
     const { PrismaClient } = require(dir);
     const prisma = new PrismaClient();
+    const me = await prisma.user.findUnique({ where: { email: TEST_EMAIL } });
     const rows = [['normalization', 40, 4, 10, [{ concept: '3NF vs BCNF', n: 3 }, { concept: 'functional dependencies', n: 2 }]], ['sql-joins', 30, 3, 10, [{ concept: 'outer joins', n: 4 }]], ['transactions', 65, 7, 10, []], ['indexing', 85, 9, 10, []], ['er-diagrams', 90, 9, 10, []]];
     for (const [topic, score, c, t, missed] of rows) {
       await prisma.topicMastery.upsert({
-        where: { userId_topic: { userId: 'local-user', topic } },
-        create: { userId: 'local-user', topic, score, quizzes: 1, lastCorrect: c, lastTotal: t, missed: JSON.stringify(missed) },
+        where: { userId_topic: { userId: me.id, topic } },
+        create: { userId: me.id, topic, score, quizzes: 1, lastCorrect: c, lastTotal: t, missed: JSON.stringify(missed) },
         update: {},
       });
     }
@@ -241,6 +247,14 @@ module.exports = function canvasCheck({ getMainWindow }) {
       }
     } catch (err) {
       results.push({ error: String(err && err.stack ? err.stack : err) });
+    }
+    try {
+      const { PrismaClient } = require(path.join(__dirname, '../server/generated/prisma'));
+      const prisma = new PrismaClient();
+      await prisma.user.deleteMany({ where: { email: TEST_EMAIL } }); // cascades to its notes, tasks, etc.
+      await prisma.$disconnect();
+    } catch (err) {
+      console.warn('[canvas-check] could not remove the test account:', err.message);
     }
     fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify(results));
     fs.writeFileSync(path.join(out, 'page-errors.txt'), pageErrors.join('\n'));

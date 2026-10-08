@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
-import { signToken } from '../middleware/auth.js';
+import { authenticate, signToken } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { loadProfile } from '../services/profile.js';
 
 /*
  * Real accounts: anyone can sign up, and their notes/tasks/quizzes are theirs alone.
@@ -9,13 +11,14 @@ import { signToken } from '../middleware/auth.js';
  */
 const router = Router();
 
-function publicUser(u: any) {
-  return { id: u.id, name: u.name, email: u.email, jobTitle: u.jobTitle, bio: u.bio, timezone: u.timezone, settings: u.settings };
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-router.post('/signup', async (req, res, next) => {
+// Brute-force protection: a handful of tries per address per window.
+const loginLimit = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too many sign-in attempts. Wait a few minutes and try again.' });
+const signupLimit = rateLimit({ windowMs: 60 * 60_000, max: Number(process.env.SIGNUP_RATE_MAX) || 10, message: 'Too many sign-ups from this address. Try again later.' });
+const passwordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, message: 'Too many attempts. Wait a few minutes and try again.' });
+
+router.post('/signup', signupLimit, async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
@@ -23,6 +26,7 @@ router.post('/signup', async (req, res, next) => {
 
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    if (password.length > 200) return res.status(400).json({ error: 'Password is too long.' });
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ error: 'An account with that email already exists.' });
@@ -30,24 +34,56 @@ router.post('/signup', async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({ data: { email, name, passwordHash, settings: {} } });
 
-    const token = signToken({ id: user.id, email: user.email });
-    res.status(201).json({ token, user: publicUser(user) });
+    const token = signToken(user);
+    res.status(201).json({ token, user: await loadProfile(user.id) });
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimit, async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    const password = String(req.body?.password || '');
+    const password = String(req.body?.password || '').slice(0, 200);
 
     const user = await prisma.user.findUnique({ where: { email } });
     const ok = user && (await bcrypt.compare(password, user.passwordHash));
     if (!ok) return res.status(401).json({ error: 'Incorrect email or password.' });
 
-    const token = signToken({ id: user!.id, email: user!.email });
-    res.json({ token, user: publicUser(user) });
+    res.json({ token: signToken(user!), user: await loadProfile(user!.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Change the password. Every other device is signed out; this one gets a fresh token.
+// (Wrong current password answers 403, not 401, so the app does not mistake it for an expired session.)
+router.post('/change-password', authenticate, passwordLimit, async (req, res, next) => {
+  try {
+    const current = String(req.body?.currentPassword || '').slice(0, 200);
+    const next_ = String(req.body?.newPassword || '');
+    if (next_.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    if (next_.length > 200) return res.status(400).json({ error: 'Password is too long.' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user || !(await bcrypt.compare(current, user.passwordHash))) {
+      return res.status(403).json({ error: 'Your current password is not correct.' });
+    }
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(next_, 12), tokenVersion: { increment: 1 } },
+    });
+    res.json({ token: signToken(updated), message: 'Password changed. Other devices were signed out.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// "Sign out everywhere": invalidates every token, including this device's.
+router.post('/logout-all', authenticate, async (req, res, next) => {
+  try {
+    await prisma.user.update({ where: { id: req.user!.id }, data: { tokenVersion: { increment: 1 } } });
+    res.json({ message: 'Signed out on all devices.' });
   } catch (error) {
     next(error);
   }

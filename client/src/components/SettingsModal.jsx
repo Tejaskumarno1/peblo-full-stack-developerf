@@ -1,6 +1,7 @@
 import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { aiAPI, transferAPI } from '../api';
+import { aiAPI, transferAPI, authAPI } from '../api';
+import { setToken } from '../api/token';
 import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
@@ -99,6 +100,33 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
   };
 
   const [saveSuccess, setSaveSuccess] = useState('');
+
+  // ── Account security ──
+  const [pw, setPw] = useState({ current: '', next: '', again: '' });
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwBusy, setPwBusy] = useState(false);
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pw.next.length < 8) return setPwMsg({ ok: false, text: 'The new password must be at least 8 characters.' });
+    if (pw.next !== pw.again) return setPwMsg({ ok: false, text: 'The two new passwords do not match.' });
+    setPwBusy(true);
+    setPwMsg(null);
+    try {
+      const { data } = await authAPI.changePassword({ currentPassword: pw.current, newPassword: pw.next });
+      setToken(data.token); // this device stays signed in; every other device is signed out
+      setPw({ current: '', next: '', again: '' });
+      setPwMsg({ ok: true, text: 'Password changed. Your other devices were signed out.' });
+    } catch (err) {
+      setPwMsg({ ok: false, text: err.response?.data?.error || 'Could not change the password. Try again.' });
+    } finally {
+      setPwBusy(false);
+    }
+  };
+  const handleLogoutAll = async () => {
+    try { await authAPI.logoutAll(); } catch { /* signing out here still happens */ }
+    onClose();
+    logout();
+  };
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
@@ -490,6 +518,38 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </div>
               </div>
 
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Password &amp; sessions</h3>
+              <form onSubmit={handleChangePassword} className="settings-toggle-row" style={{ display: 'block' }}>
+                <div className="settings-toggle-info" style={{ marginBottom: '0.75rem' }}>
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Shield size={16} /> Change password</h4>
+                  <p>Changing it signs out every other device. There is no email reset yet, so keep your password somewhere safe.</p>
+                </div>
+                <div className="settings-grid-2">
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-current">Current password</label>
+                    <input id="pw-current" type="password" autoComplete="current-password" className="settings-field-input" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required />
+                  </div>
+                  <div className="settings-field-group" />
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-new">New password</label>
+                    <input id="pw-new" type="password" autoComplete="new-password" minLength={8} className="settings-field-input" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required />
+                  </div>
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-again">Repeat new password</label>
+                    <input id="pw-again" type="password" autoComplete="new-password" minLength={8} className="settings-field-input" value={pw.again} onChange={(e) => setPw({ ...pw, again: e.target.value })} required />
+                  </div>
+                </div>
+                {pwMsg && <p role="status" style={{ margin: '0.5rem 0', fontWeight: 500, color: pwMsg.ok ? 'var(--success)' : '#ef4444' }}>{pwMsg.text}</p>}
+                <button type="submit" className="btn btn-primary" disabled={pwBusy}>{pwBusy ? 'Changing…' : 'Change password'}</button>
+              </form>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><LogOut size={16} /> Sign out everywhere</h4>
+                  <p>Ends your session on every device, including this one. Use it if you lost a device or signed in on a shared computer.</p>
+                </div>
+                <button type="button" className="btn btn-outline" onClick={handleLogoutAll} style={{ whiteSpace: 'nowrap' }}>Sign out everywhere</button>
+              </div>
+
               <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Import</h3>
               <div className="settings-toggle-row" style={{ alignItems: 'flex-start' }}>
                 <div className="settings-toggle-info">
@@ -524,7 +584,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">AI Providers & Models</h2>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Use your own OpenAI or Gemini key, or run AI completely on this computer with Ollama. Keys are stored in Peblo's local database and only sent to the provider you use.
+                Use your own OpenAI or Gemini key, or run AI completely on this computer with Ollama. Keys are stored encrypted in your Peblo account and only sent to the provider you use.
               </p>
 
               <form onSubmit={handleSaveApiKeys}>

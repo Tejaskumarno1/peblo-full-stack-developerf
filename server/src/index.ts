@@ -22,16 +22,22 @@ import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
+import { protectExistingKeys } from './services/profile.js';
 
 export interface StartOptions {
   /** Port to listen on. 0 picks a free port (what the desktop app uses). */
   port?: number;
   /** Folder with the built React client. When set, it is served at `/`. */
   staticDir?: string;
+  /** Interface to listen on. The desktop app stays on 127.0.0.1; a hosted server uses 0.0.0.0. */
+  host?: string;
 }
 
 export function createApp(staticDir?: string) {
   const app = express();
+
+  // Behind a hosting platform's proxy, TRUST_PROXY=1 makes rate limits see the real client address.
+  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
   // Desktop app (Electron) sends no Origin header, so it's always allowed. The Vite dev
   // server and, once ALLOWED_ORIGINS is set (comma-separated), a hosted web client too.
@@ -46,6 +52,11 @@ export function createApp(staticDir?: string) {
   }));
   app.use(express.json({ limit: '10mb' }));
 
+  // Before the routers: hosting platforms probe this without signing in.
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);
@@ -58,10 +69,6 @@ export function createApp(staticDir?: string) {
   app.use('/api/study', studyRoutes);
   app.use('/api/river', riverRoutes);
   app.use('/api', transferRoutes);
-
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
 
   app.use('/api', errorHandler);
 
@@ -77,8 +84,9 @@ export function createApp(staticDir?: string) {
   return app;
 }
 
-export async function startServer({ port = 0, staticDir }: StartOptions = {}): Promise<{ server: Server; port: number }> {
+export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: StartOptions = {}): Promise<{ server: Server; port: number }> {
   await initDatabase();
+  await protectExistingKeys().catch((e) => console.error('[keys] could not protect existing keys:', e));
 
   const app = createApp(staticDir);
   const httpServer = createServer(app);
@@ -86,11 +94,15 @@ export async function startServer({ port = 0, staticDir }: StartOptions = {}): P
   // Socket.IO lets the server tell the UI to refresh after AI creates notes/tasks.
   // Each connection must carry a valid sign-in token; it only ever hears its own account's events.
   const io = new SocketIOServer(httpServer);
-  io.use((socket, next) => {
-    const user = verifyToken(socket.handshake.auth?.token);
-    if (!user) return next(new Error('Sign in to continue.'));
-    socket.data.userId = user.id;
-    next();
+  io.use(async (socket, next) => {
+    try {
+      const user = await verifyToken(socket.handshake.auth?.token);
+      if (!user) return next(new Error('Sign in to continue.'));
+      socket.data.userId = user.id;
+      next();
+    } catch (e) {
+      next(new Error('Sign in to continue.'));
+    }
   });
   io.on('connection', (socket) => {
     socket.join(socket.data.userId);
@@ -99,18 +111,27 @@ export async function startServer({ port = 0, staticDir }: StartOptions = {}): P
 
   await new Promise<void>((resolve, reject) => {
     httpServer.once('error', reject);
-    httpServer.listen(port, '127.0.0.1', () => resolve());
+    httpServer.listen(port, host, () => resolve());
   });
 
   const actualPort = (httpServer.address() as AddressInfo).port;
-  console.log(`Peblo server running on http://127.0.0.1:${actualPort}`);
+  console.log(`Peblo server running on http://${host}:${actualPort}`);
   return { server: httpServer, port: actualPort };
 }
 
 // `npm run dev` inside /server runs this file directly.
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirectRun) {
-  startServer({ port: Number(process.env.PORT) || 3001 }).catch((err) => {
+  // Run on its own: `npm run dev:server` while developing, or `npm run serve` (after `npm run build`) on a host.
+  // A host should set NODE_ENV=production, DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS (if the web client is elsewhere)
+  // and TRUST_PROXY=1 when it sits behind the platform's proxy. It then serves the web app and the API together.
+  const production = process.env.NODE_ENV === 'production';
+  const clientDir = process.env.PEBLO_STATIC_DIR || path.resolve(process.cwd(), 'client', 'dist');
+  startServer({
+    port: Number(process.env.PORT) || 3001,
+    host: process.env.HOST || (production ? '0.0.0.0' : '127.0.0.1'),
+    staticDir: production && existsSync(clientDir) ? clientDir : undefined,
+  }).catch((err) => {
     console.error(err);
     process.exit(1);
   });

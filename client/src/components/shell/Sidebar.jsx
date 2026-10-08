@@ -148,7 +148,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, onOpenSettings }
         <Link to="/ai/connections" className="pb-trust" title="AI and privacy settings">
           <span className="pb-trust-title">
             <Lock size={14} color="var(--pb-local)" strokeWidth={2.2} />
-            Everything on this device
+            Saved to your account
           </span>
           <span className="pb-trust-row">
             <span className={`pb-dot ${modelKind}`} />
