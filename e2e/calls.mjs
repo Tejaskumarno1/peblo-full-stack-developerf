@@ -36,6 +36,8 @@ try {
   check('the call comes back after the snooze', (await page.locator('.ai-call-overlay').count()) === 1);
   await page.locator('.call-btn.answer').click();
   await page.locator('.ai-call-task-item').first().waitFor({ timeout: 10000 });
+  // the list is drawn from the call's own state; give a slow machine a moment to settle
+  await page.waitForFunction(() => [...document.querySelectorAll('.ai-call-task-item')].some((e) => /today/i.test(e.textContent)), null, { timeout: 5000 }).catch(() => {});
   const rows = await page.locator('.ai-call-task-item').allInnerTexts();
   check('the snoozed call still has the agenda (2 tasks)', rows.length === 2, JSON.stringify(rows));
   const rent = rows.find((r) => /Pay rent/.test(r)) || '';

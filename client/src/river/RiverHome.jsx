@@ -5,6 +5,8 @@ import { Loader2 } from 'lucide-react';
 import { todosAPI, notesAPI, riverAPI, hubAPI } from '../api';
 import { RiverHeader, useDismiss } from './RiverShell';
 import RiverDrawer from './RiverDrawer';
+import { quickMeetingTimes, timeOfDay } from './quickAdd';
+import { hiddenClusters, nextHidden } from './hidden';
 import {
   ZOOMS, DAY_START, DAY_END, dayWidth, rangeStart, rangeWidth, xOf,
   startOfDay, addDays, sameDay, momentOf, endOf, dueMomentOf, isMeeting, isAllDay,
@@ -61,7 +63,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const today = startOfDay(now);
   const todayKey = today.toDateString();
   const start = useMemo(() => rangeStart(z, today), [zoom, todayKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const end = useMemo(() => addDays(start, z.back + z.ahead + 7), [start, z]);
+  const end = useMemo(() => addDays(start, z.back + z.ahead + (z.bin === 'week' ? 7 : 1)), [start, z]);
   const width = rangeWidth(z, start) + PAD * 2;
   const X = useCallback((d) => PAD + xOf(d, z, start), [z, start]);
 
@@ -147,7 +149,13 @@ export default function RiverHome({ initialZoom = 'day' }) {
     if (!el) return;
     el.scrollTo({ left: Math.max(0, X(date) - el.clientWidth * 0.4), behavior: smooth ? 'smooth' : 'auto' });
   }, [X]);
-  useLayoutEffect(() => { scrollTo(new Date(), false); }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A Jump that needs another zoom parks its target here; the new scale is in place by the time this runs.
+  const pendingScroll = useRef(null);
+  useLayoutEffect(() => {
+    const target = pendingScroll.current;
+    pendingScroll.current = null;
+    scrollTo(target || new Date(), false);
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onWheel = (e) => {
     const el = scrollRef.current;
@@ -182,8 +190,12 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2400); };
   const toggle = async (t) => {
     queryClient.setQueriesData({ queryKey: ['todos', 'range', 'river'] }, (old) => (Array.isArray(old) ? old.map((x) => (x.id === t.id ? { ...x, completed: !x.completed, updatedAt: new Date().toISOString() } : x)) : old));
-    await todosAPI.update(t.id, { completed: !t.completed });
-    refresh();
+    try {
+      await todosAPI.update(t.id, { completed: !t.completed });
+    } catch {
+      flash('Could not update that task. Check your connection and try again.');
+    }
+    refresh(); // on failure this also puts the row back as the server has it
   };
 
   const onLaneDoubleClick = (lane) => (e) => {
@@ -197,21 +209,40 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const addPromise = async (p) => {
     let due = p.due ? new Date(p.due) : null;
     if (!due) { due = addDays(startOfDay(), 1); due.setHours(9, 0, 0, 0); }
-    const { data } = await todosAPI.create({ text: p.owner && p.owner.toLowerCase() !== 'you' ? `${p.text} (${p.owner})` : p.text, deadline: due.toISOString(), noteId: p.noteId, priority: 'medium' });
-    await riverAPI.setPromise(p.genId, p.index, 'added', data.todo?.id);
+    let data;
+    try {
+      ({ data } = await todosAPI.create({ text: p.owner && p.owner.toLowerCase() !== 'you' ? `${p.text} (${p.owner})` : p.text, deadline: due.toISOString(), noteId: p.noteId, priority: 'medium' }));
+    } catch {
+      flash('Could not add that promise. Try again.');
+      return;
+    }
+    try {
+      await riverAPI.setPromise(p.genId, p.index, 'added', data.todo?.id);
+    } catch {
+      flash('Added to your tasks, but could not mark the promise as added.');
+    }
     queryClient.invalidateQueries({ queryKey: ['river', 'promises'] });
     refresh();
     flash(`On the river · due ${dayWord(due)}, ${clock(due)}`);
   };
   const dismissPromise = async (p) => {
-    await riverAPI.setPromise(p.genId, p.index, 'ignored');
+    try {
+      await riverAPI.setPromise(p.genId, p.index, 'ignored');
+    } catch {
+      flash('Could not dismiss that promise. Try again.');
+    }
     queryClient.invalidateQueries({ queryKey: ['river', 'promises'] });
   };
 
   const scheduleUndated = async (t, dayOffset) => {
     const d = addDays(startOfDay(), dayOffset);
     d.setHours(23, 59, 0, 0);
-    await todosAPI.update(t.id, { deadline: d.toISOString() });
+    try {
+      await todosAPI.update(t.id, { deadline: d.toISOString() });
+    } catch {
+      flash('Could not move that task. Try again.');
+      return;
+    }
     refresh();
     flash(`Moved to ${dayWord(d).toLowerCase()}`);
   };
@@ -253,8 +284,14 @@ export default function RiverHome({ initialZoom = 'day' }) {
     if (r.note) { navigate(`/notes/${r.note.id}`); return; }
     if (r.todo) setSelId(r.todo.id);
     if (r.at) {
-      if (r.at < start || r.at > end) setZoomSaved('quarter');
-      setTimeout(() => scrollTo(r.at), 50);
+      if ((r.at < start || r.at > end) && zoom !== 'quarter') {
+        pendingScroll.current = r.at;
+        setZoomSaved('quarter');
+      } else if (r.at < start || r.at > end) {
+        flash('That is outside the dates the river shows');
+      } else {
+        setTimeout(() => scrollTo(r.at), 50);
+      }
     }
   };
 
@@ -485,6 +522,12 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   </button>
                 );
               })}
+              {lay && hiddenClusters(lay.mItems).map((c) => (
+                <button key={`meeting-${c.x}`} type="button" className="r-chip-more" style={{ left: c.x, bottom: 2 }} title="Show the meetings that do not fit"
+                  onClick={() => { const h = nextHidden(c, selId, (it) => it.t.id); setSelId(h.item.t.id); flash(`${h.item.t.text} · ${h.position} of ${h.total} hidden`); }}>
+                  + {c.items.length} more
+                </button>
+              ))}
               {bins && bins.map((b) => (
                 <BinChips
                   key={b.i}
@@ -498,7 +541,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                     </button>
                   )}
                   max={z.bin === 'day' ? 3 : 2}
-                  onMore={() => { setZoomSaved('day'); setTimeout(() => scrollTo(new Date(b.from.getTime() + 10 * 3600000)), 60); }}
+                  onMore={() => { pendingScroll.current = new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
                 />
               ))}
               {quick && quick.lane === 'meeting' && (
@@ -524,6 +567,12 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   </div>
                 );
               })}
+              {lay && hiddenClusters(lay.tItems).map((c) => (
+                <button key={`task-${c.x}`} type="button" className="r-chip-more" style={{ left: c.x, bottom: 2 }} title="Show the tasks that do not fit"
+                  onClick={() => { const h = nextHidden(c, selId, (it) => it.t.id); setSelId(h.item.t.id); flash(`${h.item.t.text} · ${h.position} of ${h.total} hidden`); }}>
+                  + {c.items.length} more
+                </button>
+              ))}
               {bins && bins.map((b) => (
                 <BinChips
                   key={b.i}
@@ -540,7 +589,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                       </button>
                     );
                   }}
-                  onMore={() => { setZoomSaved('day'); setTimeout(() => scrollTo(new Date(b.from.getTime() + 10 * 3600000)), 60); }}
+                  onMore={() => { pendingScroll.current = new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
                 />
               ))}
               {quick && quick.lane === 'task' && (
@@ -560,6 +609,12 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   </Link>
                 );
               })}
+              {lay && hiddenClusters(lay.nItems).map((c) => (
+                <button key={`note-${c.x}`} type="button" className="r-chip-more" style={{ left: c.x, bottom: 2 }} title="Show the notes that do not fit"
+                  onClick={() => { const h = nextHidden(c, null, (it) => it.n.id); navigate(`/notes/${h.item.n.id}`); }}>
+                  + {c.items.length} more
+                </button>
+              ))}
               {bins && bins.map((b) => (
                 <BinChips
                   key={b.i}
@@ -684,26 +739,35 @@ function QuickAdd({ quick, mode, onDone, refEl }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const at = quick.at;
+  const times = quickMeetingTimes(at);
   const left = Math.max(8, quick.x - 150);
   const save = async (e) => {
     e.preventDefault();
     if (!text.trim() || busy) return;
     setBusy(true);
-    const end = new Date(at.getTime() + 3600000);
-    await todosAPI.create({
-      text: text.trim(),
-      deadline: at.toISOString(),
-      startTime: mode === 'meeting' ? at.toTimeString().slice(0, 5) : null,
-      endTime: mode === 'meeting' ? end.toTimeString().slice(0, 5) : null,
-    });
+    setErr('');
+    try {
+      await todosAPI.create({
+        text: text.trim(),
+        deadline: (mode === 'meeting' ? times.start : at).toISOString(),
+        startTime: mode === 'meeting' ? timeOfDay(times.start) : null,
+        endTime: mode === 'meeting' ? timeOfDay(times.end) : null,
+      });
+    } catch {
+      setErr('Could not add it. Check your connection and try again.');
+      setBusy(false);
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
     onDone();
   };
   return (
     <form className="r-quick" ref={refEl} style={{ left, top: 8 }} onSubmit={save}>
-      <label htmlFor="r-quick-input">{mode === 'meeting' ? `New meeting · ${dayWord(at)}, ${clockRange(at, new Date(at.getTime() + 3600000))}` : `New task · due ${dayWord(at)}, ${clock(at)}`}</label>
+      <label htmlFor="r-quick-input">{mode === 'meeting' ? `New meeting · ${dayWord(at)}, ${clockRange(times.start, times.end)}` : `New task · due ${dayWord(at)}, ${clock(at)}`}</label>
       <input id="r-quick-input" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={mode === 'meeting' ? 'What is it?' : 'What needs doing?'} autoComplete="off" />
+      {err && <p role="alert" style={{ margin: '4px 0', fontSize: 12, color: 'var(--r-late, #c4441c)' }}>{err}</p>}
       <div className="row">
         <button type="button" className="r-btn ghost small" onClick={onDone}>Cancel</button>
         <button type="submit" className="r-btn small" disabled={!text.trim() || busy}>Add</button>

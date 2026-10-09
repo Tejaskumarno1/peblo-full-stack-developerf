@@ -21,4 +21,5 @@ parity.mjs = week start (Monday/Sunday) in Tasks, Calendar and Soft; the style f
 series.mjs = repeating task is one series: delete asks this / following / all, Cancel changes nothing, "Every weekday" in the Calendar (PEB-76).
 themeflash.mjs = the saved theme is applied before the app script runs: dark/midnight/system in all 5 styles (PEB-102).
 calls.mjs = AI voice call: Call me now, snooze brings back the same agenda, all-day tasks read as today, setting turns calls off (PEB-81).
+riverfix.mjs = River: a failed tick shows a message and rolls back; "+ N more" on a deep stack reaches the hidden meeting (PEB-85).
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).
