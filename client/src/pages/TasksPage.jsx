@@ -102,8 +102,19 @@ export default function TasksPage() {
     }
   };
 
-  const toggle = async (t) => { await todosAPI.update(t.id, { completed: !t.completed }); refresh(); };
-  const remove = async (t) => { await todosAPI.delete(t.id); refresh(); };
+  const [actionError, setActionError] = useState('');
+  const toggle = async (t) => {
+    setActionError('');
+    try { await todosAPI.update(t.id, { completed: !t.completed }); }
+    catch { setActionError('Could not update that task. Try again.'); }
+    refresh();
+  };
+  const remove = async (t) => {
+    setActionError('');
+    try { await todosAPI.delete(t.id); }
+    catch { setActionError('Could not delete that task. Try again.'); }
+    refresh();
+  };
 
   // Week strip + day timeline
   const weekStart = addDays(today, weekOffset * 7 - ((today.getDay() + 6) % 7));
@@ -120,7 +131,8 @@ export default function TasksPage() {
     })
     .filter((x) => x.start !== null && x.start >= 6 && x.start < 23);
   const untimed = dayTasks.filter((t) => !timed.find((x) => x.t.id === t.id));
-  const HOURS = Array.from({ length: 16 }, (_, i) => 7 + i);
+  const TL_START = 6; // the filter above keeps 06:00-22:59, so the timeline starts at 06:00
+  const HOURS = Array.from({ length: 23 - TL_START }, (_, i) => TL_START + i);
   const HOUR_H = 44;
 
   return (
@@ -166,6 +178,7 @@ export default function TasksPage() {
             <button type="submit" className="pb-btn primary sm" disabled={!draft.trim() || saving}>Add</button>
           </form>
 
+          {actionError && <p role="alert" className="pb-muted" style={{ color: 'var(--pb-danger, #c0392b)' }}>{actionError}</p>}
           {isLoading ? (
             <div className="pb-empty">Loading tasks…</div>
           ) : groups.length === 0 && !done.length ? (
@@ -236,7 +249,7 @@ export default function TasksPage() {
               <div
                 key={t.id}
                 className={`tasks-block ${t.priority}`}
-                style={{ top: (start - 7) * HOUR_H + 2, height: Math.max((end - start) * HOUR_H - 4, 40) }}
+                style={{ top: (start - TL_START) * HOUR_H + 2, height: Math.max((end - start) * HOUR_H - 4, 40) }}
                 title={t.text}
               >
                 <span className="t">{t.text}</span>
@@ -251,6 +264,7 @@ export default function TasksPage() {
 }
 
 function TaskRow({ t, overdue, onToggle, onRemove }) {
+  const [confirming, setConfirming] = useState(false);
   const tags = Array.isArray(t.todoTags) ? t.todoTags : [];
   return (
     <div className={`tasks-row${t.completed ? ' done' : ''}`}>
@@ -268,7 +282,14 @@ function TaskRow({ t, overdue, onToggle, onRemove }) {
         {t.priority === 'high' && <span className="pb-badge danger">High</span>}
         {t.priority === 'low' && <span className="pb-muted" style={{ fontSize: 11 }}>Low</span>}
       </span>
-      <button type="button" className="pb-icon-btn tasks-del" aria-label={`Delete "${t.text}"`} onClick={() => onRemove(t)}><Trash2 size={14} /></button>
+      {confirming ? (
+        <span className="tasks-del-confirm">
+          <button type="button" className="pb-btn sm danger" onClick={() => { setConfirming(false); onRemove(t); }}>Delete</button>
+          <button type="button" className="pb-btn sm" onClick={() => setConfirming(false)}>Keep</button>
+        </span>
+      ) : (
+        <button type="button" className="pb-icon-btn tasks-del" aria-label={`Delete "${t.text}"`} onClick={() => setConfirming(true)}><Trash2 size={14} /></button>
+      )}
     </div>
   );
 }

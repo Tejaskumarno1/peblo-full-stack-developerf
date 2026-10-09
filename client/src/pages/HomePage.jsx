@@ -127,7 +127,7 @@ export default function HomePage() {
           </div>
           <div className="home-stats">
             <div className="home-stat"><span className="pb-display">{insights?.streakStats?.current ?? '–'}</span><span>day streak</span></div>
-            <div className="home-stat"><span className="pb-display">{weekly ? `${weekly.stats.completionRate}%` : '–'}</span><span>tasks done this week</span></div>
+            <div className="home-stat"><span className="pb-display">{weekly?.stats?.completionRate != null ? `${weekly.stats.completionRate}%` : '–'}</span><span>tasks done this week</span></div>
           </div>
         </section>
 

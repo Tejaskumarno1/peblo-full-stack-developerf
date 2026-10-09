@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { notesAPI, aiAPI } from '../api/index';
+import { notesAPI, aiAPI, todosAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import TodoListPanel from '../components/TodoListPanel';
 import { renderMarkdown, escapeHtml } from '../utils/safeHtml';
+import { extractUrls, hostOf } from '../utils/linkUrls';
 import {
   Link2,
   PanelLeft,
@@ -113,6 +114,7 @@ export default function WorkspacePage() {
   }, [searchParams, setFilterTag]);
   const [suggestedTag, setSuggestedTag] = useState('');
   const [linkPreviews, setLinkPreviews] = useState([]);
+  const previewCache = useRef(new Map());
   const [showLinkPreviews, setShowLinkPreviews] = useState(false);
 
   const { data: notes = [], isLoading: listLoading } = useQuery({
@@ -690,6 +692,17 @@ export default function WorkspacePage() {
     }
   };
 
+  // "Extract action items" -> real tasks linked to this note
+  const createTasksFromActions = async (items) => {
+    const noteId = selectedNote?.id;
+    if (!noteId || selectedNote.isDraft || noteId === '__draft__') throw new Error('Save the note first.');
+    for (const text of items) {
+      await todosAPI.create({ text: String(text).slice(0, 500), noteId });
+    }
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
   const handleWsChatSubmit = async (e) => {
     e.preventDefault();
     if (!wsChatInput.trim() || wsChatLoading) return;
@@ -757,9 +770,7 @@ export default function WorkspacePage() {
       return;
     }
 
-    const urlRegex = /(https?:\/\/[^\s\)]+)/gi;
-    const matches = noteContent.match(urlRegex) || [];
-    const uniqueUrls = Array.from(new Set(matches.map(url => url.replace(/[.,;:]$/, ''))));
+    const uniqueUrls = extractUrls(noteContent);
 
     if (uniqueUrls.length === 0) {
       setLinkPreviews([]);
@@ -774,8 +785,8 @@ export default function WorkspacePage() {
           const embedUrl = getYouTubeEmbedUrl(url);
 
           try {
-            const existing = linkPreviews.find(p => p.url === url);
-            if (existing) return { ...existing, embedUrl: existing.embedUrl || embedUrl };
+            const existing = previewCache.current.get(url);
+            if (existing) return existing;
 
             if (embedUrl) {
               return {
@@ -783,11 +794,12 @@ export default function WorkspacePage() {
                 embedUrl,
                 title: 'YouTube video',
                 description: 'Playable embedded video',
-                domain: new URL(url).hostname.replace(/^www\./, '')
+                domain: hostOf(url)
               };
             }
 
             const res = await aiAPI.linkPreview(url);
+            previewCache.current.set(url, res.data);
             return res.data;
           } catch (err) {
             console.warn('Failed to fetch link preview:', err?.response?.status || err?.message);
@@ -796,7 +808,7 @@ export default function WorkspacePage() {
               embedUrl,
               title: embedUrl ? 'YouTube video' : url,
               description: embedUrl ? 'Playable embedded video' : 'No description available.',
-              domain: new URL(url).hostname.replace(/^www\./, '')
+              domain: hostOf(url)
             };
           }
         })
@@ -807,10 +819,12 @@ export default function WorkspacePage() {
       }
     };
 
-    fetchPreviews();
+    // wait for the user to stop typing before fetching anything
+    const timer = setTimeout(fetchPreviews, 800);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [noteContent]);
 
@@ -1099,6 +1113,7 @@ export default function WorkspacePage() {
                     wsChatMessages={wsChatMessages}
                     wsChatLoading={wsChatLoading}
                     handleWsChatSubmit={handleWsChatSubmit}
+                    onCreateTasks={createTasksFromActions}
                   />
 
                 </div>
@@ -1119,7 +1134,7 @@ export default function WorkspacePage() {
 
               {showTodoList && (
                 <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
-                  <TodoListPanel onClose={() => setShowTodoList(false)} />
+                  <TodoListPanel noteId={isDraft ? null : selectedNote?.id} onClose={() => setShowTodoList(false)} />
                 </div>
               )}
             </>

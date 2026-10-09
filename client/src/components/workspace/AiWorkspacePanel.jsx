@@ -2,7 +2,7 @@
  * AiWorkspacePanel — Extracted from WorkspacePage.
  * The right-side AI panel with Insights tab and Chat Copilot tab.
  */
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import {
   Sparkles,
@@ -28,8 +28,23 @@ function AiWorkspacePanel({
   wsChatMessages,
   wsChatLoading,
   handleWsChatSubmit,
+  onCreateTasks,
 }) {
   const { aiPanelOpen, setAiPanelOpen } = useWorkspaceStore();
+  const [taskState, setTaskState] = useState({ status: 'idle', message: '' });
+  // a fresh extraction starts a fresh "create tasks" state
+  useEffect(() => { setTaskState({ status: 'idle', message: '' }); }, [aiResults.actions]);
+
+  const createTasks = async () => {
+    const items = aiResults.actions?.action_items || [];
+    setTaskState({ status: 'saving', message: '' });
+    try {
+      await onCreateTasks(items);
+      setTaskState({ status: 'done', message: `${items.length} task${items.length === 1 ? '' : 's'} created and linked to this note.` });
+    } catch (err) {
+      setTaskState({ status: 'error', message: err?.message === 'Save the note first.' ? err.message : 'Could not create the tasks. Try again.' });
+    }
+  };
 
   if (!aiPanelOpen) return null;
 
@@ -124,6 +139,19 @@ function AiWorkspacePanel({
                           <li key={i}>{item}</li>
                         ))}
                       </ul>
+                      {onCreateTasks && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={createTasks}
+                          disabled={taskState.status === 'saving' || taskState.status === 'done'}
+                        >
+                          {taskState.status === 'saving' ? 'Creating…' : taskState.status === 'done' ? 'Tasks created' : 'Create tasks'}
+                        </button>
+                      )}
+                      {taskState.message && (
+                        <p role="status" className={taskState.status === 'error' ? 'ai-error' : ''}>{taskState.message}</p>
+                      )}
                     </div>
                   )}
                   {aiResults.title?.suggested_title && (

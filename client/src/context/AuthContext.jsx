@@ -31,7 +31,9 @@ export function AuthProvider({ children }) {
   const [reloadKey, setReloadKey] = useState(0);
   const queryClient = useQueryClient();
 
-  const [theme, setThemeState] = useState(() => localStorage.getItem('peblo-theme') || 'light');
+  const [theme, setThemeState] = useState(() => {
+    try { return localStorage.getItem('peblo-theme') || 'light'; } catch { return 'light'; }
+  });
   // Style: 'studio' (sidebar), 'console' (keyboard-first) or 'soft' (friendly, with a dock).
   const [uiStyle, setUiStyleState] = useState(() => {
     try { return localStorage.getItem('peblo-style') || 'studio'; } catch { return 'studio'; }
@@ -186,7 +188,17 @@ export function AuthProvider({ children }) {
 
   const setTheme = useCallback((newTheme) => {
     setThemeState(newTheme);
-    localStorage.setItem('peblo-theme', newTheme);
+    try { localStorage.setItem('peblo-theme', newTheme); } catch { /* storage blocked: theme still applies for this session */ }
+  }, []);
+
+  // Other windows (the quick-capture window) share localStorage: follow style / theme changes made there.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'peblo-style' && e.newValue) setUiStyleState(e.newValue);
+      if (e.key === 'peblo-theme' && e.newValue) setThemeState(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const updateSettings = useCallback(async (newSettings) => {

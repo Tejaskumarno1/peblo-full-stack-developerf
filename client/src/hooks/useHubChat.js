@@ -146,6 +146,15 @@ export default function useHubChat() {
         body: JSON.stringify(payload),
         signal: controller.signal,
       }));
+      if (!res.ok || !res.body) {
+        let msg = '';
+        try {
+          const j = await res.json();
+          msg = typeof j?.error === 'string' ? j.error : (j?.error?.message || j?.message || '');
+        } catch { /* body was not JSON */ }
+        patchBot((m) => ({ ...m, status: 'error', error: msg || `The AI Hub could not answer (error ${res.status}).` }));
+        return;
+      }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -157,7 +166,8 @@ export default function useHubChat() {
         buffer = parts.pop();
         for (const part of parts) {
           if (!part.startsWith('data: ')) continue;
-          const ev = JSON.parse(part.slice(6));
+          let ev;
+          try { ev = JSON.parse(part.slice(6)); } catch { continue; } // skip a malformed event, keep streaming
           if (ev.type === 'sources') patchBot((m) => ({ ...m, sources: ev.sources, searched: ev.searched, excludedPrivate: ev.excludedPrivate }));
           else if (ev.type === 'delta') patchBot((m) => ({ ...m, status: 'streaming', content: m.content + ev.text }));
           else if (ev.type === 'done') patchBot((m) => ({ ...m, status: 'done', meta: { provider: ev.provider, model: ev.model, local: ev.local, ms: ev.ms } }));
@@ -177,9 +187,13 @@ export default function useHubChat() {
   }, [input, streaming, activeId, active, attached, modelChoice, updateChat]);
 
   // ?q=… from Home / command palette starts a new chat
+  const handledQ = useRef(null);
   useEffect(() => {
     const q = params.get('q');
-    if (q && !streaming) {
+    if (!q) { handledQ.current = null; return; }
+    const key = q + '|' + (params.get('note') || '');
+    if (!streaming && handledQ.current !== key) {
+      handledQ.current = key; // StrictMode runs effects twice; never send the same ?q= twice
       const note = params.get('note');
       const opts = { newChat: true };
       if (note) opts.attached = [{ id: note, title: params.get('noteTitle') || 'Note' }];

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Home, Inbox, FileText, CheckSquare, Calendar, Sparkles, Search, PanelLeft,
@@ -60,6 +60,10 @@ export default function Sidebar({ collapsed, onToggleCollapsed, onOpenSettings }
   const initial = (user?.name || 'You').trim().charAt(0).toUpperCase();
 
   const link = ({ isActive }) => `pb-nav-link${isActive ? ' active' : ''}`;
+  // Inbox is /notes?tag=inbox: highlight it there, and keep plain "Notes" for every other notes view.
+  const loc = useLocation();
+  const onInbox = loc.pathname.startsWith('/notes') && new URLSearchParams(loc.search).get('tag') === 'inbox';
+  const notesLink = ({ isActive }) => `pb-nav-link${isActive && !onInbox ? ' active' : ''}`;
 
   return (
     <nav aria-label="Main" className={`pb-sidebar${collapsed ? ' collapsed' : ''}`}>
@@ -94,12 +98,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed, onOpenSettings }
         <NavLink to="/" end className={link} title="Home">
           <Home size={16} />{!collapsed && <span className="grow">Home</span>}
         </NavLink>
-        <NavLink to="/notes?tag=inbox" className={() => 'pb-nav-link'} title="Inbox">
+        <NavLink to="/notes?tag=inbox" className={() => `pb-nav-link${onInbox ? ' active' : ''}`} title="Inbox">
           <Inbox size={16} />
           {!collapsed && <span className="grow">Inbox</span>}
           {!collapsed && inboxCount > 0 && <span className="pb-count">{inboxCount}</span>}
         </NavLink>
-        <NavLink to="/notes" className={link} title="Notes">
+        <NavLink to="/notes" className={notesLink} title="Notes">
           <FileText size={16} />{!collapsed && <span className="grow">Notes</span>}
         </NavLink>
         <NavLink to="/tasks" className={link} title="Tasks">
