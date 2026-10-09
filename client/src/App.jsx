@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react';
 import { useAuth } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
+import SeriesScopeDialog from './components/SeriesScopeDialog';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -62,6 +63,7 @@ function ShellLayout() {
       <Suspense fallback={<Loader />}><Outlet /></Suspense>
       <Suspense fallback={null}>
         <AiVoiceCallManager />
+        <SeriesScopeDialog />
         <CommandPalette />
       </Suspense>
     </AppShell>

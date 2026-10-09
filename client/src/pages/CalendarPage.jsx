@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { weekStartDay, weekdayNames } from '../utils/weekStart';
+import { askScope } from '../utils/askScope';
 import '../styles/dashboard.css';
 import '../styles/calendar.css';
 import '../styles/calendar-pb.css';
@@ -113,10 +114,13 @@ export default function CalendarPage() {
   };
 
   const handleDeleteTask = async (id) => {
+    const scope = await askScope(todos.find(t => t.id === id), 'delete');
+    if (!scope) return;
     const backup = [...todos];
-    setTodos(todos.filter(t => t.id !== id));
+    setTodos(scope === 'this' ? todos.filter(t => t.id !== id) : todos);
     try {
-      await todosAPI.delete(id);
+      await todosAPI.delete(id, scope);
+      if (scope !== 'this') window.dispatchEvent(new Event('todo-updated'));
     } catch {
       setTodos(backup);
     }
@@ -128,13 +132,16 @@ export default function CalendarPage() {
     if (savingEditRef.current === id) return;
     if (!editTaskText.trim()) return;
     savingEditRef.current = id;
+    const current = todos.find(t => t.id === id);
+    const scope = current && editTaskText.trim() !== (current.text || '').trim() ? await askScope(current, 'edit') : 'this';
+    if (!scope) { savingEditRef.current = null; setEditingTaskId(null); return; }
     
     const backup = [...todos];
     setTodos(todos.map(t => t.id === id ? { ...t, text: editTaskText } : t));
     setEditingTaskId(null);
     
     try {
-      await todosAPI.update(id, { text: editTaskText });
+      await todosAPI.update(id, { text: editTaskText, scope });
     } catch {
       setTodos(backup);
     } finally {
@@ -714,7 +721,8 @@ export default function CalendarPage() {
                     <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
+                      <option value="weekdays">Every weekday</option>
+<option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                       <option value="yearly">Yearly</option>
                     </select>
@@ -850,7 +858,8 @@ export default function CalendarPage() {
                     <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
+                      <option value="weekdays">Every weekday</option>
+<option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                       <option value="yearly">Yearly</option>
                     </select>

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Network, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
+import { askScope } from '../utils/askScope';
 import { useOrbit } from './OrbitShell';
 import { topicName, levelOf, levelVar, tagsOfTodo } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf } from '../river/riverUtils';
@@ -35,8 +36,9 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     await todosAPI.update(t.id, { completed: !t.completed });
   }, 'Could not update that task.');
   const remove = async (t) => {
-    if (!window.confirm(`Delete "${t.text}"?`)) return;
-    await run(() => todosAPI.delete(t.id), 'Could not delete that task.');
+    const scope = t.seriesId ? await askScope(t, 'delete') : (window.confirm(`Delete "${t.text}"?`) ? 'this' : null);
+    if (!scope) return;
+    await run(() => todosAPI.delete(t.id, scope), 'Could not delete that task.');
   };
   const add = async (e) => {
     e.preventDefault();

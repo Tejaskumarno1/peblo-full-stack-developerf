@@ -29,6 +29,7 @@ model User {
   tags          Tag[]
   aiGenerations AiGeneration[]
   todos         Todo[]
+  todoSeries    TodoSeries[]
   apiKeys       UserApiKeys?
   quizRuns      QuizRun[]
   mastery       TopicMastery[]
@@ -129,16 +130,43 @@ model Todo {
   startTime  String?   @map("start_time")
   endTime    String?   @map("end_time")
   recurrence String?   @default("none") @map("recurrence")
+  seriesId   String?   @map("series_id")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note Note? @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note   Note?       @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  series TodoSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([userId, deadline])
   @@index([userId, completed])
+  @@index([seriesId])
   @@map("todos")
+}
+
+/// A repeating task: the rule and the task details. Its occurrences are todos with this seriesId.
+model TodoSeries {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  recurrence    String
+  timezone      String    @db.VarChar(64)
+  anchor        DateTime
+  lastGenerated DateTime  @map("last_generated")
+  endedAt       DateTime? @map("ended_at")
+  text          String    @db.Text
+  priority      String    @default("medium")
+  todoTags      Json      @map("tags")
+  startTime     String?   @map("start_time")
+  endTime       String?   @map("end_time")
+  noteId        String?   @map("linked_note_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  todos Todo[]
+
+  @@index([userId])
+  @@map("todo_series")
 }
 
 model NoteEmbedding {

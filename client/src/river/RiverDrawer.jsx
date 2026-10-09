@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { todosAPI, notesAPI, riverAPI, hubAPI } from '../api';
 import { useDismiss } from './RiverShell';
+import { askScope } from '../utils/askScope';
 import { snippetOf } from '../soft/softUtils';
 import {
   momentOf, endOf, dueMomentOf, isMeeting, isAllDay, clock, clockRange, dayWord, fromNow, sameDay, tagsOfTask,
@@ -96,9 +97,10 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
   };
 
   const removeTodo = async () => {
-    if (!window.confirm(`Delete "${selected.text}"? This cannot be undone.`)) return;
+    const scope = selected.seriesId ? await askScope(selected, 'delete') : (window.confirm(`Delete "${selected.text}"? This cannot be undone.`) ? 'this' : null);
+    if (!scope) return;
     try {
-      await todosAPI.delete(selected.id);
+      await todosAPI.delete(selected.id, scope);
       onSelect(null);
       flash('Deleted');
     } catch (e) {

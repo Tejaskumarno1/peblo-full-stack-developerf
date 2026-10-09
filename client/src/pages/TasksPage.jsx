@@ -5,6 +5,7 @@ import { Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Repeat, FileText } f
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { startOfWeek } from '../utils/weekStart';
+import { askScope } from '../utils/askScope';
 import '../styles/tasks.css';
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
@@ -112,7 +113,9 @@ export default function TasksPage() {
   };
   const remove = async (t) => {
     setActionError('');
-    try { await todosAPI.delete(t.id); }
+    const scope = await askScope(t, 'delete');
+    if (!scope) return;
+    try { await todosAPI.delete(t.id, scope); }
     catch { setActionError('Could not delete that task. Try again.'); }
     refresh();
   };
@@ -289,7 +292,7 @@ function TaskRow({ t, overdue, onToggle, onRemove }) {
           <button type="button" className="pb-btn sm" onClick={() => setConfirming(false)}>Keep</button>
         </span>
       ) : (
-        <button type="button" className="pb-icon-btn tasks-del" aria-label={`Delete "${t.text}"`} onClick={() => setConfirming(true)}><Trash2 size={14} /></button>
+        <button type="button" className="pb-icon-btn tasks-del" aria-label={`Delete "${t.text}"`} onClick={() => (t.seriesId ? onRemove(t) : setConfirming(true))}><Trash2 size={14} /></button>
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
+import { askScope } from '../utils/askScope';
 import { timeOf, dayChip, daysFromToday, weekdayLong, startOfDay, addDays, tagsOf } from './softUtils';
 
 /** Soft Studio · Tasks (mockup: SoftTasks). A board of Today, Tomorrow, This week and Done. */
@@ -50,9 +51,10 @@ export default function SoftTasks() {
     refresh();
   };
   const remove = async (t) => {
-    if (!window.confirm(`Delete "${t.text}"?`)) return;
-    queryClient.setQueryData(['todos', 'all'], (old) => (old || []).filter((x) => x.id !== t.id));
-    await todosAPI.delete(t.id);
+    const scope = t.seriesId ? await askScope(t, 'delete') : (window.confirm(`Delete "${t.text}"?`) ? 'this' : null);
+    if (!scope) return;
+    if (scope === 'this') queryClient.setQueryData(['todos', 'all'], (old) => (old || []).filter((x) => x.id !== t.id));
+    await todosAPI.delete(t.id, scope);
     refresh();
   };
 

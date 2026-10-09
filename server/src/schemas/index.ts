@@ -29,7 +29,7 @@ export const todoSchemas = {
       deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional()
     })
@@ -42,7 +42,8 @@ export const todoSchemas = {
       deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+      scope: z.enum(['this', 'following', 'all']).optional(),
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional()
     })

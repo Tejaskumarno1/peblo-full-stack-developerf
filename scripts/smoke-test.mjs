@@ -686,6 +686,96 @@ try {
     await expectEvent('toggle-task', 'todos_changed', () => call('POST', '/api/dashboard/toggle-task', { id: tt.json.todo.id, completed: true }));
     sock.disconnect();
   }
+  // ---- PEB-76: repeating tasks are one series that never runs out ----
+  {
+    const ser = await import(pathToFileURL(path.resolve('dist/server/services/todoSeries.js')).href);
+    const { default: prismaS } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const at = (s) => new Date(s);
+    const iso = (d) => d.toISOString();
+    // monthly on the 31st falls back to the last day of a shorter month, and does not drift
+    const anchor = at('2026-01-31T09:00:00Z');
+    let cur = anchor; const seq = [];
+    for (let i = 0; i < 5; i++) { cur = ser.nextOccurrence('monthly', anchor, cur, 'UTC'); seq.push(iso(cur).slice(0, 10)); }
+    check('series: monthly on the 31st -> Feb 28, Mar 31, Apr 30, May 31, Jun 30', seq.join() === '2026-02-28,2026-03-31,2026-04-30,2026-05-31,2026-06-30', seq);
+    check('series: yearly on Feb 29 -> Feb 28, then Feb 29 in a leap year', iso(ser.nextOccurrence('yearly', at('2024-02-29T09:00:00Z'), at('2024-02-29T09:00:00Z'), 'UTC')).startsWith('2025-02-28') && iso(ser.nextOccurrence('yearly', at('2024-02-29T09:00:00Z'), at('2027-02-28T09:00:00Z'), 'UTC')).startsWith('2028-02-29'));
+    check('series: weekdays skip the weekend (Fri -> Mon)', iso(ser.nextOccurrence('weekdays', at('2026-10-09T09:00:00Z'), at('2026-10-09T09:00:00Z'), 'UTC')).startsWith('2026-10-12'));
+    const ny = ser.nextOccurrence('daily', at('2026-10-31T13:00:00Z'), at('2026-10-31T13:00:00Z'), 'America/New_York'); // 9:00 EDT -> next day 9:00 EST
+    check('series: daily keeps 9:00 local across the clock change', iso(ny) === '2026-11-01T14:00:00.000Z', iso(ny));
+
+    const DAY = 86400e3;
+    const base0 = new Date(); base0.setUTCHours(12, 0, 0, 0);
+    const rangeUrl = (a, b) => `/api/todos/range?from=${new Date(a).toISOString()}&to=${new Date(b).toISOString()}`;
+    const rowsOf = async (sid) => (await prismaS.todo.findMany({ where: { seriesId: sid }, orderBy: { deadline: 'asc' } }));
+
+    // a daily task is one series with ~60 days ready, not 30 loose copies
+    let r1 = await call('POST', '/api/todos', { text: 'series daily', deadline: new Date(base0.getTime() + DAY).toISOString(), recurrence: 'daily' });
+    const sid = r1.json.todo?.seriesId;
+    check('series: creating a daily task makes a series', r1.status === 201 && !!sid, r1.json);
+    let rows = await rowsOf(sid);
+    check('series: about 60 days of occurrences are ready (not the old 30)', rows.length >= 59 && rows.length <= 62, rows.length);
+
+    // it never runs out: 40 days later the list tops it up again
+    await prismaS.$executeRawUnsafe('UPDATE todos SET deadline = DATE_SUB(deadline, INTERVAL 40 DAY) WHERE series_id = ?', sid);
+    await prismaS.$executeRawUnsafe('UPDATE todo_series SET anchor = DATE_SUB(anchor, INTERVAL 40 DAY), last_generated = DATE_SUB(last_generated, INTERVAL 40 DAY) WHERE id = ?', sid);
+    await call('GET', rangeUrl(base0, base0.getTime() + 3 * DAY));
+    rows = await rowsOf(sid);
+    const lastAt = rows[rows.length - 1].deadline.getTime();
+    check('series: after 40 days pass it is topped up and never runs out', lastAt >= Date.now() + 55 * DAY, new Date(lastAt).toISOString());
+    check('series: top-up added each day once (no duplicates)', new Set(rows.map((x) => x.deadline.toISOString())).size === rows.length);
+
+    // edit scopes
+    rows = await rowsOf(sid);
+    const future = rows.filter((x) => x.deadline.getTime() > Date.now() + DAY);
+    const [a, b, c] = [future[0], future[1], future[2]];
+    let r = await call('PATCH', `/api/todos/${a.id}`, { text: 'only this one', scope: 'this' });
+    let after = await rowsOf(sid);
+    check('series: edit "this one" changes only that task', after.filter((x) => x.text === 'only this one').length === 1 && after.find((x) => x.id === b.id).text === 'series daily', r.json);
+    r = await call('PATCH', `/api/todos/${b.id}`, { text: 'from here on', priority: 'high', scope: 'following' });
+    after = await rowsOf(sid);
+    const early = after.filter((x) => x.deadline < b.deadline), late = after.filter((x) => x.deadline >= b.deadline);
+    check('series: edit "this and following" changes this and later ones, not earlier ones', late.every((x) => x.text === 'from here on' && x.priority === 'high') && early.every((x) => x.text !== 'from here on'), { early: early.length, late: late.length });
+    r = await call('PATCH', `/api/todos/${c.id}`, { priority: 'low', scope: 'bogus' });
+    check('series: an unknown scope is refused', r.status === 400, r.json);
+
+    // delete scopes
+    const total = (await rowsOf(sid)).length;
+    r = await call('DELETE', `/api/todos/${c.id}?scope=this`);
+    await call('GET', rangeUrl(base0, base0.getTime() + 3 * DAY));
+    check('series: delete "this one" removes just that task and it does not come back', r.status === 200 && (await rowsOf(sid)).length === total - 1);
+    const mid = (await rowsOf(sid)).filter((x) => x.deadline.getTime() > Date.now() + 5 * DAY)[0];
+    const keep = (await rowsOf(sid)).filter((x) => x.deadline < mid.deadline).length;
+    r = await call('DELETE', `/api/todos/${mid.id}?scope=following`);
+    await call('GET', rangeUrl(base0, base0.getTime() + 3 * DAY));
+    check('series: delete "this and following" stops the series for good', r.status === 200 && (await rowsOf(sid)).length === keep, { keep, now: (await rowsOf(sid)).length });
+
+    // changing "repeat" starts a new series from that task
+    const r2 = await call('POST', '/api/todos', { text: 'series switch', deadline: new Date(base0.getTime() + 2 * DAY).toISOString(), recurrence: 'daily' });
+    const sid2 = r2.json.todo.seriesId;
+    const second = (await rowsOf(sid2))[1];
+    r = await call('PATCH', `/api/todos/${second.id}`, { recurrence: 'weekly' });
+    const sw = (await prismaS.todo.findMany({ where: { text: 'series switch' }, orderBy: { deadline: 'asc' } }));
+    const gaps = sw.slice(1).map((x, i) => Math.round((x.deadline - sw[i].deadline) / DAY));
+    check('series: changing daily -> weekly keeps the earlier days and then repeats weekly', r.status === 200 && sw.length >= 4 && gaps[0] === 1 && gaps.slice(1).every((g) => g === 7), gaps);
+    r = await call('DELETE', `/api/todos/${second.id}?scope=all`);
+    check('series: delete "all" removes the whole (new) series', r.status === 200 && (await prismaS.todo.count({ where: { seriesId: sw[sw.length - 1].seriesId } })) === 0);
+
+    // weekdays, and monthly with the 31st (property: every row is on the 31st or the last day of its month)
+    const r3 = await call('POST', '/api/todos', { text: 'series weekdays', deadline: new Date(base0.getTime() + 3 * DAY).toISOString(), recurrence: 'weekdays' });
+    const wd = await rowsOf(r3.json.todo.seriesId);
+    check('series: "every weekday" has no Saturdays or Sundays after the first', wd.slice(1).every((x) => ![0, 6].includes(x.deadline.getUTCDay())) && wd.length > 30, wd.length);
+    let past31 = new Date(base0); past31.setUTCDate(past31.getUTCDate() - 1);
+    while (past31.getUTCDate() !== 31) past31.setUTCDate(past31.getUTCDate() - 1);
+    const r4 = await fetch(base + '/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Timezone': 'UTC' }, body: JSON.stringify({ text: 'series monthly 31', deadline: past31.toISOString(), recurrence: 'monthly' }) }).then((x) => x.json());
+    const mo = await rowsOf(r4.todo.seriesId);
+    const dim = (d) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    check('series: monthly on the 31st lands on the last day of shorter months', mo.length >= 3 && mo.every((x) => x.deadline.getUTCDate() === Math.min(31, dim(x.deadline))), mo.map((x) => x.deadline.toISOString().slice(0, 10)));
+    // old copied tasks are left alone
+    const legacy = (await call('POST', '/api/todos', { text: 'legacy copy', recurrence: 'daily' })).json.todo; // a repeat label with no date is a plain task, like the old copies
+    check('series: a repeat label without a date makes no series', !legacy.seriesId);
+    r = await call('PATCH', `/api/todos/${legacy.id}`, { text: 'legacy edited', scope: 'all' });
+    const del = await call('DELETE', `/api/todos/${legacy.id}?scope=all`);
+    check('series: an old copied task (no series) still edits and deletes on its own', r.status === 200 && del.status === 200, [r.status, r.json, del.status, del.json]);
+  }
 } catch (err) {
   failures++;
   console.error(err);

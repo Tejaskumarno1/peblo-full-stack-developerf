@@ -51,7 +51,7 @@ export const todosAPI = {
   getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-  delete: (id) => api.delete(`/todos/${id}`)
+  delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined })
 };
 
 export const transferAPI = {
