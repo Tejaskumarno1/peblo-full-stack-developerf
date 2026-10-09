@@ -11,7 +11,7 @@ import {
   PenLine,
   Check,
 } from 'lucide-react';
-import { marked } from 'marked';
+import { renderMarkdown } from '../../utils/safeHtml';
 
 function AiWorkspacePanel({
   aiPanelTab,
@@ -191,7 +191,7 @@ function AiWorkspacePanel({
               ) : (
                 wsChatMessages.map((m, i) => (
                   <div key={i} className={`ws-ai-chat-msg ${m.role} ${m.isError ? 'error' : ''}`}>
-                    <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: marked.parse(m.text || '') }} />
+                    <div className="ws-ai-chat-bubble" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text || '') }} />
                   </div>
                 ))
               )}

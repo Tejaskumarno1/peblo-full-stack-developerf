@@ -10,3 +10,4 @@ Run against an EMPTY test database, never your data:
 notes-flow.mjs = delete/restore/archive/reopen (PEB-70). draft-dup.mjs = slow-network new-note check (did not reproduce the duplicate; kept as a guard).
 
 shortcuts.mjs = Ctrl+K palette, exact modifiers, Ctrl+N new note (PEB-78).
+xss.mjs = AI Hub reply with script/javascript: content is neutralised (PEB-61).

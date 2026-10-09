@@ -21,7 +21,7 @@ import {
   Paperclip,
   Mic
 } from 'lucide-react';
-import { marked } from 'marked';
+import { renderMarkdown } from '../utils/safeHtml';
 import { aiAPI, notesAPI } from '../api/index';
 import { useUIStore } from '../store/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
@@ -612,7 +612,7 @@ export default function AiChatPanel() {
                   <div className={`ai-chat-bubble ${m.isError ? 'error' : ''}`}>
                     <div 
                       className="ai-chat-markdown"
-                      dangerouslySetInnerHTML={{ __html: marked.parse(typeof m.text === 'string' ? m.text : (m.text ? JSON.stringify(m.text) : '')) }} 
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(typeof m.text === 'string' ? m.text : (m.text ? JSON.stringify(m.text) : '')) }} 
                     />
                     {m.links?.length > 0 && (
                       <div className="ai-chat-results">

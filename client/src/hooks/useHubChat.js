@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { marked } from 'marked';
+import { sanitizeHtml } from '../utils/safeHtml';
 import { hubAPI, notesAPI } from '../api';
 import { authHeaders, signOutIfRejected } from '../api/token';
 
@@ -35,7 +36,7 @@ function escapeHtml(s) {
 /** Markdown → HTML with [n] turned into clickable citation pills (only for sources that exist). */
 export function renderAnswer(text, sourceCount) {
   const html = marked.parse(escapeHtml(text || ''), { breaks: true });
-  return html.replace(/\[(\d{1,2})\]/g, (m, n) => {
+  return sanitizeHtml(html).replace(/\[(\d{1,2})\]/g, (m, n) => {
     const i = Number(n);
     return i >= 1 && i <= sourceCount ? `<button type="button" class="pb-cite" data-cite="${i}">${i}</button>` : m;
   });

@@ -17,7 +17,7 @@ Status: Open · In progress · Fixed (commit).
 | S-04 | API keys encrypted with a per-install secret vanish on other machines | High | PEB-58 | Open |
 | S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Open |
 | S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Open |
-| S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Open |
+| S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Fixed (this commit) |
 | S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Open |
 | S-09 | Server AI keys usable by anyone; no AI rate limits | High (hosted) | PEB-26 (comment) | Open |
 | S-10 | Rate limits per IP in memory; account enumeration | Medium | PEB-63 | Open |

@@ -6,7 +6,7 @@ import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import TodoListPanel from '../components/TodoListPanel';
-import { marked } from 'marked';
+import { renderMarkdown, escapeHtml } from '../utils/safeHtml';
 import {
   Link2,
   PanelLeft,
@@ -350,10 +350,10 @@ export default function WorkspacePage() {
       mimeType = 'application/msword';
       fileExtension = 'doc';
       outputContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head><meta charset='utf-8'><title>${noteTitle || 'Untitled'}</title></head>
+<head><meta charset='utf-8'><title>${escapeHtml(noteTitle || 'Untitled')}</title></head>
 <body>
-<h1>${noteTitle || 'Untitled'}</h1>
-<div>${marked.parse(noteContent || '')}</div>
+<h1>${escapeHtml(noteTitle || 'Untitled')}</h1>
+<div>${renderMarkdown(noteContent || '')}</div>
 </body></html>`;
     } else if (format === 'html') {
       mimeType = 'text/html';
@@ -362,7 +362,7 @@ export default function WorkspacePage() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${noteTitle || 'Untitled'}</title>
+  <title>${escapeHtml(noteTitle || 'Untitled')}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1e293b; background: #f8fafc; }
     .container { background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
@@ -375,8 +375,8 @@ export default function WorkspacePage() {
 </head>
 <body>
   <div class="container">
-    <h1>${noteTitle || 'Untitled'}</h1>
-    <div>${marked.parse(noteContent || '')}</div>
+    <h1>${escapeHtml(noteTitle || 'Untitled')}</h1>
+    <div>${renderMarkdown(noteContent || '')}</div>
   </div>
 </body>
 </html>`;
@@ -387,8 +387,8 @@ export default function WorkspacePage() {
           const container = document.createElement('div');
           container.innerHTML = `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
-              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${noteTitle || 'Untitled'}</h1>
-              <div>${marked.parse(noteContent || '')}</div>
+              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${escapeHtml(noteTitle || 'Untitled')}</h1>
+              <div>${renderMarkdown(noteContent || '')}</div>
             </div>
           `;
           const opt = {
