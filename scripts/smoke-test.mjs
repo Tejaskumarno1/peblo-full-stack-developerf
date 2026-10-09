@@ -346,6 +346,10 @@ try {
   r = await call('GET', '/api/notes');
   check("another account's list is empty", r.status === 200 && r.json.notes.length === 0, r.json.notes?.length);
   r = await call('PUT', '/api/profile', { email: emailA });
+  check('changing the email needs the current password', r.status === 403, r.json);
+  r = await call('PUT', '/api/profile', { email: emailA, currentPassword: 'not my password' });
+  check('a wrong password does not change the email either', r.status === 403, r.json);
+  r = await call('PUT', '/api/profile', { email: emailA, currentPassword: 'another long password' });
   check("an email already in use can't be taken", r.status === 409, r.json);
   token = tokenA;
 
@@ -419,6 +423,57 @@ try {
     for (let i = 0; i < 4; i++) unknownTotal += await time(`nobody-${runId}-${i}@peblo.test`, 1);
     const unknown = unknownTotal / 4;
     check('unknown and known emails take a similar time to refuse', unknown > known * 0.5, { known: Math.round(known), unknown: Math.round(unknown) });
+  }
+
+  // ── PEB-66: small hardening ──
+  {
+    // 1. unexpected errors do not leak their text; CORS refusals are 403
+    const { errorHandler } = await import(pathToFileURL(path.resolve('dist/server/middleware/errorHandler.js')).href);
+    const fake = () => { const o = { code: 0, body: null }; return { o, res: { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } } }; };
+    const quiet = console.error; console.error = () => {};
+    const a = fake(); errorHandler(new Error('connect ECONNREFUSED 10.0.0.5:3306 table `users`'), { method: 'GET', originalUrl: '/x' }, a.res, () => {});
+    const b = fake(); errorHandler(Object.assign(new Error('Local AI is off.'), { statusCode: 400 }), { method: 'GET', originalUrl: '/x' }, b.res, () => {});
+    console.error = quiet;
+    check('an unexpected error shows no internal text and gives a reference', a.o.code === 500 && !/ECONNREFUSED|users/.test(JSON.stringify(a.o.body)) && /reference [0-9a-f]{8}/.test(a.o.body.error), a.o);
+    check('an error the server raised on purpose keeps its message', b.o.code === 400 && b.o.body.error === 'Local AI is off.', b.o);
+    const cors = await rawFetch(base + '/api/health', { headers: { Origin: 'https://evil.example' } });
+    check('a request from a foreign origin is refused with 403 (not 500)', cors.status === 403, cors.status);
+
+    // 2. sockets are dropped on sign out everywhere
+    const fr = await call('POST', '/api/auth/signup', { email: `smoke-f-${runId}@peblo.test`, password: 'correct horse battery' });
+    const tokenF = fr.json.token;
+    const { io: ioClient } = await import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm/index.js')).href);
+    const sk = ioClient(base, { auth: { token: tokenF }, transports: ['websocket'], reconnection: false });
+    await new Promise((ok) => { sk.on('connect', ok); setTimeout(ok, 4000); });
+    let dropped = false; sk.on('disconnect', () => { dropped = true; });
+    await rawFetch(base + '/api/auth/logout-all', { method: 'POST', headers: { Authorization: `Bearer ${tokenF}` } });
+    await new Promise((ok) => setTimeout(ok, 1500));
+    check('"sign out everywhere" drops the account\'s open sockets', sk.connected === false && dropped, { connected: sk.connected, dropped });
+    sk.close();
+
+    // 3. profile fields are checked (with a fresh account, since the one above is signed out)
+    const savedToken = token;
+    const hr = await call('POST', '/api/auth/signup', { email: `smoke-h-${runId}@peblo.test`, password: 'correct horse battery' });
+    token = hr.json.token;
+    const put = (body) => call('PUT', '/api/profile', body);
+    r = await put({ bio: 'x'.repeat(600) }); check('a 600-character bio is refused', r.status === 400, r.json);
+    r = await put({ jobTitle: 12345 }); check('a non-text job title is refused', r.status === 400, r.json);
+    r = await put({ timezone: 'Mars/Olympus' }); check('an unknown time zone is refused', r.status === 400, r.json);
+    r = await put({ settings: { big: 'y'.repeat(25000) } }); check('settings over 20 KB are refused', r.status === 400, r.json);
+    r = await put({ jobTitle: 'Engineer', bio: 'Short bio', timezone: 'Asia/Kolkata' }); check('normal profile fields still save', r.status === 200, r.json);
+
+    // 4. long passwords
+    r = await call('POST', '/api/auth/signup', { email: `smoke-g-${runId}@peblo.test`, password: 'a'.repeat(73) });
+    check('a password over 72 bytes is refused (bcrypt would cut it)', r.status === 400, r.json);
+
+    // 5 + 6. AI routes exist once; unknown API paths answer JSON
+    r = await call('POST', '/api/notes/voice-command', { transcript: 'hi' });
+    check('the AI router is no longer also mounted under /api/notes', r.status === 404, r.status);
+    r = await call('POST', '/api/ai/voice-command', { transcript: 'hi' });
+    check('voice commands are served under /api/ai (where the app calls them)', r.status !== 404, r.status);
+    const nf = await rawFetch(base + '/api/this-does-not-exist');
+    check('an unknown API path answers JSON 404 even without signing in', nf.status === 404 && /json/.test(nf.headers.get('content-type') || ''), nf.status);
+    token = savedToken;
   }
 
 

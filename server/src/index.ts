@@ -12,7 +12,7 @@ import { initDatabase } from './db.js';
 import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
-import aiRoutes from './routes/ai.js';
+import aiRoutes, { noteAiRoutes } from './routes/ai.js';
 import aiChatRoutes from './routes/aiChat.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
@@ -48,7 +48,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
       if (!origin) return cb(null, true);
       if (/^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return cb(null, true);
       if (extraOrigins.includes(origin)) return cb(null, true);
-      cb(new Error('Not allowed by CORS'));
+      cb(Object.assign(new Error('That origin is not allowed.'), { statusCode: 403 }));
     },
   }));
   app.use(express.json({ limit: '10mb' }));
@@ -62,7 +62,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);
   app.use('/api/notes', notesRoutes);
-  app.use('/api/notes', aiRoutes);
+  app.use('/api/notes', noteAiRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/ai', aiChatRoutes);
   app.use('/api/dashboard', dashboardRoutes);
@@ -71,6 +71,8 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.use('/api/river', riverRoutes);
   app.use('/api', transferRoutes);
 
+  // Unknown API paths answer JSON, never an HTML page.
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
   app.use('/api', errorHandler);
 
   if (staticDir && existsSync(staticDir)) {
@@ -108,6 +110,8 @@ export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: S
   io.on('connection', (socket) => {
     socket.join(socket.data.userId);
   });
+  // Used by "sign out everywhere" and password changes to drop sockets that were opened with an old token.
+  app.set('disconnectUser', (userId: string) => { io.in(userId).disconnectSockets(true); });
   app.set('io', io);
 
   await new Promise<void>((resolve, reject) => {

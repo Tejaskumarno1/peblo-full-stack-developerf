@@ -6,12 +6,11 @@ import { syncTags } from '../controllers/notesController.js';
 import { parseUploads, buildMarkdownExport } from '../services/importService.js';
 
 const router = Router();
-router.use(authenticate);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 200 } });
 
 // POST /api/import — Notion export .zip, Obsidian vault .zip, or loose .md/.txt/.csv files
-router.post('/import', upload.array('files'), async (req, res, next) => {
+router.post('/import', authenticate, upload.array('files'), async (req, res, next) => {
   try {
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) return res.status(400).json({ error: 'Choose a Notion export (.zip) or Markdown files to import.' });
@@ -52,7 +51,7 @@ router.post('/import', upload.array('files'), async (req, res, next) => {
 });
 
 // GET /api/export — every note (not trash) as Markdown files in a .zip
-router.get('/export', async (req, res, next) => {
+router.get('/export', authenticate, async (req, res, next) => {
   try {
     const notes = await prisma.note.findMany({
       where: { userId: req.user!.id, isDeleted: false },

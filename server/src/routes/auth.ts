@@ -33,7 +33,7 @@ router.post('/signup', signupLimit, async (req, res, next) => {
 
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
-    if (password.length > 200) return res.status(400).json({ error: 'Password is too long.' });
+    if (Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Password is too long (72 bytes at most; some characters count as more than one).' });
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ error: 'An account with that email already exists.' });
@@ -71,7 +71,7 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
     const current = String(req.body?.currentPassword || '').slice(0, 200);
     const next_ = String(req.body?.newPassword || '');
     if (next_.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
-    if (next_.length > 200) return res.status(400).json({ error: 'Password is too long.' });
+    if (Buffer.byteLength(next_, 'utf8') > 72) return res.status(400).json({ error: 'Password is too long (72 bytes at most; some characters count as more than one).' });
 
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user || !(await bcrypt.compare(current, user.passwordHash))) {
@@ -81,6 +81,7 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
       where: { id: user.id },
       data: { passwordHash: await bcrypt.hash(next_, 12), tokenVersion: { increment: 1 } },
     });
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
     res.json({ token: signToken(updated), message: 'Password changed. Other devices were signed out.' });
   } catch (error) {
     next(error);
@@ -91,6 +92,7 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
 router.post('/logout-all', authenticate, async (req, res, next) => {
   try {
     await prisma.user.update({ where: { id: req.user!.id }, data: { tokenVersion: { increment: 1 } } });
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(req.user!.id);
     res.json({ message: 'Signed out on all devices.' });
   } catch (error) {
     next(error);

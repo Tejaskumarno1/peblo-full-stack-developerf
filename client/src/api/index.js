@@ -35,7 +35,7 @@ export const aiAPI = {
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
   smartIntakeUpload: (formData, config) => api.post('/ai/smart-intake-upload', formData, config),
   processBlock: (data, config) => api.post('/notes/block/ai', data, config),
-  processVoiceCommand: (data, config) => api.post('/notes/voice-command', data, config)
+  processVoiceCommand: (data, config) => api.post('/ai/voice-command', data, config)
 };
 
 export const dashboardAPI = {

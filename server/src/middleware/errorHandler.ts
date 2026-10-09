@@ -1,8 +1,7 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
-  console.error('Error:', err.message);
-
   // Prisma unique constraint violation
   if (err.code === 'P2002') {
     return res.status(409).json({ error: 'A record with this value already exists' });
@@ -19,8 +18,13 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
     return res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'That file is too large.' : `Upload problem: ${err.message}` });
   }
 
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal server error';
-  res.status(statusCode).json({ error: message, ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}) });
+  // Errors the server raised on purpose carry a statusCode and a message written for people.
+  // Anything else is unexpected (database, library, bug): keep its text in the log, not in the reply.
+  if (typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600) {
+    console.error('Error:', err.message);
+    return res.status(err.statusCode).json({ error: err.message || 'Request failed', ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}) });
+  }
+  const requestId = crypto.randomBytes(4).toString('hex');
+  console.error(`Error [${requestId}] ${req.method} ${req.originalUrl}:`, err.stack || err.message || err);
+  res.status(500).json({ error: `Something went wrong. If it keeps happening, quote reference ${requestId}.`, requestId });
 }
-
