@@ -67,7 +67,15 @@ try {
   check('profile loads when signed in', r.status === 200 && r.json.user?.id === userAId, r.json);
 
   r = await call('PUT', '/api/profile', { name: 'Tejas', settings: { fontSize: 'large', geminiKey: 'test-key' } });
-  check('profile update + key saved', r.status === 200 && r.json.user.name === 'Tejas' && r.json.user.settings.fontSize === 'large' && r.json.user.settings.geminiKey === 'test-key', r.json);
+  check('profile update + key saved', r.status === 200 && r.json.user.name === 'Tejas' && r.json.user.settings.fontSize === 'large' && !!r.json.user.settings.geminiKey, r.json);
+  check('the saved key is returned masked, never in plain text (PEB-59)', r.json.user.settings.geminiKey.endsWith('-key') && !r.json.user.settings.geminiKey.includes('test') && r.json.user.settings.geminiKey.startsWith('•'), r.json.user.settings.geminiKey);
+  const maskedKey = r.json.user.settings.geminiKey;
+  r = await call('PUT', '/api/profile', { settings: { geminiKey: maskedKey, fontSize: 'large' } });
+  const { default: prisma0 } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  const keptRow = await prisma0.userApiKeys.findUnique({ where: { userId: userAId } });
+  check('saving the mask back keeps the stored key', r.status === 200 && !!keptRow?.geminiKey && keptRow.geminiKey.startsWith('enc:v1:'), keptRow);
+  r = await call('GET', '/api/profile');
+  check('GET /api/profile never contains the plain key', !JSON.stringify(r.json).includes('test-key'), r.json.user.settings);
 
   // API keys are encrypted at rest and kept out of the settings JSON.
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);

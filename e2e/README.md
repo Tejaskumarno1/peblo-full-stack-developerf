@@ -11,3 +11,4 @@ notes-flow.mjs = delete/restore/archive/reopen (PEB-70). draft-dup.mjs = slow-ne
 
 shortcuts.mjs = Ctrl+K palette, exact modifiers, Ctrl+N new note (PEB-78).
 xss.mjs = AI Hub reply with script/javascript: content is neutralised (PEB-61).
+signout.mjs = account data is removed on sign-out, device prefs kept (PEB-60).

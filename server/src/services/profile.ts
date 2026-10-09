@@ -3,6 +3,12 @@ import { decryptSecret, encryptSecret } from '../secrets.js';
 
 export const KEY_FIELDS = ['openAiKey', 'geminiKey', 'groqKey', 'huggingFaceKey'] as const;
 
+/** What the app is shown instead of a saved key: bullets plus the last 4 characters. */
+export const KEY_MASK = '••••••••';
+export function maskKey(plain: string): string {
+  return KEY_MASK + plain.slice(-4);
+}
+
 /**
  * The account as the signed-in person sees it. The AI keys live encrypted in their own table;
  * they are put back into `settings` here (decrypted, for the owner only) because that is where
@@ -18,7 +24,8 @@ export async function loadProfile(userId: string) {
   const merged: any = { ...((settings as any) || {}) };
   for (const k of KEY_FIELDS) {
     const plain = decryptSecret((apiKeys as any)?.[k]);
-    if (plain) merged[k] = plain; else delete merged[k];
+    // Never send the key itself back to the app (PEB-59): only a mask that shows a key is set.
+    if (plain) merged[k] = maskKey(plain); else delete merged[k];
   }
   return { ...rest, settings: merged };
 }
@@ -26,7 +33,8 @@ export async function loadProfile(userId: string) {
 export async function saveKeys(userId: string, incoming: Record<string, any>) {
   const data: any = {};
   for (const k of KEY_FIELDS) {
-    if (incoming[k] !== undefined) data[k] = encryptSecret(String(incoming[k] ?? ''));
+    // A value that is still the mask means "unchanged": keep the stored key.
+    if (incoming[k] !== undefined && !String(incoming[k] ?? '').startsWith(KEY_MASK)) data[k] = encryptSecret(String(incoming[k] ?? ''));
   }
   if (Object.keys(data).length === 0) return;
   await prisma.userApiKeys.upsert({ where: { userId }, create: { userId, ...data }, update: data });

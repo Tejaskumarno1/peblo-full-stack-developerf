@@ -15,8 +15,8 @@ Status: Open · In progress · Fixed (commit).
 | S-02 | **4 Gemini API keys** (`8ac6634` `.env `, `94b8e07`/`4e1c01c` `scratch.js` + `server/scratch.js`, `9ec68f9` `server/src/.env`) and the Supabase DB password in git history | Critical | PEB-55 | Open ✅, needs the owner to revoke all of them |
 | S-03 | SSRF through link preview (✅ reads internal pages) and `ollamaUrl`; the Ollama check is *not* a port scanner by message (⚠️) | High (hosted) | PEB-24 (comment) | Open |
 | S-04 | API keys encrypted with a per-install secret vanish on other machines | High | PEB-58 | Open |
-| S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Open |
-| S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Open |
+| S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Fixed (this commit) |
+| S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Fixed (this commit) |
 | S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Fixed (this commit) |
 | S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Open |
 | S-09 | Server AI keys usable by anyone; no AI rate limits | High (hosted) | PEB-26 (comment) | Open |

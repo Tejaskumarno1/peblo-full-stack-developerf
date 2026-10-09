@@ -6,6 +6,23 @@ import { getToken, setToken, clearToken } from '../api/token';
 
 const AuthContext = createContext(null);
 
+// Things kept on this computer that are about the *device*, not the account that just left (PEB-60).
+const DEVICE_KEYS = new Set([
+  'peblo-theme', 'peblo-style', 'peblo-sidebar-collapsed', 'peblo-river-zoom', 'peblo-river-notes-view',
+  'peblo_call_gender', 'peblo_call_rate', 'peblo_call_ringtone',
+]);
+
+// Remove everything else Peblo stored for the previous account: cached notes, settings (which held API keys),
+// AI Hub chats, notifications, reminder state. Covers both the `peblo-` and `peblo_` key styles.
+export function clearAccountData() {
+  try {
+    Object.keys(localStorage)
+      .filter(k => /^peblo[-_]/.test(k) && !DEVICE_KEYS.has(k))
+      .forEach(k => localStorage.removeItem(k));
+  } catch { /* storage unavailable */ }
+  try { sessionStorage.clear(); } catch { /* ignore */ }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +113,7 @@ export function AuthProvider({ children }) {
 
   // Signed out from anywhere (an expired token, or another window): back to the sign-in screen.
   useEffect(() => {
-    const out = () => { setUser(null); queryClient.clear(); };
+    const out = () => { clearAccountData(); setUser(null); queryClient.clear(); };
     window.addEventListener('peblo:signed-out', out);
     // Signing in or out in another window (e.g. quick capture) changes the shared token.
     const onStorage = (e) => { if (e.key === 'peblo-token') setReloadKey(k => k + 1); };
@@ -116,12 +133,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     clearToken();
-    // Chats, notifications and settings kept on this device belong to the account that just left.
-    try {
-      Object.keys(localStorage)
-        .filter(k => k.startsWith('peblo-') && !['peblo-theme', 'peblo-style'].includes(k))
-        .forEach(k => localStorage.removeItem(k));
-    } catch { /* ignore */ }
+    clearAccountData();
     setSettings({ fontSize: 'medium', wordWrap: true, autoTitle: true });
     setNotifications([]);
     queryClient.clear();
