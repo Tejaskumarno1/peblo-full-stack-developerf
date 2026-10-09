@@ -148,6 +148,16 @@ export function csvToNote(fileName: string, text: string): ImportedNote | null {
   };
 }
 
+const MAX_ZIP_ENTRIES = 5000;
+const MAX_ENTRY_BYTES = 10 * 1024 * 1024;
+const MAX_UNZIPPED_BYTES = 100 * 1024 * 1024;
+let budget = { entries: 0, bytes: 0 };
+
+export class ImportLimitError extends Error {
+  statusCode = 413;
+  constructor(message: string) { super(message); this.name = 'ImportLimitError'; }
+}
+
 function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResult, depth = 0) {
   const names = new Set(files.map((f) => f.name.toLowerCase()));
   for (const file of files) {
@@ -158,10 +168,20 @@ function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResu
 
     if (ext === '.zip') {
       if (depth > 3) { result.skippedFiles.push(file.name); continue; }
-      const inner = new AdmZip(file.data)
-        .getEntries()
-        .filter((e) => !e.isDirectory)
-        .map((e) => ({ name: e.entryName, data: e.getData() }));
+      const entries = new AdmZip(file.data).getEntries().filter((e) => !e.isDirectory);
+      // Zip-bomb guard (PEB-62): a tiny zip can declare gigabytes. Count what it *declares* before inflating anything.
+      budget.entries += entries.length;
+      if (budget.entries > MAX_ZIP_ENTRIES) throw new ImportLimitError(`This archive has too many files (limit ${MAX_ZIP_ENTRIES}).`);
+      const inner = entries.map((e) => {
+        const ext2 = path.extname(e.entryName.toLowerCase());
+        const wanted = TEXT_EXT.has(ext2) || ext2 === '.csv' || ext2 === '.zip';
+        if (!wanted) return { name: e.entryName, data: Buffer.alloc(0) }; // images etc. are only counted, never inflated
+        const declared = e.header.size;
+        if (declared > MAX_ENTRY_BYTES) throw new ImportLimitError(`"${path.basename(e.entryName)}" is too large to import (limit ${MAX_ENTRY_BYTES / 1048576} MB per file).`);
+        budget.bytes += declared;
+        if (budget.bytes > MAX_UNZIPPED_BYTES) throw new ImportLimitError(`This archive unpacks to more than ${MAX_UNZIPPED_BYTES / 1048576} MB.`);
+        return { name: e.entryName, data: e.getData() };
+      });
       ingestFiles(inner, result, depth + 1);
     } else if (TEXT_EXT.has(ext)) {
       const note = parseMarkdownPage(file.name, file.data.toString('utf8'), result);
@@ -181,6 +201,7 @@ function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResu
 
 export function parseUploads(files: { originalname: string; buffer: Buffer }[]): ImportResult {
   const result: ImportResult = { notes: [], skippedImages: 0, skippedFiles: [] };
+  budget = { entries: 0, bytes: 0 };
   ingestFiles(files.map((f) => ({ name: f.originalname, data: f.buffer })), result);
   return result;
 }

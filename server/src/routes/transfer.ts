@@ -8,7 +8,7 @@ import { parseUploads, buildMarkdownExport } from '../services/importService.js'
 const router = Router();
 router.use(authenticate);
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024, files: 500 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 200 } });
 
 // POST /api/import — Notion export .zip, Obsidian vault .zip, or loose .md/.txt/.csv files
 router.post('/import', upload.array('files'), async (req, res, next) => {

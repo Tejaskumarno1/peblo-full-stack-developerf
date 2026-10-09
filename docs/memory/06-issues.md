@@ -18,7 +18,7 @@ Status: Open · In progress · Fixed (commit).
 | S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Fixed (this commit) |
 | S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Fixed (this commit) |
 | S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Fixed (this commit) |
-| S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Open |
+| S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Fixed (this commit) |
 | S-09 | Server AI keys usable by anyone; no AI rate limits | High (hosted) | PEB-26 (comment) | Open |
 | S-10 | Rate limits per IP in memory; account enumeration | Medium | PEB-63 | Open |
 | S-11 | AI changes notes and tasks without asking; private and trashed notes sent to AI; "Local only" bypassable | Medium | PEB-64 | Open |

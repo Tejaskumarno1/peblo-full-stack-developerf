@@ -162,6 +162,27 @@ try {
   const imp = await res.json();
   check('import Notion zip + markdown', res.status === 200 && imp.imported === 3 && imp.skippedImages === 1, imp);
 
+  // ── Upload limits (PEB-62): a small zip that unpacks to hundreds of MB, or to thousands of files, is refused ──
+  const bomb = new AdmZip();
+  bomb.addFile('big.md', Buffer.alloc(120 * 1024 * 1024, 97)); // ~120 KB zipped, 120 MB unpacked
+  const bombZip = bomb.toBuffer();
+  const fBomb = new FormData();
+  fBomb.append('files', new Blob([bombZip]), 'bomb.zip');
+  res = await fetch(base + '/api/import', { method: 'POST', body: fBomb });
+  check(`zip bomb (${Math.round(bombZip.length / 1024)} KB zipped, 120 MB unpacked) is refused with 413`, res.status === 413, res.status);
+  const many = new AdmZip();
+  for (let i = 0; i < 5200; i++) many.addFile(`n/${i}.md`, Buffer.from('x'));
+  const fMany = new FormData();
+  fMany.append('files', new Blob([many.toBuffer()]), 'many.zip');
+  res = await fetch(base + '/api/import', { method: 'POST', body: fMany });
+  check('a zip with thousands of files is refused with 413', res.status === 413, res.status);
+  const fBig = new FormData();
+  fBig.append('file', new Blob([Buffer.alloc(11 * 1024 * 1024, 97)], { type: 'text/plain' }), 'huge.txt');
+  res = await fetch(base + '/api/ai/smart-intake-upload', { method: 'POST', body: fBig });
+  check('an 11 MB upload to the AI intake is refused with 413', res.status === 413, res.status);
+  r = await call('GET', '/api/notes?tag=imported');
+  check('refused imports created no notes', (r.json.notes || []).length === 3, (r.json.notes || []).length);
+
   r = await call('GET', '/api/notes?tag=imported');
   const byTitle = Object.fromEntries((r.json.notes || []).map((n) => [n.title, n]));
   const trip = byTitle['Trip plan'];
