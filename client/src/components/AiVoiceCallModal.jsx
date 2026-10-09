@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { aiAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import '../styles/ai-call.css';
+import { introText as introSpeech, spokenWhen } from '../utils/callRules';
 
 export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_briefing' }) {
   const queryClient = useQueryClient();
@@ -260,18 +261,6 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
     };
   }, []);
 
-  useEffect(() => {
-    window.__simulateVoiceCommand = (text) => {
-      setTranscript(text);
-      transcriptRef.current = text;
-      setCallState('PROCESSING');
-      processVoiceCommand(text);
-    };
-    return () => {
-      delete window.__simulateVoiceCommand;
-    };
-  }, []);
-
   const speak = (text, onEndCallback) => {
     // Abort microphone capture to prevent listening to speaker feedback
     if (recognitionRef.current) {
@@ -340,35 +329,10 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
 
     // 1. Task Agenda
     const incompleteTasks = currentTasks?.filter(t => !t.completed) || [];
-    let introText = "";
+    let introText = introSpeech(callType, incompleteTasks, new Date());
 
-    if (callType === 'upcoming_task' && incompleteTasks.length > 0) {
-      const task = incompleteTasks[0];
-      let timeStr = "shortly";
-      if (task.deadline) {
-        const d = new Date(task.deadline);
-        timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-      }
-      introText = `Hello! This is a reminder for your upcoming task: ${task.text}. The deadline is at ${timeStr}. `;
-    } else {
-      introText = `Good morning! You have ${incompleteTasks.length} tasks scheduled for today. `;
-      if (incompleteTasks.length > 0) {
-        introText += "Here is your agenda. ";
-        incompleteTasks.forEach((task, index) => {
-          let timeStr = "No specific time";
-          if (task.deadline) {
-            const d = new Date(task.deadline);
-            if (d.getHours() !== 0 || d.getMinutes() !== 0) {
-               timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            }
-          }
-          introText += `Task ${index + 1}: ${task.text}, scheduled for ${timeStr}. `;
-        });
-      } else {
-        introText += "You have a free schedule! ";
-      }
-
-      // 2. Smart Notifications Briefing
+    // 2. Unread updates, read out on calls that cover the whole list
+    if (callType !== 'upcoming_task') {
       const unreadNotifications = notifications?.filter(n => !n.read) || [];
       if (unreadNotifications.length > 0) {
         introText += `You also have ${unreadNotifications.length} unread updates. `;
@@ -446,7 +410,7 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
             queryClient.invalidateQueries({ queryKey: ['todos'] });
             queryClient.invalidateQueries({ queryKey: ['notes'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            window.dispatchEvent(new Event('todo-updated')); // Calendar and Tasks listen for this
           } catch (e) {
             console.error("React Query invalidation failed:", e);
           }
@@ -470,13 +434,13 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
 
   const snoozeCall = (minutes = 10) => {
     stopRingtone();
-    window.dispatchEvent(new CustomEvent('snooze_ai_call', { detail: { minutes } }));
+    window.dispatchEvent(new CustomEvent('snooze_ai_call', { detail: { minutes, tasks: currentTasks } }));
     endCall();
   };
 
   const endCall = () => {
     stopRingtone();
-    window.speechSynthesis.cancel();
+    try { window.speechSynthesis?.cancel(); } catch { /* no speech support */ }
     if (recognitionRef.current) recognitionRef.current.abort();
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     onClose();
@@ -640,10 +604,8 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
                   {currentTasks.map((t, idx) => {
                     let timeStr = "";
                     if (t.deadline) {
-                      const d = new Date(t.deadline);
-                      if (d.getHours() !== 0 || d.getMinutes() !== 0) {
-                        timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      }
+                      const w = spokenWhen(t, new Date());
+                      timeStr = w === 'no specific time' ? '' : w.replace(/^at /, '');
                     }
                     return (
                       <div key={t.id || idx} className={`ai-call-task-item ${t.completed ? 'completed' : ''}`}>

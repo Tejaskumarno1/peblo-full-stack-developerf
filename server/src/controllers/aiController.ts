@@ -127,7 +127,7 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
         select: { id: true, text: true, deadline: true }
       }),
       prisma.note.findMany({
-        where: { userId: req.user!.id, isArchived: false },
+        where: { userId: req.user!.id, isArchived: false, deletedAt: null }, // Trash is not offered to the assistant
         select: { id: true, title: true }
       })
     ]);
@@ -140,17 +140,23 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
     let snoozeMinutes = 10;
 
     if (!result.needClarification && result.actions && Array.isArray(result.actions)) {
+      const applied: any[] = [];
       for (const action of result.actions) {
+        try {
         if (action.type === 'RESCHEDULE' && action.taskId) {
-          await prisma.todo.update({
+          const when = new Date(action.newDate);
+          if (Number.isNaN(when.getTime())) continue; // a date the assistant garbled: skip it, keep the rest
+          const r = await prisma.todo.updateMany({
             where: { id: action.taskId, userId: req.user!.id },
-            data: { deadline: new Date(action.newDate) }
+            data: { deadline: when }
           });
+          if (r.count === 0) continue; // not this person's task (or gone)
         } else if (action.type === 'COMPLETE' && action.taskId) {
-          await prisma.todo.update({
+          const r = await prisma.todo.updateMany({
             where: { id: action.taskId, userId: req.user!.id },
             data: { completed: true }
           });
+          if (r.count === 0) continue;
         } else if (action.type === 'CREATE' && action.text) {
           await prisma.todo.create({
             data: {
@@ -177,7 +183,7 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
           saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
         } else if (action.type === 'READ_NOTE' && action.noteId) {
           const note = await prisma.note.findFirst({
-            where: { id: action.noteId, userId: req.user!.id }
+            where: { id: action.noteId, userId: req.user!.id, deletedAt: null }
           });
           if (note) {
             const summaryText = await aiService.generateVerbalNoteSummary(req.user!.id, note.title, note.content);
@@ -189,7 +195,13 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
           isSnooze = true;
           snoozeMinutes = action.minutes || 10;
         }
+        applied.push(action);
+        } catch (err) {
+          // One bad action must not undo or hide the ones that already went through
+          console.error('Voice action failed:', action?.type, err instanceof Error ? err.message : err);
+        }
       }
+      result.actions = applied;
 
       // Broadcast changes if any actions were taken (and it's not just a snooze)
       const nonSnoozeActions = result.actions.filter((a: any) => a.type !== 'SNOOZE');

@@ -405,6 +405,30 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </p>
               </div>
 
+              <div className="settings-field-group">
+                <label className="settings-field-label" htmlFor="pref-calls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    id="pref-calls"
+                    type="checkbox"
+                    checked={settings?.voiceCalls !== false}
+                    onChange={(e) => saveSetting({ voiceCalls: e.target.checked })}
+                  />
+                  AI voice calls
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Peblo rings you while the app is open: a morning briefing, and a reminder about two hours before a timed task is due. Turn off to stop both.
+                </p>
+                <button
+                  type="button"
+                  id="call-me-now"
+                  className="btn"
+                  disabled={settings?.voiceCalls === false}
+                  onClick={() => { window.dispatchEvent(new CustomEvent('trigger_ai_call')); onClose(); }}
+                >
+                  Call me now
+                </button>
+              </div>
+
               {settingError && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{settingError}</p>}
 
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>
