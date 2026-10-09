@@ -162,6 +162,22 @@ try {
   const imp = await res.json();
   check('import Notion zip + markdown', res.status === 200 && imp.imported === 3 && imp.skippedImages === 1, imp);
 
+  // ── Link preview must not reach internal pages (PEB-24) ──
+  const httpMod = await import('http');
+  const internal = httpMod.createServer((q, s) => { s.setHeader('content-type', 'text/html'); s.end('<title>SECRET-INTERNAL-PAGE</title><meta property="og:description" content="internal data">'); });
+  await new Promise((ok) => internal.listen(0, '127.0.0.1', ok));
+  const internalUrl = `http://127.0.0.1:${internal.address().port}/`;
+  r = await call('GET', '/api/ai/link-preview?url=' + encodeURIComponent(internalUrl));
+  check('link preview refuses a loopback page (no title or description leaked)', !JSON.stringify(r.json).includes('SECRET-INTERNAL') && !JSON.stringify(r.json).includes('internal data'), r.json);
+  r = await call('GET', '/api/ai/link-preview?url=' + encodeURIComponent('http://169.254.169.254/latest/meta-data/'));
+  check('link preview refuses the cloud-metadata address', r.status === 200 && /Could not load/.test(r.json.description || ''), r.json);
+  r = await call('GET', '/api/ai/link-preview?url=' + encodeURIComponent('file:///etc/passwd'));
+  check('link preview refuses non-http links', /Could not load/.test(r.json.description || ''), r.json);
+  internal.close();
+  const { isPrivateIp } = await import(pathToFileURL(path.resolve('dist/server/utils/safeFetch.js')).href);
+  const sample = { '10.1.2.3': true, '192.168.0.9': true, '172.20.0.1': true, '127.0.0.1': true, '169.254.169.254': true, '::1': true, '::ffff:10.0.0.1': true, 'fd00::1': true, '8.8.8.8': false, '93.184.216.34': false, '2606:4700:4700::1111': false };
+  check('private/public address classification', Object.entries(sample).every(([ip, want]) => isPrivateIp(ip) === want), Object.entries(sample).filter(([ip, want]) => isPrivateIp(ip) !== want));
+
   // ── Upload limits (PEB-62): a small zip that unpacks to hundreds of MB, or to thousands of files, is refused ──
   const bomb = new AdmZip();
   bomb.addFile('big.md', Buffer.alloc(120 * 1024 * 1024, 97)); // ~120 KB zipped, 120 MB unpacked

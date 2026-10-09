@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { safeFetchHtml } from '../utils/safeFetch.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { syncTags, saveEmbeddingForNote } from './notesController.js';
@@ -255,13 +256,14 @@ export async function getLinkPreview(req: Request, res: Response, next: NextFunc
       targetUrl = 'https://' + targetUrl;
     }
 
-    const response = await fetch(targetUrl, {
+    // Only public web pages (PEB-24): no internal addresses, bounded time and size, redirects re-checked.
+    const fetched = await safeFetchHtml(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
       }
     });
-
-    const html = await response.text();
+    targetUrl = fetched.url;
+    const html = fetched.html;
 
     const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? titleMatch[1].trim() : '';
