@@ -152,7 +152,10 @@ export async function getInsights(req: Request, res: Response, next: NextFunctio
 export async function toggleTask(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const { id, completed } = req.body;
+    const { id, completed } = req.body ?? {};
+    if (typeof id !== 'string' || !id || typeof completed !== 'boolean') {
+      return res.status(400).json({ error: 'Validation Error', details: [{ path: 'id', message: 'id (string) and completed (boolean) are required' }] });
+    }
 
     // Single query: updateMany enforces userId ownership without a separate findFirst
     const { count } = await prisma.todo.updateMany({

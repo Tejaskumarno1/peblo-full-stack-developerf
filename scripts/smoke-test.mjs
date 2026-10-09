@@ -23,6 +23,7 @@ let token = null;
 const runId = Date.now();
 const emailA = `smoke-a-${runId}@peblo.test`;
 const emailB = `smoke-b-${runId}@peblo.test`;
+const emailC = `smoke-c-${runId}@peblo.test`;
 // Requests to our own server carry the current account's sign-in token (also the raw fetch() calls below).
 const rawFetch = globalThis.fetch;
 globalThis.fetch = (u, o = {}) => (token && String(u).startsWith(base)
@@ -327,13 +328,37 @@ try {
 
   r = await call('GET', '/notes/some-id');
   check('SPA route serves index.html', r.status === 200 && String(r.json).includes('<div id="root">'));
+
+  // ── Regressions: bad input must give 400, never 500; toggle-task must need an id (PEB-68, PEB-69) ──
+  r = await call('POST', '/api/auth/signup', { email: emailC, password: 'correct horse battery', name: 'Smoke C' });
+  token = r.json.token;
+  r = await call('POST', '/api/notes', { title: 123, tags: 'not-an-array' });
+  check('invalid note input gives 400 (not 500)', r.status === 400 && Array.isArray(r.json.details), r);
+  r = await call('POST', '/api/todos', { priority: 'urgent' });
+  check('invalid todo input gives 400 (not 500)', r.status === 400, r);
+  r = await call('POST', '/api/todos', { text: 'bad date', deadline: 'not-a-date' });
+  check('invalid deadline gives 400 (not 500)', r.status === 400, r);
+  const t1 = await call('POST', '/api/todos', { text: 'regression one' });
+  const t2 = await call('POST', '/api/todos', { text: 'regression two' });
+  r = await call('POST', '/api/dashboard/toggle-task', { completed: true });
+  check('toggle-task without an id is refused', r.status === 400, r);
+  r = await call('POST', '/api/dashboard/toggle-task', { id: t1.json.todo.id, completed: 'yes' });
+  check('toggle-task needs a boolean', r.status === 400, r);
+  r = await call('GET', '/api/todos');
+  const list = r.json.todos || r.json;
+  check('no task was completed by the refused calls', list.length >= 2 && list.every(t => !t.completed), list.map(t => t.completed));
+  r = await call('POST', '/api/dashboard/toggle-task', { id: t2.json.todo.id, completed: true });
+  check('toggle-task completes only the given task', r.status === 200, r);
+  r = await call('GET', '/api/todos');
+  const list2 = r.json.todos || r.json;
+  check('exactly one task is completed', list2.filter(t => t.completed).length === 1, list2.map(t => t.completed));
 } catch (err) {
   failures++;
   console.error(err);
 } finally {
   server.close();
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
-  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB] } } }); } catch {} // cascades to everything they created
+  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC] } } }); } catch {} // cascades to everything they created
   await prisma.$disconnect();
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
   process.exit(failures ? 1 : 0);

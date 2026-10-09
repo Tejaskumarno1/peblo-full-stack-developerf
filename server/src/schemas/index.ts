@@ -26,7 +26,7 @@ export const todoSchemas = {
     body: z.object({
       text: z.string().min(1, "Task text is required"),
       priority: z.enum(['low', 'medium', 'high']).optional(),
-      deadline: z.string().nullable().optional(),
+      deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
       recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
@@ -39,7 +39,7 @@ export const todoSchemas = {
       text: z.string().optional(),
       priority: z.enum(['low', 'medium', 'high']).optional(),
       completed: z.boolean().optional(),
-      deadline: z.string().nullable().optional(),
+      deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
       recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
