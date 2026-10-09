@@ -24,6 +24,7 @@ const runId = Date.now();
 const emailA = `smoke-a-${runId}@peblo.test`;
 const emailB = `smoke-b-${runId}@peblo.test`;
 const emailC = `smoke-c-${runId}@peblo.test`;
+const emailD = `smoke-d-${runId}@peblo.test`;
 // Requests to our own server carry the current account's sign-in token (also the raw fetch() calls below).
 const rawFetch = globalThis.fetch;
 globalThis.fetch = (u, o = {}) => (token && String(u).startsWith(base)
@@ -434,6 +435,47 @@ try {
     r = await call('GET', '/api/todos?date=not-a-date');
     check('tz: a nonsense ?date= is a 400, not a 500', r.status === 400, r);
   }
+  // PEB-73: streak and heatmap count the person's days and never invent activity
+  {
+    const as = await import(pathToFileURL(path.resolve('dist/server/utils/activityStats.js')).href);
+    // Monday 9 Nov 2026, 09:00 IST = 03:30 UTC. One edit, nothing else.
+    const edit = new Date('2026-11-09T03:30:00Z');
+    const map = (tz) => as.buildDailyActivity([{ createdAt: edit, updatedAt: edit }], tz);
+    check('stats: 09:00 IST Monday lands on Monday in Asia/Kolkata', Object.keys(map('Asia/Kolkata')).join() === '2026-11-09', Object.keys(map('Asia/Kolkata')));
+    // 00:30 IST Monday = 19:00 UTC Sunday: the day is Monday for the user, Sunday on a UTC server
+    const early = new Date('2026-11-08T19:00:00Z');
+    check('stats: 00:30 IST is Monday for the user (was Sunday)', as.toDateKey(early, 'Asia/Kolkata') === '2026-11-09' && as.toDateKey(early, 'UTC') === '2026-11-08');
+    const tue = new Date('2026-11-10T04:00:00Z'); // Tuesday 09:30 IST, nothing done yet today
+    let s = as.calculateStreakStats(map('Asia/Kolkata'), 'Asia/Kolkata', tue);
+    check('stats: Tuesday morning, Monday active: streak is 1 and still alive', s.current === 1 && s.activeDays === 1 && s.mostActiveDay === 'Monday', s);
+    const wed = new Date('2026-11-11T04:00:00Z');
+    s = as.calculateStreakStats(map('Asia/Kolkata'), 'Asia/Kolkata', wed);
+    check('stats: a whole day with no edits breaks the streak', s.current === 0 && s.longest === 1, s);
+    const week = as.buildYearHeatmap(map('Asia/Kolkata'), 'Asia/Kolkata', tue).flat();
+    const mon = week.find(d => d.date === '2026-11-09'), tuesday = week.find(d => d.date === '2026-11-10');
+    check('heatmap: Monday has 1, Tuesday (today) has 0, last cell is today', mon.total === 1 && tuesday.total === 0 && week[week.length - 1].date === '2026-11-10' && week[0].dayOfWeek === 0, [mon, tuesday, week[week.length - 1]]);
+    check('stats: edits this month counts only real edits', as.getEditsThisMonth(map('Asia/Kolkata'), 'Asia/Kolkata', tue) === 1 && as.getEditsThisMonth(map('Asia/Kolkata'), 'Asia/Kolkata', new Date('2026-12-02T00:00:00Z')) === 0);
+    const utcMap = as.buildDailyActivity([{ createdAt: early, updatedAt: early }], 'UTC');
+    check('stats: same checks work in UTC', Object.keys(utcMap).join() === '2026-11-08' && as.calculateStreakStats(utcMap, 'UTC', new Date('2026-11-08T20:00:00Z')).current === 1);
+    const run = ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-09'].map(d => new Date(d + 'T06:00:00Z'));
+    s = as.calculateStreakStats(as.buildDailyActivity(run.map(d => ({ createdAt: d, updatedAt: d })), 'UTC'), 'UTC', new Date('2026-11-09T12:00:00Z'));
+    check('stats: longest run and current run are separate', s.longest === 3 && s.current === 1, s);
+
+    // API: 12 overdue tasks are all counted; a brand-new account has no fake activity today
+    for (let i = 0; i < 12; i++) await call('POST', '/api/todos', { text: 'overdue ' + i, deadline: '2020-01-01T10:00:00Z' });
+    r = await call('GET', '/api/dashboard/daily-briefing');
+    check('briefing: overdue count is not capped at 10', r.json.stats.overdue >= 12 && r.json.overdueTasks.length <= 10, [r.json.stats.overdue, r.json.overdueTasks.length]);
+    const nu = await call('POST', '/api/auth/signup', { email: emailD, password: 'correct horse battery', name: 'Smoke D' });
+    const prevToken = token; token = nu.json.token;
+    r = await call('GET', '/api/dashboard/insights');
+    const cells = r.json.activityHeatmap.flat();
+    check('insights: a new account shows no invented activity', r.json.streakStats.current === 0 && r.json.streakStats.activeDays === 0 && r.json.editsThisMonth === 0 && cells.every(c => c.total === 0), [r.json.streakStats, r.json.editsThisMonth]);
+    const nn = await call('POST', '/api/notes', { title: 'trash me', content: 'x' });
+    await call('DELETE', `/api/notes/${nn.json.note.id}`);
+    r = await call('GET', '/api/dashboard/insights');
+    check('insights: a note in Trash is not counted as activity', r.json.editsThisMonth === 0 && r.json.streakStats.activeDays === 0, r.json.streakStats);
+    token = prevToken;
+  }
   // PEB-84: a quiz can be marked once; a replay changes nothing and reports the score before
   {
     const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
@@ -485,7 +527,7 @@ try {
 } finally {
   server.close();
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
-  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC] } } }); } catch {} // cascades to everything they created
+  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC, emailD] } } }); } catch {} // cascades to everything they created
   await prisma.$disconnect();
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
   process.exit(failures ? 1 : 0);

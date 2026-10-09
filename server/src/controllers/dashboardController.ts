@@ -14,6 +14,7 @@ import {
 export async function getInsights(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
+    const tz = tzOf(req);
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -54,7 +55,7 @@ export async function getInsights(req: Request, res: Response, next: NextFunctio
       }),
       prisma.aiGeneration.groupBy({ by: ['type'], where: { userId }, _count: { _all: true } }),
       prisma.note.findMany({
-        where: { userId, updatedAt: { gte: oneYearAgoDate } },
+        where: { userId, isDeleted: false, updatedAt: { gte: oneYearAgoDate } }, // notes in Trash are not activity
         select: { createdAt: true, updatedAt: true },
       }),
       prisma.note.groupBy({
@@ -91,11 +92,14 @@ export async function getInsights(req: Request, res: Response, next: NextFunctio
     const recentAiActivity = recentAiGenerations.map((g: any) => {
       const title = g.note?.title || 'Untitled';
       const action =
-        g.type === 'summary'
-          ? `Summarized "${title}" notes`
-          : g.type === 'action_items'
-            ? `Extracted actions from "${title}"`
-            : `Suggested title for "${title}"`;
+        g.type === 'summary' ? `Summarized "${title}" notes`
+        : g.type === 'action_items' ? `Extracted actions from "${title}"`
+        : g.type === 'title' ? `Suggested title for "${title}"`
+        : g.type === 'tags' ? `Suggested tags for "${title}"`
+        : g.type === 'smart_intake' ? 'Organised pasted text into notes and tasks'
+        : g.type === 'smart_intake_file' ? 'Organised an uploaded file into notes and tasks'
+        : g.type === 'chat' ? 'Chatted with Peblo AI'
+        : 'Used Peblo AI';
       return { id: g.id, type: g.type, message: action, createdAt: g.createdAt };
     });
 
@@ -108,20 +112,11 @@ export async function getInsights(req: Request, res: Response, next: NextFunctio
     };
 
     // Activity heatmap & streak
-    const dayMap = buildDailyActivity(heatmapNotes);
-
-    const todayKey = new Date().toISOString().split('T')[0];
-    if (!dayMap[todayKey]) {
-      dayMap[todayKey] = { date: todayKey, created: 0, updated: 0, total: 0 };
-    }
-    if (dayMap[todayKey].total === 0) {
-      dayMap[todayKey].total = 1;
-      dayMap[todayKey].updated = 1;
-    }
-
-    const activityHeatmap = buildYearHeatmap(dayMap);
-    const streakStats = calculateStreakStats(dayMap);
-    const editsThisMonth = getEditsThisMonth(dayMap);
+    // Days are the person's days; a day with no edits stays at 0 and breaks the streak.
+    const dayMap = buildDailyActivity(heatmapNotes, tz);
+    const activityHeatmap = buildYearHeatmap(dayMap, tz);
+    const streakStats = calculateStreakStats(dayMap, tz);
+    const editsThisMonth = getEditsThisMonth(dayMap, tz);
 
     res.json({
       totalNotes: counts.totalNotes,
@@ -190,7 +185,7 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
     const yesterdayStartD = new Date(yesterdayStart);
     const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
-    const [completedYesterday, totalActive, overdueTasks, todayTasksRaw, recentNotes] = await Promise.all([
+    const [completedYesterday, totalActive, overdueTasks, todayTasksRaw, recentNotes, overdueCount] = await Promise.all([
       prisma.todo.count({
         where: { userId, completed: true, updatedAt: { gte: yesterdayStartD, lt: todayStartD } },
       }),
@@ -211,6 +206,7 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
         orderBy: { updatedAt: 'desc' },
         take: 5,
       }),
+      prisma.todo.count({ where: { userId, completed: false, deadline: { not: null, lt: todayStartD } } }),
     ]);
     const todayTasks = todayTasksRaw.sort(
       (x, y) => (priorityRank[x.priority] ?? 1) - (priorityRank[y.priority] ?? 1)
@@ -224,7 +220,7 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
       greeting,
       date: longDate(tz, now),
       stats: {
-        overdue: overdueTasks.length,
+        overdue: overdueCount,
         dueToday: todayTasks.length,
         totalActive: countRow.totalActive,
         completedYesterday: countRow.completedYesterday,
