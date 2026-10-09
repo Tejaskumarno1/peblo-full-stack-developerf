@@ -1,6 +1,6 @@
 # Peblo: platform reverse-engineering report (shell, build, config, DB, tooling, docs)
 
-Repo: `the repo` (git repo, branch `app`, 79 commits, clean tree; other branches `main`, `desktop-app`; remotes `origin`, `pc`).
+Repo: `the repo` (git repo, branch `app`, 79 commits, clean tree; other branches `main`, `desktop-app`; remote `origin` (a stale `pc` ref remains; the remote itself is gone). GitHub default branch is `main`, the obsolete web app — see PEB-100).
 Nothing in the repo was modified. `node_modules`, `server/generated`, `dist`, `client/dist` are absent, so nothing was built or run.
 
 Architecture in one paragraph: Electron main process (`electron/main.cjs`) imports the compiled Express server (`dist/server/index.js`) **in-process**, starts it on `127.0.0.1:<random port>`, and loads the React SPA (Vite build in `client/dist`, served by that same Express app) into a sandboxed BrowserWindow. Data lives in a **shared MySQL 8 database** (Prisma 6, `DATABASE_URL`), multi-user with JWT accounts. The same server can also run standalone as a hosted web service (`npm run serve`), and the desktop app can be pointed at that remote server instead (`PEBLO_API_URL` / `server-url.txt`). There is **no preload script, no IPC, no auto-update**.

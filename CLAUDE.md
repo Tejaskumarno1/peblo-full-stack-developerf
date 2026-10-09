@@ -2,11 +2,13 @@
 
 Peblo is an Electron desktop app (also runnable as a hosted web server) for notes, tasks, a calendar and an AI assistant over your own notes. Stack: React 19 + Vite client, Express + Prisma 6 + MySQL 8 server, Socket.IO, OpenAI / Gemini / Ollama.
 
-**Full memory: [`docs/memory/`](docs/memory/README.md).** Read `01-overview.md` first, then the file for the area you are touching. Known problems and their Jira keys (project PEB) are in `06-issues.md`.
+**Full memory: [`docs/memory/`](docs/memory/README.md).** Read `01-overview.md` first, then the file for the area you are touching. Known problems and their Jira keys (project PEB) are in `06-issues.md`; which of them were proved by running the code is in `08-verification.md`.
+
+**Branch:** work on `app`. GitHub's default branch `main` is the obsolete May web app (PEB-100).
 
 ## Where things are
 - `electron/main.cjs`: desktop shell. It starts the server in-process on 127.0.0.1 at a random port, unless `PEBLO_API_URL` or `<userData>/server-url.txt` selects hosted mode.
-- `server/src/index.ts`: routes are mounted in this order: auth, profile, ai/hub, notes, ai, dashboard, todos, study, river, import/export.
+- `server/src/index.ts`: routes are mounted in this order: `/api/auth`, `/api/profile`, `/api/ai/hub`, `/api/notes` (notes, then the AI router mounted a second time), `/api/ai` (AI router, then aiChat), `/api/dashboard`, `/api/todos`, `/api/study`, `/api/river`, `/api` (import/export).
 - `server/src/services/aiService.ts`: every AI prompt and the provider cascade. `retrieval.ts` does keyword retrieval for the AI Hub.
 - `server/prisma/schema.prisma` and `server/prisma/sql/NNN_*.sql`: migrations are applied at start-up by `server/src/db.ts`.
 - `client/src/App.jsx`: routes, picked by UI style. `client/src/pages/*` holds the Studio and Console screens; `client/src/{soft,river,orbit}` hold the other three styles.

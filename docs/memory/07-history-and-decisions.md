@@ -13,7 +13,8 @@
 | 5–6 Oct 2026 | Fixed 1440×900 design canvas at any size/zoom/DPI; River and Orbit styles | `1547556`, `84c7183` |
 | 6–7 Oct 2026 | **Back to multi-user:** Postgres, then **MySQL**; sign-in screen, JWT, authenticated sockets; seed script | `ef82253`, `66cf624`, `3a0f1a3`, `72d5016` |
 | 7–8 Oct 2026 | Account security (bcrypt 12, token version, rate limits), encrypted AI keys, hosted mode, notes list paging; product, technical, design and go-to-market docs; OpenAI key bug fix | `3157c76`, `01d544b`, `8b0a99b` |
-| 8 Oct 2026 | Reverse-engineering pass: this memory folder, plus Jira PEB-35…98 | (this commit) |
+| 8 Oct 2026 | Reverse-engineering pass: this memory folder, plus Jira PEB-35…98 | `2c611d0` |
+| 9 Oct 2026 | Verification and coverage pass, Jira PEB-99…120 | (this commit) |
 
 **Why this matters:** many files still describe an older stage. README and `docs/00–06` describe the SQLite single-user build. `done.txt`, `implementation_plan.md` and the `.kiro` spec describe the May web app. The code is the truth, and this memory describes the code.
 
@@ -46,3 +47,4 @@
 | Date | Change |
 |---|---|
 | 8 Oct 2026 | Created from a full read of the code (server, client, five styles, Electron, scripts, docs) at commit `8b0a99b`. |
+| 9 Oct 2026 | Verification pass: static checks, the real server against a recording fake database, pure-logic tests, and the production UI in a browser (08, 09). Coverage review of everything the first pass skipped (10). Jira PEB-99…120 added; PEB-55 widened to 4 keys; PEB-68 lowered to Medium; corrections listed in 08. |

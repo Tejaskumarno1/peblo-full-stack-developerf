@@ -17,6 +17,9 @@ It is written for:
 | [05-platform.md](05-platform.md) | Electron, build and installers, CI, every env var, every database table, scripts, docs and gap list, challenge checklist |
 | [06-issues.md](06-issues.md) | every known problem with its Jira key, and the suggested order |
 | [07-history-and-decisions.md](07-history-and-decisions.md) | how the app evolved, decisions made, decisions still open |
+| [08-verification.md](08-verification.md) | which issues were **proved by running the code**, how, and what is still untested |
+| [09-ui-runtime.md](09-ui-runtime.md) | browser test of the real build: every screen in every style, bug reproductions, accessibility numbers |
+| [10-coverage-review.md](10-coverage-review.md) | what the first pass missed: file coverage matrix, CSS/themes/tokens, git branches and history, licences, requirement-by-requirement status vs Jira |
 
 Line numbers in 02–05 are approximate (`~`) and drift as code changes; search for the function name.
 
