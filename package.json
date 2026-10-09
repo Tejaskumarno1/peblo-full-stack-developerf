@@ -139,5 +139,8 @@
     "electron-winstaller@5.4.0": true,
     "@prisma/engines@6.19.3": true,
     "electron@44.4.5": true
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }
