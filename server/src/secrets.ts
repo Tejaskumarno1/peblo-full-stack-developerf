@@ -27,6 +27,11 @@ export function encryptSecret(plain: string | null | undefined): string | null {
   return PREFIX + [iv, tag, data].map((b) => b.toString('base64')).join(':');
 }
 
+/** True when a value is stored encrypted but cannot be read now (another install's secret, or damaged). */
+export function isUnreadable(stored: string | null | undefined): boolean {
+  return !!stored && isEncrypted(stored) && decryptSecret(stored) === null;
+}
+
 /** Returns the original text. Values saved before encryption existed pass through unchanged. */
 export function decryptSecret(stored: string | null | undefined): string | null {
   if (!stored) return null;

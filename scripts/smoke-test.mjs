@@ -85,6 +85,24 @@ try {
   check('API key is encrypted in the database', !!keyRow?.geminiKey && keyRow.geminiKey.startsWith('enc:v1:') && !keyRow.geminiKey.includes('test-key'), keyRow);
   check('API key is not duplicated in the settings JSON', userRow.settings.geminiKey === undefined && userRow.settings.fontSize === 'large', userRow.settings);
 
+  // PEB-58: a key saved under another install's secret is reported, not silently treated as "no key"
+  {
+    process.env.KEY_ENCRYPTION_SECRET = 'another-install-secret-another-install-secret';
+    try {
+      const p = await call('GET', '/api/profile');
+      check('unreadable key: profile lists it and sends no key', p.status === 200 && p.json.user.settings.unreadableKeys?.includes('geminiKey') && p.json.user.settings.geminiKey === undefined, p.json.user?.settings);
+      const m = await call('GET', '/api/ai/hub/models');
+      const g = (m.json.cloud || []).find((c) => c.provider === 'gemini');
+      check('unreadable key: models endpoint flags it', m.status === 200 && g?.unreadable === true && g?.configured === false, m.json.cloud);
+      const c = await call('POST', '/api/ai/chat', { message: 'make a note about tides' });
+      check('unreadable key: AI says the key cannot be read (not "no AI set up")', c.status === 400 && /can't be read/.test(c.json?.error || '') && !/No AI set up/.test(c.json?.error || ''), c.json);
+    } finally {
+      delete process.env.KEY_ENCRYPTION_SECRET;
+    }
+    const ok = await call('GET', '/api/profile');
+    check('with the right secret the key reads again and nothing is flagged', ok.json.user.settings.geminiKey?.startsWith('•') && !ok.json.user.settings.unreadableKeys, ok.json.user?.settings);
+  }
+
   r = await call('PUT', '/api/profile', { email: 'not-an-email' });
   check('profile rejects an invalid email', r.status === 400, r.json);
 

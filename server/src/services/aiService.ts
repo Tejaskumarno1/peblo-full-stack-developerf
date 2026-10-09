@@ -1,4 +1,4 @@
-import { decryptSecret } from '../secrets.js';
+import { decryptSecret, isUnreadable } from '../secrets.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -89,8 +89,19 @@ function localOnlyError() {
   return err;
 }
 
-function noKeyError() {
-  const err: any = new Error('No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in AI Hub → Connections.');
+/** Names of saved cloud keys that exist but cannot be read on this install. */
+export function unreadableKeyNames(user: any): string[] {
+  const out: string[] = [];
+  if (isUnreadable(user?.apiKeys?.openAiKey)) out.push('OpenAI');
+  if (isUnreadable(user?.apiKeys?.geminiKey)) out.push('Gemini');
+  return out;
+}
+
+function noKeyError(user?: any) {
+  const bad = unreadableKeyNames(user);
+  const err: any = new Error(bad.length
+    ? `Your saved ${bad.join(' and ')} key can't be read on this computer (it was saved by a different Peblo install). Please enter it again in AI Hub → Connections.`
+    : 'No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in AI Hub → Connections.');
   err.statusCode = 400;
   err.code = 'NO_AI_KEY';
   return err;
@@ -124,7 +135,7 @@ async function runWithCascade(
   const order = providerOrder(user);
   if (!order.some((n) => providers[n])) {
     if (order.length === 1 && (providers.openai || providers.gemini)) throw localOnlyError();
-    throw noKeyError();
+    throw noKeyError(user);
   }
 
   let timedOut = false;
@@ -439,7 +450,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
     gemini: getGeminiInstance(user),
   };
   const chosen = providerOrder(user).find((n) => providers[n]);
-  if (!chosen) throw noKeyError();
+  if (!chosen) throw noKeyError(user);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -942,7 +953,7 @@ export interface HubMessage { role: 'user' | 'assistant'; content: string }
 export interface HubModelInfo {
   routing: string;
   local: { enabled: boolean; ok: boolean; url: string; chatModel: string; embedModel: string; models: string[]; error?: string };
-  cloud: { provider: 'openai' | 'gemini'; label: string; configured: boolean; model: string }[];
+  cloud: { provider: 'openai' | 'gemini'; label: string; configured: boolean; unreadable: boolean; model: string }[];
 }
 
 /** Everything the model picker and the Connections page need to know. */
@@ -964,8 +975,8 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
       error: check.error,
     },
     cloud: [
-      { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), model: DEFAULT_OPENAI_MODEL },
-      { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL },
+      { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), unreadable: isUnreadable(user?.apiKeys?.openAiKey), model: DEFAULT_OPENAI_MODEL },
+      { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), unreadable: isUnreadable(user?.apiKeys?.geminiKey), model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL },
     ],
   };
 }
@@ -1033,7 +1044,7 @@ export async function streamHubChat(
       throw err;
     }
     if (order.length === 1 && order[0] === 'ollama' && (providers.openai || providers.gemini)) throw localOnlyError();
-    throw noKeyError();
+    throw noKeyError(user);
   }
 
   let lastError: any = null;

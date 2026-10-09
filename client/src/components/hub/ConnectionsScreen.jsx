@@ -4,6 +4,7 @@ import { Monitor, MessageCircleQuestion, Cloud, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { aiAPI, hubAPI } from '../../api';
 import { normalizeRouting } from '../../utils/aiRouting';
+import { unreadableKeyMessage } from '../../utils/keyStatus';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', icon: Monitor, tone: 'a' },
@@ -131,7 +132,8 @@ export default function ConnectionsScreen({ p, extra }) {
         <section className={c('card')} aria-labelledby={`${p}-keys`}>
           <h2 id={`${p}-keys`} className={c('card-title')}>Cloud keys</h2>
           <span className={c('quiet')}>Saved encrypted in your account. {routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
-          <KeyInput p={p} id={`${p}-openai`} label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
+          {unreadableKeyMessage(settings) && <p role="alert" className={c('quiet')} style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
+<KeyInput p={p} id={`${p}-openai`} label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput p={p} id={`${p}-gemini`} label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
           <span className={c('quiet')} style={{ fontSize: 13 }}>Notes tagged #private are never sent to any AI.</span>
         </section>

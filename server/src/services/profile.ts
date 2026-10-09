@@ -1,5 +1,5 @@
 import prisma from '../db.js';
-import { decryptSecret, encryptSecret } from '../secrets.js';
+import { decryptSecret, encryptSecret, isUnreadable } from '../secrets.js';
 
 export const KEY_FIELDS = ['openAiKey', 'geminiKey', 'groqKey', 'huggingFaceKey'] as const;
 
@@ -22,11 +22,16 @@ export async function loadProfile(userId: string) {
   if (!user) return null;
   const { apiKeys, settings, ...rest } = user;
   const merged: any = { ...((settings as any) || {}) };
+  const unreadableKeys: string[] = [];
   for (const k of KEY_FIELDS) {
-    const plain = decryptSecret((apiKeys as any)?.[k]);
+    const stored = (apiKeys as any)?.[k];
+    const plain = decryptSecret(stored);
     // Never send the key itself back to the app (PEB-59): only a mask that shows a key is set.
     if (plain) merged[k] = maskKey(plain); else delete merged[k];
+    // A key IS saved but this install cannot read it (saved under another install's secret): say so (PEB-58).
+    if (isUnreadable(stored)) unreadableKeys.push(k);
   }
+  if (unreadableKeys.length) merged.unreadableKeys = unreadableKeys; else delete merged.unreadableKeys;
   return { ...rest, settings: merged };
 }
 

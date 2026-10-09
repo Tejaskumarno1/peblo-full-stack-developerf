@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { aiAPI, transferAPI, authAPI } from '../api';
 import { setToken } from '../api/token';
 import { ROUTING_CHOICES, normalizeRouting } from '../utils/aiRouting';
+import { unreadableKeyMessage } from '../utils/keyStatus';
 import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
 import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu } from 'lucide-react';
@@ -509,6 +510,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </div>
 
 
+                {unreadableKeyMessage(settings) && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
                 <div className="settings-field-group">
                   <label className="settings-field-label">OpenAI API Key {settings?.invalidKeys?.includes('openai') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
                   <input 

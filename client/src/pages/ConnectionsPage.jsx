@@ -5,6 +5,7 @@ import { Cpu, Lock, Plug, Link2, Check, RefreshCw, Eye, EyeOff } from 'lucide-re
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, hubAPI } from '../api';
 import { normalizeRouting } from '../utils/aiRouting';
+import { unreadableKeyMessage } from '../utils/keyStatus';
 import '../styles/connections.css';
 
 const ROUTES = [
@@ -166,7 +167,8 @@ export default function ConnectionsPage() {
                 <span className="pb-badge cloud">Cloud</span>
               </div>
               <div className="cx-provider-body">
-                <KeyField id="openai-key" label="OpenAI API key" placeholder="sk-…" value={settings?.openAiKey} hint="Uses GPT-4o mini. Your question and matching notes are sent to OpenAI." onSave={(v) => apply({ openAiKey: v })} />
+                {unreadableKeyMessage(settings) && <p role="alert" className="pb-muted cx-hint" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
+<KeyField id="openai-key" label="OpenAI API key" placeholder="sk-…" value={settings?.openAiKey} hint="Uses GPT-4o mini. Your question and matching notes are sent to OpenAI." onSave={(v) => apply({ openAiKey: v })} />
                 <KeyField id="gemini-key" label="Google Gemini API key" placeholder="AIza…" value={settings?.geminiKey} hint="Uses Gemini 2.5 Flash. Free keys at aistudio.google.com." onSave={(v) => apply({ geminiKey: v })} />
                 {routing === 'ollama' && (settings?.openAiKey || settings?.geminiKey) && <p className="pb-muted cx-hint">Keys are saved but not used while "Local only" is on.</p>}
               </div>
