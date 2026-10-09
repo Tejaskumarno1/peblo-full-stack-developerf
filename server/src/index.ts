@@ -37,7 +37,8 @@ export function createApp(staticDir?: string) {
   const app = express();
 
   // Behind a hosting platform's proxy, TRUST_PROXY=1 makes rate limits see the real client address.
-  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
+  // "true" used to trust every X-Forwarded-For entry (anyone could fake an address); it now means one proxy hop.
+if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
   // Desktop app (Electron) sends no Origin header, so it's always allowed. The Vite dev
   // server and, once ALLOWED_ORIGINS is set (comma-separated), a hosted web client too.

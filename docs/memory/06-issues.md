@@ -20,7 +20,7 @@ Status: Open · In progress · Fixed (commit).
 | S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Fixed (this commit) |
 | S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Fixed (this commit) |
 | S-09 | Server AI keys usable by anyone; no AI rate limits | High (hosted) | PEB-26 (comment) | Open |
-| S-10 | Rate limits per IP in memory; account enumeration | Medium | PEB-63 | Open |
+| S-10 | Rate limits per IP in memory; account enumeration | Medium | PEB-63 | Partly fixed (this commit): sign-in is limited per address (40) and per account (10 failures / 15 min, so faking the address does not help), only failures count, unknown emails cost one bcrypt comparison (similar timing), TRUST_PROXY=true now means one hop. Still open: sign-up still answers 409 for a taken email (needs email verification, PEB-23); limits are in memory (one server); other endpoints are not limited (AI limits are PEB-26) |
 | S-11 | AI changes notes and tasks without asking; private and trashed notes sent to AI; "Local only" bypassable | Medium | PEB-64 | Open |
 | S-12 | No CSP, DevTools in release, any-localhost trust, debug hook | Medium | PEB-65 | Open |
 | S-13 | Raw error text, sockets survive sign-out, unchecked profile fields, 72-byte bcrypt, duplicate route mount (includes S-14) | Low | PEB-66 | Open |

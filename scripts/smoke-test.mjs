@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve('server/.env') });
 if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is not set (server/.env).'); process.exit(1); }
 process.env.PEBLO_SQL_DIR = path.resolve('server/prisma/sql');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-test-secret-smoke-test-secret';
+process.env.TRUST_PROXY = '1'; // as behind a proxy: lets the test fake client addresses (PEB-63)
 process.env.SIGNUP_RATE_MAX = '1000'; // the test makes several accounts; the sign-in limit is still tested
 delete process.env.OPENAI_API_KEY;
 delete process.env.GEMINI_API_KEY;
@@ -388,6 +389,37 @@ try {
     limited = r.status === 429;
   }
   check('repeated bad sign-ins are rate limited (429)', limited);
+
+  // PEB-63: the limit holds when the client address is faked, and is per account
+  {
+    const target = `ratelimit-${runId}@peblo.test`;
+    let blocked = false; let tries = 0;
+    for (let i = 0; i < 14 && !blocked; i++) {
+      tries++;
+      const rr = await rawFetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `203.0.113.${i + 1}` }, body: JSON.stringify({ email: target, password: 'wrong wrong' }) });
+      blocked = rr.status === 429;
+    }
+    check('sign-in limit holds with a different faked address every time', blocked && tries <= 12, { tries });
+    const other = await rawFetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.7' }, body: JSON.stringify({ email: emailB, password: 'correct horse battery' }) });
+    check('another account is not locked out by that', other.status !== 429, other.status);
+  }
+  // PEB-63: unknown and known emails take about the same time to refuse
+  {
+    const time = async (email, n) => {
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        const t0 = Date.now();
+        await rawFetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `192.0.2.${Math.floor(Math.random() * 200) + 1}` }, body: JSON.stringify({ email, password: 'wrong wrong' }) });
+        total += Date.now() - t0;
+      }
+      return total / n;
+    };
+    const known = await time(emailB, 4);
+    let unknownTotal = 0;
+    for (let i = 0; i < 4; i++) unknownTotal += await time(`nobody-${runId}-${i}@peblo.test`, 1);
+    const unknown = unknownTotal / 4;
+    check('unknown and known emails take a similar time to refuse', unknown > known * 0.5, { known: Math.round(known), unknown: Math.round(unknown) });
+  }
 
 
   r = await call('GET', '/notes/some-id');

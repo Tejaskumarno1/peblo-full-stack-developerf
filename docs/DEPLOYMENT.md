@@ -15,7 +15,7 @@ Peblo can run as a normal web service: one Node process serves the web app and t
 | `KEY_ENCRYPTION_SECRET` | Optional; encrypts saved AI keys. Falls back to `JWT_SECRET`. |
 | `NODE_ENV` | `production` (also makes the server listen on `0.0.0.0` and serve the web app) |
 | `PORT` | Most hosts set this for you |
-| `TRUST_PROXY` | `1` when behind the host's proxy, so rate limits see real client addresses |
+| `TRUST_PROXY` | The number of proxies in front of the server (usually `1`), so rate limits see real client addresses. Leave unset when nothing sits in front. `true` means 1; never trust more hops than you have |
 | `ALLOWED_ORIGINS` | Only if the web client is served from a different address |
 | `GEMINI_API_KEYS` / `OPENAI_API_KEY` | Optional shared fallback keys. **Everyone on the server would share them**, so leave them unset on a public server and let users add their own. |
 
