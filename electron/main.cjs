@@ -153,8 +153,9 @@ function resourcePath(...parts) {
 function configurePrismaEngine() {
   const dir = resourcePath('server', 'generated', 'prisma');
   if (!fs.existsSync(dir)) return;
-  const engine = fs.readdirSync(dir).find((f) => /query_engine.*\.node$/.test(f));
+  const engine = require('./engine.cjs').pickEngine(fs.readdirSync(dir), process.platform, process.arch);
   if (engine) process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(dir, engine);
+  else console.error(`[peblo] no database engine for ${process.platform}/${process.arch} in ${dir}`);
 }
 
 /**

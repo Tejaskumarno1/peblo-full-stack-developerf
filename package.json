@@ -130,7 +130,8 @@
       "category": "Office",
       "icon": "build/icon.png",
       "maintainer": "Boddu Tejas Kumar <boddutejaskumar@gmail.com>"
-    }
+    },
+    "afterPack": "build/afterPack.cjs"
   },
   "allowScripts": {
     "@prisma/client@6.19.3": true,

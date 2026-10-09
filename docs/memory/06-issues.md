@@ -34,7 +34,7 @@ Status: Open · In progress · Fixed (commit).
 | B-01 | Validation errors return 500 (Zod 4 uses `.issues`, not `.errors`); bad dates give 500; tag array crash | Medium (UI never sends bad input) | PEB-68 | Open ✅ |
 | B-02 | `toggle-task` without an `id` marks all of the user's tasks done | High | PEB-69 | Fixed (this commit) |
 | B-03 | A fresh install can't start (looks for `server/.env` in the bundle) | Critical | PEB-57 | Open ? |
-| B-04 | Intel Mac build likely missing the Prisma engine; tag builds may publish twice | High | PEB-71 | Open |
+| B-04 | Intel Mac build likely missing the Prisma engine; tag builds may publish twice | High | PEB-71 | Fixed in code ✅ (Windows package checked; Mac dmgs need a CI run + an Intel Mac) |
 | B-05 | Migrations: no lock, no recovery, `db:sql` overwrites 001 | High | PEB-72 | Fixed ✅ (lock + re-runnable; no pre-migration backup — PEB-30) |
 | B-06 | Streak and heatmap off by a day in IST; fake activity for today; overdue capped at 10 | Medium | PEB-73 | Fixed (this commit): day keys in the user's zone, no invented activity, Trash excluded, overdue counted, all AI types labelled. No edit log yet, so only each note's last edit shows |
 | B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Fixed (this commit): client sends X-Timezone, server day ranges/greeting/briefing/weekly/smart-intake/Hub use it. Still server-clock: streak/heatmap (PEB-73), recurrence, retrieval/river date labels |

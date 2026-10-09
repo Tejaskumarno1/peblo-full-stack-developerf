@@ -27,11 +27,11 @@ jobs:
           npm --prefix client install
 
       - name: Build installers
-        run: npm run dist
+        # --publish never: the "release" job below is the only thing that publishes (no double upload).
+        run: npm run dist -- --publish never
         env:
           # Unsigned builds; add signing certificates later if needed.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:

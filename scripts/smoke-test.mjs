@@ -2,6 +2,7 @@
 // with a throwaway account (created at the start, deleted at the end).
 // Usage: npm test      (or: npm run build:server && node scripts/smoke-test.mjs)
 import path from 'path';
+import * as fsmm from 'node:fs';
 import dotenv from 'dotenv';
 import { pathToFileURL } from 'url';
 
@@ -843,6 +844,24 @@ try {
       check('migrations: the lock is released when done', Number(lock[0].got) === 1);
       await P.$queryRawUnsafe("SELECT RELEASE_LOCK('peblo_migrate')");
     } finally { await cleanup(); fsm.rmSync(dir, { recursive: true, force: true }); }
+  }
+  // ---- PEB-71: the right database engine for each computer ----
+  {
+    const { pickEngine } = (await import(pathToFileURL(path.resolve('electron/engine.cjs')).href)).default;
+    const all = ['libquery_engine-darwin-arm64.dylib.node', 'libquery_engine-darwin.dylib.node', 'libquery_engine-debian-openssl-3.0.x.so.node', 'query_engine-windows.dll.node', 'query_engine_bg.wasm', 'index.js'];
+    check('engine: Intel Mac gets the x64 engine', pickEngine(all, 'darwin', 'x64') === 'libquery_engine-darwin.dylib.node', pickEngine(all, 'darwin', 'x64'));
+    check('engine: Apple Silicon gets the arm64 engine', pickEngine(all, 'darwin', 'arm64') === 'libquery_engine-darwin-arm64.dylib.node', pickEngine(all, 'darwin', 'arm64'));
+    check('engine: Windows gets the windows engine', pickEngine(all, 'win32', 'x64') === 'query_engine-windows.dll.node');
+    check('engine: Linux gets the openssl 3 engine', pickEngine(all, 'linux', 'x64') === 'libquery_engine-debian-openssl-3.0.x.so.node');
+    check('engine: an installer with only the other kind of Mac finds nothing (so the app can say so)', pickEngine(['libquery_engine-darwin-arm64.dylib.node'], 'darwin', 'x64') === undefined && pickEngine([], 'win32', 'x64') === undefined);
+    const schemaText = fsmm.readFileSync('server/prisma/schema.prisma', 'utf8');
+    check('engine: the schema asks Prisma for every engine we ship', ['"windows"', '"darwin"', '"darwin-arm64"', '"debian-openssl-3.0.x"'].every((t) => schemaText.includes(t)));
+    const wf = fsmm.readFileSync('.github/workflows/build-desktop.yml', 'utf8');
+    const { unwanted } = (await import(pathToFileURL(path.resolve('build/afterPack.cjs')).href)).default;
+    const left = (plat, arch) => all.filter((f) => /query_engine.*\.node$/.test(f) && !unwanted(all, plat, arch).includes(f));
+    check('packaging: the Intel dmg keeps only the x64 engine, the Apple Silicon dmg only the arm64 one', left('darwin', 'x64').join() === 'libquery_engine-darwin.dylib.node' && left('darwin', 'arm64').join() === 'libquery_engine-darwin-arm64.dylib.node', [left('darwin', 'x64'), left('darwin', 'arm64')]);
+    check('packaging: Windows and Linux keep only their own engine', left('win32', 'x64').join() === 'query_engine-windows.dll.node' && left('linux', 'x64').join() === 'libquery_engine-debian-openssl-3.0.x.so.node');
+    check('release: the build job never publishes by itself (only the release job does)', /dist -- --publish never/.test(wf) && !/GH_TOKEN/.test(wf));
   }
 } catch (err) {
   failures++;
