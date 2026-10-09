@@ -33,7 +33,7 @@ Status: Open · In progress · Fixed (commit).
 |---|---|---|---|---|
 | B-01 | Validation errors return 500 (Zod 4 uses `.issues`, not `.errors`); bad dates give 500; tag array crash | Medium (UI never sends bad input) | PEB-68 | Open ✅ |
 | B-02 | `toggle-task` without an `id` marks all of the user's tasks done | High | PEB-69 | Open |
-| B-03 | A fresh install can't start (looks for `server/.env` in the bundle) | Critical | PEB-57 | Open |
+| B-03 | A fresh install can't start (looks for `server/.env` in the bundle) | Critical | PEB-57 | Open ? |
 | B-04 | Intel Mac build likely missing the Prisma engine; tag builds may publish twice | High | PEB-71 | Open |
 | B-05 | Migrations: no lock, no recovery, `db:sql` overwrites 001 | High | PEB-72 | Open |
 | B-06 | Streak and heatmap off by a day in IST; fake activity for today; overdue capped at 10 | Medium | PEB-73 | Open |
