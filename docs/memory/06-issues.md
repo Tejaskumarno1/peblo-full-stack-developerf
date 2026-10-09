@@ -49,7 +49,7 @@ Status: Open · In progress · Fixed (commit).
 | B-17 | Settings that do nothing; two routing lists | Medium | PEB-82 | Open |
 | B-18 | Version history only for AI edits; unpruned; unsafe restore; trash never emptied | Medium | PEB-83 (story) | Open |
 | B-19 | Orbit: quiz counted twice, "was X%" wrong, unquizzed topics dropped | Medium | PEB-84 | Fixed (this commit): server claims the run atomically (409 on repeat), result carries `before`, unquizzed topics stay in the path, number keys bounded, error messages. Not done: quiz-size copy, space picker label, per-open quiz parsing, missed-concept history |
-| B-20 | River: all-day becomes 22:00, duplicate promises, hidden items, no delete | Medium | PEB-85 | Open |
+| B-20 | River: all-day becomes 22:00, duplicate promises, hidden items, no delete | Medium | PEB-85 | Partly fixed (this commit): Move keeps all-day, drawer Delete, promises keep added/ignored state, atomic promise updates, todoId ownership, move/delete errors shown. Still open: hidden rows / +N more, wrong scroll after Jump, midnight QuickAdd, other River error handling, brief date |
 | B-22 | Small UI defects (link preview per keystroke, Hub hides errors, timeline, sidebar, breadcrumb squeezed to 2 px…) | Low | PEB-86 | Open ✅ |
 | B-23 | Probable light flash on start for dark themes (inferred) | Low | PEB-102 | Open ⏸ |
 | B-24 | Focus ring faint, missing on active nav link and in high-contrast mode | Medium | PEB-120 | Open ✅ |

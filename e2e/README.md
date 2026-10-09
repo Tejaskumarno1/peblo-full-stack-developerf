@@ -14,3 +14,4 @@ xss.mjs = AI Hub reply with script/javascript: content is neutralised (PEB-61).
 signout.mjs = account data is removed on sign-out, device prefs kept (PEB-60).
 
 calendar.mjs = Calendar day-view arrows, drag keeps the time of day, inline edit saves once (PEB-79).
+river.mjs = River Move keeps an all-day task all-day, Delete from the drawer (PEB-85).

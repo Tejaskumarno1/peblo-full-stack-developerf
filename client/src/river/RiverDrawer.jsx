@@ -95,6 +95,19 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
     navigate(`/notes?${qs.toString()}`);
   };
 
+  const removeTodo = async () => {
+    if (!window.confirm(`Delete "${selected.text}"? This cannot be undone.`)) return;
+    try {
+      await todosAPI.delete(selected.id);
+      onSelect(null);
+      flash('Deleted');
+    } catch (e) {
+      flash(e.response?.data?.error || 'Could not delete it. Try again.');
+    } finally {
+      refresh();
+    }
+  };
+
   const sourceTitle = (n) => brief.data?.sources.find((s) => s.n === n);
 
   return (
@@ -117,6 +130,7 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
           ) : (
             <button type="button" className="r-btn" onClick={() => onToggle(selected)}>{selected.completed ? 'Not done yet' : 'Mark done'}</button>
           )}
+          <button type="button" className="r-btn ghost" onClick={removeTodo}>Delete</button>
           <div className="r-menu-wrap" ref={moveRef}>
             <button type="button" className="r-btn ghost" aria-expanded={moveOpen} onClick={() => setMoveOpen((v) => !v)}>Move</button>
             {moveOpen && (
@@ -201,33 +215,48 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
 /** Pick a new day and time for a meeting or task. */
 function MoveForm({ todo, meeting, at, end, onDone }) {
   const base = at || new Date();
+  // An all-day task keeps no clock time unless one is picked; the field starts empty for it
+  const keepsAllDay = !meeting && !!todo.deadline && isAllDay(todo);
   const [day, setDay] = useState(dateValue(base));
-  const [from, setFrom] = useState(timeValue(base));
+  const [from, setFrom] = useState(keepsAllDay ? '' : timeValue(base));
+  const [err, setErr] = useState('');
   const [to, setTo] = useState(end ? timeValue(end) : timeValue(new Date(base.getTime() + 3600000)));
   const [busy, setBusy] = useState(false);
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
+    setErr('');
     const [y, m, d] = day.split('-').map(Number);
-    const [h, mi] = from.split(':').map(Number);
+    const [h, mi] = from ? from.split(':').map(Number) : [23, 59]; // no time chosen: due at the end of that day
     const when = new Date(y, m - 1, d, h, mi);
-    await todosAPI.update(todo.id, meeting
-      ? { deadline: when.toISOString(), startTime: from, endTime: to }
-      : { deadline: when.toISOString() });
-    setBusy(false);
-    onDone(when);
+    try {
+      await todosAPI.update(todo.id, meeting
+        ? { deadline: when.toISOString(), startTime: from, endTime: to }
+        : { deadline: when.toISOString() });
+      onDone(when);
+    } catch (e2) {
+      setErr(e2.response?.data?.error || 'Could not move it. Try again.');
+    } finally {
+      setBusy(false);
+    }
   };
   const clear = async () => {
-    await todosAPI.update(todo.id, { deadline: null, startTime: null, endTime: null });
-    onDone(null);
+    setErr('');
+    try {
+      await todosAPI.update(todo.id, { deadline: null, startTime: null, endTime: null });
+      onDone(null);
+    } catch (e2) {
+      setErr(e2.response?.data?.error || 'Could not clear the date. Try again.');
+    }
   };
   return (
     <form className="r-pop up r-move" onSubmit={save}>
       <label className="f">Day<input type="date" value={day} onChange={(e) => setDay(e.target.value)} required /></label>
       <div className="two">
-        <label className="f">{meeting ? 'Starts' : 'Due at'}<input type="time" value={from} onChange={(e) => setFrom(e.target.value)} required /></label>
+        <label className="f">{meeting ? 'Starts' : 'Due at (optional)'}<input type="time" value={from} onChange={(e) => setFrom(e.target.value)} required={meeting} /></label>
         {meeting && <label className="f">Ends<input type="time" value={to} onChange={(e) => setTo(e.target.value)} required /></label>}
       </div>
+      {err && <p className="r-err" role="alert">{err}</p>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         {!meeting && <button type="button" className="r-btn ghost small" onClick={clear}>No date</button>}
         <button type="submit" className="r-btn small" disabled={busy}>Move</button>

@@ -3,6 +3,7 @@ import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { findPromises, meetingBrief } from '../services/aiService.js';
 import { retrieve, sourcesPrompt } from '../services/retrieval.js';
+import { carryOverPromiseState } from '../services/promiseState.js';
 
 /*
  * River style: briefs before meetings, and promises found in notes.
@@ -55,7 +56,12 @@ router.post('/notes/:id/promises', async (req, res, next) => {
     if (isPrivate(note)) return res.status(400).json({ error: 'This note is #private, so Peblo does not show it to any AI.' });
     if ((note.content || '').trim().length < 20) return res.json({ id: null, noteId: note.id, items: [] });
 
-    const items = (await findPromises(userId, note.title, note.content, note.createdAt)).map((p) => ({ ...p, status: 'open', todoId: null }));
+    // Reading again must not bring back promises you already added or ignored: carry their state over by wording.
+    const prevGen = await prisma.aiGeneration.findFirst({ where: { noteId: note.id, userId, type: 'promises' }, orderBy: { createdAt: 'desc' } });
+    const items = carryOverPromiseState(
+      parse(prevGen?.result || '', { items: [] }).items || [],
+      await findPromises(userId, note.title, note.content, note.createdAt),
+    );
     const gen = await prisma.aiGeneration.create({
       data: { noteId: note.id, userId, type: 'promises', result: JSON.stringify({ items }) },
     });
@@ -87,15 +93,27 @@ router.get('/promises', async (req, res, next) => {
 // PATCH /api/river/promises/:id { index, status: "added" | "ignored" | "open", todoId? }
 router.patch('/promises/:id', async (req, res, next) => {
   try {
-    const gen = await prisma.aiGeneration.findFirst({ where: { id: req.params.id, userId: req.user!.id, type: 'promises' } });
-    if (!gen) return res.status(404).json({ error: 'Not found' });
-    const data = parse(gen.result, { items: [] });
+    const userId = req.user!.id;
     const i = Number(req.body?.index);
     const status = String(req.body?.status || '');
-    if (!data.items?.[i] || !['added', 'ignored', 'open'].includes(status)) return res.status(400).json({ error: 'Bad request' });
-    data.items[i] = { ...data.items[i], status, todoId: req.body?.todoId || data.items[i].todoId || null };
-    const saved = await prisma.aiGeneration.update({ where: { id: gen.id }, data: { result: JSON.stringify(data) } });
-    res.json(promiseView(saved));
+    if (!Number.isInteger(i) || !['added', 'ignored', 'open'].includes(status)) return res.status(400).json({ error: 'Bad request' });
+    // A todoId must be one of this user's own tasks
+    const wantedTodo = req.body?.todoId ? String(req.body.todoId) : null;
+    if (wantedTodo && !(await prisma.todo.findFirst({ where: { id: wantedTodo, userId }, select: { id: true } }))) {
+      return res.status(400).json({ error: 'Bad request' });
+    }
+    // Read-modify-write of one JSON blob: only write if nobody changed it meanwhile, otherwise read again and retry
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const gen = await prisma.aiGeneration.findFirst({ where: { id: req.params.id, userId, type: 'promises' } });
+      if (!gen) return res.status(404).json({ error: 'Not found' });
+      const data = parse(gen.result, { items: [] });
+      if (!data.items?.[i]) return res.status(400).json({ error: 'Bad request' });
+      data.items[i] = { ...data.items[i], status, todoId: wantedTodo || data.items[i].todoId || null };
+      const next = JSON.stringify(data);
+      const won = await prisma.aiGeneration.updateMany({ where: { id: gen.id, result: gen.result }, data: { result: next } });
+      if (won.count === 1) return res.json(promiseView({ ...gen, result: next }));
+    }
+    res.status(409).json({ error: 'That changed while you were saving it. Try again.' });
   } catch (error) {
     next(error);
   }

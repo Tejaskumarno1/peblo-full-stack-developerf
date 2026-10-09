@@ -476,6 +476,33 @@ try {
     check('insights: a note in Trash is not counted as activity', r.json.editsThisMonth === 0 && r.json.streakStats.activeDays === 0, r.json.streakStats);
     token = prevToken;
   }
+  // PEB-85: River promises keep their state, parallel updates are not lost, and a task id must be yours
+  {
+    const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const { carryOverPromiseState } = await import(pathToFileURL(path.resolve('dist/server/services/promiseState.js')).href);
+    const prev = [{ text: 'Send the deck to Rohit', status: 'added', todoId: 't1' }, { text: 'Book the room', status: 'ignored', todoId: null }, { text: 'Call Mia', status: 'open', todoId: null }];
+    const found = [{ text: 'send the deck to rohit!', owner: 'you' }, { text: 'Book the room', owner: 'Sam' }, { text: 'Call Mia', owner: 'you' }, { text: 'A new one', owner: 'you' }];
+    const out = carryOverPromiseState(prev, found);
+    check('promises: reading again keeps added/ignored state (matched by wording)', out[0].status === 'added' && out[0].todoId === 't1' && out[1].status === 'ignored' && out[2].status === 'open' && out[3].status === 'open', out.map(x => x.status));
+
+    const uC = await prisma.user.findUnique({ where: { email: emailC } });
+    const note = await prisma.note.create({ data: { userId: uC.id, title: 'meeting', content: 'x'.repeat(40) } });
+    const items = [0, 1, 2, 3].map(i => ({ text: 'promise ' + i, owner: 'you', due: null, status: 'open', todoId: null }));
+    const gen = await prisma.aiGeneration.create({ data: { userId: uC.id, noteId: note.id, type: 'promises', result: JSON.stringify({ items }) } });
+    const mine = await call('POST', '/api/todos', { text: 'my task' });
+    const rs = await Promise.all([0, 1, 2, 3].map(i => call('PATCH', '/api/river/promises/' + gen.id, { index: i, status: i % 2 ? 'ignored' : 'added', ...(i % 2 ? {} : { todoId: mine.json.todo.id }) })));
+    check('promises: four quick updates all succeed', rs.every(x => x.status === 200), rs.map(x => x.status));
+    const row = await prisma.aiGeneration.findUnique({ where: { id: gen.id } });
+    const saved = JSON.parse(row.result).items.map(x => x.status).join();
+    check('promises: none of the four updates was lost', saved === 'added,ignored,added,ignored', saved);
+    // someone else's task id is refused
+    const other = await prisma.user.findUnique({ where: { email: emailA } });
+    const theirs = await prisma.todo.create({ data: { userId: other.id, text: 'not yours', todoTags: [] } });
+    r = await call('PATCH', '/api/river/promises/' + gen.id, { index: 0, status: 'added', todoId: theirs.id });
+    check('promises: a todoId that belongs to someone else is refused', r.status === 400, r);
+    r = await call('PATCH', '/api/river/promises/' + gen.id, { index: 9, status: 'added' });
+    check('promises: an index that does not exist is a 400', r.status === 400, r);
+  }
   // PEB-84: a quiz can be marked once; a replay changes nothing and reports the score before
   {
     const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
