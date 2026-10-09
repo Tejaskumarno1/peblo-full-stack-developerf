@@ -13,7 +13,7 @@ Status: Open · In progress · Fixed (commit).
 |---|---|---|---|---|
 | S-01 | Every desktop install holds the shared MySQL password; anyone with the app's `.env` can read all users' data | Critical | PEB-56 | Open |
 | S-02 | **4 Gemini API keys** (`8ac6634` `.env `, `94b8e07`/`4e1c01c` `scratch.js` + `server/scratch.js`, `9ec68f9` `server/src/.env`) and the Supabase DB password in git history | Critical | PEB-55 | Open ✅, needs the owner to revoke all of them |
-| S-03 | SSRF through link preview (✅ reads internal pages) and `ollamaUrl`; the Ollama check is *not* a port scanner by message (⚠️) | High (hosted) | PEB-24 | Link preview fixed (this commit); `ollamaUrl` still open |
+| S-03 | SSRF through link preview (✅ reads internal pages) and `ollamaUrl`; the Ollama check is *not* a port scanner by message (⚠️) | High (hosted) | PEB-24 | Link preview fixed; `ollamaUrl` fixed for shared servers (`PEBLO_HOSTED=1`, allow-list `OLLAMA_ALLOWED_HOSTS`). Not done: DNS-rebinding on allow-listed names |
 | S-04 | API keys encrypted with a per-install secret vanish on other machines | High | PEB-58 | Partly fixed (this commit): a saved key that this install cannot read is reported ("can't be read on this computer, enter it again") in Settings, Your AI (all styles) and AI errors, and the models endpoint flags it; tested with a wrong secret. Still open: keys saved on one install still need the same KEY_ENCRYPTION_SECRET on every install (hosted-server decision, PEB-56) |
 | S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Fixed (this commit) |
 | S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Fixed (this commit) |

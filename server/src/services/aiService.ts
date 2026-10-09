@@ -1,4 +1,5 @@
 import { decryptSecret, isUnreadable } from '../secrets.js';
+import { effectiveOllamaUrl, ollamaUrlProblem } from '../utils/ollamaPolicy.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -44,7 +45,8 @@ export const DEFAULT_OLLAMA_EMBED_MODEL = 'nomic-embed-text';
 function getOllamaProvider(user: any): OAIProvider | null {
   const settings = user?.settings as any || {};
   if (settings.ollamaEnabled !== true) return null;
-  const base = String(settings.ollamaUrl || DEFAULT_OLLAMA_URL).trim().replace(/\/+$/, '');
+  const base = effectiveOllamaUrl(settings.ollamaUrl, DEFAULT_OLLAMA_URL);
+  if (!base) return null; // a shared server without an allowed Ollama address has no local AI
   return {
     name: 'ollama',
     client: new OpenAI({ baseURL: `${base}/v1`, apiKey: 'ollama', timeout: 2 * 60 * 1000, maxRetries: 0 }),
@@ -221,7 +223,13 @@ function parseJSONLoose(text: string): any {
 
 /** Lists models installed in the user's Ollama, to check the connection from Settings. */
 export async function checkOllama(url?: string): Promise<{ ok: boolean; models: string[]; error?: string }> {
-  const base = String(url || DEFAULT_OLLAMA_URL).trim().replace(/\/+$/, '');
+  const asked = typeof url === 'string' ? url.trim() : '';
+  if (asked) {
+    const problem = ollamaUrlProblem(asked);
+    if (problem) return { ok: false, models: [], error: problem };
+  }
+  const base = effectiveOllamaUrl(asked, DEFAULT_OLLAMA_URL);
+  if (!base) return { ok: false, models: [], error: 'Local AI is not available on this server.' };
   try {
     const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return { ok: false, models: [], error: `Ollama answered with HTTP ${res.status}` };
@@ -961,8 +969,8 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
   const user = await getUserSettings(userId);
   const settings = (user?.settings as any) || {};
   const ollama = getOllamaProvider(user);
-  const url = String(settings.ollamaUrl || DEFAULT_OLLAMA_URL);
-  const check = settings.ollamaEnabled === true ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
+  const url = effectiveOllamaUrl(settings.ollamaUrl, DEFAULT_OLLAMA_URL) || '';
+  const check = settings.ollamaEnabled === true && url ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
   return {
     routing: settings.defaultAiModel || 'auto',
     local: {

@@ -33,3 +33,12 @@ Set `PEBLO_API_URL=https://your-server` before starting the app, or put the addr
 - No email: **password reset and email verification do not exist**. Change password works while signed in; anyone who forgets it needs to be reset directly in the database.
 - Local AI (Ollama) means the machine the *server* runs on. On a public server, turn it off or restrict who can set a custom Ollama address.
 - Chat history lives in each browser, not on the server.
+
+## Shared server: local AI (Ollama) addresses
+
+On the desktop app a person may point Peblo at any Ollama address (their own computer or LAN). On a server that several people share, a custom address would let them make the server call its own network, so:
+
+- Set `PEBLO_HOSTED=1`. Custom Ollama addresses are then refused unless they are on the allow-list.
+- `OLLAMA_ALLOWED_HOSTS` = comma-separated `host` or `host:port` entries people may use, e.g. `ollama.corp.example:11434`.
+- `OLLAMA_URL` = an address everyone else uses (optional). Without it, people on a shared server have no local AI.
+- The link preview already refuses private, loopback and link-local addresses on every deployment.

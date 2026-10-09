@@ -3,6 +3,7 @@ import prisma from '../db.js';
 import bcrypt from 'bcryptjs';
 import { KEY_FIELDS, loadProfile, saveKeys } from '../services/profile.js';
 import { validZone } from '../utils/userTime.js';
+import { ollamaUrlProblem } from '../utils/ollamaPolicy.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -39,6 +40,13 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
       }
       const taken = await prisma.user.findFirst({ where: { email: newEmail, NOT: { id: userId } }, select: { id: true } });
       if (taken) return res.status(409).json({ error: 'That email is already used by another account.' });
+    }
+
+    if (settings && typeof settings === 'object' && 'ollamaUrl' in settings) {
+      const u = settings.ollamaUrl;
+      if (typeof u !== 'string') return bad('The Ollama address must be text.');
+      const problem = u.trim() ? ollamaUrlProblem(u.trim()) : null;
+      if (problem) return bad(problem);
     }
 
     let mergedSettings: any;

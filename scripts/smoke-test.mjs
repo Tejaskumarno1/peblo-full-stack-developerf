@@ -776,6 +776,40 @@ try {
     const del = await call('DELETE', `/api/todos/${legacy.id}?scope=all`);
     check('series: an old copied task (no series) still edits and deletes on its own', r.status === 200 && del.status === 200, [r.status, r.json, del.status, del.json]);
   }
+  // ---- PEB-24: custom Ollama addresses on a shared server ----
+  {
+    const pol = await import(pathToFileURL(path.resolve('dist/server/utils/ollamaPolicy.js')).href);
+    const keep = { h: process.env.PEBLO_HOSTED, a: process.env.OLLAMA_ALLOWED_HOSTS, u: process.env.OLLAMA_URL };
+    const restore = () => { for (const [k, v] of [['PEBLO_HOSTED', keep.h], ['OLLAMA_ALLOWED_HOSTS', keep.a], ['OLLAMA_URL', keep.u]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } };
+    const DEF = 'http://127.0.0.1:11434';
+    try {
+      delete process.env.PEBLO_HOSTED; delete process.env.OLLAMA_ALLOWED_HOSTS; delete process.env.OLLAMA_URL;
+      check('ollama: the desktop app accepts a LAN or localhost address', pol.ollamaUrlProblem('http://192.168.1.20:11434') === null && pol.effectiveOllamaUrl('http://192.168.1.20:11434/', DEF) === 'http://192.168.1.20:11434' && pol.effectiveOllamaUrl('', DEF) === DEF);
+      check('ollama: only http(s) addresses, no embedded passwords', !!pol.ollamaUrlProblem('file:///etc/passwd') && !!pol.ollamaUrlProblem('javascript:alert(1)') && !!pol.ollamaUrlProblem('http://user:pw@host:11434') && !!pol.ollamaUrlProblem('nonsense'));
+      let r = await call('PUT', '/api/profile', { settings: { ollamaUrl: 'file:///etc/passwd' } });
+      check('ollama: saving a non-http address is refused (400)', r.status === 400, r.json);
+
+      process.env.PEBLO_HOSTED = '1';
+      for (const bad of ['http://169.254.169.254/latest/meta-data', 'http://localhost:11434', 'http://10.0.0.5:11434', 'http://127.0.0.1:6379']) {
+        check(`ollama: a shared server refuses ${bad}`, !!pol.ollamaUrlProblem(bad) && pol.effectiveOllamaUrl(bad, DEF) === null, pol.ollamaUrlProblem(bad));
+      }
+      r = await call('PUT', '/api/profile', { settings: { ollamaUrl: 'http://169.254.169.254/latest' } });
+      check('ollama: a shared server refuses to save an internal address (400)', r.status === 400 && /does not allow/.test(r.json?.error || ''), r.json);
+      r = await call('GET', '/api/ai/ollama/check?url=' + encodeURIComponent('http://10.0.0.5:11434'));
+      check('ollama: the connection test does not call an internal address', r.status === 200 && r.json.ok === false && /does not allow/.test(r.json.error || ''), r.json);
+      r = await call('GET', '/api/ai/ollama/check');
+      check('ollama: no local AI on a shared server unless the owner sets one', r.json.ok === false && /not available/.test(r.json.error || ''), r.json);
+
+      process.env.OLLAMA_ALLOWED_HOSTS = 'ollama.corp.example:11434, gpu-box.example';
+      check('ollama: addresses on the owner\'s allow-list are accepted', pol.ollamaUrlProblem('http://ollama.corp.example:11434') === null && pol.ollamaUrlProblem('https://gpu-box.example/') === null && !!pol.ollamaUrlProblem('http://ollama.corp.example:9999'));
+      r = await call('PUT', '/api/profile', { settings: { ollamaUrl: 'http://ollama.corp.example:11434' } });
+      check('ollama: saving an allow-listed address works', r.status === 200, r.json);
+      r = await call('PUT', '/api/profile', { settings: { ollamaUrl: '' } });
+
+      process.env.OLLAMA_URL = 'http://ollama.internal:11434';
+      check('ollama: with an owner address everyone else uses it', pol.effectiveOllamaUrl('http://10.0.0.5:11434', DEF) === 'http://ollama.internal:11434');
+    } finally { restore(); await call('PUT', '/api/profile', { settings: { ollamaUrl: '' } }); }
+  }
 } catch (err) {
   failures++;
   console.error(err);
