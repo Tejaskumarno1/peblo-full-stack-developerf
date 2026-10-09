@@ -1,0 +1,1 @@
+{"name":"peblo-e2e","private":true,"type":"module","dependencies":{"dotenv":"^17.0.0","playwright-core":"^1.56.0"}}
