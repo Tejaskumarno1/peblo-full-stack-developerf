@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 
@@ -244,6 +245,7 @@ export async function updateNote(req: any, res: any, next: any) {
       await syncTags(req.user.id, req.params.id, tags);
     }
 
+    notify(req, 'notes_changed');
     // Return early to save an extra sequential database lookup
     res.json({ message: 'Note updated' });
   } catch (error) {
@@ -263,6 +265,7 @@ export async function deleteNote(req: any, res: any, next: any) {
     });
 
     if (softDeleted > 0) {
+      notify(req, 'notes_changed');
       return res.json({ message: 'Note moved to trash' });
     }
 
@@ -272,6 +275,7 @@ export async function deleteNote(req: any, res: any, next: any) {
     });
 
     if (hardDeleted > 0) {
+      notify(req, 'notes_changed');
       return res.json({ message: 'Note permanently deleted' });
     }
 
@@ -299,6 +303,7 @@ export async function restoreNote(req: any, res: any, next: any) {
       include: noteInclude
     });
 
+    notify(req, 'notes_changed');
     res.json({ note: formatNote(note) });
   } catch (error) {
     next(error);
@@ -320,6 +325,7 @@ export async function archiveNote(req: any, res: any, next: any) {
       include: noteInclude
     });
 
+    notify(req, 'notes_changed');
     res.json({ note: formatNote(note) });
   } catch (error) {
     next(error);
@@ -361,6 +367,7 @@ export async function revertBackup(req: any, res: any, next: any) {
       include: noteInclude
     });
 
+    notify(req, 'notes_changed');
     res.json({ note: formatNote(note) });
   } catch (error) {
     next(error);

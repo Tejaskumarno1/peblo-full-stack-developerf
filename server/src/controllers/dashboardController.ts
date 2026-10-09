@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import {
   buildDailyActivity,
@@ -167,6 +168,7 @@ export async function toggleTask(req: Request, res: Response, next: NextFunction
       return res.status(404).json({ error: 'Todo not found' });
     }
 
+    notify(req, 'todos_changed');
     res.json({ success: true, updatedTodo: { id, completed } });
   } catch (error) {
     next(error);

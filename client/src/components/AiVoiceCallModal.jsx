@@ -443,10 +443,10 @@ export default function AiVoiceCallModal({ onClose, tasks, callType = 'morning_b
 
           // Invalidate React Query cache for instant dashboard sync
           try {
-            queryClient.invalidateQueries({ queryKey: ['todayTasks'] });
+            queryClient.invalidateQueries({ queryKey: ['todos'] });
             queryClient.invalidateQueries({ queryKey: ['notes'] });
-            queryClient.invalidateQueries({ queryKey: ['insights'] });
-            queryClient.invalidateQueries({ queryKey: ['weeklyReport'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
           } catch (e) {
             console.error("React Query invalidation failed:", e);
           }

@@ -155,11 +155,12 @@ export function AuthProvider({ children }) {
     const socket = io(socketURL, { auth: (cb) => cb({ token: getToken() }) });
 
     socket.on('todos_changed', () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
+      window.dispatchEvent(new Event('todo-updated'));
     });
 
     socket.on('notes_changed', () => {
-      queryClient.invalidateQueries(['notes']);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
     });
 
     return () => {

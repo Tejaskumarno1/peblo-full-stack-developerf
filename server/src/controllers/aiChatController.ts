@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
@@ -164,6 +165,7 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
       });
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: plan.reply,
       notes: createdNotes,
@@ -275,6 +277,7 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
       });
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     // Send final completion event with the DB records
     res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote })}\n\n`);
     res.end();
@@ -348,6 +351,7 @@ export async function smartIntake(req: Request, res: Response, next: NextFunctio
       }));
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: result.reply,
       note,
@@ -439,6 +443,7 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
       }));
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: `I successfully processed your file! ${result.reply}`,
       note,

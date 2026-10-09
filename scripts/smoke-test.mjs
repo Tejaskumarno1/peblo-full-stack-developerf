@@ -397,6 +397,31 @@ try {
   r = await call('GET', '/api/todos');
   const list2 = r.json.todos || r.json;
   check('exactly one task is completed', list2.filter(t => t.completed).length === 1, list2.map(t => t.completed));
+  // PEB-77: every write path tells the signed-in user's other screens to refetch
+  {
+    const { io: ioClient } = await import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm-debug/index.js')).href).catch(() => import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm/index.js')).href));
+    const sock = ioClient(base, { auth: { token }, transports: ['websocket'] });
+    await new Promise((res, rej) => { sock.on('connect', res); sock.on('connect_error', rej); setTimeout(() => rej(new Error('socket connect timeout')), 5000); });
+    const seen = [];
+    sock.on('todos_changed', () => seen.push('todos_changed'));
+    sock.on('notes_changed', () => seen.push('notes_changed'));
+    const expectEvent = async (label, ev, fn) => {
+      seen.length = 0;
+      await fn();
+      const t0 = Date.now();
+      while (!seen.includes(ev) && Date.now() - t0 < 2000) await new Promise(r => setTimeout(r, 25));
+      check(`socket: ${label} emits ${ev}`, seen.includes(ev), seen);
+    };
+    const n = await call('POST', '/api/notes', { title: 'sock', content: 'x' });
+    const nid = n.json.note.id;
+    await expectEvent('note update', 'notes_changed', () => call('PATCH', `/api/notes/${nid}`, { title: 'sock2' }));
+    await expectEvent('note archive', 'notes_changed', () => call('POST', `/api/notes/${nid}/archive`));
+    await expectEvent('note delete', 'notes_changed', () => call('DELETE', `/api/notes/${nid}`));
+    await expectEvent('note restore', 'notes_changed', () => call('POST', `/api/notes/${nid}/restore`));
+    const tt = await call('POST', '/api/todos', { text: 'sock todo' });
+    await expectEvent('toggle-task', 'todos_changed', () => call('POST', '/api/dashboard/toggle-task', { id: tt.json.todo.id, completed: true }));
+    sock.disconnect();
+  }
 } catch (err) {
   failures++;
   console.error(err);

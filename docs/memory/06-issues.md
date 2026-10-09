@@ -40,7 +40,7 @@ Status: Open · In progress · Fixed (commit).
 | B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Open |
 | B-08 | AI failures show fake results and create junk notes | Medium | PEB-75 | Open |
 | B-09 | Repeating tasks are 30 copies, monthly dates overflow, no series edit | Medium | PEB-76 (story) | Open |
-| B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Open |
+| B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Fixed (this commit): every write path emits events, query keys corrected, Calendar refreshes on 	odos_changed; socket regression in smoke test. Calendar still uses local state, not React Query |
 | B-11 | Notes can't be reopened after delete/archive/restore; draft double-create; placeholder autosaved (includes B-13) | High | PEB-70 | Fixed (this commit); e2e in `e2e/` |
 | B-12 | Ctrl+K broken on Notes; shortcuts ignore extra modifiers | Medium | PEB-78 | Fixed (this commit) |
 | B-14 | Calendar: Day view arrows, drag drops the time, double save | Medium | PEB-79 | Open |

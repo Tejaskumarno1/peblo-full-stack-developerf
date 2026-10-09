@@ -16,7 +16,7 @@ export default function TodoListPanel({ onClose }) {
   const createMutation = useMutation({
     mutationFn: (text) => todosAPI.create({ text }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
       setNewTaskText('');
     }
   });
@@ -24,25 +24,25 @@ export default function TodoListPanel({ onClose }) {
   const toggleMutation = useMutation({
     mutationFn: ({ id, completed }) => todosAPI.update(id, { completed }),
     onMutate: async ({ id, completed }) => {
-      await queryClient.cancelQueries(['todos']);
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
       const previousTodos = queryClient.getQueryData(['todos']);
       queryClient.setQueryData(['todos'], old => 
-        old.map(t => t.id === id ? { ...t, completed } : t)
+        (old || []).map(t => t.id === id ? { ...t, completed } : t)
       );
       return { previousTodos };
     },
     onError: (err, variables, context) => {
-      queryClient.setQueryData(['todos'], context.previousTodos);
+      if (context?.previousTodos !== undefined) queryClient.setQueryData(['todos'], context.previousTodos);
     },
     onSettled: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => todosAPI.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     }
   });
 

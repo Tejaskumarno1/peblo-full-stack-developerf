@@ -51,8 +51,8 @@ export default function CalendarPage() {
     loadMonthTodos();
   }, [year, month]);
 
-  const loadMonthTodos = async () => {
-    setLoading(true);
+  const loadMonthTodos = async (silent = false) => {
+    if (silent !== true) setLoading(true);
     try {
       const from = new Date(year, month, 1).toISOString();
       const to = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
@@ -66,8 +66,9 @@ export default function CalendarPage() {
   };
 
   useEffect(() => {
-    window.addEventListener('todo-updated', loadMonthTodos);
-    return () => window.removeEventListener('todo-updated', loadMonthTodos);
+    const refresh = () => loadMonthTodos(true);
+    window.addEventListener('todo-updated', refresh);
+    return () => window.removeEventListener('todo-updated', refresh);
   }, [year, month]);
 
   const handleToggle = async (todo) => {
