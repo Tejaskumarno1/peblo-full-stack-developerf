@@ -16,6 +16,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { weekStartDay, weekdayNames } from '../utils/weekStart';
 import '../styles/dashboard.css';
 import '../styles/calendar.css';
 import '../styles/calendar-pb.css';
@@ -207,8 +208,9 @@ export default function CalendarPage() {
   }, [selectedDay]);
 
   // Build calendar grid
+  const weekFirst = weekStartDay();
   const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month, 1).getDay();
+    const firstDay = (new Date(year, month, 1).getDay() - weekFirst + 7) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
 
@@ -229,7 +231,7 @@ export default function CalendarPage() {
     }
 
     return cells;
-  }, [year, month]);
+  }, [year, month, weekFirst]);
 
   // Map: dateString -> tasks
   const tasksByDate = useMemo(() => {
@@ -469,7 +471,7 @@ export default function CalendarPage() {
             </div>
           ) : (
           <div className="cal-grid">
-            {DAYS.map(day => (
+            {weekdayNames(DAYS).map(day => (
               <div key={day} className="cal-day-header">{day}</div>
             ))}
 

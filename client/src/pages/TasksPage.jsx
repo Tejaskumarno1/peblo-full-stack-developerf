@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Plus, Trash2, ChevronLeft, ChevronRight, Repeat, FileText } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
+import { startOfWeek } from '../utils/weekStart';
 import '../styles/tasks.css';
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
@@ -117,7 +118,7 @@ export default function TasksPage() {
   };
 
   // Week strip + day timeline
-  const weekStart = addDays(today, weekOffset * 7 - ((today.getDay() + 6) % 7));
+  const weekStart = addDays(startOfWeek(today), weekOffset * 7);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const dayTasks = todos.filter((t) => t.deadline && sameDay(t.deadline, selectedDay) && !t.completed);
   const timed = dayTasks

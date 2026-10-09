@@ -1,3 +1,4 @@
+import { startOfWeek } from '../utils/weekStart';
 // Time maths and small helpers for the River screens.
 import { startOfDay, addDays, sameDay, spanOf } from '../soft/softUtils';
 
@@ -29,10 +30,9 @@ export function rangeStart(z, today = startOfDay()) {
   return d;
 }
 
+/** First day of the week containing d (Monday, or Sunday if the account says so). */
 export function mondayOf(d) {
-  const x = startOfDay(d);
-  const dow = (x.getDay() + 6) % 7;
-  return addDays(x, -dow);
+  return startOfWeek(d);
 }
 
 /** Horizontal position of a moment, in px from the start of the range. */

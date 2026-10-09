@@ -389,6 +389,22 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </p>
               </div>
 
+              <div className="settings-field-group">
+                <label className="settings-field-label" htmlFor="pref-week">Week starts on</label>
+                <select
+                  id="pref-week"
+                  className="settings-field-input"
+                  value={settings?.weekStart === 'sun' ? 'sun' : 'mon'}
+                  onChange={(e) => saveSetting({ weekStart: e.target.value })}
+                >
+                  <option value="mon">Monday</option>
+                  <option value="sun">Sunday</option>
+                </select>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Used by the Calendar, Tasks and the week views in every style. Saved to your account.
+                </p>
+              </div>
+
               {settingError && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{settingError}</p>}
 
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>

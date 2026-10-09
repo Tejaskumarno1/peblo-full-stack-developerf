@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { todosAPI } from '../api';
+import { startOfWeek, weekdayNames } from '../utils/weekStart';
 import { startOfDay, addDays, sameDay, daysFromToday, spanOf, timeOf, toneOf, tagsOf, weekdayLong } from './softUtils';
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -13,9 +14,9 @@ export default function SoftCalendar() {
   const [view, setView] = useState('week');
   const [cursor, setCursor] = useState(() => startOfDay());
 
-  const weekStart = addDays(cursor, -cursor.getDay());
+  const weekStart = startOfWeek(cursor);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-  const gridStart = addDays(monthStart, -monthStart.getDay());
+  const gridStart = startOfWeek(monthStart);
   const from = gridStart < weekStart ? gridStart : weekStart;
   const to = addDays(from, 62);
 
@@ -100,7 +101,7 @@ export default function SoftCalendar() {
       <div className="s-cal-side">
         <section className="s-minical" aria-label={`${fmt(cursor, { month: 'long' })} overview`}>
           <h2 className="s-mini-title">{fmt(cursor, { month: 'long' })}</h2>
-          <div className="s-mini-dow">{DOW.map((d, i) => <span key={i}>{d}</span>)}</div>
+          <div className="s-mini-dow">{weekdayNames(DOW).map((d, i) => <span key={i}>{d}</span>)}</div>
           <div className="s-mini-grid">
             {mini.map((d) => {
               const inMonth = d.getMonth() === cursor.getMonth();
@@ -139,7 +140,7 @@ export default function SoftCalendar() {
       <section className="s-week" aria-label="Schedule">
         {view === 'month' ? (
           <div className="s-month">
-            {DOW.map((d, i) => <span key={i} className="s-month-dow">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</span>)}
+            {weekdayNames(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => <span key={i} className="s-month-dow">{d}</span>)}
             {Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)).map((d) => {
               const items = todos.filter((t) => t.deadline && sameDay(t.deadline, d));
               return (

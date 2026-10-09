@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useQueryClient } from '@tanstack/react-query';
 import { io } from 'socket.io-client';
 import { profileAPI, authAPI } from '../api/index';
+import { VALID_STYLES } from '../utils/weekStart';
 import { getToken, setToken, clearToken } from '../api/token';
 
 const AuthContext = createContext(null);
@@ -88,9 +89,16 @@ export function AuthProvider({ children }) {
   // Merge the settings saved on the account into this device's settings.
   const adoptProfile = useCallback((u) => {
     setUser(u);
+    // The account decides the style on every device
+    const acctStyle = u?.settings?.uiStyle;
+    if (VALID_STYLES.includes(acctStyle)) {
+      setUiStyleState(acctStyle);
+      try { localStorage.setItem('peblo-style', acctStyle); } catch { /* ignore */ }
+    }
     if (u?.settings && typeof u.settings === 'object') {
       setSettings(prev => {
         const merged = { ...u.settings, ...prev };
+        if (u.settings.weekStart) merged.weekStart = u.settings.weekStart; // account wins
         try { localStorage.setItem('peblo-settings', JSON.stringify(merged)); } catch { /* ignore */ }
         return merged;
       });
@@ -190,6 +198,8 @@ export function AuthProvider({ children }) {
   const setUiStyle = useCallback((style) => {
     setUiStyleState(style);
     try { localStorage.setItem('peblo-style', style); } catch { /* ignore */ }
+    // Remember it on the account so every device opens in the same style
+    if (getToken()) profileAPI.updateProfile({ settings: { uiStyle: style } }).catch((e) => console.error('Failed to save style to the account:', e));
   }, []);
 
   const setTheme = useCallback((newTheme) => {
