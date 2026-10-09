@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { todosAPI } from '../api';
 import {
@@ -41,6 +41,7 @@ export default function CalendarPage() {
   const [newTaskRecurrence, setNewTaskRecurrence] = useState('none');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTaskText, setEditTaskText] = useState('');
+  const savingEditRef = useRef(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -86,15 +87,17 @@ export default function CalendarPage() {
     if (!newTaskText.trim() || !selectedDay) return;
     
     const deadline = new Date(selectedDay);
-    deadline.setHours(23, 59, 59, 999);
+    const at = /^(\d{1,2}):(\d{2})$/.exec(newTaskStartTime || '');
+    if (at) deadline.setHours(Number(at[1]), Number(at[2]), 0, 0);
+    else deadline.setHours(23, 59, 59, 999); // no time: due at the end of the day
     
     try {
       const res = await todosAPI.create({
         text: newTaskText,
         priority: newTaskPriority,
         deadline: deadline.toISOString(),
-        startTime: newTaskStartTime,
-        endTime: newTaskEndTime,
+        startTime: newTaskStartTime || null,
+        endTime: newTaskEndTime || null,
         recurrence: newTaskRecurrence
       });
       setTodos([...todos, res.data.todo]);
@@ -120,7 +123,10 @@ export default function CalendarPage() {
 
   const handleUpdateTask = async (e, id) => {
     e.preventDefault();
+    // Enter fires submit and then the input loses focus (blur): only the first of them may save
+    if (savingEditRef.current === id) return;
     if (!editTaskText.trim()) return;
+    savingEditRef.current = id;
     
     const backup = [...todos];
     setTodos(todos.map(t => t.id === id ? { ...t, text: editTaskText } : t));
@@ -130,12 +136,21 @@ export default function CalendarPage() {
       await todosAPI.update(id, { text: editTaskText });
     } catch {
       setTodos(backup);
+    } finally {
+      savingEditRef.current = null;
     }
   };
 
   const handleDropTask = async (taskId, newDate) => {
     const d = new Date(newDate);
-    d.setHours(23, 59, 59, 999);
+    const before = todos.find(t => t.id === taskId)?.deadline;
+    if (before) {
+      // move to the new day but keep the time of day (a 09:00 task stays 09:00)
+      const o = new Date(before);
+      d.setHours(o.getHours(), o.getMinutes(), o.getSeconds(), o.getMilliseconds());
+    } else {
+      d.setHours(23, 59, 59, 999);
+    }
     
     const backup = [...todos];
     setTodos(todos.map(t => t.id === taskId ? { ...t, deadline: d.toISOString() } : t));
@@ -264,13 +279,23 @@ export default function CalendarPage() {
     setSelectedDay(cell.date);
   };
 
+  const stepDay = (n) => {
+    const d = new Date(selectedDay || new Date(year, month, 1));
+    d.setDate(d.getDate() + n);
+    setSelectedDay(d);
+    setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
+    setIsAddingTask(false);
+  };
+
   const handlePrevMonth = () => {
+    if (viewMode === 'day') return stepDay(-1);
     setCurrentDate(new Date(year, month - 1, 1));
     setSelectedDay(null);
     setIsAddingTask(false);
   };
 
   const handleNextMonth = () => {
+    if (viewMode === 'day') return stepDay(1);
     setCurrentDate(new Date(year, month + 1, 1));
     setSelectedDay(null);
     setIsAddingTask(false);
@@ -341,11 +366,11 @@ export default function CalendarPage() {
           {/* Month Nav */}
           <div className="cal-top-bar">
             <div className="cal-month-nav">
-              <button className="cal-nav-btn" onClick={handlePrevMonth} aria-label="Previous month">
+              <button className="cal-nav-btn" onClick={handlePrevMonth} aria-label={viewMode === 'day' ? 'Previous day' : 'Previous month'}>
                 <ChevronLeft size={18} />
               </button>
               <h2 className="cal-month-label">{viewMode === 'month' ? monthLabel : selectedDayLabel}</h2>
-              <button className="cal-nav-btn" onClick={handleNextMonth} aria-label="Next month">
+              <button className="cal-nav-btn" onClick={handleNextMonth} aria-label={viewMode === 'day' ? 'Next day' : 'Next month'}>
                 <ChevronRight size={18} />
               </button>
             </div>
