@@ -46,7 +46,6 @@ export default function OrbitCapture({ onClose, preset = {}, windowMode = false 
     try {
       if (mode === 'task') {
         let deadline = parsed.deadline ? new Date(parsed.deadline) : null;
-        if (deadline) deadline.setHours(23, 59, 0, 0);
         await todosAPI.create({ text: parsed.text || raw, priority: parsed.priority, tags, deadline: deadline ? deadline.toISOString() : null });
         setStatus(`Task added${tags[0] ? ` to ${topicName(tags[0])}` : ''}${deadline ? ` · due ${dayWord(deadline).toLowerCase()}` : ''}`);
       } else {

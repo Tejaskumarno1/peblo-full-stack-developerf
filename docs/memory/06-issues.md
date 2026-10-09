@@ -44,7 +44,7 @@ Status: Open · In progress · Fixed (commit).
 | B-11 | Notes can't be reopened after delete/archive/restore; draft double-create; placeholder autosaved (includes B-13) | High | PEB-70 | Fixed (this commit); e2e in `e2e/` |
 | B-12 | Ctrl+K broken on Notes; shortcuts ignore extra modifiers | Medium | PEB-78 | Fixed (this commit) |
 | B-14 | Calendar: Day view arrows, drag drops the time, double save | Medium | PEB-79 | Open |
-| B-15 | Task parser: "next friday", no clock times; Soft 17:00 vs all-day elsewhere (includes B-21) | Medium | PEB-80 | Open |
+| B-15 | Task parser: "next friday", no clock times; Soft 17:00 vs all-day elsewhere (includes B-21) | Medium | PEB-80 | Fixed (this commit): shared parser with times, next-week weekdays, month/ISO dates, all-day = 23:59 in every style; 31 unit tests. Slash dates (12/10) deliberately unsupported (ambiguous) |
 | B-16 | Voice call: empty agenda on snooze, rings at 21:53 for all-day tasks, no refresh | Medium | PEB-81 | Open |
 | B-17 | Settings that do nothing; two routing lists | Medium | PEB-82 | Open |
 | B-18 | Version history only for AI edits; unpruned; unsafe restore; trash never emptied | Medium | PEB-83 (story) | Open |

@@ -23,24 +23,17 @@ export function stripMarkdown(text) {
     .trim();
 }
 
-// Relative date formatting
-export function formatRelativeDate(dateString) {
+// Relative date formatting, by calendar day (not by 24-hour blocks), for past and future dates
+export function formatRelativeDate(dateString, now = new Date()) {
   if (!dateString) return '';
   const date = new Date(dateString);
-  const now = new Date();
-  
-  const diffTime = Math.abs(now - date);
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 0) {
-    // Check if it's actually today vs yesterday (based on calendar day, not just 24h)
-    if (now.getDate() === date.getDate()) return 'Today';
-    return 'Yesterday';
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
+  if (Number.isNaN(date.getTime())) return '';
+  const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((dayStart(now) - dayStart(date)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === -1) return 'Tomorrow';
+  if (diffDays > 1 && diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < -1 && diffDays > -7) return `In ${-diffDays} days`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

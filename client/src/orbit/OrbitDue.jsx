@@ -40,7 +40,6 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     if (!raw) return;
     const p = parseTask(raw);
     let deadline = p.deadline ? new Date(p.deadline) : null;
-    if (deadline) deadline.setHours(23, 59, 0, 0);
     const tags = [...new Set([...(space ? [space] : []), ...p.tags])];
     await todosAPI.create({ text: p.text || raw, priority: p.priority, tags, deadline: deadline ? deadline.toISOString() : null });
     setText('');
