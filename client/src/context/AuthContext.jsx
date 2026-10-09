@@ -42,20 +42,18 @@ export function AuthProvider({ children }) {
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('peblo-settings');
-      return saved ? JSON.parse(saved) : { fontSize: 'medium', wordWrap: true, autoTitle: true };
+      return saved ? JSON.parse(saved) : { fontSize: 'medium' };
     } catch {
-      return { fontSize: 'medium', wordWrap: true, autoTitle: true };
+      return { fontSize: 'medium' };
     }
   });
 
   const [notifications, setNotifications] = useState(() => {
     try {
       const saved = localStorage.getItem('peblo-notifications');
-      return saved ? JSON.parse(saved) : [
-        { id: '1', text: 'Welcome to Peblo Notes! 🎉 Capture ideas, extract AI insights, and organize with tags.', read: false, time: new Date().toISOString() },
-        { id: '2', text: 'Need a summary? Try the AI Assistant by clicking the Sparkles button in the editor.', read: false, time: new Date().toISOString() },
-        { id: '3', text: 'Tip: Use Ctrl + K to quickly focus the search bar.', read: true, time: new Date().toISOString() }
-      ];
+      // older versions seeded three welcome tips that no screen showed (the voice call read them out): drop them
+      const TIPS = ['Welcome to Peblo Notes', 'Need a summary?', 'Tip: Use Ctrl + K'];
+      return saved ? JSON.parse(saved).filter((n) => !TIPS.some((p) => String(n.text || '').startsWith(p))) : [];
     } catch {
       return [];
     }
@@ -81,6 +79,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
   }, [uiStyle]);
+
+  // Editor text size (Settings -> Preferences): small / medium (the style's own size) / large
+  useEffect(() => {
+    document.documentElement.setAttribute('data-editor-font', settings?.fontSize || 'medium');
+  }, [settings?.fontSize]);
 
   // Merge the settings saved on the account into this device's settings.
   const adoptProfile = useCallback((u) => {
@@ -136,7 +139,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     clearToken();
     clearAccountData();
-    setSettings({ fontSize: 'medium', wordWrap: true, autoTitle: true });
+    setSettings({ fontSize: 'medium' });
     setNotifications([]);
     queryClient.clear();
     setUser(null);
@@ -170,14 +173,17 @@ export function AuthProvider({ children }) {
     };
   }, [user, queryClient]);
 
+  // Resolves true when the server saved it, false when it did not (the old values come back).
   const updateProfile = useCallback(async (updatedUser) => {
-    // Optimistic UI update
-    setUser((prev) => ({ ...prev, ...updatedUser }));
-    
+    let previous = null;
+    setUser((prev) => { previous = prev; return { ...prev, ...updatedUser }; });
     try {
       await profileAPI.updateProfile(updatedUser);
+      return true;
     } catch (err) {
       console.error('Failed to update profile to DB:', err);
+      if (previous) setUser(previous);
+      return false;
     }
   }, []);
 
@@ -225,13 +231,12 @@ export function AuthProvider({ children }) {
       }
       
       if (Object.keys(payload).length > 0) {
-        // Fire and forget, no await to prevent UI blocking if network is slow
-        profileAPI.updateProfile(payload).catch(err => {
-          console.error('Failed to sync settings to DB:', err);
-        });
+        await profileAPI.updateProfile(payload);
       }
+      return true;
     } catch (err) {
-      console.error('Error in settings sync payload construction:', err);
+      console.error('Failed to sync settings to DB:', err);
+      return false; // the change still applies on this device; the caller can tell the person it did not reach the account
     }
   }, []);
 

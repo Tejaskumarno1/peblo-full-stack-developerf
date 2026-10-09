@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Monitor, MessageCircleQuestion, Cloud, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, hubAPI } from '../api';
+import { normalizeRouting } from '../utils/aiRouting';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', tone: 'mint', icon: Monitor },
@@ -36,7 +37,7 @@ export default function SoftConnections() {
   const [checking, setChecking] = useState(false);
   const [url, setUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
 
-  const routing = models?.routing || settings?.defaultAiModel || 'auto';
+  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel);
   const local = models?.local;
   const enabled = settings?.ollamaEnabled === true;
   const installed = check?.ok ? check.models : local?.models || [];

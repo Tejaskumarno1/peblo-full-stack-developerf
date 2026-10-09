@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { normalizeRouting, describeModel } from '../../utils/aiRouting';
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -46,14 +47,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, onOpenSettings }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [notes]);
 
-  const local = models?.local;
-  const cloudReady = (models?.cloud || []).filter((c) => c.configured);
-  const routing = models?.routing || 'auto';
-  let modelLine = 'No AI set up';
-  let modelKind = 'off';
-  if (local?.enabled && local.ok) { modelLine = local.chatModel; modelKind = 'local'; }
-  else if (local?.enabled && !local.ok && routing === 'ollama') { modelLine = 'Ollama not running'; modelKind = 'warn'; }
-  else if (cloudReady.length && routing !== 'ollama') { modelLine = cloudReady[0].model; modelKind = 'cloud'; }
+  const routing = normalizeRouting(models?.routing);
+  const { name: modelLine, kind: modelKind } = describeModel(models);
 
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light';
   const ThemeIcon = theme === 'light' ? Moon : theme === 'dark' ? MoonStar : Sun;

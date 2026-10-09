@@ -1,3 +1,4 @@
+import { normalizeRouting, describeModel } from '../../utils/aiRouting';
 import { useQuery } from '@tanstack/react-query';
 import { notesAPI, todosAPI, hubAPI } from '../../api';
 
@@ -21,15 +22,10 @@ export default function useShellData() {
   });
 
   const openTasks = (today?.todayTasks?.length || 0) + (today?.overdueTasks?.length || 0);
-  const local = models?.local;
-  const cloudReady = (models?.cloud || []).filter((c) => c.configured);
-  const routing = models?.routing || 'auto';
-
-  let modelLine = 'no AI set up';
-  let modelKind = 'off';
-  if (local?.enabled && local.ok) { modelLine = `${local.chatModel} · local`; modelKind = 'local'; }
-  else if (local?.enabled && !local.ok) { modelLine = 'ollama not running'; modelKind = 'warn'; }
-  else if (cloudReady.length && routing !== 'ollama') { modelLine = `${cloudReady[0].model} · cloud`; modelKind = 'cloud'; }
+  const routing = normalizeRouting(models?.routing);
+  const desc = describeModel(models);
+  const modelKind = desc.kind;
+  const modelLine = desc.kind === 'local' ? `${desc.name} \u00b7 local` : desc.kind === 'cloud' ? `${desc.name} \u00b7 cloud` : desc.kind === 'warn' ? 'ollama not running' : 'no AI set up';
 
   return { notesCount: notes.length, openTasks, modelLine, modelKind, routing };
 }

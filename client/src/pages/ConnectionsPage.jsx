@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, Lock, Plug, Link2, Check, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, hubAPI } from '../api';
+import { normalizeRouting } from '../utils/aiRouting';
 import '../styles/connections.css';
 
 const ROUTES = [
@@ -40,7 +41,7 @@ export default function ConnectionsPage() {
   const [check, setCheck] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  const routing = models?.routing || settings?.defaultAiModel || 'auto';
+  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel);
   const local = models?.local;
   const enabled = settings?.ollamaEnabled === true;
 

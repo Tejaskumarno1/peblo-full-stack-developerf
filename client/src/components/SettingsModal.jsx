@@ -2,9 +2,10 @@ import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, transferAPI, authAPI } from '../api';
 import { setToken } from '../api/token';
+import { ROUTING_CHOICES, normalizeRouting } from '../utils/aiRouting';
 import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
-import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
+import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
   const { user, updateProfile, logout, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
@@ -15,15 +16,11 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
   const [profileEmail] = useState(user?.email || '');
   const [profileJob, setProfileJob] = useState(settings?.jobTitle || '');
   const [profileBio, setProfileBio] = useState(settings?.bio || '');
-  const [profileTimezone, setProfileTimezone] = useState(settings?.timezone || (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'UTC'; } })());
 
   const [openAiKey, setOpenAiKey] = useState(settings?.openAiKey || '');
   const [geminiKey, setGeminiKey] = useState(settings?.geminiKey || '');
-  const [groqKey, setGroqKey] = useState(settings?.groqKey || '');
-  const [huggingFaceKey, setHuggingFaceKey] = useState(settings?.huggingFaceKey || '');
-  const [defaultAiModel, setDefaultAiModel] = useState(settings?.defaultAiModel || 'auto');
-  const [forceCustomModels, setForceCustomModels] = useState(settings?.forceCustomModels || false);
-  const [isAiDropdownOpen, setIsAiDropdownOpen] = useState(false);
+  const initialRouting = normalizeRouting(settings?.defaultAiModel);
+  const [routing, setRouting] = useState(initialRouting);
   const [ollamaEnabled, setOllamaEnabled] = useState(settings?.ollamaEnabled || false);
   const [ollamaUrl, setOllamaUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
   const [ollamaModel, setOllamaModel] = useState(settings?.ollamaModel || 'llama3.2');
@@ -92,11 +89,29 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
     }
   };
 
-  const handleSaveApiKeys = (e) => {
+  const [saveError, setSaveError] = useState('');
+  const [settingError, setSettingError] = useState('');
+  // Single setting changed on the spot (a select or toggle): tell the person if it did not reach their account.
+  const saveSetting = async (patch) => {
+    setSettingError('');
+    const ok = await updateSettings(patch);
+    if (!ok) setSettingError('Saved on this computer only. Could not reach your account, so it will not follow you to other devices.');
+  };
+
+  const handleSaveApiKeys = async (e) => {
     e.preventDefault();
-    updateSettings({ openAiKey, geminiKey, defaultAiModel, ollamaEnabled, ollamaUrl: ollamaUrl.trim(), ollamaModel: ollamaModel.trim(), ollamaEmbedModel: ollamaEmbedModel.trim() });
-    setSaveSuccess('AI Settings saved successfully!');
-    setTimeout(() => setSaveSuccess(''), 3000);
+    setSaveError('');
+    const next = { openAiKey, geminiKey, ollamaEnabled, ollamaUrl: ollamaUrl.trim(), ollamaModel: ollamaModel.trim(), ollamaEmbedModel: ollamaEmbedModel.trim() };
+    // Only touch the routing choice when it was changed here, so saving a key never overwrites a choice made on Your AI.
+    if (routing !== initialRouting) next.defaultAiModel = routing;
+    const ok = await updateSettings(next);
+    if (ok) {
+      setSaveSuccess('AI Settings saved successfully!');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } else {
+      setSaveSuccess('');
+      setSaveError('Could not save. Check your connection and try again.');
+    }
   };
 
   const [saveSuccess, setSaveSuccess] = useState('');
@@ -128,12 +143,19 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
     logout();
   };
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    updateProfile({ name: profileName, email: profileEmail });
-    updateSettings({ jobTitle: profileJob, bio: profileBio, timezone: profileTimezone });
-    setSaveSuccess('Profile saved successfully!');
-    setTimeout(() => setSaveSuccess(''), 3000);
+    setSaveError('');
+    // The email is read-only, so only the name goes up with the profile fields.
+    const okName = await updateProfile({ name: profileName });
+    const okRest = await updateSettings({ jobTitle: profileJob, bio: profileBio });
+    if (okName && okRest) {
+      setSaveSuccess('Profile saved successfully!');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } else {
+      setSaveSuccess('');
+      setSaveError('Could not save your profile. Check your connection and try again.');
+    }
   };
 
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
@@ -165,12 +187,6 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           </button>
           
           <h3 style={{ marginTop: '1.5rem' }}>Workspace</h3>
-          <button 
-            className={`settings-tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('notifications')}
-          >
-            <Bell size={18} /> Notifications
-          </button>
           <button 
             className={`settings-tab-btn ${activeTab === 'ai-providers' ? 'active' : ''}`}
             onClick={() => setActiveTab('ai-providers')}
@@ -235,22 +251,9 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     />
                   </div>
                   <div className="settings-field-group">
-                    <label className="settings-field-label">Timezone</label>
-                    <select 
-                      className="settings-field-input"
-                      value={profileTimezone}
-                      onChange={(e) => setProfileTimezone(e.target.value)}
-                    >
-                      {(() => {
-                        // Real IANA zones. The app already uses this computer's zone for "today"; this is kept on the profile.
-                        const zones = ['UTC', 'Asia/Kolkata', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney'];
-                        const legacy = { EST: 'America/New_York', PST: 'America/Los_Angeles', IST: 'Asia/Kolkata', CET: 'Europe/Paris' };
-                        const mine = legacy[profileTimezone] || profileTimezone;
-                        let here = ''; try { here = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* ignore */ }
-                        const list = [...new Set([here, mine, ...zones].filter(Boolean))];
-                        return list.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}{z === here ? ' (this computer)' : ''}</option>);
-                      })()}
-                    </select>
+                    <label className="settings-field-label">Time zone</label>
+                    <p className="settings-field-input" style={{ margin: 0, opacity: 0.8 }}>{(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, ' '); } catch { return 'this computer'; } })()}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Peblo follows this computer's time zone for "today", deadlines and reminders.</p>
                   </div>
                 </div>
 
@@ -282,6 +285,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button type="submit" className="btn btn-primary">Save Profile Changes</button>
                   {saveSuccess && <span style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 500 }}>{saveSuccess}</span>}
+                  {saveError && <span role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 500 }}>{saveError}</span>}
                 </div>
               </form>
             </div>
@@ -355,7 +359,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   <input 
                     type="checkbox" 
                     checked={settings?.compactMode || false} 
-                    onChange={(e) => updateSettings({ compactMode: e.target.checked })}
+                    onChange={(e) => saveSetting({ compactMode: e.target.checked })}
                   />
                   <span className="toggle-slider"></span>
                 </label>
@@ -366,132 +370,29 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           {activeTab === 'preferences' && (
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">Editor Preferences</h2>
-              
-              <div className="settings-grid-2" style={{ marginBottom: '1rem' }}>
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Editor Font Size</label>
-                  <select 
-                    className="settings-field-input"
-                    value={settings.fontSize || 'medium'} 
-                    onChange={(e) => updateSettings({ fontSize: e.target.value })}
-                  >
-                    <option value="small">Small (13px)</option>
-                    <option value="medium">Medium (15px)</option>
-                    <option value="large">Large (18px)</option>
-                  </select>
-                </div>
-                
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Note Language</label>
-                  <select 
-                    className="settings-field-input"
-                    value={settings.language || 'en'} 
-                    onChange={(e) => updateSettings({ language: e.target.value })}
-                  >
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                  </select>
-                </div>
-              </div>
 
               <div className="settings-field-group">
-                <label className="settings-field-label">Auto-save Interval</label>
-                <select 
+                <label className="settings-field-label" htmlFor="pref-font">Editor text size</label>
+                <select
+                  id="pref-font"
                   className="settings-field-input"
-                  value={settings.autoSaveInterval || '5'} 
-                  onChange={(e) => updateSettings({ autoSaveInterval: e.target.value })}
+                  value={settings?.fontSize || 'medium'}
+                  onChange={(e) => saveSetting({ fontSize: e.target.value })}
                 >
-                  <option value="1">Every 1 minute</option>
-                  <option value="5">Every 5 minutes</option>
-                  <option value="15">Every 15 minutes</option>
-                  <option value="0">Never (Manual Save Only)</option>
+                  <option value="small">Small (13px)</option>
+                  <option value="medium">Default (your style's size)</option>
+                  <option value="large">Large (18px)</option>
                 </select>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Changes the size of the text inside the note editor, in every style.
+                </p>
               </div>
 
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Behavior</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Enable Word Wrap</h4>
-                  <p>Wrap long lines of text to fit the editor width.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.wordWrap ?? true} 
-                    onChange={(e) => updateSettings({ wordWrap: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
+              {settingError && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{settingError}</p>}
 
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Auto-suggest Titles (AI)</h4>
-                  <p>Automatically generate titles for new drafts based on content.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.autoTitle ?? true} 
-                    onChange={(e) => updateSettings({ autoTitle: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <div className="settings-section fade-in">
-              <h2 className="settings-section-title">Notification Settings</h2>
-              
-              <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Email Notifications</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Product Updates & Marketing</h4>
-                  <p>Receive emails about new features, tips, and promotional offers.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.emailMarketing ?? false} 
-                    onChange={(e) => updateSettings({ emailMarketing: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Weekly Activity Digest</h4>
-                  <p>A summary of your notes, insights, and productivity stats every Monday.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.emailActivity ?? true} 
-                    onChange={(e) => updateSettings({ emailActivity: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Push Notifications</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Task Reminders</h4>
-                  <p>Get notified when a deadline from your To-Do list is approaching.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.pushReminders ?? true} 
-                    onChange={(e) => updateSettings({ pushReminders: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>
+                Notes save themselves a moment after you stop typing. Peblo does not send emails or push notifications, so there are no notification settings.
+              </p>
             </div>
           )}
 
@@ -593,46 +494,17 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
 
               <form onSubmit={handleSaveApiKeys}>
                 <div className="settings-field-group" style={{ background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                  <label className="settings-field-label" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>Default AI Agent</label>
-                  <div style={{ position: 'relative' }}>
-                    <div 
-                      className="settings-field-input"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: 'var(--bg-surface)', border: '2px solid var(--border-subtle)', fontWeight: 500 }}
-                      onClick={() => setIsAiDropdownOpen(!isAiDropdownOpen)}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {defaultAiModel === 'auto' && <><Zap size={16} /> Auto (OpenAI → Gemini → Local)</>}
-                        {defaultAiModel === 'openai' && <><Bot size={16} /> OpenAI (GPT-4 / GPT-3.5)</>}
-                        {defaultAiModel === 'gemini' && <><Sparkles size={16} /> Google Gemini</>}
-                        {defaultAiModel === 'ollama' && <><Cpu size={16} /> Local AI (Ollama): private, works offline</>}
-                      </div>
-                      <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
-                    </div>
-                    
-                    {isAiDropdownOpen && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '0.25rem', background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
-                        {[
-                          { id: 'auto', icon: Zap, label: 'Auto (OpenAI → Gemini → Local)' },
-                          { id: 'openai', icon: Bot, label: 'OpenAI (GPT-4 / GPT-3.5)' },
-                          { id: 'gemini', icon: Sparkles, label: 'Google Gemini' },
-                          { id: 'ollama', icon: Cpu, label: 'Local AI (Ollama): private, works offline' }
-                        ].map((option) => (
-                          <div 
-                            key={option.id}
-                            style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', background: defaultAiModel === option.id ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.2s' }}
-                            onClick={() => { setDefaultAiModel(option.id); setIsAiDropdownOpen(false); }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = defaultAiModel === option.id ? 'var(--bg-hover)' : 'transparent'}
-                          >
-                            <option.icon size={16} style={{ color: 'var(--accent)' }} />
-                            <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>{option.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <label className="settings-field-label" id="routing-label" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>Where may your AI run?</label>
+                  <div role="radiogroup" aria-labelledby="routing-label" style={{ display: 'grid', gap: '0.5rem' }}>
+                    {ROUTING_CHOICES.map((o) => (
+                      <label key={o.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.6rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer', background: routing === o.id ? 'var(--bg-hover)' : 'transparent' }}>
+                        <input type="radio" name="settings-routing" checked={routing === o.id} onChange={() => setRouting(o.id)} />
+                        <span><strong style={{ fontSize: '0.9rem' }}>{o.title}</strong><br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{o.desc}</span></span>
+                      </label>
+                    ))}
                   </div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-                    Peblo tries this provider first and falls back to any other one you've set up.
+                    The same choice appears under Your AI, in every style.
                   </p>
                 </div>
 
@@ -723,6 +595,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button type="submit" className="btn btn-primary">Save AI Settings</button>
                   {saveSuccess && <span style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 500 }}>{saveSuccess}</span>}
+                  {saveError && <span role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 500 }}>{saveError}</span>}
                 </div>
               </form>
             </div>

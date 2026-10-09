@@ -237,3 +237,9 @@
 .style-preview.orbit .c { right: 16%; top: 16px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; border: 3px solid #F2B33D; }
 .style-preview.orbit .d { right: 22%; bottom: 10px; width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; border: 3px solid #2FB67C; }
 .style-preview.orbit .e { left: 18%; bottom: 12px; width: 30%; height: 3px; border-radius: 2px; background: #2350FF; transform: rotate(-24deg); }
+
+/* Settings -> Preferences -> Editor text size. "medium" keeps each style's own size. */
+html[data-editor-font="small"] .bn-editor,
+html[data-editor-font="small"] .bn-editor .bn-inline-content { font-size: 13px !important; }
+html[data-editor-font="large"] .bn-editor,
+html[data-editor-font="large"] .bn-editor .bn-inline-content { font-size: 18px !important; }
