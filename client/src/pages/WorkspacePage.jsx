@@ -682,7 +682,7 @@ export default function WorkspacePage() {
       const message =
         err.response?.data?.error ||
         (err.response?.status === 502
-          ? 'AI service unavailable. Check GEMINI_API_KEY in server/.env and restart the server.'
+          ? 'The AI is not available. Check AI Hub > Connections, then try again.'
           : 'AI request failed. Try again.');
       setAiError(message);
     } finally {

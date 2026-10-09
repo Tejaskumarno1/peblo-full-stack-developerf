@@ -7,13 +7,6 @@ import { serverZone, dayKey, dayBounds } from '../utils/userTime.js';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
-function getMockResponse(type: string, title: string, content: string) {
-  if (type === 'summary') return { summary: 'AI is not available. Add an OpenAI or Gemini API key in AI Hub → Connections.' };
-  if (type === 'action_items') return { action_items: [] };
-  if (type === 'title') return { title: 'Untitled Note' };
-  return {};
-}
-
 async function getUserSettings(userId: string) {
   return await prisma.user.findUnique({ 
     where: { id: userId },
@@ -40,7 +33,7 @@ function getOpenAIProvider(user: any): OAIProvider | null {
     if (envKey && !envKey.includes('your-openai')) apiKey = envKey;
   }
   if (!apiKey) return null;
-  return { name: 'openai', client: new OpenAI({ apiKey }), model: DEFAULT_OPENAI_MODEL, embedModel: 'text-embedding-3-small' };
+  return { name: 'openai', client: new OpenAI({ apiKey, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }), model: DEFAULT_OPENAI_MODEL, embedModel: 'text-embedding-3-small' };
 }
 
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
@@ -54,7 +47,7 @@ function getOllamaProvider(user: any): OAIProvider | null {
   const base = String(settings.ollamaUrl || DEFAULT_OLLAMA_URL).trim().replace(/\/+$/, '');
   return {
     name: 'ollama',
-    client: new OpenAI({ baseURL: `${base}/v1`, apiKey: 'ollama', timeout: 5 * 60 * 1000 }),
+    client: new OpenAI({ baseURL: `${base}/v1`, apiKey: 'ollama', timeout: 2 * 60 * 1000, maxRetries: 0 }),
     model: String(settings.ollamaModel || DEFAULT_OLLAMA_MODEL).trim(),
     embedModel: String(settings.ollamaEmbedModel || DEFAULT_OLLAMA_EMBED_MODEL).trim(),
   };
@@ -103,6 +96,17 @@ function noKeyError() {
   return err;
 }
 
+const PROVIDER_TIMEOUT_MS = 60_000;
+
+/** Gives up on a provider that never answers, so the next one (or the error) is not kept waiting for minutes. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { const e: any = new Error('The AI took too long to answer.'); e.code = 'TIMEOUT'; reject(e); }, ms);
+  });
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
+}
+
 // --- The Core Orchestrator: tries each configured provider in order ---
 async function runWithCascade(
   operationName: string,
@@ -123,11 +127,12 @@ async function runWithCascade(
     throw noKeyError();
   }
 
+  let timedOut = false;
   for (const name of order) {
     try {
       if (name === 'gemini' && providers.gemini) {
         console.log(`[${operationName}] Trying Gemini...`);
-        return await executeGemini(providers.gemini);
+        return await withTimeout(executeGemini(providers.gemini), PROVIDER_TIMEOUT_MS);
       }
       if ((name === 'openai' || name === 'ollama') && providers[name]) {
         const p = providers[name]!;
@@ -135,11 +140,17 @@ async function runWithCascade(
         return await executeOpenAI(p.client, p);
       }
     } catch (error: any) {
+      if (error?.code === 'TIMEOUT' || error?.name === 'APIConnectionTimeoutError') timedOut = true;
       console.warn(`[${operationName}] ${name} failed: ${error.message}`);
     }
   }
 
-  throw new Error('The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
+  const err: any = new Error(timedOut
+    ? 'The AI took too long to answer. Try again, or pick a faster model in AI Hub → Connections.'
+    : 'The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
+  err.statusCode = 502;
+  err.code = timedOut ? 'TIMEOUT' : 'PROVIDER_ERROR';
+  throw err;
 }
 
 /** Ask for a JSON object from whichever provider is configured. */
@@ -245,7 +256,8 @@ export async function generateSummary(userId: string, title: string, content: st
       }
     );
   } catch (err) {
-    return getMockResponse('summary', title, content);
+    // Never invent a result. The error reaches the person, and nothing is saved or created.
+    throw err;
   }
 }
 
@@ -282,7 +294,8 @@ export async function extractActionItems(userId: string, title: string, content:
       }
     );
   } catch (err) {
-    return getMockResponse('action_items', title, content);
+    // Never invent a result. The error reaches the person, and nothing is saved or created.
+    throw err;
   }
 }
 
@@ -391,16 +404,8 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
       }
     );
   } catch (err) {
-    return {
-      reply: `(Fallback) I created a placeholder note for your request: "${message.substring(0, 50)}..."`,
-      notes: [{
-        title: message.substring(0, 48) || 'AI Note',
-        content: `## Overview\n\n${message}\n\n*Note: AI generated response disabled due to API limits.*`,
-        category: 'Personal',
-        tags: ['ai-fallback'],
-      }],
-      updateNote: null,
-    };
+    // Never invent a result. The error reaches the person, and nothing is saved or created.
+    throw err;
   }
 }
 
@@ -558,7 +563,8 @@ export async function suggestTitle(userId: string, content: string) {
       }
     );
   } catch (err) {
-    return getMockResponse('title', '', content);
+    // Never invent a result. The error reaches the person, and nothing is saved or created.
+    throw err;
   }
 }
 
@@ -764,10 +770,8 @@ export async function processTextCommand(userId: string, text: string, command: 
       }
     );
   } catch (err) {
-    if (command === 'summarize') return `Summary: This is a placeholder summary of the text: "${text.substring(0, 30)}..."`;
-    if (command === 'improve') return `Improved: ${text}`;
-    if (command === 'todo') return `- Task 1: Check text content\n- Task 2: Follow up on items`;
-    return text;
+    // Never invent a result. The error reaches the person, and nothing is saved or created.
+    throw err;
   }
 }
 

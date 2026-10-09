@@ -503,6 +503,39 @@ try {
     r = await call('PATCH', '/api/river/promises/' + gen.id, { index: 9, status: 'added' });
     check('promises: an index that does not exist is a 400', r.status === 400, r);
   }
+  // PEB-75: with no AI configured every AI button gets the same clear error, and nothing is written
+  {
+    const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const uC = await prisma.user.findUnique({ where: { email: emailC } });
+    // make sure user C really has no AI: no keys, Ollama off, and no environment keys
+    const keep = { o: process.env.OPENAI_API_KEY, g: process.env.GEMINI_API_KEY, gs: process.env.GEMINI_API_KEYS };
+    delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_API_KEYS;
+    await call('PUT', '/api/profile', { settings: { defaultAiModel: 'auto', ollamaEnabled: false } });
+    const n = await call('POST', '/api/notes', { title: 'ai off', content: 'Some real text to summarise, long enough to matter.' });
+    const noteId = n.json.note.id;
+    const notesBefore = await prisma.note.count({ where: { userId: uC.id } });
+    const gensBefore = await prisma.aiGeneration.count({ where: { userId: uC.id } });
+    const tries = [
+      ['summary', 'POST', `/api/notes/${noteId}/ai/summary`, {}],
+      ['action items', 'POST', `/api/notes/${noteId}/ai/actions`, {}],
+      ['title', 'POST', `/api/notes/${noteId}/ai/title`, {}],
+      ['selection command', 'POST', '/api/notes/block/ai', { text: 'hello world, summarise me please', command: 'summarize' }],
+      ['AI chat', 'POST', '/api/ai/chat', { message: 'make a note about tides' }],
+    ];
+    const msgs = new Set();
+    for (const [name, m, url, body] of tries) {
+      const rr = await call(m, url, body);
+      const msg = rr.json?.error || '';
+      msgs.add(msg);
+      check(`ai off: ${name} is an error with a helpful message (not fake content)`, rr.status === 400 && /No AI set up|AI Hub/.test(msg) && !/placeholder|Fallback|Task 1/i.test(JSON.stringify(rr.json)), rr);
+    }
+    check('ai off: every button says the same thing', msgs.size === 1, [...msgs]);
+    check('ai off: no note was created and nothing was saved as an AI result', (await prisma.note.count({ where: { userId: uC.id } })) === notesBefore && (await prisma.aiGeneration.count({ where: { userId: uC.id } })) === gensBefore);
+    const row = await prisma.note.findUnique({ where: { id: noteId }, include: { aiGenerations: true } });
+    check('ai off: the note is not marked as having a summary', row.aiGenerations.length === 0, row.aiGenerations.length);
+    Object.assign(process.env, { OPENAI_API_KEY: keep.o, GEMINI_API_KEY: keep.g, GEMINI_API_KEYS: keep.gs });
+    for (const k of Object.keys(keep)) if (keep[k] === undefined) { /* leave unset */ }
+  }
   // PEB-84: a quiz can be marked once; a replay changes nothing and reports the score before
   {
     const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);

@@ -38,7 +38,7 @@ Status: Open · In progress · Fixed (commit).
 | B-05 | Migrations: no lock, no recovery, `db:sql` overwrites 001 | High | PEB-72 | Open |
 | B-06 | Streak and heatmap off by a day in IST; fake activity for today; overdue capped at 10 | Medium | PEB-73 | Fixed (this commit): day keys in the user's zone, no invented activity, Trash excluded, overdue counted, all AI types labelled. No edit log yet, so only each note's last edit shows |
 | B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Fixed (this commit): client sends X-Timezone, server day ranges/greeting/briefing/weekly/smart-intake/Hub use it. Still server-clock: streak/heatmap (PEB-73), recurrence, retrieval/river date labels |
-| B-08 | AI failures show fake results and create junk notes | Medium | PEB-75 | Open |
+| B-08 | AI failures show fake results and create junk notes | Medium | PEB-75 | Fixed (this commit): no mock results, nothing saved on failure, typed errors (NO_AI_KEY, PROVIDER_ERROR 502, TIMEOUT), 60 s provider timeouts. Streaming chat and background helpers (embeddings, tags) not changed |
 | B-09 | Repeating tasks are 30 copies, monthly dates overflow, no series edit | Medium | PEB-76 (story) | Open |
 | B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Fixed (this commit): every write path emits events, query keys corrected, Calendar refreshes on 	odos_changed; socket regression in smoke test. Calendar still uses local state, not React Query |
 | B-11 | Notes can't be reopened after delete/archive/restore; draft double-create; placeholder autosaved (includes B-13) | High | PEB-70 | Fixed (this commit); e2e in `e2e/` |
