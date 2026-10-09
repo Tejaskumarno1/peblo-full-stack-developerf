@@ -810,6 +810,40 @@ try {
       check('ollama: with an owner address everyone else uses it', pol.effectiveOllamaUrl('http://10.0.0.5:11434', DEF) === 'http://ollama.internal:11434');
     } finally { restore(); await call('PUT', '/api/profile', { settings: { ollamaUrl: '' } }); }
   }
+  // ---- PEB-72: migrations take a lock and can be re-run ----
+  {
+    const dbm = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const P = dbm.default;
+    const fsm = await import('node:fs'); const osm = await import('node:os');
+    const dir = fsm.mkdtempSync(path.join(osm.tmpdir(), 'peblo-mig-'));
+    const put = (name, sql) => fsm.writeFileSync(path.join(dir, name), sql);
+    const cols = async () => (await P.$queryRawUnsafe("SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mig_t1'")).map((x) => x.c).sort();
+    const versions = async () => (await P.$queryRawUnsafe('SELECT version AS v FROM `_peblo_migrations` WHERE version >= 9000 ORDER BY version')).map((x) => Number(x.v));
+    const cleanup = async () => { await P.$executeRawUnsafe('DROP TABLE IF EXISTS mig_t1'); await P.$executeRawUnsafe('DELETE FROM `_peblo_migrations` WHERE version >= 9000'); };
+    try {
+      await cleanup();
+      put('9001_a.sql', 'CREATE TABLE mig_t1 (id INT PRIMARY KEY, a INT);\nALTER TABLE mig_t1 ADD COLUMN b INT;\n');
+      const rs = await Promise.allSettled([1, 2, 3, 4].map(() => dbm.runMigrations(dir, 30)));
+      check('migrations: four apps starting together on an old database all succeed', rs.every((x) => x.status === 'fulfilled'), rs.map((x) => x.reason?.message));
+      check('migrations: the change was applied exactly once', JSON.stringify(await cols()) === '["a","b","id"]' && JSON.stringify(await versions()) === '[9001]', [await cols(), await versions()]);
+
+      put('9002_b.sql', 'ALTER TABLE mig_t1 ADD COLUMN c INT;\nALTER TABLE mig_t1 ADD COLUMN d INT;\n');
+      await P.$executeRawUnsafe('ALTER TABLE mig_t1 ADD COLUMN c INT'); // the first step ran before the app died
+      let err2 = null; try { await dbm.runMigrations(dir, 30); } catch (e) { err2 = e; }
+      check('migrations: a migration that died halfway can be run again', !err2 && (await cols()).join() === 'a,b,c,d,id' && (await versions()).join() === '9001,9002', [err2?.message, await cols()]);
+
+      put('9003_c.sql', 'ALTER TABLE mig_t1 ADD COLUMN e INT;\nALTER TABLE nope_missing ADD COLUMN x INT;\n');
+      let failed = false; try { await dbm.runMigrations(dir, 30); } catch { failed = true; }
+      check('migrations: a real error still stops the start and is not recorded', failed && !(await versions()).includes(9003));
+      put('9003_c.sql', 'ALTER TABLE mig_t1 ADD COLUMN e INT;\nALTER TABLE mig_t1 ADD COLUMN f INT;\n');
+      let err3 = null; try { await dbm.runMigrations(dir, 30); } catch (e) { err3 = e; }
+      check('migrations: after the file is fixed the rest runs (the finished step is skipped)', !err3 && (await cols()).includes('f') && (await versions()).includes(9003), [err3?.message, await cols()]);
+
+      const lock = await P.$queryRawUnsafe("SELECT GET_LOCK('peblo_migrate', 1) AS got");
+      check('migrations: the lock is released when done', Number(lock[0].got) === 1);
+      await P.$queryRawUnsafe("SELECT RELEASE_LOCK('peblo_migrate')");
+    } finally { await cleanup(); fsm.rmSync(dir, { recursive: true, force: true }); }
+  }
 } catch (err) {
   failures++;
   console.error(err);
