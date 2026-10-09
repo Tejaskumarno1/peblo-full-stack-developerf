@@ -90,7 +90,7 @@
 .orbit a { color: inherit; }
 .orbit :where(button) { font-family: inherit; color: inherit; }
 .orbit input::placeholder, .orbit textarea::placeholder { color: inherit; opacity: 0.65; }
-.orbit :focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--o-path) 45%, transparent); }
+.orbit :focus-visible { outline: 2px solid var(--o-path); outline-offset: 2px; }
 .orbit .grow { flex: 1; }
 .orbit .o-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .orbit .mono { font-family: var(--o-mono); }
@@ -120,7 +120,7 @@
 .o-nav a.active { background: var(--o-ink); color: var(--o-on-ink); }
 .o-ask { position: relative; width: 420px; height: 52px; padding: 0 8px 0 18px; display: flex; align-items: center; gap: 10px; }
 .o-ask input { flex: 1; min-width: 0; height: 40px; border: none; background: transparent; color: var(--o-fg); font: inherit; font-size: 15px; outline: none; }
-.o-ask input:focus-visible { box-shadow: none; }
+.o-ask input:focus-visible { box-shadow: none; outline: none; }
 .o-ask kbd { padding: 4px 8px; border-radius: 8px; background: var(--o-soft); font-family: var(--o-mono); font-size: 11px; color: var(--o-fg2); }
 .o-avatar { width: 52px; height: 52px; border-radius: 16px; border: none; background: var(--o-ink); color: var(--o-on-ink); font: inherit; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .o-plus { width: 52px; height: 52px; border-radius: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -303,7 +303,7 @@
 .o-bank span { font-size: 13px; line-height: 1.4; }
 
 .o-title-input { width: 100%; padding: 0; border: none; background: transparent; color: var(--o-fg); font: inherit; font-size: 36px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
-.o-title-input:focus-visible { box-shadow: none; }
+.o-title-input:focus-visible { box-shadow: none; outline: none; }
 .o-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .o-tags .o-chip { height: 28px; padding: 0 6px 0 10px; font-size: 12px; }
 .o-tags .o-chip button { width: 20px; height: 20px; border: none; background: transparent; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; color: var(--o-fg2); }

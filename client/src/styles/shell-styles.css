@@ -88,7 +88,7 @@
   font-family: var(--pb-font-mono);
   font-size: 13.5px;
 }
-.cs-cmd input:focus-visible { box-shadow: none; }
+.cs-cmd input:focus-visible { box-shadow: none; outline: none; }
 .cs-cmd input::placeholder { color: var(--pb-fg-3); }
 .cs-kbd {
   font-family: var(--pb-font-mono);

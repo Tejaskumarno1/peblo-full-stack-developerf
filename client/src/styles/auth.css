@@ -112,7 +112,7 @@
   cursor: pointer;
 }
 .pb-auth-eye:hover { color: var(--pb-fg); background: var(--pb-surface-2); }
-.pb-auth-eye:focus-visible { outline: none; box-shadow: var(--pb-focus); }
+.pb-auth-eye:focus-visible { }
 
 .pb-auth-error { min-height: 18px; margin-top: -4px; font-size: 13.5px; line-height: 1.35; color: var(--pb-danger); }
 
@@ -129,7 +129,7 @@
   transition: filter 0.12s, opacity 0.12s;
 }
 .pb-auth-submit:hover:not(:disabled) { filter: brightness(1.08); }
-.pb-auth-submit:focus-visible { outline: none; box-shadow: var(--pb-focus); }
+.pb-auth-submit:focus-visible { }
 .pb-auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .pb-auth-switch { margin: 4px 0 0; text-align: center; font-size: 14px; color: var(--pb-fg-3); }
