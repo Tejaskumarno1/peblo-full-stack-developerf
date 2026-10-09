@@ -8,3 +8,5 @@ Run against an EMPTY test database, never your data:
     node notes-flow.mjs
 
 notes-flow.mjs = delete/restore/archive/reopen (PEB-70). draft-dup.mjs = slow-network new-note check (did not reproduce the duplicate; kept as a guard).
+
+shortcuts.mjs = Ctrl+K palette, exact modifiers, Ctrl+N new note (PEB-78).

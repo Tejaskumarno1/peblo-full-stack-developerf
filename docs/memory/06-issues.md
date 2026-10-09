@@ -42,7 +42,7 @@ Status: Open · In progress · Fixed (commit).
 | B-09 | Repeating tasks are 30 copies, monthly dates overflow, no series edit | Medium | PEB-76 (story) | Open |
 | B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Open |
 | B-11 | Notes can't be reopened after delete/archive/restore; draft double-create; placeholder autosaved (includes B-13) | High | PEB-70 | Fixed (this commit); e2e in `e2e/` |
-| B-12 | Ctrl+K broken on Notes; shortcuts ignore extra modifiers | Medium | PEB-78 | Open |
+| B-12 | Ctrl+K broken on Notes; shortcuts ignore extra modifiers | Medium | PEB-78 | Fixed (this commit) |
 | B-14 | Calendar: Day view arrows, drag drops the time, double save | Medium | PEB-79 | Open |
 | B-15 | Task parser: "next friday", no clock times; Soft 17:00 vs all-day elsewhere (includes B-21) | Medium | PEB-80 | Open |
 | B-16 | Voice call: empty agenda on snooze, rings at 21:53 for all-day tasks, no refresh | Medium | PEB-81 | Open |

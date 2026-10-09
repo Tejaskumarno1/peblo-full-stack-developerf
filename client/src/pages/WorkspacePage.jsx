@@ -268,12 +268,15 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(false);
+    // The URL still names the open note for one render; without this the route effect re-opens it over the new draft.
+    if (routeId) ignoredNoteIdsRef.current.add(routeId);
     navigate('/notes', { replace: true });
-  }, [navigate]);
+  }, [navigate, routeId]);
 
   useKeyboardShortcut('s', () => forceSave(), { ctrl: true });
-  useKeyboardShortcut('k', () => document.getElementById('search-input')?.focus(), { ctrl: true });
+  // Ctrl+K is the global command palette (CommandPalette.jsx); it must not be swallowed here (PEB-78)
   useKeyboardShortcut('n', handleCreateNote, { ctrl: true });
+  useKeyboardShortcut('n', handleCreateNote, { ctrl: true, alt: true }); // the button's tooltip says Ctrl+Alt+N
   useKeyboardShortcut('p', () => setShowPreview((p) => !p), { ctrl: true });
   useKeyboardShortcut('j', () => setAiPanelOpen((p) => !p), { ctrl: true });
 
