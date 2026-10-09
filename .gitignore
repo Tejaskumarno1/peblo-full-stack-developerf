@@ -11,3 +11,5 @@ dist/
 *.db-wal
 *.db-shm
 server/generated/
+
+e2e/node_modules/

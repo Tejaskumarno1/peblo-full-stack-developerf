@@ -193,26 +193,40 @@ export default function WorkspacePage() {
     return { title: noteTitle, content: noteContent, tags: noteTags, category: noteCategory || undefined };
   }, [noteTitle, noteContent, noteTags, noteCategory, selectedNote]);
 
-  const persistDraft = useCallback(async (title, content, tags, category) => {
-    try {
-      const res = await notesAPI.create({
-        title: title || 'Untitled',
-        content: content || '',
-        tags,
-        category: category || undefined,
-      });
-      const newNote = res.data.note;
-      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
-        if (!old) return old;
-        return [newNote, ...old];
-      });
-      setSelectedNote(newNote);
-      navigate(`/notes/${newNote.id}`, { replace: true });
-      return newNote;
-    } catch (err) {
-      console.error('Failed to persist draft:', err);
-      return null;
-    }
+  // One create at a time: if the first POST is still in flight when the next autosave fires, reuse it
+  // instead of creating a second note (PEB-70).
+  const draftCreateRef = useRef(null);
+  const persistDraft = useCallback((title, content, tags, category) => {
+    if (draftCreateRef.current) return draftCreateRef.current;
+    const run = (async () => {
+      try {
+        const res = await notesAPI.create({
+          title: title || 'Untitled',
+          content: content || '',
+          tags,
+          category: category || undefined,
+        });
+        const newNote = res.data.note;
+        // Only the plain "All notes" lists get the new note, not Archive, Trash or tag views.
+        queryClient.setQueriesData({
+          queryKey: ['notes'],
+          predicate: (q) => { const k = q.queryKey[1] || {}; return !k.archived && !k.deleted && !k.tag; },
+        }, (old) => {
+          if (!old) return old;
+          return [newNote, ...old];
+        });
+        setSelectedNote(newNote);
+        navigate(`/notes/${newNote.id}`, { replace: true });
+        return newNote;
+      } catch (err) {
+        console.error('Failed to persist draft:', err);
+        return null;
+      } finally {
+        draftCreateRef.current = null;
+      }
+    })();
+    draftCreateRef.current = run;
+    return run;
   }, [navigate, queryClient]);
 
   const handleSave = useCallback(async (noteId, data) => {
@@ -458,9 +472,15 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!routeId) {
       lastRouteIdRef.current = null;
+      ignoredNoteIdsRef.current.clear();
       return;
     }
 
+    // An id is only ignored while the URL still points at it (it was just deleted/archived/restored).
+    // Once the route moves on, forget it so the note can be opened again later (PEB-70).
+    for (const id of Array.from(ignoredNoteIdsRef.current)) {
+      if (id !== routeId) ignoredNoteIdsRef.current.delete(id);
+    }
     if (ignoredNoteIdsRef.current.has(routeId)) {
       return;
     }
@@ -539,6 +559,7 @@ export default function WorkspacePage() {
         if (!old) return old;
         return old.filter((n) => n.id !== noteId);
       });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });
@@ -556,6 +577,7 @@ export default function WorkspacePage() {
         if (!old) return old;
         return old.filter((n) => n.id !== noteId);
       });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });

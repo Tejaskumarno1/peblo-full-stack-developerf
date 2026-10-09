@@ -33,8 +33,11 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]); // Intentionally ignore initialContent to prevent cursor reset on every keystroke
 
+  // True while an AI command is running: the "AI is processing..." placeholder must never reach autosave (PEB-70)
+  const aiBusyRef = useRef(false);
+
   const handleChange = async () => {
-    if (!onChange || loadingRef.current) return;
+    if (!onChange || loadingRef.current || aiBusyRef.current) return;
     const markdown = await editor.blocksToMarkdownLossy(editor.document);
     onChange(markdown);
   };
@@ -61,6 +64,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     const originalType = currentBlock.type;
 
     // Set thinking indicator
+    aiBusyRef.current = true;
     editorInstance.updateBlock(currentBlock.id, {
       content: [{ type: 'text', text: 'AI is processing...', styles: { italic: true } }]
     });
@@ -132,6 +136,9 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         content: originalContent
       });
       alert('AI processing failed. Please try again.');
+    } finally {
+      aiBusyRef.current = false;
+      handleChange(); // save the real result (or the restored original), never the placeholder
     }
   };
 
