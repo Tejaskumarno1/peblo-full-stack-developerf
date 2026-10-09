@@ -1,5 +1,5 @@
 // The map behind the Orbit screens: topics are tags, sized by notes, ringed by how well you know them.
-import { startOfDay } from '../soft/softUtils';
+import { startOfDay } from '../soft/softUtils.js';
 
 const EXAM = /exam|test|viva|mid-?sem|finals?\b/i;
 export const HIDDEN_TAGS = new Set(['inbox', 'private']);
@@ -10,7 +10,9 @@ const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT
 export function topicName(tag) {
   if (!tag) return '';
   const words = tag.split(/[-_\s]+/).filter(Boolean);
+  const SMALL = new Set(['of', 'the', 'and', 'in', 'to', 'for', 'on', 'at', 'an', 'a', 'or', 'vs']);
   return words.map((w, i) => {
+    if (i > 0 && SMALL.has(w.toLowerCase())) return w.toLowerCase();
     if (w.length <= 3 || !/[aeiouy]/i.test(w)) return w.toUpperCase();
     return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
   }).join(' ');
@@ -199,9 +201,10 @@ export function layoutGraph(graph, { width, height, right = 380 }) {
  */
 export function revisionPath(nodes) {
   const topics = nodes.filter((t) => t.kind === 'topic');
-  let steps = topics.filter((t) => t.score !== null && t.score < 80).sort((a, b) => a.score - b.score);
-  if (!steps.length && !topics.some((t) => t.score !== null)) steps = [...topics].sort((a, b) => b.count - a.count);
-  steps = steps.slice(0, 3);
+  // Weakest quizzed topics first, then topics never quizzed (biggest first) so new topics are not hidden by one strong one
+  const weak = topics.filter((t) => t.score !== null && t.score < 80).sort((a, b) => a.score - b.score);
+  const fresh = topics.filter((t) => t.score === null).sort((a, b) => b.count - a.count);
+  const steps = [...weak, ...fresh].slice(0, 3);
   const minutes = steps.reduce((m, t) => m + (t.score === null || t.score < 50 ? 35 : 20), 0);
   return { steps, minutes };
 }

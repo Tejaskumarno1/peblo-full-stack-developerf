@@ -17,6 +17,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const { todos, mastery, space } = useOrbit();
   const [view, setView] = useState(initialView);
   const [text, setText] = useState('');
+  const [err, setErr] = useState('');
   const [week, setWeek] = useState(() => mondayOf(new Date()));
   const today = startOfDay();
 
@@ -24,15 +25,18 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
-  const toggle = async (t) => {
+  // Every call shows a message on failure and refetches, so the screen never keeps a change the server refused
+  const run = async (fn, failMsg) => {
+    setErr('');
+    try { await fn(); } catch (e) { setErr(e.response?.data?.error || failMsg); } finally { refresh(); }
+  };
+  const toggle = (t) => run(async () => {
     queryClient.setQueryData(['todos', 'orbit-all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
     await todosAPI.update(t.id, { completed: !t.completed });
-    refresh();
-  };
+  }, 'Could not update that task.');
   const remove = async (t) => {
     if (!window.confirm(`Delete "${t.text}"?`)) return;
-    await todosAPI.delete(t.id);
-    refresh();
+    await run(() => todosAPI.delete(t.id), 'Could not delete that task.');
   };
   const add = async (e) => {
     e.preventDefault();
@@ -41,9 +45,10 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     const p = parseTask(raw);
     let deadline = p.deadline ? new Date(p.deadline) : null;
     const tags = [...new Set([...(space ? [space] : []), ...p.tags])];
-    await todosAPI.create({ text: p.text || raw, priority: p.priority, tags, deadline: deadline ? deadline.toISOString() : null });
-    setText('');
-    refresh();
+    await run(async () => {
+      await todosAPI.create({ text: p.text || raw, priority: p.priority, tags, deadline: deadline ? deadline.toISOString() : null });
+      setText('');
+    }, 'Could not add the task. Your text is still here, try again.');
   };
 
   const groups = useMemo(() => {
@@ -83,6 +88,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
 
         <div className="o-due">
           <form className="o-due-add" onSubmit={add}>
+            {err && <p className="o-err" role="alert">{err}</p>}
             <label htmlFor="o-due-input" className="o-sr">New task</label>
             <input id="o-due-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Add a task${space ? ` to ${topicName(space)}` : ''}: "Lab 6 file thursday #sql-joins"`} autoComplete="off" />
             <button type="submit" className="o-btn" disabled={!text.trim()}>Add</button>

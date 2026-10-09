@@ -128,10 +128,15 @@ export default function OrbitMap({ interactive }) {
     return notes.filter((n) => !tagsOfNote(n).includes(topicTag) && (!s || (n.title || '').toLowerCase().includes(s))).slice(0, 6);
   }, [notes, topicTag, connectQ]);
   const connect = async (n) => {
-    await notesAPI.update(n.id, { tags: [...(n.tags || []), topicTag] });
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    setTool(null);
-    setConnectQ('');
+    try {
+      await notesAPI.update(n.id, { tags: [...(n.tags || []), topicTag] });
+      setTool(null);
+      setConnectQ('');
+    } catch (e) {
+      console.error('Could not connect the note', e); // the picker stays open so the person can retry
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    }
   };
   const draftIn = (tags) => navigate(`/notes?new=1${tags.length ? `&tag=${encodeURIComponent(tags.join(','))}` : ''}`);
 

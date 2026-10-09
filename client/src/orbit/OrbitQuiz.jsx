@@ -14,7 +14,7 @@ const LETTERS = ['A', 'B', 'C', 'D'];
  */
 export default function OrbitQuiz() {
   const { topic: raw } = useParams();
-  const topic = decodeURIComponent(raw || '');
+  const topic = raw || ''; // React Router has already decoded it; decoding again breaks topics containing %
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { mastery, notes } = useOrbit();
@@ -24,9 +24,14 @@ export default function OrbitQuiz() {
   const [answers, setAnswers] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [submitError, setSubmitError] = useState('');
   const started = useRef('');
+  const submitting = useRef(false);
 
-  const before = mastery.get(topic)?.score ?? null;
+  // The score at the start of this quiz. After submitting, the server tells us what it was before this run.
+  const liveBefore = mastery.get(topic)?.score ?? null;
+  const [startBefore, setStartBefore] = useState(undefined);
+  const before = result ? (result.before ?? null) : (startBefore !== undefined ? startBefore : liveBefore);
   const count = notes.filter((n) => (n.tags || []).includes(topic)).length;
 
   const start = async () => {
@@ -36,8 +41,12 @@ export default function OrbitQuiz() {
     setIndex(0);
     setAnswers([]);
     setResult(null);
+    setSubmitError('');
+    submitting.current = false;
+    setStartBefore(undefined);
     try {
       const { data } = await studyAPI.quiz(topic, 10);
+      setStartBefore(mastery.get(topic)?.score ?? null);
       setQuiz(data);
     } catch (err) {
       setError(err.response?.data?.error || 'Peblo could not write the quiz. Check Your AI.');
@@ -55,12 +64,27 @@ export default function OrbitQuiz() {
   const picked = answers[index];
   const answered = picked !== undefined;
 
-  const choose = (i) => { if (!answered) setAnswers((a) => { const n = [...a]; n[index] = i; return n; }); };
+  const choose = (i) => {
+    if (answered || !q || i >= q.options.length) return; // keys 1-4 can name an option that does not exist
+    setAnswers((a) => { const n = [...a]; n[index] = i; return n; });
+  };
   const next = async () => {
     if (index < quiz.questions.length - 1) { setIndex(index + 1); return; }
-    const { data } = await studyAPI.answer(quiz.id, answers);
-    setResult(data);
-    queryClient.invalidateQueries({ queryKey: ['study'] });
+    if (submitting.current) return; // Enter or a second click while the first is still in flight
+    submitting.current = true;
+    setSubmitError('');
+    try {
+      const { data } = await studyAPI.answer(quiz.id, answers);
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ['study'] });
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setSubmitError('This quiz was already marked. Start another one to keep going.');
+      } else {
+        submitting.current = false; // let the person try again
+        setSubmitError(err.response?.data?.error || 'Could not send your answers. Check your connection and try again.');
+      }
+    }
   };
 
   // Number keys pick an answer, Enter goes on
@@ -139,6 +163,7 @@ export default function OrbitQuiz() {
               )}
               <div className="o-btns" style={{ justifyContent: 'flex-end' }}>
                 <span className="o-quiet" style={{ fontSize: 13, alignSelf: 'center', marginRight: 'auto' }}>Keys 1–4 answer · Enter goes on</span>
+                {submitError && <span className="o-err" role="alert" style={{ fontSize: 13, alignSelf: 'center' }}>{submitError}</span>}
                 <button type="button" className="o-btn" disabled={!answered} onClick={next}>{index < quiz.questions.length - 1 ? 'Next question' : 'See my score'}</button>
               </div>
             </>

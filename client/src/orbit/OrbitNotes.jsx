@@ -100,8 +100,14 @@ function OrbitNote({ note }) {
   const accept = async (s) => {
     if (s.kind === 'tag') patch({ tags: [...doc.tags, s.tag] });
     else {
-      await todosAPI.update(s.task.id, { noteId });
-      queryClient.invalidateQueries({ queryKey: ['todos'] });
+      try {
+        await todosAPI.update(s.task.id, { noteId });
+      } catch (e) {
+        console.error('Could not link the task', e);
+        return; // keep the suggestion visible so it can be accepted again
+      } finally {
+        queryClient.invalidateQueries({ queryKey: ['todos'] });
+      }
     }
     setDismissed((d) => [...d, s.key]);
   };

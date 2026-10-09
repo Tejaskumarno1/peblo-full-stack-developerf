@@ -91,7 +91,13 @@ router.post('/quiz/:id/answers', async (req, res, next) => {
     const total = questions.length || 1;
     const pct = Math.round((correct / total) * 100);
 
-    await prisma.quizRun.update({ where: { id: run.id }, data: { answers: JSON.stringify(answers), correct, finishedAt: new Date() } });
+    // Claim the run first: only the request that flips finishedAt from null may touch mastery.
+    // A repeat (double click, replayed request) gets 409 and changes nothing.
+    const claimed = await prisma.quizRun.updateMany({
+      where: { id: run.id, userId, finishedAt: null },
+      data: { answers: JSON.stringify(answers), correct, finishedAt: new Date() },
+    });
+    if (claimed.count === 0) return res.status(409).json({ error: 'This quiz was already submitted.' });
 
     const prev = await prisma.topicMastery.findUnique({ where: { userId_topic: { userId, topic: run.topic } } });
     // Recent quizzes count most, so the score moves as you learn.
@@ -102,7 +108,7 @@ router.post('/quiz/:id/answers', async (req, res, next) => {
       create: { userId, topic: run.topic, score, quizzes: 1, lastCorrect: correct, lastTotal: total, missed: JSON.stringify(missedList) },
       update: { score, quizzes: { increment: 1 }, lastCorrect: correct, lastTotal: total, missed: JSON.stringify(missedList) },
     });
-    res.json({ correct, total, pct, mastery: shape(row) });
+    res.json({ correct, total, pct, before: prev ? prev.score : null, mastery: shape(row) });
   } catch (error) {
     next(error);
   }

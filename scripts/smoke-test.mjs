@@ -397,6 +397,26 @@ try {
   r = await call('GET', '/api/todos');
   const list2 = r.json.todos || r.json;
   check('exactly one task is completed', list2.filter(t => t.completed).length === 1, list2.map(t => t.completed));
+  // PEB-84: a quiz can be marked once; a replay changes nothing and reports the score before
+  {
+    const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const uC = await prisma.user.findUnique({ where: { email: emailC } });
+    const qs = [0, 1].map(i => ({ q: `q${i}`, options: ['a', 'b', 'c'], answer: 1, concept: `c${i}`, explain: '' }));
+    const run = await prisma.quizRun.create({ data: { userId: uC.id, topic: 'smoke-topic', questions: JSON.stringify(qs), total: 2 } });
+    const url = `/api/study/quiz/${run.id}/answers`;
+    // fire three at once, like a double click on the last question
+    const rs = await Promise.all([1, 2, 3].map(() => call('POST', url, { answers: [1, 1] })));
+    const codes = rs.map(x => x.status).sort();
+    check('quiz: exactly one of three simultaneous submissions is accepted, the rest get 409', codes.join() === '200,409,409', codes);
+    const ok = rs.find(x => x.status === 200);
+    check('quiz: the accepted result reports the score before (null on a first quiz)', ok.json.before === null && ok.json.pct === 100, ok.json);
+    r = await call('POST', url, { answers: [0, 0] });
+    check('quiz: a later replay is refused', r.status === 409, r);
+    const m = await prisma.topicMastery.findUnique({ where: { userId_topic: { userId: uC.id, topic: 'smoke-topic' } } });
+    check('quiz: mastery was applied once (score 100, quizzes 1)', m.score === 100 && m.quizzes === 1, m);
+    r = await call('POST', '/api/study/quiz/does-not-exist/answers', { answers: [] });
+    check('quiz: unknown id is 404', r.status === 404, r);
+  }
   // PEB-77: every write path tells the signed-in user's other screens to refetch
   {
     const { io: ioClient } = await import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm-debug/index.js')).href).catch(() => import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm/index.js')).href));
