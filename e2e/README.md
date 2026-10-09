@@ -19,4 +19,5 @@ settings.mjs = dead settings removed, editor text size works, one AI routing cho
 focus.mjs = keyboard focus shows a solid 2px outline at every Tab stop in all 5 styles and on the active nav link (PEB-120).
 parity.mjs = week start (Monday/Sunday) in Tasks, Calendar and Soft; the style follows the account onto a new device and is saved when picked (PEB-90).
 series.mjs = repeating task is one series: delete asks this / following / all, Cancel changes nothing, "Every weekday" in the Calendar (PEB-76).
+themeflash.mjs = the saved theme is applied before the app script runs: dark/midnight/system in all 5 styles (PEB-102).
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).

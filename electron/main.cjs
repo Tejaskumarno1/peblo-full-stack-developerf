@@ -10,6 +10,31 @@ const { pathToFileURL } = require('url');
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.PEBLO_DEV_URL; // e.g. http://localhost:5173 when running `npm run dev`
 
+// The window's own background shows before the page paints. Remember the page's background from the last run
+// (written by rememberBackground) so a dark theme does not start with a light window.
+const BG_FILE = () => path.join(app.getPath('userData'), 'window-bg.txt');
+function savedBackground(fallback) {
+  try {
+    const v = fs.readFileSync(BG_FILE(), 'utf8').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : fallback;
+  } catch { return fallback; }
+}
+function rememberBackground(win) {
+  const save = async () => {
+    try {
+      if (win.isDestroyed()) return;
+      const rgb = await win.webContents.executeJavaScript('getComputedStyle(document.body).backgroundColor');
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(String(rgb));
+      if (!m) return;
+      const hex = '#' + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
+      fs.writeFileSync(BG_FILE(), hex);
+    } catch { /* not worth stopping for */ }
+  };
+  win.webContents.on('did-finish-load', () => setTimeout(save, 600));
+  win.on('blur', save);
+  win.on('close', save);
+}
+
 // PEBLO_DATA_DIR lets you run a throwaway copy (for testing) without touching your real notes.
 if (process.env.PEBLO_DATA_DIR) app.setPath('userData', path.resolve(process.env.PEBLO_DATA_DIR));
 
@@ -191,7 +216,7 @@ function createWindow() {
     minHeight: 450,
     show: false,
     title: 'Peblo',
-    backgroundColor: '#F6F5F2',
+    backgroundColor: savedBackground('#F6F5F2'),
     icon: ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
@@ -206,6 +231,7 @@ function createWindow() {
   for (const ev of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'moved']) mainWindow.on(ev, applyScale);
   applyScale();
 
+  rememberBackground(mainWindow);
   mainWindow.once('ready-to-show', () => { applyScale(); mainWindow.show(); });
   mainWindow.loadURL(appUrl('/'));
   secureWebContents(mainWindow);
@@ -257,7 +283,7 @@ function createCaptureWindow() {
     fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
-    backgroundColor: '#ffffff',
+    backgroundColor: savedBackground('#ffffff'),
     title: 'Quick capture',
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
