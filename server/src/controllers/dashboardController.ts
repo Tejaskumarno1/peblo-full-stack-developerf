@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { notify } from '../utils/notify.js';
+import { tzOf, dayBounds, dayKey, hourIn, longDate, shortWeekday, zoneParts } from '../utils/userTime.js';
 import prisma from '../db.js';
 import {
   buildDailyActivity,
@@ -179,9 +180,10 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
   try {
     const userId = req.user!.id;
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+    const tz = tzOf(req);
+    const todayStart = dayBounds(tz, now).start.toISOString();
+    const todayEnd = dayBounds(tz, now).end.toISOString();
+    const yesterdayStart = dayBounds(tz, now, -1).start.toISOString();
 
     const todayStartD = new Date(todayStart);
     const todayEndD = new Date(todayEnd);
@@ -215,12 +217,12 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
     );
     const countRow = { completedYesterday, totalActive };
 
-    const hour = now.getHours();
+    const hour = hourIn(tz, now);
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
     res.json({
       greeting,
-      date: now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      date: longDate(tz, now),
       stats: {
         overdue: overdueTasks.length,
         dueToday: todayTasks.length,
@@ -230,14 +232,14 @@ export async function getDailyBriefing(req: Request, res: Response, next: NextFu
       overdueTasks: overdueTasks.map((t: any) => ({ id: t.id, text: t.text, priority: t.priority, deadline: t.deadline })),
       todayTasks: todayTasks.map((t: any) => ({ id: t.id, text: t.text, priority: t.priority, startTime: t.startTime, endTime: t.endTime })),
       recentNotes: recentNotes.map((n: any) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt })),
-      tip: getDailyTip(),
+      tip: getDailyTip(tz),
     });
   } catch (error) {
     next(error);
   }
 }
 
-function getDailyTip() {
+function getDailyTip(tz: string) {
   const tips = [
     "Start with your hardest task — you'll feel unstoppable after.",
     "Try the 2-minute rule: if it takes less than 2 minutes, do it now.",
@@ -249,7 +251,8 @@ function getDailyTip() {
     "Eat the frog first — tackle your most dreaded task before anything else.",
   ];
   // One tip per day, so it doesn't change every time the home screen refreshes.
-  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  const p = zoneParts(new Date(), tz);
+  const day = Math.floor(Date.UTC(p.y, p.m - 1, p.d) / 86400000);
   return tips[day % tips.length];
 }
 
@@ -293,15 +296,15 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
       .slice(0, 5);
 
     // One bucket per day for the last 7 days (local time), oldest first
-    const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const tz = tzOf(req);
     const dailyBreakdown: any[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      dailyBreakdown.push({ date: d, key: dayKey(d), tasksCompleted: 0, notesEdited: 0 });
+      const d = dayBounds(tz, now, -i).start;
+      dailyBreakdown.push({ date: d, key: dayKey(d, tz), tasksCompleted: 0, notesEdited: 0 });
     }
     const byKey = new Map(dailyBreakdown.map((d) => [d.key, d]));
-    for (const t of completedTodos) { const b = byKey.get(dayKey(t.updatedAt)); if (b) b.tasksCompleted++; }
-    for (const n of editedNotes) { const b = byKey.get(dayKey(n.updatedAt)); if (b) b.notesEdited++; }
+    for (const t of completedTodos) { const b = byKey.get(dayKey(t.updatedAt, tz)); if (b) b.tasksCompleted++; }
+    for (const n of editedNotes) { const b = byKey.get(dayKey(n.updatedAt, tz)); if (b) b.notesEdited++; }
 
     // Of everything on your plate this week (finished this week + still open), how much you finished.
     const onPlate = countRow.tasksCompleted + openTasks;
@@ -309,8 +312,8 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
 
     res.json({
       period: {
-        from: weekAgo.toISOString().split('T')[0],
-        to: now.toISOString().split('T')[0],
+        from: dayKey(weekAgo, tz),
+        to: dayKey(now, tz),
       },
       stats: {
         tasksCreated: countRow.tasksCreated,
@@ -321,7 +324,7 @@ export async function getWeeklyReport(req: Request, res: Response, next: NextFun
         aiUsage: countRow.aiUsage,
       },
       dailyBreakdown: dailyBreakdown.map((d: any) => ({
-        day: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
+        day: shortWeekday(new Date(d.date), tz),
         date: d.key,
         tasksCompleted: d.tasksCompleted,
         notesEdited: d.notesEdited,

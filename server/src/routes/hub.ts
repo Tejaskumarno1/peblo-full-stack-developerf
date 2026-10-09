@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { listHubModels, streamHubChat, HubMessage } from '../services/aiService.js';
 import { retrieve, sourcesPrompt } from '../services/retrieval.js';
+import { tzOf } from '../utils/userTime.js';
 
 const router = Router();
 router.use(authenticate);
@@ -59,7 +60,7 @@ router.post('/chat', async (req, res) => {
       excludedPrivate: found.excludedPrivate,
     });
 
-    const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const today = new Date().toLocaleDateString('en-IN', { timeZone: tzOf(req), weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const system = [
       "You are Peblo's assistant, inside the user's private notes, tasks and calendar app.",
       `Today is ${today}.`,

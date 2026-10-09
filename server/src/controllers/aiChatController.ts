@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { notify } from '../utils/notify.js';
+import { tzOf } from '../utils/userTime.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
@@ -303,7 +304,7 @@ export async function smartIntake(req: Request, res: Response, next: NextFunctio
     const userId = req.user!.id;
 
     // Step 1: AI analyzes and organizes the raw data
-    const result = await aiService.analyzeAndOrganize(userId, rawData.trim(), template || 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData.trim(), template || 'auto', tzOf(req));
 
     // Step 2: Create the note
     const note = await createNoteForUser(userId, result.note);
@@ -386,7 +387,7 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
     }
 
     // Call the same AI service logic
-    const result = await aiService.analyzeAndOrganize(userId, rawData, 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData, 'auto', tzOf(req));
 
     // Step 1: Create Note
     const note = await prisma.note.create({

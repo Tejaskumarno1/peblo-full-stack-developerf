@@ -397,6 +397,43 @@ try {
   r = await call('GET', '/api/todos');
   const list2 = r.json.todos || r.json;
   check('exactly one task is completed', list2.filter(t => t.completed).length === 1, list2.map(t => t.completed));
+  // PEB-74: "today" is the person's today, whatever zone the server runs in
+  {
+    const ut = await import(pathToFileURL(path.resolve('dist/server/utils/userTime.js')).href);
+    const iso = (d) => d.toISOString();
+    let b = ut.dayBounds('Asia/Kolkata', new Date('2026-10-08T20:30:00Z')); // 02:00 IST on 9 Oct
+    check('tz: 02:00 IST belongs to 9 Oct IST', iso(b.start) === '2026-10-08T18:30:00.000Z' && iso(b.end) === '2026-10-09T18:29:59.999Z', [iso(b.start), iso(b.end)]);
+    b = ut.dayBounds('Asia/Kolkata', new Date('2026-10-08T19:00:00Z')); // 00:30 IST
+    check('tz: 00:30 IST is already the new day', iso(b.start) === '2026-10-08T18:30:00.000Z', iso(b.start));
+    b = ut.dayBounds('Asia/Kolkata', new Date('2026-10-09T18:00:00Z')); // 23:30 IST
+    check('tz: 23:30 IST is still the same day', iso(b.start) === '2026-10-08T18:30:00.000Z' && iso(b.end) === '2026-10-09T18:29:59.999Z', [iso(b.start), iso(b.end)]);
+    b = ut.dayBounds('America/New_York', new Date('2026-11-01T12:00:00Z')); // 25-hour day (clocks go back)
+    check('tz: a 25-hour day in New York', iso(b.start) === '2026-11-01T04:00:00.000Z' && iso(b.end) === '2026-11-02T04:59:59.999Z', [iso(b.start), iso(b.end)]);
+    b = ut.dayBounds('America/New_York', new Date('2026-03-08T18:00:00Z')); // 23-hour day (clocks go forward)
+    check('tz: a 23-hour day in New York', iso(b.start) === '2026-03-08T05:00:00.000Z' && iso(b.end) === '2026-03-09T03:59:59.999Z', [iso(b.start), iso(b.end)]);
+    check('tz: hour, key and long date in the persons zone', ut.hourIn('Asia/Kolkata', new Date('2026-10-08T20:30:00Z')) === 2 && ut.dayKey(new Date('2026-10-08T20:30:00Z'), 'Asia/Kolkata') === '2026-10-09' && ut.longDate('Asia/Kolkata', new Date('2026-10-08T20:30:00Z')).startsWith('Friday, October 9'), ut.longDate('Asia/Kolkata', new Date('2026-10-08T20:30:00Z')));
+    check('tz: bad zone names are rejected', ut.validZone('Mars/Base') === null && ut.validZone('Asia/Kolkata') === 'Asia/Kolkata' && ut.validZone('') === null);
+
+    const withZone = (zone, method, url, body) => fetch(base + url, { method, headers: { 'X-Timezone': zone, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }).then(async (res) => ({ status: res.status, json: await res.json().catch(() => null) }));
+    for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+      const day = ut.dayBounds(zone);
+      const inToday = await call('POST', '/api/todos', { text: 'tz today ' + zone, deadline: new Date(day.start.getTime() + 3600e3).toISOString() });
+      const justBefore = await call('POST', '/api/todos', { text: 'tz yesterday ' + zone, deadline: new Date(day.start.getTime() - 3600e3).toISOString() });
+      const rz = await withZone(zone, 'GET', '/api/todos/today');
+      const todayIds = (rz.json.todayTasks || []).map(x => x.id), overdueIds = (rz.json.overdueTasks || []).map(x => x.id);
+      check(`tz: ${zone}: a task due 1h into the user's day is "today"`, todayIds.includes(inToday.json.todo.id) && !overdueIds.includes(inToday.json.todo.id), { todayIds, overdueIds });
+      check(`tz: ${zone}: a task due 1h before the user's day is overdue, not today`, overdueIds.includes(justBefore.json.todo.id) && !todayIds.includes(justBefore.json.todo.id), { todayIds, overdueIds });
+      const key = ut.dayKey(day.start, zone);
+      const rd = await withZone(zone, 'GET', '/api/todos?date=' + key);
+      check(`tz: ${zone}: ?date= lists exactly that local day`, (rd.json.todos || []).some(x => x.id === inToday.json.todo.id) && !(rd.json.todos || []).some(x => x.id === justBefore.json.todo.id), (rd.json.todos || []).map(x => x.text));
+      const br = await withZone(zone, 'GET', '/api/dashboard/daily-briefing');
+      const hr = Number(new Date().toLocaleString('en-US', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' }));
+      const greet = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+      check(`tz: ${zone}: greeting and date follow the user's clock`, br.json.greeting === greet && br.json.date === new Date().toLocaleDateString('en-US', { timeZone: zone, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), [br.json.greeting, greet, br.json.date]);
+    }
+    r = await call('GET', '/api/todos?date=not-a-date');
+    check('tz: a nonsense ?date= is a 400, not a 500', r.status === 400, r);
+  }
   // PEB-84: a quiz can be marked once; a replay changes nothing and reports the score before
   {
     const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);

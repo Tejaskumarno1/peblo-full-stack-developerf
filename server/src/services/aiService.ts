@@ -2,6 +2,7 @@ import { decryptSecret } from '../secrets.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
+import { serverZone, dayKey, dayBounds } from '../utils/userTime.js';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
@@ -562,9 +563,11 @@ export async function suggestTitle(userId: string, content: string) {
 }
 
 // --- Smart Intake: Analyze raw data and extract notes + tasks ---
-export async function analyzeAndOrganize(userId: string, rawData: string, template: string = 'auto') {
-  const today = new Date().toISOString().split('T')[0];
-  const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+export async function analyzeAndOrganize(userId: string, rawData: string, template: string = 'auto', tz: string = serverZone()) {
+  // "today" and "tomorrow" are the person's, not the server's
+  const today = dayKey(new Date(), tz);
+  const tomorrow = dayKey(dayBounds(tz, new Date(), 1).start, tz);
+  const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
 
   const templateHints: Record<string, string> = {
     auto: 'Automatically detect the type of data and organize accordingly.',
@@ -590,7 +593,7 @@ CRITICAL RULES for task extraction:
 - For each task, determine:
   - "text": A clear, actionable task description (imperative voice)
   - "priority": "high" (urgent/critical/ASAP/important), "medium" (normal), or "low" (nice-to-have/optional)
-  - "deadline": ISO 8601 date string (YYYY-MM-DD) or null. Interpret relative dates like "next Monday", "by Friday", "in 2 weeks" relative to today (${today}, ${dayOfWeek}). If a task says "tomorrow", that means ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}.
+  - "deadline": ISO 8601 date string (YYYY-MM-DD) or null. Interpret relative dates like "next Monday", "by Friday", "in 2 weeks" relative to today (${today}, ${dayOfWeek}). If a task says "tomorrow", that means ${tomorrow}.
   - "startTime": Time string like "09:00" or null (if a specific time is mentioned)
   - "endTime": Time string like "17:00" or null
   - "tags": 1-3 relevant tags for this specific task

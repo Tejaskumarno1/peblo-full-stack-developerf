@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
+import { tzOf, dayBounds, dayBoundsOf } from '../utils/userTime.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
@@ -9,11 +10,17 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
 
     // Filter by single date
     if (date) {
-      const dayStart = new Date(date as string);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date as string);
-      dayEnd.setHours(23, 59, 59, 999);
-      where.deadline = { gte: dayStart, lte: dayEnd }; 
+      // "2026-10-12" names a calendar day; a full timestamp means the day that moment falls on. Either way the person's day.
+      const tz = tzOf(req);
+      const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
+      let b;
+      if (ymd) b = dayBoundsOf(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]), tz);
+      else {
+        const at = new Date(String(date));
+        if (Number.isNaN(at.getTime())) return res.status(400).json({ error: 'Invalid date' });
+        b = dayBounds(tz, at);
+      }
+      where.deadline = { gte: b.start, lte: b.end };
     }
 
     // Filter by date range
@@ -52,10 +59,10 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
 export async function getTodayTodos(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    const threeDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59, 999).toISOString();
+    const tz = tzOf(req);
+    const todayStart = dayBounds(tz).start.toISOString();
+    const todayEnd = dayBounds(tz).end.toISOString();
+    const threeDaysLater = dayBounds(tz, new Date(), 3).end.toISOString();
 
     // One query fetches all incomplete tasks due up to 3 days out;
     // they are split into today/overdue/upcoming below.

@@ -15,7 +15,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
   const [profileEmail] = useState(user?.email || '');
   const [profileJob, setProfileJob] = useState(settings?.jobTitle || '');
   const [profileBio, setProfileBio] = useState(settings?.bio || '');
-  const [profileTimezone, setProfileTimezone] = useState(settings?.timezone || 'UTC');
+  const [profileTimezone, setProfileTimezone] = useState(settings?.timezone || (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'UTC'; } })());
 
   const [openAiKey, setOpenAiKey] = useState(settings?.openAiKey || '');
   const [geminiKey, setGeminiKey] = useState(settings?.geminiKey || '');
@@ -241,11 +241,15 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                       value={profileTimezone}
                       onChange={(e) => setProfileTimezone(e.target.value)}
                     >
-                      <option value="UTC">UTC (Universal Time)</option>
-                      <option value="EST">EST (Eastern Standard Time)</option>
-                      <option value="PST">PST (Pacific Standard Time)</option>
-                      <option value="IST">IST (Indian Standard Time)</option>
-                      <option value="CET">CET (Central European Time)</option>
+                      {(() => {
+                        // Real IANA zones. The app already uses this computer's zone for "today"; this is kept on the profile.
+                        const zones = ['UTC', 'Asia/Kolkata', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney'];
+                        const legacy = { EST: 'America/New_York', PST: 'America/Los_Angeles', IST: 'Asia/Kolkata', CET: 'Europe/Paris' };
+                        const mine = legacy[profileTimezone] || profileTimezone;
+                        let here = ''; try { here = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* ignore */ }
+                        const list = [...new Set([here, mine, ...zones].filter(Boolean))];
+                        return list.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}{z === here ? ' (this computer)' : ''}</option>);
+                      })()}
                     </select>
                   </div>
                 </div>

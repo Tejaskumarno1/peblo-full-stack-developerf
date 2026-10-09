@@ -12,6 +12,8 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // The server works out "today" for us, so it needs our zone (e.g. Asia/Kolkata)
+  try { config.headers['X-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* leave it to the server */ }
   return config;
 });
 

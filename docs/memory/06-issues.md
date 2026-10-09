@@ -37,7 +37,7 @@ Status: Open · In progress · Fixed (commit).
 | B-04 | Intel Mac build likely missing the Prisma engine; tag builds may publish twice | High | PEB-71 | Open |
 | B-05 | Migrations: no lock, no recovery, `db:sql` overwrites 001 | High | PEB-72 | Open |
 | B-06 | Streak and heatmap off by a day in IST; fake activity for today; overdue capped at 10 | Medium | PEB-73 | Open |
-| B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Open |
+| B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Fixed (this commit): client sends X-Timezone, server day ranges/greeting/briefing/weekly/smart-intake/Hub use it. Still server-clock: streak/heatmap (PEB-73), recurrence, retrieval/river date labels |
 | B-08 | AI failures show fake results and create junk notes | Medium | PEB-75 | Open |
 | B-09 | Repeating tasks are 30 copies, monthly dates overflow, no series edit | Medium | PEB-76 (story) | Open |
 | B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Fixed (this commit): every write path emits events, query keys corrected, Calendar refreshes on 	odos_changed; socket regression in smoke test. Calendar still uses local state, not React Query |
