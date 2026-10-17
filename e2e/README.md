@@ -23,5 +23,6 @@ themeflash.mjs = the saved theme is applied before the app script runs: dark/mid
 calls.mjs = AI voice call: Call me now, snooze brings back the same agenda, all-day tasks read as today, setting turns calls off (PEB-81).
 riverfix.mjs = River: a failed tick shows a message and rolls back; "+ N more" on a deep stack reaches the hidden meeting (PEB-85).
 security.mjs = Content-Security-Policy: no violation in any style or page, injected inline script / onerror do not run (PEB-65).
+aioff.mjs = Settings > AI Providers > "Turn off all AI": saved on the account, status line says AI is off, server refuses AI, calls disabled, unticking restores it (PEB-106).
 deleteaccount.mjs = Settings > Data > Delete account: needs a password and a tick, a wrong password changes nothing, success signs this device out and the token stops working (PEB-25).
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).

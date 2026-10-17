@@ -18,7 +18,7 @@ router.get('/models', async (req, res, next) => {
 });
 
 // POST /api/ai/hub/search — the sources a question would use (for previews)
-router.post('/search', ...aiLimit, async (req, res, next) => {
+router.post('/search', async (req, res, next) => {
   try {
     const result = await retrieve(req.user!.id, String(req.body?.query || ''), { noteIds: req.body?.noteIds });
     res.json({ ...result, sources: result.sources.map(({ text, ...s }) => s) });

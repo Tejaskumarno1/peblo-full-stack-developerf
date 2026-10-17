@@ -16,6 +16,7 @@ export function normalizeRouting(value) {
  * kind: 'local' | 'cloud' | 'warn' (Ollama wanted but not running) | 'off'
  */
 export function describeModel(models) {
+  if (models?.aiOff) return { kind: 'off', name: 'AI is off' }; // "Turn off all AI" (PEB-106)
   const local = models?.local;
   const cloudReady = (models?.cloud || []).filter((c) => c.configured);
   const routing = normalizeRouting(models?.routing);

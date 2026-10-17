@@ -437,7 +437,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   type="button"
                   id="call-me-now"
                   className="btn"
-                  disabled={settings?.voiceCalls === false}
+                  disabled={settings?.voiceCalls === false || settings?.aiOff === true}
                   onClick={() => { window.dispatchEvent(new CustomEvent('trigger_ai_call')); onClose(); }}
                 >
                   Call me now
@@ -568,6 +568,21 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '2rem' }}>
                 Use your own OpenAI or Gemini key, or run AI completely on this computer with Ollama. Keys are stored encrypted in your Peblo account and only sent to the provider you use.
               </p>
+
+              <div className="settings-field-group" style={{ marginBottom: '1.5rem' }}>
+                <label className="settings-field-label" htmlFor="pref-ai-off" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    id="pref-ai-off"
+                    type="checkbox"
+                    checked={settings?.aiOff === true}
+                    onChange={(e) => saveSetting({ aiOff: e.target.checked })}
+                  />
+                  Turn off all AI
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Nothing is sent to any model, local or cloud: no summaries, chat, voice calls, quizzes or briefings. Your notes and tasks work as before. Saved to your account, so it applies on every device.
+                </p>
+              </div>
 
               <form onSubmit={handleSaveApiKeys}>
                 <div className="settings-field-group" style={{ background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>

@@ -5,8 +5,8 @@ export const NEW_TASK_GRACE_MIN = 30;     // do not ring for a task that was onl
 export const BRIEFING_FROM = 7 * 60 + 30; // morning briefing window, minutes after midnight
 export const BRIEFING_UNTIL = 11 * 60;
 
-// Calls are on unless the person turned them off in Settings.
-export const callsEnabled = (settings) => settings?.voiceCalls !== false;
+// Calls are on unless the person turned them off in Settings, or turned off all AI (PEB-106).
+export const callsEnabled = (settings) => settings?.voiceCalls !== false && settings?.aiOff !== true;
 
 // All-day tasks are stored at 23:59 with no start time.
 export const isAllDayTask = (t) => {

@@ -33,7 +33,13 @@ export function serverKeysAllowed(): boolean {
   return String(process.env.SERVER_AI_KEYS || '').trim().toLowerCase() !== 'off';
 }
 
+/** "Turn off all AI" (PEB-106): with it on, no provider is ever built, so nothing can reach a model. */
+export function aiIsOff(user: any): boolean {
+  return (user?.settings as any)?.aiOff === true;
+}
+
 function getOpenAIProvider(user: any): OAIProvider | null {
+  if (aiIsOff(user)) return null;
   const settings = user?.settings as any || {};
   const key = decryptSecret(user?.apiKeys?.openAiKey)?.trim();
   let apiKey = key;
@@ -51,6 +57,7 @@ export const DEFAULT_OLLAMA_EMBED_MODEL = 'nomic-embed-text';
 
 /** Local AI through Ollama (https://ollama.com), which speaks the OpenAI API on /v1. Nothing leaves the computer. */
 function getOllamaProvider(user: any): OAIProvider | null {
+  if (aiIsOff(user)) return null;
   const settings = user?.settings as any || {};
   if (settings.ollamaEnabled !== true) return null;
   const base = effectiveOllamaUrl(settings.ollamaUrl, DEFAULT_OLLAMA_URL);
@@ -64,6 +71,7 @@ function getOllamaProvider(user: any): OAIProvider | null {
 }
 
 function getGeminiInstance(user: any) {
+  if (aiIsOff(user)) return null;
   const settings = user?.settings as any || {};
   const forceCustomModels = settings.forceCustomModels === true;
   const key = decryptSecret(user?.apiKeys?.geminiKey)?.trim();
@@ -108,6 +116,12 @@ export function unreadableKeyNames(user: any): string[] {
 }
 
 function noKeyError(user?: any) {
+  if (aiIsOff(user)) {
+    const off: any = new Error('AI is turned off in your settings, so nothing is sent to any model. Turn it back on in Settings > AI Providers.');
+    off.statusCode = 403;
+    off.code = 'AI_OFF';
+    return off;
+  }
   const bad = unreadableKeyNames(user);
   const err: any = new Error(bad.length
     ? `Your saved ${bad.join(' and ')} key can't be read on this computer (it was saved by a different Peblo install). Please enter it again in AI Hub → Connections.`
@@ -967,6 +981,8 @@ export async function suggestTag(userId: string, title: string, content: string)
 export interface HubMessage { role: 'user' | 'assistant'; content: string }
 
 export interface HubModelInfo {
+  /** "Turn off all AI" is on: nothing below is usable. */
+  aiOff?: boolean;
   routing: string;
   local: { enabled: boolean; ok: boolean; url: string; chatModel: string; embedModel: string; models: string[]; error?: string };
   cloud: { provider: 'openai' | 'gemini'; label: string; configured: boolean; unreadable: boolean; model: string }[];
@@ -978,11 +994,13 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
   const settings = (user?.settings as any) || {};
   const ollama = getOllamaProvider(user);
   const url = effectiveOllamaUrl(settings.ollamaUrl, DEFAULT_OLLAMA_URL) || '';
-  const check = settings.ollamaEnabled === true && url ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
+  const off = aiIsOff(user);
+  const check = !off && settings.ollamaEnabled === true && url ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
   return {
+    aiOff: off,
     routing: settings.defaultAiModel || 'auto',
     local: {
-      enabled: settings.ollamaEnabled === true,
+      enabled: !off && settings.ollamaEnabled === true,
       ok: check.ok,
       url,
       chatModel: ollama?.model || DEFAULT_OLLAMA_MODEL,

@@ -22,5 +22,6 @@ test('describeModel: Ollama down but a cloud key and auto routing uses the cloud
 });
 test('describeModel: nothing set up', () => {
   assert.equal(describeModel({}).kind, 'off');
+assert.deepEqual(describeModel({ aiOff: true, local: { enabled: true, ok: true, chatModel: 'llama3.2' }, cloud: [{ configured: true, model: 'gpt' }], routing: 'auto' }), { kind: 'off', name: 'AI is off' });
   assert.equal(describeModel(undefined).name, 'No AI set up');
 });

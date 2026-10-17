@@ -94,7 +94,7 @@ All five are tracked in **PEB-28** (comment) and PEB-93.
 | G-08 | `[[links]]` and backlinks (title-match backlinks already exist: Partial) | PEB-98 |
 | G-09 | Server out of Electron's main process (TRD D5) | PEB-104 |
 | G-10 | Lossless note storage (TRD D8) | PEB-105 |
-| G-11 | AI off switch (HUB-12, P0) | PEB-106 |
+| G-11 | AI off switch (HUB-12, P0) | PEB-106: Done (this commit): Settings > AI Providers > "Turn off all AI" (`settings.aiOff`, saved on the account). Every route that calls a model goes through `aiLimit` = `aiOffGate` + the PEB-26 limits and answers 403 `AI_OFF`; aiService also builds no provider when it is on, so a route that forgets the gate still cannot reach a model. `/api/ai/hub/models` says `aiOff` and does not ask Ollama; the status line reads "AI is off"; voice calls stop. Not gated on purpose: hub search (keyword search of notes) and quiz history counts. 38 smoke checks (no request reaches any model), `e2e/aioff.mjs`. Limits: individual AI buttons are not hidden, they show the server's "AI is turned off" message when pressed; a client talking to an older server is not covered |
 | G-12 | Peblo Connect: use other MCP servers (CON-01…06, P0/P1) | PEB-107 |
 | G-13 | Opt-in crash reports (PLAT-04, P0) | PEB-108 |
 | G-14 | First-run onboarding (PLAT-10, P0) | PEB-109 |

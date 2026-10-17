@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { aiOffGate } from './aiOff.js';
 
 /**
  * A small in-memory limiter (per server process) for the endpoints people could brute-force.
@@ -82,8 +83,8 @@ export function aiLimiter(opts: { burst?: number; daily?: number } = {}): Reques
   return list;
 }
 
-/** One shared instance: the daily count is for all AI features together. */
-export const aiLimit = aiLimiter();
+/** What every route that calls a model goes through: "Turn off all AI" first (PEB-106), then the limits. One shared instance, so the daily count is for all AI features together. */
+export const aiLimit: RequestHandler[] = [aiOffGate, ...aiLimiter()];
 
 /** A generous limit for the whole API, per address, so one client cannot hammer the server (API_RATE_MAX per minute, default 1200, 0 = off). */
 export function apiLimiter(max = numberFrom(process.env.API_RATE_MAX, 1200)): RequestHandler {

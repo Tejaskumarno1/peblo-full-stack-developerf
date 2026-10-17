@@ -1138,6 +1138,82 @@ check('deleting your own account leaves the same endpoint working for others', a
 check('..and that account is gone too', (await counts(yId)).notes === 0 && !(await prismaDel.user.findUnique({ where: { id: yId } })));
 token = saveToken;
 }
+
+// ---- PEB-106: "Turn off all AI": no AI route answers, and no request reaches any model ----
+{
+const http3 = await import('http');
+const asked3 = [];
+const fake3 = http3.createServer(async (req, resp) => {
+  let body = '';
+  for await (const c of req) body += c;
+  asked3.push({ url: req.url, text: body });
+  if (req.url === '/api/tags') { resp.writeHead(200, { 'Content-Type': 'application/json' }); return resp.end(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] })); }
+  resp.writeHead(200, { 'Content-Type': 'application/json' });
+  resp.end(JSON.stringify({ id: 'x', object: 'chat.completion', created: 0, model: 'm', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ title: 'A title' }) }, finish_reason: 'stop' }] }));
+});
+await new Promise((ok) => fake3.listen(0, '127.0.0.1', ok));
+const url3 = `http://127.0.0.1:${fake3.address().port}`;
+process.env.OPENAI_BASE_URL = `${url3}/v1`;
+await call('PUT', '/api/profile', { settings: { ollamaEnabled: true, ollamaUrl: url3, ollamaModel: 'llama3.2', openAiKey: 'sk-test', defaultAiModel: 'auto', aiOff: false } });
+const n3 = (await call('POST', '/api/notes', { title: 'AI off note', content: 'some text to work on' })).json.note;
+
+let m3 = await call('GET', '/api/ai/hub/models');
+check('AI on: the hub lists a local model and a cloud key', m3.json.aiOff === false && m3.json.local.enabled === true && m3.json.cloud.some((c) => c.configured), m3.json);
+let t3 = await call('POST', `/api/notes/${n3.id}/ai/title`, { content: 'hello' });
+check('AI on: a title request reaches the model', t3.status === 200 && asked3.length > 0, t3);
+
+await call('PUT', '/api/profile', { settings: { aiOff: true } });
+asked3.length = 0;
+const routes3 = [
+  ['POST', `/api/notes/${n3.id}/ai/title`, { content: 'x' }],
+  ['POST', `/api/notes/${n3.id}/ai/summary`, { content: 'x' }],
+  ['POST', `/api/notes/${n3.id}/ai/actions`, { content: 'x' }],
+  ['POST', `/api/notes/${n3.id}/ai/tags`, { content: 'x' }],
+  ['POST', '/api/notes/block/ai', { text: 'x', command: 'improve' }],
+  ['POST', '/api/ai/voice-command', { transcript: 'what is due today' }],
+  ['POST', '/api/ai/chat', { message: 'hello' }],
+  ['POST', '/api/ai/chat-stream', { message: 'hello' }],
+  ['POST', '/api/ai/smart-intake', { rawData: 'meeting notes about the launch' }],
+  ['POST', '/api/ai/hub/chat', { messages: [{ role: 'user', content: 'hello' }] }],
+  ['POST', '/api/study/quiz', { topic: 'work', count: 3 }],
+  ['POST', '/api/river/brief', { title: 'x' }],
+  ['POST', `/api/river/notes/${n3.id}/promises`, {}],
+];
+for (const [method, url, body] of routes3) {
+  const rr = await call(method, url, body);
+  check(`AI off: ${url.replace(n3.id, ':id')} answers 403 AI_OFF`, rr.status === 403 && rr.json?.code === 'AI_OFF' && /turned off/i.test(rr.json.error), rr);
+}
+check('AI off: no request reached any model (local or cloud)', asked3.length === 0, asked3.map((a) => a.url));
+
+m3 = await call('GET', '/api/ai/hub/models');
+check('AI off: the hub says so and lists nothing usable', m3.json.aiOff === true && m3.json.local.enabled === false && m3.json.cloud.every((c) => !c.configured), m3.json);
+check('AI off: the model list did not even ask Ollama', !asked3.some((a) => a.url === '/api/tags'), asked3.map((a) => a.url));
+check('AI off: searching notes (no model) still works', (await call('POST', '/api/ai/hub/search', { query: 'AI off note' })).status === 200);
+check('AI off: notes and tasks work as before', (await call('POST', '/api/notes', { title: 'Still works', content: 'x' })).status === 201 && (await call('POST', '/api/todos', { text: 'still works' })).status === 201);
+check('AI off: quiz history counts still load', (await call('GET', `/api/study/notes/${n3.id}/questions`)).status === 200);
+
+const { aiIsOff } = await import(pathToFileURL(path.resolve('dist/server/services/aiService.js')).href);
+check('AI off: the service itself refuses (even if a route forgot the gate)', aiIsOff({ settings: { aiOff: true } }) === true && aiIsOff({ settings: {} }) === false && aiIsOff(null) === false);
+const sv = await import(pathToFileURL(path.resolve('dist/server/services/aiService.js')).href);
+let thrown = null;
+try { await sv.suggestTitle((await prismaOffUser()).id, 'text'); } catch (e) { thrown = e; }
+check('AI off: calling the service directly throws AI_OFF and asks no model', thrown?.code === 'AI_OFF' && asked3.length === 0, thrown?.message);
+
+await call('PUT', '/api/profile', { settings: { aiOff: false } });
+t3 = await call('POST', `/api/notes/${n3.id}/ai/title`, { content: 'hello' });
+check('AI back on: it works again', t3.status === 200 && asked3.length > 0, t3);
+
+await call('PUT', '/api/profile', { settings: { openAiKey: '', ollamaEnabled: false, defaultAiModel: 'auto', aiOff: false } });
+delete process.env.OPENAI_BASE_URL;
+await new Promise((ok) => fake3.close(ok));
+
+async function prismaOffUser() {
+  const { default: pr } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  await call('PUT', '/api/profile', { settings: { aiOff: true } });
+  const me = (await call('GET', '/api/profile')).json.user;
+  return { id: me.id, pr };
+}
+}
 } catch (err) {
   failures++;
   console.error(err);

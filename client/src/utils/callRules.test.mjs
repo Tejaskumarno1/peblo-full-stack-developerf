@@ -68,4 +68,6 @@ test('calls are on unless switched off', () => {
   assert.equal(callsEnabled({}), true);
   assert.equal(callsEnabled(undefined), true);
   assert.equal(callsEnabled({ voiceCalls: false }), false);
+  assert.equal(callsEnabled({ aiOff: true }), false, 'no calls when all AI is off');
+  assert.equal(callsEnabled({ aiOff: false }), true);
 });

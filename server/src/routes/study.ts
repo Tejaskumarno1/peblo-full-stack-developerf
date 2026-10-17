@@ -116,7 +116,7 @@ router.post('/quiz/:id/answers', async (req, res, next) => {
 });
 
 // GET /api/study/notes/:id/questions: how many quiz questions came from one note
-router.get('/notes/:id/questions', ...aiLimit, async (req, res, next) => {
+router.get('/notes/:id/questions', async (req, res, next) => {
   try {
     const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id }, select: { questions: true } });
     let count = 0;
