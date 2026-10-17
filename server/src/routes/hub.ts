@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
+import { aiLimit } from '../middleware/rateLimit.js';
 import { listHubModels, streamHubChat, HubMessage } from '../services/aiService.js';
 import { retrieve, sourcesPrompt } from '../services/retrieval.js';
 import { tzOf } from '../utils/userTime.js';
@@ -17,7 +18,7 @@ router.get('/models', async (req, res, next) => {
 });
 
 // POST /api/ai/hub/search — the sources a question would use (for previews)
-router.post('/search', async (req, res, next) => {
+router.post('/search', ...aiLimit, async (req, res, next) => {
   try {
     const result = await retrieve(req.user!.id, String(req.body?.query || ''), { noteIds: req.body?.noteIds });
     res.json({ ...result, sources: result.sources.map(({ text, ...s }) => s) });
@@ -32,7 +33,7 @@ router.post('/search', async (req, res, next) => {
  * Events: {type:'sources'} → {type:'delta', text}* → {type:'done', provider, model, local, ms}
  *         or {type:'consent', provider, message} / {type:'error', code, message}
  */
-router.post('/chat', async (req, res) => {
+router.post('/chat', ...aiLimit, async (req, res) => {
   const userId = req.user!.id;
   const messages: HubMessage[] = (Array.isArray(req.body?.messages) ? req.body.messages : [])
     .filter((m: any) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')

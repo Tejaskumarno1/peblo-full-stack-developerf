@@ -78,6 +78,7 @@ File sizes: aiService 1147 lines, aiChatController 450, dashboardController 329,
 - `DATABASE_URL`, `JWT_SECRET`, `KEY_ENCRYPTION_SECRET`
 - `OPENAI_API_KEY`, `GEMINI_API_KEYS` / `GEMINI_API_KEY`, `GEMINI_MODEL`
 - `TRUST_PROXY`, `ALLOWED_ORIGINS`, `SIGNUP_RATE_MAX`
+- PEB-26 limits: `AI_DAILY_LIMIT` (AI requests per account per rolling 24 h, default 500, 0 = off), `AI_BURST_MAX` (per minute, default 20, 0 = off), `API_RATE_MAX` (any /api call per address per minute, default 1200, 0 = off), `SERVER_AI_KEYS=off` (ignore `OPENAI_API_KEY` / `GEMINI_API_KEYS`; only keys people saved themselves are used). Counts are in memory (one server process) and reset on restart. The AI limit is `aiLimit` in `middleware/rateLimit.ts`, put after `authenticate` on every route that calls a provider
 - `NODE_ENV`, `PORT`, `HOST`, `PEBLO_STATIC_DIR`, `PEBLO_SQL_DIR`
 
 **Tables** (`schema.prisma`):

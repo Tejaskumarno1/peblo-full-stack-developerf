@@ -25,12 +25,20 @@ export interface OAIProvider {
 
 type ProviderName = 'openai' | 'gemini' | 'ollama';
 
+/**
+ * Keys in the server's own environment (OPENAI_API_KEY, GEMINI_API_KEYS) are a fallback for accounts without a key of their own.
+ * A shared server that does not want to pay for its users' AI sets SERVER_AI_KEYS=off, and then only keys people saved themselves are used.
+ */
+export function serverKeysAllowed(): boolean {
+  return String(process.env.SERVER_AI_KEYS || '').trim().toLowerCase() !== 'off';
+}
+
 function getOpenAIProvider(user: any): OAIProvider | null {
   const settings = user?.settings as any || {};
   const key = decryptSecret(user?.apiKeys?.openAiKey)?.trim();
   let apiKey = key;
   if (!apiKey && settings.forceCustomModels !== true) {
-    const envKey = process.env.OPENAI_API_KEY?.trim();
+    const envKey = serverKeysAllowed() ? process.env.OPENAI_API_KEY?.trim() : '';
     if (envKey && !envKey.includes('your-openai')) apiKey = envKey;
   }
   if (!apiKey) return null;
@@ -63,7 +71,7 @@ function getGeminiInstance(user: any) {
   if (key) return new GoogleGenerativeAI(key);
   if (forceCustomModels) return null;
 
-  const keysStr = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
+  const keysStr = serverKeysAllowed() ? (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '') : '';
   const keys = keysStr.split(',').map(k => k.trim()).filter(k => k && k !== 'your-gemini-api-key-here');
   if (keys.length === 0) return null;
   return new GoogleGenerativeAI(keys[0]);

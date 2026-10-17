@@ -887,6 +887,67 @@ try {
     check('in production the own address still works', (await originStatus(base)) === 200);
     if (prevEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prevEnv;
   }
+
+// ---- PEB-26: AI limits per account, a general API limit, server-held keys can be switched off ----
+{
+const { default: express } = await import('express');
+const { aiLimiter, apiLimiter } = await import(pathToFileURL(path.resolve('dist/server/middleware/rateLimit.js')).href);
+const { serverKeysAllowed } = await import(pathToFileURL(path.resolve('dist/server/services/aiService.js')).href);
+
+const mini = express();
+mini.set('trust proxy', 1);
+mini.use((req, _res, next) => { const u = req.header('x-user'); if (u) req.user = { id: u }; next(); });
+mini.post('/burst', ...aiLimiter({ burst: 3, daily: 0 }), (_q, r) => r.json({ ok: true }));
+mini.post('/daily', ...aiLimiter({ burst: 0, daily: 4 }), (_q, r) => r.json({ ok: true }));
+mini.post('/both', ...aiLimiter({ burst: 2, daily: 3 }), (_q, r) => r.json({ ok: true }));
+mini.get('/api-wide', apiLimiter(5), (_q, r) => r.json({ ok: true }));
+mini.get('/api-off', apiLimiter(0), (_q, r) => r.json({ ok: true }));
+const miniServer = await new Promise((resolve) => { const s = mini.listen(0, '127.0.0.1', () => resolve(s)); });
+const mb = `http://127.0.0.1:${miniServer.address().port}`;
+const hit = (url, user, method = 'POST', ip) => rawFetch(mb + url, { method, headers: { ...(user ? { 'x-user': user } : {}), ...(ip ? { 'X-Forwarded-For': ip } : {}) } });
+
+const a = []; for (let i = 0; i < 4; i++) a.push((await hit('/burst', 'alice')).status);
+check('a fourth AI request in a minute is refused (limit 3)', a.join() === '200,200,200,429', a.join());
+const r429 = await hit('/burst', 'alice');
+const body429 = await r429.json();
+check('the refusal says why and when to retry', r429.status === 429 && !!r429.headers.get('retry-after') && /too fast/i.test(body429.error), JSON.stringify(body429));
+check('another account is not affected by that limit', (await hit('/burst', 'bob')).status === 200);
+check('the limit follows the account, not the address', (await hit('/burst', 'alice', 'POST', '9.9.9.9')).status === 429 && (await hit('/burst', 'carol', 'POST', '9.9.9.9')).status === 200);
+
+const d = []; for (let i = 0; i < 5; i++) d.push((await hit('/daily', 'dave')).status);
+check('the daily limit refuses the request after it (4 allowed)', d.join() === '200,200,200,200,429', d.join());
+const dBody = await (await hit('/daily', 'dave')).json();
+check('the daily message says how many and how to change it', /4 AI requests/.test(dBody.error) && /AI_DAILY_LIMIT/.test(dBody.error), dBody.error);
+check('another account still has its daily requests', (await hit('/daily', 'erin')).status === 200);
+
+const both = []; for (let i = 0; i < 4; i++) both.push((await hit('/both', 'frank')).status);
+check('burst and daily limits work together (burst 2 stops the third)', both.join() === '200,200,429,429', both.join());
+
+const w = []; for (let i = 0; i < 7; i++) w.push((await hit('/api-wide', null, 'GET', '5.5.5.5')).status);
+check('the general API limit refuses past its maximum (5 per minute)', w.join() === '200,200,200,200,200,429,429', w.join());
+check('it counts per address: another address is fine', (await hit('/api-wide', null, 'GET', '6.6.6.6')).status === 200);
+const off = []; for (let i = 0; i < 8; i++) off.push((await hit('/api-off', null, 'GET')).status);
+check('a limit of 0 switches it off', off.every((s) => s === 200));
+await new Promise((r) => miniServer.close(r));
+
+// the real server: AI routes are behind sign-in, so the limiter never sees anonymous callers
+const anon = await rawFetch(base + '/api/ai/voice-command', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+check('AI routes still need sign-in (401 before any limit)', anon.status === 401);
+const sawAi = []; for (let i = 0; i < 3; i++) sawAi.push((await call('POST', '/api/notes/block/ai', { text: 'x', action: 'improve' })).status);
+check('the real AI route is reachable inside the limits', sawAi.every((s) => s !== 429), sawAi.join());
+
+// server-held provider keys: used unless SERVER_AI_KEYS=off
+const prev = process.env.SERVER_AI_KEYS;
+delete process.env.SERVER_AI_KEYS;
+check('server keys are allowed by default', serverKeysAllowed() === true);
+process.env.SERVER_AI_KEYS = 'off';
+check('SERVER_AI_KEYS=off switches them off', serverKeysAllowed() === false);
+process.env.SERVER_AI_KEYS = ' OFF ';
+check('..whatever the case or spacing', serverKeysAllowed() === false);
+process.env.SERVER_AI_KEYS = 'on';
+check('any other value leaves them on', serverKeysAllowed() === true);
+if (prev === undefined) delete process.env.SERVER_AI_KEYS; else process.env.SERVER_AI_KEYS = prev;
+}
 } catch (err) {
   failures++;
   console.error(err);

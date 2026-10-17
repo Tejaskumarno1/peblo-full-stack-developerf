@@ -23,6 +23,7 @@ import riverRoutes from './routes/river.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
+import { apiLimiter } from './middleware/rateLimit.js';
 import { protectExistingKeys } from './services/profile.js';
 
 export interface StartOptions {
@@ -46,6 +47,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
 
   // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
   app.use(cors(corsDelegate));
+app.use('/api', apiLimiter());
   app.use(express.json({ limit: '10mb' }));
 
   // Before the routers: hosting platforms probe this without signing in.
@@ -125,7 +127,12 @@ if (isDirectRun) {
   // Run on its own: `npm run dev:server` while developing, or `npm run serve` (after `npm run build`) on a host.
   // A host should set NODE_ENV=production, DATABASE_URL, JWT_SECRET, ALLOWED_ORIGINS (if the web client is elsewhere)
   // and TRUST_PROXY=1 when it sits behind the platform's proxy. It then serves the web app and the API together.
+  // Also worth knowing on a shared host: SERVER_AI_KEYS=off (do not pay for users' AI with OPENAI_API_KEY / GEMINI_API_KEYS),
+  // AI_DAILY_LIMIT, AI_BURST_MAX and API_RATE_MAX (limits per account / per address).
   const production = process.env.NODE_ENV === 'production';
+  if (production && process.env.SERVER_AI_KEYS === undefined && (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY) && process.env.ALLOWED_ORIGINS) {
+    console.warn('This server holds AI keys of its own and every account can use them. Set SERVER_AI_KEYS=off to use only keys people save themselves, and AI_DAILY_LIMIT to cap what one account can ask.');
+  }
   const clientDir = process.env.PEBLO_STATIC_DIR || path.resolve(process.cwd(), 'client', 'dist');
   startServer({
     port: Number(process.env.PORT) || 3001,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
+import { aiLimit } from '../middleware/rateLimit.js';
 import { makeQuiz } from '../services/aiService.js';
 
 /*
@@ -36,7 +37,7 @@ router.get('/mastery', async (req, res, next) => {
 });
 
 // POST /api/study/quiz { topic, count? }: writes a new quiz from the topic's notes
-router.post('/quiz', async (req, res, next) => {
+router.post('/quiz', ...aiLimit, async (req, res, next) => {
   try {
     const userId = req.user!.id;
     const topic = clean(req.body?.topic);
@@ -115,7 +116,7 @@ router.post('/quiz/:id/answers', async (req, res, next) => {
 });
 
 // GET /api/study/notes/:id/questions: how many quiz questions came from one note
-router.get('/notes/:id/questions', async (req, res, next) => {
+router.get('/notes/:id/questions', ...aiLimit, async (req, res, next) => {
   try {
     const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id }, select: { questions: true } });
     let count = 0;

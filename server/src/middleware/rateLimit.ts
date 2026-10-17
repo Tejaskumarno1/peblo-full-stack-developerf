@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 
 /**
  * A small in-memory limiter (per server process) for the endpoints people could brute-force.
@@ -43,4 +43,50 @@ export function rateLimit(opts: { windowMs: number; max: number; message?: strin
     }
     next();
   };
+}
+
+// ---- PEB-26: limits on what one account can spend ----
+
+const userKey = (req: Request) => {
+  const id = (req as any).user?.id;
+  return id ? `user:${id}` : '';
+};
+
+const numberFrom = (raw: string | undefined, fallback: number) => {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+};
+
+/**
+ * Limits for requests that call an AI provider, counted per signed-in account (not per address):
+ *  - AI_BURST_MAX: requests per minute (default 20, 0 = no limit)
+ *  - AI_DAILY_LIMIT: requests per rolling 24 hours (default 500, 0 = no limit)
+ * Use it after `authenticate`. Counts are in memory, so they reset when the server restarts.
+ */
+export function aiLimiter(opts: { burst?: number; daily?: number } = {}): RequestHandler[] {
+  const burst = opts.burst ?? numberFrom(process.env.AI_BURST_MAX, 20);
+  const daily = opts.daily ?? numberFrom(process.env.AI_DAILY_LIMIT, 500);
+  const list: RequestHandler[] = [];
+  if (burst > 0) {
+    list.push(rateLimit({ windowMs: 60_000, max: burst, key: userKey, message: 'You are sending AI requests too fast. Wait a minute and try again.' }));
+  }
+  if (daily > 0) {
+    list.push(rateLimit({
+      windowMs: 24 * 60 * 60_000,
+      max: daily,
+      key: userKey,
+      message: `You have used today's ${daily} AI requests. The limit is counted over a rolling 24 hours, so it frees up gradually. Whoever runs this server can change it with AI_DAILY_LIMIT.`,
+    }));
+  }
+  return list;
+}
+
+/** One shared instance: the daily count is for all AI features together. */
+export const aiLimit = aiLimiter();
+
+/** A generous limit for the whole API, per address, so one client cannot hammer the server (API_RATE_MAX per minute, default 1200, 0 = off). */
+export function apiLimiter(max = numberFrom(process.env.API_RATE_MAX, 1200)): RequestHandler {
+  if (max <= 0) return (_req, _res, next) => next();
+  return rateLimit({ windowMs: 60_000, max, message: 'Too many requests. Slow down and try again in a minute.' });
 }
