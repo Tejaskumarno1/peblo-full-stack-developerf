@@ -50,7 +50,7 @@ router.post('/notes/:id/promises', ...aiLimit, async (req, res, next) => {
   try {
     const userId = req.user!.id;
     const note = await prisma.note.findFirst({
-      where: { id: req.params.id, userId },
+      where: { id: req.params.id, userId, isDeleted: false },
       include: { tags: { include: { tag: true } } },
     });
     if (!note) return res.status(404).json({ error: 'Note not found' });

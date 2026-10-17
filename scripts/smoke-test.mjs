@@ -11,6 +11,7 @@ if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is not set (server/
 process.env.PEBLO_SQL_DIR = path.resolve('server/prisma/sql');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-test-secret-smoke-test-secret';
 process.env.TRUST_PROXY = '1'; // as behind a proxy: lets the test fake client addresses (PEB-63)
+process.env.AI_BURST_MAX = '1000'; // the test makes many AI calls in a minute; the AI limits themselves are tested with their own instances (PEB-26)
 process.env.SIGNUP_RATE_MAX = '1000'; // the test makes several accounts; the sign-in limit is still tested
 delete process.env.OPENAI_API_KEY;
 delete process.env.GEMINI_API_KEY;
@@ -947,6 +948,135 @@ check('..whatever the case or spacing', serverKeysAllowed() === false);
 process.env.SERVER_AI_KEYS = 'on';
 check('any other value leaves them on', serverKeysAllowed() === true);
 if (prev === undefined) delete process.env.SERVER_AI_KEYS; else process.env.SERVER_AI_KEYS = prev;
+}
+
+// ---- PEB-64: AI never reads #private or Trash notes, only changes the note the person picked, "Local only" cannot be overridden ----
+{
+const http2 = await import('http');
+const asked = []; // what the fake model was asked (full request bodies)
+let fakeAnswer = '{}';
+const fake2 = http2.createServer(async (req, resp) => {
+  let body = '';
+  for await (const c of req) body += c;
+  const j = body ? JSON.parse(body) : {};
+  asked.push({ url: req.url, model: j.model, text: body });
+  if (j.stream) {
+    resp.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    for (const piece of [fakeAnswer.slice(0, 20), fakeAnswer.slice(20)]) {
+      resp.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: j.model, choices: [{ index: 0, delta: { content: piece }, finish_reason: null }] })}\n\n`);
+    }
+    resp.write('data: [DONE]\n\n');
+    return resp.end();
+  }
+  resp.writeHead(200, { 'Content-Type': 'application/json' });
+  resp.end(JSON.stringify({ id: 'x', object: 'chat.completion', created: 0, model: j.model, choices: [{ index: 0, message: { role: 'assistant', content: fakeAnswer }, finish_reason: 'stop' }] }));
+});
+await new Promise((ok) => fake2.listen(0, '127.0.0.1', ok));
+const url2 = `http://127.0.0.1:${fake2.address().port}`;
+await call('PUT', '/api/profile', { settings: { ollamaEnabled: true, ollamaUrl: url2, ollamaModel: 'llama3.2', defaultAiModel: 'ollama' } });
+
+const mk = async (title, content, tags) => (await call('POST', '/api/notes', { title, content, tags })).json.note;
+const plainN = await mk('Plan for Tuesday', 'visible text', ['work']);
+const otherN = await mk('Garden ideas', 'other text', ['home']);
+const secretN = await mk('Secret diary', 'my secret words', ['private']);
+const trashN = await mk('Old trashed thing', 'trash words', ['work']);
+await call('DELETE', `/api/notes/${trashN.id}`);
+const content = async (id) => (await call('GET', `/api/notes/${id}`)).json.note.content;
+
+// per-note AI actions refuse #private and Trash notes before any model is asked
+asked.length = 0;
+for (const [what, body] of [['title', { content: 'x' }], ['summary', { content: 'x' }], ['actions', { content: 'x' }], ['tags', { content: 'x' }]]) {
+  const rp = await call('POST', `/api/notes/${secretN.id}/ai/${what}`, body);
+  check(`AI ${what} on a #private note is refused`, rp.status === 400 && /#private/.test(rp.json.error), rp);
+  const rt = await call('POST', `/api/notes/${trashN.id}/ai/${what}`, body);
+  check(`AI ${what} on a note in the Trash is refused`, rt.status === 404, rt);
+}
+check('no model was asked for any of those', asked.length === 0, asked.length);
+fakeAnswer = JSON.stringify({ title: 'A title' });
+let r64 = await call('POST', `/api/notes/${plainN.id}/ai/title`, { content: 'hello there' });
+check('AI title on an ordinary note still works', r64.status === 200 && r64.json.title === 'A title', r64);
+
+// chat: the model is offered only readable notes, and a change to another note is only a suggestion
+asked.length = 0;
+fakeAnswer = JSON.stringify({ reply: 'Rewrote it', notes: [], updateNote: { noteId: otherN.id, replaceContent: 'REWRITTEN BY AI' } });
+r64 = await call('POST', '/api/ai/chat', { message: 'improve my garden note' });
+const prompt1 = asked.map((a) => a.text).join(' ');
+check('the model is offered ordinary notes', /Plan for Tuesday/.test(prompt1) && /Garden ideas/.test(prompt1));
+check('the model is not told the titles of #private or Trash notes', !/Secret diary/.test(prompt1) && !/Old trashed thing/.test(prompt1), prompt1.slice(0, 300));
+check('a rewrite of another note is not applied', r64.status === 200 && (await content(otherN.id)) === 'other text' && !r64.json.updatedNote, r64);
+check('it comes back as a suggestion to confirm', r64.json.suggestedUpdate?.noteId === otherN.id && r64.json.suggestedUpdate.title === 'Garden ideas' && r64.json.suggestedUpdate.replaceContent === 'REWRITTEN BY AI', r64.json);
+
+// streaming chat does the same
+let sres = await fetch(base + '/api/ai/chat-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'improve my garden note' }) });
+const sevs = (await sres.text()).split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6)));
+const sdone = sevs.find((e) => e.done);
+check('streaming chat also only suggests', !!sdone && sdone.suggestedUpdate?.noteId === otherN.id && !sdone.updatedNote && (await content(otherN.id)) === 'other text', sevs.slice(-2));
+
+// saying yes applies it and keeps the old text as a version
+r64 = await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id, replaceContent: 'REWRITTEN BY AI' });
+check('confirming applies the change', r64.status === 200 && (await content(otherN.id)) === 'REWRITTEN BY AI', r64);
+const bk = (await call('GET', `/api/notes/${otherN.id}/backups`)).json.backups || [];
+check('..and the earlier text is kept so it can be undone', bk.some((b) => b.content === 'other text'), bk.length);
+r64 = await call('POST', `/api/notes/${otherN.id}/backups/${bk.find((b) => b.content === 'other text')?.id}/revert`);
+check('..and reverting brings it back', r64.status === 200 && (await content(otherN.id)) === 'other text', r64);
+r64 = await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id, appendContent: 'ADDED' });
+check('confirming an addition appends it', r64.status === 200 && /other text[\s\S]*ADDED/.test(await content(otherN.id)));
+check('confirming nothing is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id })).status === 400);
+check('confirming for a note in the Trash is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: trashN.id, appendContent: 'x' })).status === 404 && (await call('GET', `/api/notes/${trashN.id}`)).json.note.content === 'trash words');
+check('confirming for a note that does not exist is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: 'no-such-note', appendContent: 'x' })).status === 404);
+
+// the model names a #private note: dropped, nothing changes
+fakeAnswer = JSON.stringify({ reply: 'x', notes: [], updateNote: { noteId: secretN.id, replaceContent: 'HACKED' } });
+r64 = await call('POST', '/api/ai/chat', { message: 'change the diary' });
+check('a #private note named by the model is neither changed nor suggested', !r64.json.suggestedUpdate && !r64.json.updatedNote && (await content(secretN.id)) === 'my secret words', r64.json);
+fakeAnswer = JSON.stringify({ reply: 'x', notes: [], updateNote: { noteId: trashN.id, replaceContent: 'HACKED' } });
+r64 = await call('POST', '/api/ai/chat', { message: 'change the old thing' });
+check('a note in the Trash named by the model is neither changed nor suggested', !r64.json.suggestedUpdate && !r64.json.updatedNote, r64.json);
+
+// chat on the note the person picked: applied; naming another note does not
+fakeAnswer = JSON.stringify({ reply: 'Added', notes: [], updateNote: { noteId: plainN.id, appendContent: 'MORE FOR PLAN' } });
+r64 = await call('POST', '/api/ai/chat', { message: 'add to this', mode: 'append', noteId: plainN.id });
+check('chat on a picked note adds to it', r64.status === 200 && r64.json.updatedNote?.id === plainN.id && /MORE FOR PLAN/.test(await content(plainN.id)), r64.json);
+fakeAnswer = JSON.stringify({ reply: 'x', notes: [], updateNote: { noteId: otherN.id, replaceContent: 'WRONG NOTE' } });
+const before = await content(otherN.id);
+r64 = await call('POST', '/api/ai/chat', { message: 'add this', mode: 'append', noteId: plainN.id });
+check('chat on a picked note cannot rewrite a different one', (await content(otherN.id)) === before && r64.json.suggestedUpdate?.noteId === otherN.id, r64.json);
+r64 = await call('POST', '/api/ai/chat', { message: 'add this', mode: 'append', noteId: secretN.id });
+check('chat on a #private note is refused', r64.status === 400 && /#private/.test(r64.json.error), r64);
+r64 = await call('POST', '/api/ai/chat', { message: 'add this', mode: 'append', noteId: trashN.id });
+check('chat on a note in the Trash is refused', r64.status === 404, r64);
+
+// voice: the assistant is not told about, or asked to read out, a #private note
+asked.length = 0;
+fakeAnswer = JSON.stringify({ responseSpeech: 'Reading it', needClarification: false, actions: [{ type: 'READ_NOTE', noteId: secretN.id }] });
+r64 = await call('POST', '/api/ai/voice-command', { transcript: 'read my secret diary' });
+check('voice: the model is not told the titles of #private or Trash notes', !/Secret diary/.test(asked.map((a) => a.text).join(' ')) && !/Old trashed thing/.test(asked.map((a) => a.text).join(' ')));
+check('voice: reading a #private note aloud is refused', r64.status === 200 && /couldn't find/i.test(r64.json.responseSpeech) && asked.length === 1, r64.json);
+
+// "Local only" cannot be overridden by a named cloud model plus a yes
+process.env.OPENAI_BASE_URL = `${url2}/v1`;
+await call('PUT', '/api/profile', { settings: { openAiKey: 'sk-test', defaultAiModel: 'ollama' } });
+asked.length = 0;
+const hubRes = await fetch(base + '/api/ai/hub/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }], provider: 'openai', model: 'gpt-4o-mini', allowCloud: true }) });
+const hubEvs = (await hubRes.text()).split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6)));
+check('"Local only" refuses a cloud model even when the request says allowCloud', hubEvs.some((e) => e.type === 'error' && e.code === 'LOCAL_ONLY') && !asked.some((a) => a.model === 'gpt-4o-mini'), hubEvs);
+
+// the decision itself
+const { decideChatUpdate } = await import(pathToFileURL(path.resolve('dist/server/utils/aiAccess.js')).href);
+const offered = [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }];
+const d1 = decideChatUpdate({ targetNoteId: 'a', plan: { noteId: 'a', appendContent: 'x' }, offered });
+check('decide: the picked note is applied', d1.apply?.noteId === 'a' && !d1.suggest);
+const d2 = decideChatUpdate({ targetNoteId: 'a', plan: { noteId: 'b', replaceContent: 'x' }, offered });
+check('decide: another offered note is a suggestion', !d2.apply && d2.suggest?.noteId === 'b' && d2.suggest.title === 'B');
+const d3 = decideChatUpdate({ targetNoteId: null, plan: { noteId: 'zzz', replaceContent: 'x' }, offered });
+check('decide: a note that was not offered is dropped', !d3.apply && !d3.suggest);
+const d4 = decideChatUpdate({ targetNoteId: 'a', plan: { noteId: 'a', appendContent: '  ', replaceContent: '' }, offered });
+check('decide: an empty change is dropped', !d4.apply && !d4.suggest);
+check('decide: no plan is fine', !decideChatUpdate({ offered }).apply && !decideChatUpdate({ plan: null, offered }).suggest);
+
+await call('PUT', '/api/profile', { settings: { openAiKey: '', ollamaEnabled: false, defaultAiModel: 'auto' } });
+delete process.env.OPENAI_BASE_URL;
+await new Promise((ok) => fake2.close(ok));
 }
 } catch (err) {
   failures++;

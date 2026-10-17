@@ -3,15 +3,22 @@ import { safeFetchHtml } from '../utils/safeFetch.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { syncTags, saveEmbeddingForNote } from './notesController.js';
+import { aiReadableWhere, noteAiAccess, PRIVATE_MESSAGE } from '../utils/aiAccess.js';
+
+/** The note a per-note AI action works on: it must exist, not be in the Trash and not be #private. Answers the request itself when it cannot be used. */
+async function noteForAi(req: Request, res: Response) {
+  const access = await noteAiAccess(req.user!.id, req.params.id as string);
+  if (access === 'private') { res.status(400).json({ error: PRIVATE_MESSAGE }); return null; }
+  if (access === 'missing') { res.status(404).json({ error: 'Note not found' }); return null; }
+  const note = await prisma.note.findFirst({ where: { id: req.params.id as string, userId: req.user!.id } });
+  if (!note) { res.status(404).json({ error: 'Note not found' }); return null; }
+  return note;
+}
 
 export async function generateSummary(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 
@@ -39,12 +46,8 @@ export async function generateSummary(req: Request, res: Response, next: NextFun
 
 export async function extractActions(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 
@@ -71,12 +74,8 @@ export async function extractActions(req: Request, res: Response, next: NextFunc
 
 export async function suggestTitle(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const content = req.body?.content ?? note.content;
 
     if (!content || content.trim().length === 0) {
@@ -127,7 +126,7 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
         select: { id: true, text: true, deadline: true }
       }),
       prisma.note.findMany({
-        where: { userId: req.user!.id, isArchived: false, deletedAt: null }, // Trash is not offered to the assistant
+        where: { ...aiReadableWhere(req.user!.id), isArchived: false }, // no Trash, no #private
         select: { id: true, title: true }
       })
     ]);
@@ -183,7 +182,7 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
           saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
         } else if (action.type === 'READ_NOTE' && action.noteId) {
           const note = await prisma.note.findFirst({
-            where: { id: action.noteId, userId: req.user!.id, deletedAt: null }
+            where: { ...aiReadableWhere(req.user!.id), id: action.noteId }
           });
           if (note) {
             const summaryText = await aiService.generateVerbalNoteSummary(req.user!.id, note.title, note.content);
@@ -236,12 +235,8 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
 
 export async function suggestTagForNote(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 

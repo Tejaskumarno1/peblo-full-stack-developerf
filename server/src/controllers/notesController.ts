@@ -376,6 +376,9 @@ export async function revertBackup(req: any, res: any, next: any) {
 
 export async function saveEmbeddingForNote(userId: string, noteId: string, title: string, content: string) {
   try {
+    // a #private note (or one in the Trash) is never sent to a model, not even to be indexed
+    const here = await prisma.note.findFirst({ where: { id: noteId, userId, isDeleted: false }, select: { tags: { select: { tag: { select: { name: true } } } } } });
+    if (!here || here.tags.some((t) => t.tag.name === 'private')) return;
     const text = `Title: ${title}\n\nContent: ${content}`;
     const embedding = await aiService.generateEmbedding(userId, text);
     if (embedding && embedding.length > 0) {

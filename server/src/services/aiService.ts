@@ -1039,7 +1039,8 @@ export async function streamHubChat(
   }
 
   const isCloud = (n: ProviderName) => n !== 'ollama';
-  if (routing === 'ollama' && order.some(isCloud) && !opts.allowCloud) {
+  // "Local only" means local only: a yes to "use the cloud" (allowCloud) cannot override it, and neither can a named cloud provider.
+  if (routing === 'ollama' && order.some(isCloud)) {
     const err: any = new Error('Your AI setting is "Local only", so cloud models are switched off. Change it in Connections to use them.');
     err.code = 'LOCAL_ONLY';
     throw err;

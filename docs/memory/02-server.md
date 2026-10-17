@@ -152,7 +152,8 @@ All user-owned tables cascade on user delete.
 ### 2.6 AI chat (`routes/aiChat.ts`, `controllers/aiChatController.ts`). Mounted at `/api/ai`; all routes require auth.
 | Method | Path | Validation | Does | Tables | Response |
 |---|---|---|---|---|---|
-| POST | `/api/ai/chat` | `message` required; `mode=create\|append`; `noteId` | The AI plans notes, then the server creates notes and/or updates (appends to or replaces) one existing note. Logs `chat` generations. | notes, tags, note_tags, note_backups, ai_generations | `{reply, notes:[note], updatedNote}` |
+| POST | `/api/ai/chat` | `message` required; `mode=create\|append`; `noteId` | The AI plans notes, then the server creates notes. A change to an existing note is applied only to the note the person picked (`mode=append`, `noteId`); a change to any other note is returned as `suggestedUpdate` and NOT applied (PEB-64). #private and Trash notes are not shown to the model (`utils/aiAccess.ts`), and chat on one is refused. Logs `chat` generations. | notes, tags, note_tags, note_backups, ai_generations | `{reply, notes:[note], updatedNote, suggestedUpdate:{noteId,title,appendContent,replaceContent}\|null}` |
+| POST | `/api/ai/chat/apply-update` | `noteId`, `appendContent` and/or `replaceContent` | The person said yes to a `suggestedUpdate`: adds to or rewrites that note (not in Trash), keeping the earlier text as a version. No AI call, so no AI limit. | notes, note_backups, ai_generations | `{note}` (404 if gone, 400 if empty, 413 over 200 000 characters) |
 | POST | `/api/ai/chat-stream` | same | **SSE**: `data:{chunk}` repeated (the raw JSON text from the model), then `data:{done:true, reply, notes, updatedNote}` or `data:{error}` | same | text/event-stream |
 | POST | `/api/ai/smart-intake` | `rawData` required; `template` = auto, meeting, email, project, braindump or syllabus | `analyzeAndOrganize` creates 1 note and N todos linked to it (in a `$transaction`) and logs `smart_intake` | notes, tags, note_tags, todos, ai_generations | `{reply, note, todos}` |
 | POST | `/api/ai/smart-intake-upload` | multipart `file`; mimetype must be `application/pdf` or `text/plain` (**multer has no size limit**) | Extracts text with pdf-parse or as UTF-8, then follows the same flow; logs `smart_intake_file` | same | `{reply:'I successfully processed your file! …', note(raw row, no tags), todos}` |
@@ -264,7 +265,7 @@ All of these read and write the `todos` table (and read `notes` when a `noteId` 
 Orphan tags are never removed. `aiChatController` has its own N+1 copy of `syncTags` (aiChatController.ts:22-33).
 
 **Versions/backups**
-- `note_backups` rows are written **only** by the AI chat update path (`updateExistingNote` in `/ai/chat` and `/ai/chat-stream`).
+- `note_backups` rows are written **only** by the AI chat update path (`applyNoteUpdate` in `aiChatController.ts`, used by `/ai/chat`, `/ai/chat-stream` and `/ai/chat/apply-update`; the last 5 are kept).
 - Normal PATCH saves never create versions.
 - `/ai/chat` keeps the newest 5 backups (aiChatController.ts:112-121). `/ai/chat-stream` does **not** prune (aiChatController.ts:230-232), so its backups grow without limit.
 - Revert overwrites the note with no safety backup.

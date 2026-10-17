@@ -4,6 +4,7 @@ import { tzOf } from '../utils/userTime.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
+import { aiReadableWhere, noteAiAccess, decideChatUpdate, PRIVATE_MESSAGE } from '../utils/aiAccess.js';
 
 // prisma imported from db.js
 
@@ -55,6 +56,54 @@ async function createNoteForUser(userId: string, { title, content, category, tag
   return formatNote(updated);
 }
 
+/**
+ * Adds to, or rewrites, one of this person's notes. The text before the change is kept as a version (the last 5),
+ * so it can be undone from the note's history. Notes in the Trash are left alone.
+ */
+export async function applyNoteUpdate(userId: string, id: string, appendContent: string | null, replaceContent: string | null) {
+  const existing = await prisma.note.findFirst({ where: { id, userId, isDeleted: false, deletedAt: null } });
+  if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+
+  let newContent = existing.content || '';
+  if (replaceContent?.trim()) {
+    newContent = replaceContent.trim();
+  } else if (appendContent?.trim()) {
+    const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
+    newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
+  }
+
+  await prisma.noteBackup.create({ data: { noteId: existing.id, content: existing.content || '' } });
+  const oldBackups = await prisma.noteBackup.findMany({ where: { noteId: existing.id }, orderBy: { createdAt: 'desc' }, skip: 5 });
+  if (oldBackups.length > 0) {
+    await prisma.noteBackup.deleteMany({ where: { id: { in: oldBackups.map((b) => b.id) } } });
+  }
+
+  await prisma.note.update({ where: { id: existing.id }, data: { content: newContent } });
+  await prisma.aiGeneration.create({
+    data: { noteId: existing.id, userId, type: 'chat', result: JSON.stringify({ source: 'dashboard_chat_update' }) },
+  });
+  const refetched = await prisma.note.findUnique({ where: { id: existing.id }, include: noteInclude });
+  return formatNote(refetched);
+}
+
+/** The person said yes to a suggested change to one of their notes. */
+export async function applyChatUpdate(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { noteId, appendContent, replaceContent } = req.body || {};
+    if (typeof noteId !== 'string' || !noteId) return res.status(400).json({ error: 'Which note?' });
+    const add = typeof appendContent === 'string' ? appendContent : null;
+    const rewrite = typeof replaceContent === 'string' ? replaceContent : null;
+    if (!add?.trim() && !rewrite?.trim()) return res.status(400).json({ error: 'There is nothing to add.' });
+    if (Math.max(add?.length || 0, rewrite?.length || 0) > 200_000) return res.status(413).json({ error: 'That is too long for one note.' });
+    const note = await applyNoteUpdate(req.user!.id, noteId, add, rewrite);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    notify(req, 'notes_changed');
+    res.json({ note });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function chatAndCreateNotes(req: Request, res: Response, next: NextFunction) {
   try {
     const { message, mode = 'create', noteId } = req.body;
@@ -66,7 +115,7 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
     const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
-      where: { userId, isArchived: false },
+      where: { ...aiReadableWhere(userId), isArchived: false },
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 25,
@@ -74,10 +123,12 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
 
     let targetNote: any = null;
     if (mode === 'append' && noteId) {
-      targetNote = await prisma.note.findFirst({
+      const access = await noteAiAccess(userId, noteId as string);
+      if (access === 'private') return res.status(400).json({ error: PRIVATE_MESSAGE });
+      targetNote = access === 'ok' ? await prisma.note.findFirst({
         where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
-      });
+      }) : null;
       if (!targetNote) {
         return res.status(404).json({ error: 'Note not found' });
       }
@@ -93,58 +144,14 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
     const createdNotes: any[] = [];
     let updatedNote: any = null;
 
-    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
-      const existing = await prisma.note.findFirst({
-        where: { id, userId },
-      });
-      if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+    const updateExistingNote = (id: string, appendContent: string | null, replaceContent: string | null) => applyNoteUpdate(userId, id, appendContent, replaceContent);
 
-      let newContent = existing.content || '';
-      if (replaceContent?.trim()) {
-        newContent = replaceContent.trim();
-      } else if (appendContent?.trim()) {
-        const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
-        newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
-      }
-
-      await prisma.noteBackup.create({
-        data: { noteId: existing.id, content: existing.content || '' }
-      });
-
-      const oldBackups = await prisma.noteBackup.findMany({
-        where: { noteId: existing.id },
-        orderBy: { createdAt: 'desc' },
-        skip: 5
-      });
-      if (oldBackups.length > 0) {
-        await prisma.noteBackup.deleteMany({
-          where: { id: { in: oldBackups.map(b => b.id) } }
-        });
-      }
-
-      await prisma.note.update({
-        where: { id: existing.id },
-        data: { content: newContent },
-      });
-
-      await prisma.aiGeneration.create({
-        data: {
-          noteId: existing.id,
-          userId,
-          type: 'chat',
-          result: JSON.stringify({ source: 'dashboard_chat_update' }),
-        },
-      });
-
-      const refetched = await prisma.note.findUnique({
-        where: { id: existing.id },
-        include: noteInclude,
-      });
-      return formatNote(refetched);
-    };
-
-    if (plan.updateNote?.noteId && (plan.updateNote.appendContent || plan.updateNote.replaceContent)) {
-      updatedNote = await updateExistingNote(plan.updateNote.noteId, plan.updateNote.appendContent, plan.updateNote.replaceContent);
+    // A change to the note the person picked is applied (and can be undone from its history); a change to any
+    // other note is only suggested, and the person decides.
+    const decision = decideChatUpdate({ targetNoteId: mode === 'append' ? targetNote?.id : null, plan: plan.updateNote, offered: recentNotes });
+    const suggestedUpdate = decision.suggest;
+    if (decision.apply) {
+      updatedNote = await updateExistingNote(decision.apply.noteId, decision.apply.appendContent, decision.apply.replaceContent);
     } else if (mode === 'append' && targetNote) {
       const appendContent = plan.notes[0]?.content || `## AI addition\n\n${message.trim()}`;
       updatedNote = await updateExistingNote(targetNote.id, appendContent, null);
@@ -171,6 +178,7 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
       reply: plan.reply,
       notes: createdNotes,
       updatedNote,
+      suggestedUpdate,
     });
   } catch (error) {
     next(error);
@@ -188,7 +196,7 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
     const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
-      where: { userId, isArchived: false },
+      where: { ...aiReadableWhere(userId), isArchived: false },
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 25,
@@ -196,10 +204,12 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
 
     let targetNote: any = null;
     if (mode === 'append' && noteId) {
-      targetNote = await prisma.note.findFirst({
+      const access = await noteAiAccess(userId, noteId as string);
+      if (access === 'private') return res.status(400).json({ error: PRIVATE_MESSAGE });
+      targetNote = access === 'ok' ? await prisma.note.findFirst({
         where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
-      });
+      }) : null;
       if (!targetNote) {
         return res.status(404).json({ error: 'Note not found' });
       }
@@ -216,47 +226,14 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
     const createdNotes: any[] = [];
     let updatedNote: any = null;
 
-    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
-      const existing = await prisma.note.findFirst({
-        where: { id, userId },
-      });
-      if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+    const updateExistingNote = (id: string, appendContent: string | null, replaceContent: string | null) => applyNoteUpdate(userId, id, appendContent, replaceContent);
 
-      let newContent = existing.content || '';
-      if (replaceContent?.trim()) {
-        newContent = replaceContent.trim();
-      } else if (appendContent?.trim()) {
-        const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
-        newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
-      }
-
-      await prisma.noteBackup.create({
-        data: { noteId: existing.id, content: existing.content || '' }
-      });
-
-      await prisma.note.update({
-        where: { id: existing.id },
-        data: { content: newContent },
-      });
-
-      await prisma.aiGeneration.create({
-        data: {
-          noteId: existing.id,
-          userId,
-          type: 'chat',
-          result: JSON.stringify({ source: 'dashboard_chat_update' }),
-        },
-      });
-
-      const refetched = await prisma.note.findUnique({
-        where: { id: existing.id },
-        include: noteInclude,
-      });
-      return formatNote(refetched);
-    };
-
-    if (plan.updateNote?.noteId && (plan.updateNote.appendContent || plan.updateNote.replaceContent)) {
-      updatedNote = await updateExistingNote(plan.updateNote.noteId, plan.updateNote.appendContent, plan.updateNote.replaceContent);
+    // A change to the note the person picked is applied (and can be undone from its history); a change to any
+    // other note is only suggested, and the person decides.
+    const decision = decideChatUpdate({ targetNoteId: mode === 'append' ? targetNote?.id : null, plan: plan.updateNote, offered: recentNotes });
+    const suggestedUpdate = decision.suggest;
+    if (decision.apply) {
+      updatedNote = await updateExistingNote(decision.apply.noteId, decision.apply.appendContent, decision.apply.replaceContent);
     } else if (mode === 'append' && targetNote) {
       const appendContent = plan.notes[0]?.content || `## AI addition\n\n${message.trim()}`;
       updatedNote = await updateExistingNote(targetNote.id, appendContent, null);
@@ -280,7 +257,7 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
 
     notify(req, 'notes_changed', 'todos_changed');
     // Send final completion event with the DB records
-    res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote, suggestedUpdate })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
