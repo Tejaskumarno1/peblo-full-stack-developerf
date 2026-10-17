@@ -6,7 +6,7 @@ import { ROUTING_CHOICES, normalizeRouting } from '../utils/aiRouting';
 import { unreadableKeyMessage } from '../utils/keyStatus';
 import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
-import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu } from 'lucide-react';
+import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Trash2 } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
   const { user, updateProfile, logout, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
@@ -142,6 +142,21 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
     try { await authAPI.logoutAll(); } catch { /* signing out here still happens */ }
     onClose();
     logout();
+  };
+
+  // Delete the account and everything in it (PEB-25): needs the password and a tick, then signs this device out.
+  const [del, setDel] = useState({ password: '', sure: false, busy: false, error: '' });
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    if (!del.sure || !del.password) return;
+    setDel((d) => ({ ...d, busy: true, error: '' }));
+    try {
+      await authAPI.deleteAccount({ password: del.password });
+      onClose();
+      logout();
+    } catch (err) {
+      setDel((d) => ({ ...d, busy: false, error: err.response?.data?.error || 'Could not delete the account. Try again.' }));
+    }
   };
 
   const handleSaveProfile = async (e) => {
@@ -495,6 +510,27 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </div>
                 <button type="button" className="btn btn-outline" onClick={handleLogoutAll} style={{ whiteSpace: 'nowrap' }}>Sign out everywhere</button>
               </div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Delete account</h3>
+              <form onSubmit={handleDeleteAccount} className="settings-toggle-row" style={{ display: 'block' }} aria-label="Delete account">
+                <div className="settings-toggle-info" style={{ marginBottom: '0.75rem' }}>
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Trash2 size={16} /> Delete my account</h4>
+                  <p>
+                    Deletes your account and everything in it: notes, tasks, tags, saved AI keys and quiz history. It is removed from the
+                    server for good, there is no copy and it cannot be undone. Export your notes first if you want to keep them.
+                  </p>
+                </div>
+                <div className="settings-field-group">
+                  <label className="settings-field-label" htmlFor="del-password">Your password</label>
+                  <input id="del-password" type="password" autoComplete="current-password" className="settings-field-input" value={del.password} onChange={(e) => setDel({ ...del, password: e.target.value })} />
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.75rem 0', fontSize: '0.9rem' }}>
+                  <input id="del-sure" type="checkbox" checked={del.sure} onChange={(e) => setDel({ ...del, sure: e.target.checked })} />
+                  I understand this deletes everything and cannot be undone
+                </label>
+                {del.error && <p role="alert" style={{ margin: '0.5rem 0', fontWeight: 500, color: '#ef4444' }}>{del.error}</p>}
+                <button type="submit" id="del-submit" className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#ef4444' }} disabled={!del.sure || !del.password || del.busy}>{del.busy ? 'Deleting...' : 'Delete my account'}</button>
+              </form>
 
               <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Import</h3>
               <div className="settings-toggle-row" style={{ alignItems: 'flex-start' }}>

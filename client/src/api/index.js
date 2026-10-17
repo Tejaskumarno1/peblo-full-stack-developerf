@@ -4,7 +4,8 @@ export const authAPI = {
   signup: (data) => api.post('/auth/signup', data),
   login: (data) => api.post('/auth/login', data),
   changePassword: (data) => api.post('/auth/change-password', data),
-  logoutAll: () => api.post('/auth/logout-all')
+  logoutAll: () => api.post('/auth/logout-all'),
+  deleteAccount: (data) => api.post('/auth/delete-account', data)
 };
 
 export const profileAPI = {

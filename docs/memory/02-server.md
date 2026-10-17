@@ -117,6 +117,7 @@ All user-owned tables cascade on user delete.
 | POST | `/api/auth/login` | no | 10 per 15 min per IP | email lower-cased, password cut to 200 | `bcrypt.compare`; 401 "Incorrect email or password." | users | `{token, user}` |
 | POST | `/api/auth/change-password` | yes | 8 per 15 min per IP (after auth) | new password 8-200 | Verifies the current password (403 if wrong). Re-hashes and increments `tokenVersion`, which signs out other devices. | users | `{token, message}` |
 | POST | `/api/auth/logout-all` | yes | – | – | Increments `tokenVersion`, which invalidates every token including this one | users | `{message}` |
+| POST | `/api/auth/delete-account` | yes | `password` | Checks the password (403 if wrong, same limiter as change-password), then `prisma.user.delete`; every table cascades (notes, tags, todos, series, api keys, quiz runs, mastery, backups, embeddings). Drops the account's sockets (PEB-25) | all | `{message}` |
 
 ### 2.3 Profile (`routes/profile.ts`, `controllers/profileController.ts`)
 | Method | Path | Auth | Validation | Does | Tables | Response |

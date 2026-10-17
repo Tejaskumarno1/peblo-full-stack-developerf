@@ -99,4 +99,22 @@ router.post('/logout-all', authenticate, async (req, res, next) => {
   }
 });
 
+// Delete the account and everything in it (notes, tasks, tags, saved keys, quiz history). Needs the password again.
+// Every table that holds the person's data is tied to the user row with ON DELETE CASCADE, so one delete removes it all.
+// There is no undo and no copy is kept; the app tells people to export first.
+router.post('/delete-account', authenticate, passwordLimit, async (req, res, next) => {
+  try {
+    const password = String(req.body?.password || '').slice(0, 200);
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(403).json({ error: 'That password is not correct.' });
+    }
+    await prisma.user.delete({ where: { id: user.id } });
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
+    res.json({ message: 'Your account and everything in it was deleted.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

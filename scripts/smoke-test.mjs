@@ -1078,6 +1078,66 @@ await call('PUT', '/api/profile', { settings: { openAiKey: '', ollamaEnabled: fa
 delete process.env.OPENAI_BASE_URL;
 await new Promise((ok) => fake2.close(ok));
 }
+
+// ---- PEB-25: delete the account and everything in it ----
+{
+const { default: prismaDel } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+const saveToken = token;
+const pw = 'correct horse battery';
+const xEmail = `smoke-del-x-${runId}@peblo.test`;
+const yEmail = `smoke-del-y-${runId}@peblo.test`;
+const sx = await call('POST', '/api/auth/signup', { email: xEmail, password: pw, name: 'Del X' });
+const sy = await call('POST', '/api/auth/signup', { email: yEmail, password: pw, name: 'Del Y' });
+const xId = sx.json.user.id, xToken = sx.json.token;
+const yId = sy.json.user.id, yToken = sy.json.token;
+
+token = yToken;
+const yNote = (await call('POST', '/api/notes', { title: 'Y note', content: 'keep me', tags: ['y'] })).json.note;
+await call('POST', '/api/todos', { text: 'Y task' });
+
+token = xToken;
+const xNote = (await call('POST', '/api/notes', { title: 'X note', content: 'delete me', tags: ['x'] })).json.note;
+await call('POST', '/api/notes', { title: 'X second', content: 'also', tags: ['x', 'other'] });
+await call('POST', '/api/todos', { text: 'X task', deadline: new Date(Date.now() + 86400000).toISOString() });
+await call('POST', '/api/todos', { text: 'X repeating', deadline: new Date(Date.now() + 86400000).toISOString(), recurrence: 'daily' });
+await call('PUT', '/api/profile', { settings: { geminiKey: 'delete-test-key' } });
+await call('POST', `/api/notes/${xNote.id}/backups/none/revert`); // harmless: makes sure the route exists for this user
+const counts = async (id) => ({
+  notes: await prismaDel.note.count({ where: { userId: id } }),
+  tags: await prismaDel.tag.count({ where: { userId: id } }),
+  todos: await prismaDel.todo.count({ where: { userId: id } }),
+  series: await prismaDel.todoSeries.count({ where: { userId: id } }),
+  keys: await prismaDel.userApiKeys.count({ where: { userId: id } }),
+});
+const before = await counts(xId);
+check('the account has data before it is deleted', before.notes === 2 && before.tags >= 2 && before.todos >= 60 && before.series === 1 && before.keys === 1, before);
+
+let rd = await call('POST', '/api/auth/delete-account', { password: 'not the password' });
+check('a wrong password does not delete anything (403)', rd.status === 403 && (await counts(xId)).notes === 2, rd);
+rd = await call('POST', '/api/auth/delete-account', {});
+check('no password does not delete anything (403)', rd.status === 403 && (await counts(xId)).notes === 2, rd);
+token = null;
+rd = await call('POST', '/api/auth/delete-account', { password: pw });
+check('signed out, nobody can delete an account (401)', rd.status === 401 && (await counts(xId)).notes === 2, rd);
+
+token = xToken;
+rd = await call('POST', '/api/auth/delete-account', { password: pw });
+check('the right password deletes the account (200)', rd.status === 200 && /deleted/i.test(rd.json.message), rd);
+const after = await counts(xId);
+check('..and every row of its data is gone', Object.values(after).every((n) => n === 0) && !(await prismaDel.user.findUnique({ where: { id: xId } })), after);
+const lg = await call('POST', '/api/auth/login', { email: xEmail, password: pw });
+check('..the person can no longer sign in', lg.status === 401, lg);
+const old = await call('GET', '/api/notes');
+check('..and the old token stops working', old.status === 401, old.status);
+
+token = yToken;
+const yAfter = await call('GET', `/api/notes/${yNote.id}`);
+check('another account is untouched', yAfter.status === 200 && yAfter.json.note.content === 'keep me' && (await counts(yId)).notes === 1 && (await counts(yId)).todos === 1);
+const again = await call('POST', '/api/auth/delete-account', { password: pw });
+check('deleting your own account leaves the same endpoint working for others', again.status === 200);
+check('..and that account is gone too', (await counts(yId)).notes === 0 && !(await prismaDel.user.findUnique({ where: { id: yId } })));
+token = saveToken;
+}
 } catch (err) {
   failures++;
   console.error(err);
