@@ -48,7 +48,7 @@ router.post('/signup', signupLimit, async (req, res, next) => {
   }
 });
 
-router.post('/login', loginLimit, async (req, res, next) => {
+router.post('/login', ...loginLimit, async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '').slice(0, 200);

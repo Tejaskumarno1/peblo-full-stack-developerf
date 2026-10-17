@@ -19,6 +19,7 @@
     "dev:app": "wait-on tcp:3001 http-get://localhost:5173 && cross-env PEBLO_DEV_URL=http://localhost:5173 electron .",
     "build:client": "npm --prefix client run build",
     "build:server": "node scripts/build-server.mjs",
+    "typecheck": "tsc -p server --noEmit",
     "build": "npm run build:client && npm run build:server",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
