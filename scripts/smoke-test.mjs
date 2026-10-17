@@ -863,6 +863,30 @@ try {
     check('packaging: Windows and Linux keep only their own engine', left('win32', 'x64').join() === 'query_engine-windows.dll.node' && left('linux', 'x64').join() === 'libquery_engine-debian-openssl-3.0.x.so.node');
     check('release: the build job never publishes by itself (only the release job does)', /dist -- --publish never/.test(wf) && !/GH_TOKEN/.test(wf));
   }
+
+  // ---- PEB-65: security headers, Content-Security-Policy, strict origins ----
+  {
+    const h = await rawFetch(base + '/api/health');
+    check('API answers say nosniff, no framing, no referrer', h.headers.get('x-content-type-options') === 'nosniff' && h.headers.get('x-frame-options') === 'DENY' && h.headers.get('referrer-policy') === 'no-referrer');
+    check('API answers are not cached and do not say "Express"', h.headers.get('cache-control') === 'no-store' && !h.headers.get('x-powered-by'));
+    const page = await rawFetch(base + '/');
+    const csp = page.headers.get('content-security-policy') || '';
+    check('the web app gets a Content-Security-Policy', /default-src 'self'/.test(csp) && /object-src 'none'/.test(csp) && /frame-ancestors 'none'/.test(csp), csp);
+    check('scripts: this origin plus the inline theme script by hash, never unsafe-inline', /script-src 'self' 'sha256-[A-Za-z0-9+/=]+'/.test(csp) && !/script-src[^;]*'unsafe-inline'/.test(csp), csp);
+    const html = await page.text();
+    const { inlineScriptHashes } = await import(pathToFileURL(path.resolve('dist/server/middleware/security.js')).href);
+    const hashes = inlineScriptHashes(html);
+    check('the hash is that of the inline script in index.html', hashes.length >= 1 && hashes.every((x) => csp.includes(x)), hashes);
+    const originStatus = async (origin) => (await rawFetch(base + '/api/health', { headers: { Origin: origin } })).status;
+    check('another website is refused (403)', (await originStatus('https://evil.example')) === 403);
+    check("the app's own address is allowed", (await originStatus(base)) === 200);
+    check('a local dev server is allowed outside production', (await originStatus('http://localhost:5173')) === 200);
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    check('in production a page on another local port is refused', (await originStatus('http://localhost:5173')) === 403);
+    check('in production the own address still works', (await originStatus(base)) === 200);
+    if (prevEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prevEnv;
+  }
 } catch (err) {
   failures++;
   console.error(err);

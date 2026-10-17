@@ -22,6 +22,7 @@ import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
+import { securityHeaders, corsDelegate } from './middleware/security.js';
 import { protectExistingKeys } from './services/profile.js';
 
 export interface StartOptions {
@@ -40,17 +41,11 @@ export function createApp(staticDir?: string) {
   // "true" used to trust every X-Forwarded-For entry (anyone could fake an address); it now means one proxy hop.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
-  // Desktop app (Electron) sends no Origin header, so it's always allowed. The Vite dev
-  // server and, once ALLOWED_ORIGINS is set (comma-separated), a hosted web client too.
-  const extraOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  app.use(cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      if (/^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) return cb(null, true);
-      if (extraOrigins.includes(origin)) return cb(null, true);
-      cb(Object.assign(new Error('That origin is not allowed.'), { statusCode: 403 }));
-    },
-  }));
+  app.disable('x-powered-by');
+  app.use(securityHeaders(staticDir));
+
+  // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
+  app.use(cors(corsDelegate));
   app.use(express.json({ limit: '10mb' }));
 
   // Before the routers: hosting platforms probe this without signing in.

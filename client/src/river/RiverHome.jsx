@@ -541,7 +541,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                     </button>
                   )}
                   max={z.bin === 'day' ? 3 : 2}
-                  onMore={() => { pendingScroll.current = new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
+                  onMore={() => { const hid = b.meet[z.bin === 'day' ? 3 : 2]; pendingScroll.current = hid ? momentOf(hid) : new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
                 />
               ))}
               {quick && quick.lane === 'meeting' && (
@@ -589,7 +589,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                       </button>
                     );
                   }}
-                  onMore={() => { pendingScroll.current = new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
+                  onMore={() => { const hid = b.tasks[2]; pendingScroll.current = hid ? dueMomentOf(hid) : new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
                 />
               ))}
               {quick && quick.lane === 'task' && (

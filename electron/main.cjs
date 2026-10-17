@@ -119,10 +119,11 @@ function appUrl(route = '/') {
   return base.replace(/\/$/, '') + route;
 }
 
+// Only Peblo's own address counts as "inside the app" (same scheme, host and port). A page on another
+// local port, or any other site, opens in the normal browser and never inside Peblo.
 function isInternal(target) {
   try {
-    const u = new URL(target);
-    return u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+    return new URL(target).origin === new URL(appUrl('/')).origin;
   } catch {
     return false;
   }
@@ -224,6 +225,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: isDev, // no DevTools in release builds
       spellcheck: true,
     },
   });
@@ -238,9 +240,11 @@ function createWindow() {
   secureWebContents(mainWindow);
 
   // Microphone for voice notes / AI voice calls; nothing else is granted.
+  const allowedPermission = (permission) => ['media', 'clipboard-sanitized-write', 'notifications'].includes(permission);
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(['media', 'clipboard-sanitized-write', 'notifications'].includes(permission));
+    callback(allowedPermission(permission));
   });
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => allowedPermission(permission));
 
   // Closing the window keeps Peblo running in the tray so quick capture keeps working.
   mainWindow.on('close', (event) => {
@@ -286,7 +290,7 @@ function createCaptureWindow() {
     alwaysOnTop: true,
     backgroundColor: savedBackground('#ffffff'),
     title: 'Quick capture',
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: isDev, spellcheck: true },
   });
   lockZoom(captureWindow);
   captureWindow.loadURL(appUrl('/quick-capture'));
@@ -358,7 +362,7 @@ function buildMenu() {
       label: 'View',
       submenu: [
         { role: 'reload' },
-        { role: 'toggleDevTools' },
+        ...(isDev ? [{ role: 'toggleDevTools' }] : []),
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

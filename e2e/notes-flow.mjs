@@ -21,7 +21,7 @@ try {
   check('deleted note is in Trash', true);
   await row('Alpha note').click();
   await page.waitForURL(new RegExp('/notes/' + a.id), { timeout: 8000 });
-  check('a note in Trash can be opened', await page.getByText('This note is in the Trash').isVisible().catch(() => false));
+  check('a note in Trash can be opened', await page.getByText('This note is in the Trash').waitFor({ timeout: 5000 }).then(() => true, () => false));
   await row('Alpha note').getByLabel('Restore note').click({ force: true });
   await page.waitForTimeout(800);
   await tab('All').click();

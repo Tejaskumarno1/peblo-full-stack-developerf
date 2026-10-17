@@ -131,7 +131,15 @@
       "icon": "build/icon.png",
       "maintainer": "Boddu Tejas Kumar <boddutejaskumar@gmail.com>"
     },
-    "afterPack": "build/afterPack.cjs"
+    "afterPack": "build/afterPack.cjs",
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableCookieEncryption": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    }
   },
   "allowScripts": {
     "@prisma/client@6.19.3": true,
