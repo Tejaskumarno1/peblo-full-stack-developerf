@@ -8,6 +8,7 @@ import { notesAPI, todosAPI, studyAPI } from '../api';
 import OrbitMap from './OrbitMap';
 import OrbitCapture from './OrbitCapture';
 import OrbitTopics from './OrbitTopics';
+import OrbitBackup from './OrbitBackup';
 import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject } from './orbitUtils';
 import { initialsOf } from '../river/riverUtils';
 import './orbit.css';
@@ -168,6 +169,11 @@ function OrbitTop({ data }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/calendar'); }}>This week</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:topics')); }}>Manage topics</button>
+            {(data.notes || []).some((n) => Array.isArray(n.tags) && n.tags.includes('example-data'))
+              ? <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:example-clear')); }}>Clear example data</button>
+              : <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:example')); }}>Try with example data</button>}
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:backup')); }}>Back up everything</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:restore')); }}>Restore from a backup</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
           </div>
@@ -238,6 +244,7 @@ export default function OrbitShell({ children }) {
         <OrbitTop data={data} />
         {children}
         {topicsOpen && <OrbitTopics onClose={() => setTopicsOpen(false)} />}
+        <OrbitBackup />
         {capture && (
           <div className="o-capture-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setCapture(null); }}>
             <OrbitCapture preset={capture} onClose={() => setCapture(null)} />

@@ -752,3 +752,10 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 /* Round 13: map focus ring, icon picker */
 .orbit .o-node .ball:focus-visible{outline:3px solid var(--o-accent,#2350FF);outline-offset:3px}
 .orbit .o-icon-pick{height:32px;border-radius:8px;border:1px solid var(--o-line,#ccc);background:transparent;color:inherit;padding:0 4px}
+
+/* Round 14: breadcrumb, backup dialog */
+.orbit .o-crumbs{display:flex;align-items:center;gap:6px;min-width:0}
+.orbit .o-crumbs button{background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:4px 6px;border-radius:8px;display:inline-flex;align-items:center;gap:6px}
+.orbit .o-crumbs button:hover{background:var(--o-wash,rgba(0,0,0,.06))}
+.orbit .o-crumbs .here{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--o-fg2,#667);padding:4px 6px}
+.orbit .o-backup-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px}

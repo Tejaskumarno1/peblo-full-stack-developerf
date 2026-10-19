@@ -180,13 +180,17 @@ function OrbitNote({ note }) {
   return (
     <article className={`o-sheet${zen ? ' zen' : ''}`} style={{ top: 92, width: 876 }} aria-label="Note">
       <SheetHead onBack={back}>
-        <span className="crumb">{space ? topicName(space) : 'Map'}</span>
-        {topic && (
-          <>
-            <ChevronRight size={14} strokeWidth={2.2} style={{ color: 'var(--o-fg2)' }} />
-            <span className="topic"><i style={{ borderColor: levelVar(levelOf(mastery.get(topic)?.score)) }} />{topicName(topic)}</span>
-          </>
-        )}
+        <nav className="o-crumbs" aria-label="Breadcrumb">
+          <button type="button" className="crumb" aria-label="Back to the map" onClick={back}>{space ? topicName(space) : 'Map'}</button>
+          {topic && (
+            <>
+              <ChevronRight size={14} strokeWidth={2.2} style={{ color: 'var(--o-fg2)' }} />
+              <button type="button" className="topic" aria-label={`Show ${topicName(topic)} on the map`} onClick={() => showTopic(topic)}><i style={{ borderColor: levelVar(levelOf(mastery.get(topic)?.score)) }} />{topicName(topic)}</button>
+            </>
+          )}
+          <ChevronRight size={14} strokeWidth={2.2} style={{ color: 'var(--o-fg2)' }} />
+          <span className="here" aria-current="page">{doc.title || 'Untitled note'}</span>
+        </nav>
         <span className="grow" />
         <span className="status" role="status" aria-live="polite">{flash || (doc.isDraft ? 'NEW NOTE' : status)}</span>
         {saveStatus === 'error' && <button type="button" className="o-btn small" onClick={() => note.forceSave()}>Retry</button>}

@@ -38,3 +38,4 @@ orbit-study.mjs = Orbit study: mastery explainer, quiz length + missed-question 
 `orbit-trash.mjs` — trash and archive: restore, unarchive, empty trash
 `orbit-checklist.mjs` — getting-started checklist on the map
 `orbit-map3.mjs` — map topic colours and icons, arrow-key navigation, PNG/SVG download
+`orbit-backup.mjs` — backup and restore, example data

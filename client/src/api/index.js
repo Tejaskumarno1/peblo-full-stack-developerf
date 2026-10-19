@@ -87,3 +87,11 @@ export const riverAPI = {
   promises: (noteId) => api.get('/river/promises', { params: noteId ? { noteId } : {} }),
   setPromise: (id, index, status, todoId) => api.patch(`/river/promises/${id}`, { index, status, todoId }),
 };
+
+
+export const backupAPI = {
+  get: () => api.get('/backup'),
+  restore: (data) => api.post('/restore', data),
+  addExample: () => api.post('/example'),
+  clearExample: () => api.post('/example/clear'),
+};

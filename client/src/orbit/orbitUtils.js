@@ -2,7 +2,7 @@
 import { startOfDay } from '../soft/softUtils.js';
 
 const EXAM = /exam|test|viva|mid-?sem|finals?\b/i;
-export const HIDDEN_TAGS = new Set(['inbox', 'private']);
+export const HIDDEN_TAGS = new Set(['inbox', 'private', 'example-data']);
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 

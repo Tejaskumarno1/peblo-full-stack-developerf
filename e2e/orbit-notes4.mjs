@@ -52,6 +52,13 @@ try {
   const saved = (await get(n.id))?.content || '';
   check('replace all rewrites the note', /left join/.test(saved) && !/inner join/i.test(saved), saved);
   check('..and the editor shows the new text', (await page.locator('.o-body').innerText()).includes('left join'));
+  // Round 14: breadcrumb
+  await go('/notes/' + n.id);
+  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+  check('a note shows a breadcrumb ending in its title', (await crumbs.innerText()).includes('Joins'));
+  await crumbs.getByRole('button', { name: 'Show Dbms on the map' }).click();
+  await page.waitForTimeout(800);
+  check('the topic crumb goes to that topic on the map', new URL(page.url()).pathname === '/' && (await page.getByRole('complementary', { name: 'Selected topic' }).count()) === 1);
 } catch (e) {
   check('script ran to the end', false, String(e).slice(0, 300));
 }
