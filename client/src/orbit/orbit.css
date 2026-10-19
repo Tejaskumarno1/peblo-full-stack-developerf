@@ -694,3 +694,19 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 }
 
 .o-goal { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 14px; }
+
+/* Round 8: Today, exams, focus timer, time report */
+.o-today { display: flex; flex-direction: column; gap: 18px; }
+.o-today section { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.o-today section .o-task { align-self: stretch; }
+.o-exam { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.o-exam-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.o-exam-add select, .o-exam-add input { height: 36px; border-radius: 9px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; padding: 0 8px; }
+.o-focus { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--o-ink); color: var(--o-on-ink); box-shadow: var(--o-shadow); max-width: 90%; }
+.o-focus .t { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.o-focus .m { font-family: var(--o-mono); font-variant-numeric: tabular-nums; }
+.o-time { display: flex; flex-direction: column; gap: 8px; }
+.o-time-row { display: grid; grid-template-columns: 160px 1fr 80px; align-items: center; gap: 10px; }
+.o-time-row .bar { height: 10px; border-radius: 999px; background: var(--o-line); overflow: hidden; }
+.o-time-row .bar i { display: block; height: 100%; background: var(--o-path); border-radius: 999px; }
+

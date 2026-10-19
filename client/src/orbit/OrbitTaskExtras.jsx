@@ -6,7 +6,7 @@ import { topicName, tagsOfTodo, shortDate } from './orbitUtils';
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 /** Everything a task can carry besides its title: details, steps, estimate, colour, "waits for", status. */
-export function TaskDetail({ t, todos, onMeta, onOpenNote }) {
+export function TaskDetail({ t, todos, onMeta, onOpenNote, onFocus }) {
   const m = metaOf(t);
   const [details, setDetails] = useState(m.details || '');
   const [step, setStep] = useState('');
@@ -44,6 +44,8 @@ export function TaskDetail({ t, todos, onMeta, onOpenNote }) {
             <option value="todo">To do</option><option value="doing">Doing</option>
           </select>
         </label>
+        {onFocus && !t.completed && <button type="button" className="o-btn small" onClick={() => onFocus(t)}>Focus 25 min</button>}
+        {m.spentMin > 0 && <span className="o-quiet">{minutesLabel(m.spentMin)} spent</span>}
         <label className="o-toggle"><input type="checkbox" checked={!!m.assignment} onChange={(e) => onMeta(t, { assignment: e.target.checked ? true : null })} /> This is an assignment</label>
       </div>
       <div className="o-labels" role="group" aria-label="Colour label">

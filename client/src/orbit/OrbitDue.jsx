@@ -9,6 +9,7 @@ import { useOrbit } from './OrbitShell';
 import { useAuth } from '../context/AuthContext';
 import { orbitPrefs } from './orbitPrefs';
 import { TaskExportMenu } from './OrbitExport';
+import OrbitToday, { TimeReport } from './OrbitToday';
 import { TaskDetail, Board, Assignments, DoneLog, NextCard } from './OrbitTaskExtras';
 import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
@@ -129,6 +130,25 @@ export default function OrbitDue({ view: initialView = 'list' }) {
 
   // Round 5: extra details (task.meta), board columns, assignments, bulk edit
   const setMeta = (t, patch) => run(() => todosAPI.update(t.id, { meta: patch }), 'Could not save that.');
+  // Round 8: focus timer that logs minutes on the task (meta.spentMin)
+  const [focus, setFocus] = useState(null); // { task, startedAt, mins }
+  const [, setTick] = useState(0);
+  const stopFocus = async () => {
+    if (!focus) return;
+    const f = focus;
+    setFocus(null);
+    const mins = Math.min(f.mins, Math.round((Date.now() - f.startedAt) / 60000));
+    if (mins < 1) { say('Focus stopped. Under a minute, so nothing was logged.'); return; }
+    const cur = todos.find((x) => x.id === f.task.id) || f.task;
+    if (await setMeta(cur, { spentMin: (metaOf(cur).spentMin || 0) + mins })) say(`Logged ${mins} min on "${f.task.text.length > 30 ? f.task.text.slice(0, 30) + '…' : f.task.text}"`);
+  };
+  const startFocus = (t) => { setFocus({ task: t, startedAt: Date.now(), mins: 25 }); setOpenId(null); };
+  useEffect(() => {
+    if (!focus) return undefined;
+    const i = setInterval(() => { setTick((n) => n + 1); if (Date.now() >= focus.startedAt + focus.mins * 60000) stopFocus(); }, 1000);
+    return () => clearInterval(i);
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  const focusLeft = focus ? Math.max(0, focus.startedAt + focus.mins * 60000 - Date.now()) : 0;
   const COLS = { todo: 'To do', doing: 'Doing', done: 'Done' };
   const applyCol = (t, col) => todosAPI.update(t.id, col === 'done' ? { completed: true, meta: { status: null } } : { completed: false, meta: { status: col === 'doing' ? 'doing' : null } });
   const moveCol = async (t, col) => {
@@ -300,6 +320,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
           {m.status === 'doing' && !t.completed && <span className="o-prio">Doing</span>}
           {sp.total > 0 && <span className="m" title="Steps done">{sp.done}/{sp.total} steps</span>}
           {m.estimateMin > 0 && <span className="m">{minutesLabel(m.estimateMin)}</span>}
+          {m.spentMin > 0 && <span className="m">{minutesLabel(m.spentMin)} spent</span>}
           {(t.priority === 'high' || t.priority === 'low') && <span className={`o-prio ${t.priority}`}>{t.priority}</span>}
           {tag && <span className="o-chip" style={{ height: 26, fontSize: 12 }}><i style={{ background: levelVar(levelOf(mastery.get(tag)?.score)) }} />{topicName(tag)}</span>}
           {t.deadline && <span className="m">{whenOf(t)}</span>}
@@ -322,7 +343,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             <button type="button" className="del" aria-label={`Delete ${t.text}`} onClick={() => remove(t)}><Trash2 size={15} /></button>
           </span>
         </div>
-        {openId === t.id && <TaskDetail t={t} todos={todos} onMeta={setMeta} onOpenNote={(id) => navigate(`/notes/${id}`)} />}
+        {openId === t.id && <TaskDetail t={t} todos={todos} onMeta={setMeta} onOpenNote={(id) => navigate(`/notes/${id}`)} onFocus={startFocus} />}
         {editing && (
           <form className="o-edit" onSubmit={(e) => { e.preventDefault(); saveEdit(t); }}>
             <label>Task<input value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} aria-label="Task title" autoFocus /></label>
@@ -356,11 +377,13 @@ export default function OrbitDue({ view: initialView = 'list' }) {
         <header className="o-sheet-head">
           <span className="crumb">Due</span>
           <div className="o-seg" role="tablist" aria-label="View" style={{ marginLeft: 8 }}>
+            <button type="button" role="tab" aria-selected={view === 'today'} onClick={() => setView('today')}>Today</button>
             <button type="button" role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>List</button>
             <button type="button" role="tab" aria-selected={view === 'week'} onClick={() => setView('week')}>Week</button>
             <button type="button" role="tab" aria-selected={view === 'board'} onClick={() => setView('board')}>Board</button>
             <button type="button" role="tab" aria-selected={view === 'assign'} onClick={() => setView('assign')}>Assignments</button>
             <button type="button" role="tab" aria-selected={view === 'done'} onClick={() => setView('done')}>Done</button>
+            <button type="button" role="tab" aria-selected={view === 'time'} onClick={() => setView('time')}>Time</button>
           </div>
           <span className="grow" />
           <button type="button" className="o-btn ghost small" style={{ height: 44 }} onClick={back}><Network size={16} strokeWidth={2.2} /> Back to map</button>
@@ -483,6 +506,8 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             </>
           )}
 
+          {view === 'today' && <OrbitToday onToggle={toggle} />}
+          {view === 'time' && <TimeReport todos={live} />}
           {view === 'board' && <Board todos={live} onMove={moveCol} />}
           {view === 'assign' && <Assignments todos={live} mastery={mastery} onStatus={setAStatus} />}
           {view === 'done' && (
@@ -533,6 +558,14 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             </>
           )}
         </div>
+        {focus && (
+          <div className="o-focus" role="timer" aria-label="Focus timer">
+            <b>Focus</b>
+            <span className="t">{focus.task.text}</span>
+            <span className="m" aria-live="off">{String(Math.floor(focusLeft / 60000)).padStart(2, '0')}:{String(Math.floor((focusLeft % 60000) / 1000)).padStart(2, '0')}</span>
+            <button type="button" className="o-btn small" onClick={stopFocus}>Stop and log</button>
+          </div>
+        )}
         {toast && (
           <div className="o-toast" role="status">
             <span>{toast.msg}</span>
