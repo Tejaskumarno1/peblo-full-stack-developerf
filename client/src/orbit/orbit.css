@@ -347,6 +347,12 @@
 .o-list-head input { width: 260px; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; }
 .o-group { display: flex; flex-direction: column; gap: 8px; }
 .o-group-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+button.o-group-head { width: 100%; background: none; border: none; font: inherit; font-weight: 700; font-size: 16px; color: inherit; text-align: left; cursor: pointer; padding: 6px 0; }
+button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-offset: 2px; border-radius: 6px; }
+.o-group-head .chev { transition: transform 0.15s; flex: none; color: var(--o-fg2); }
+.o-group-head .chev.open { transform: rotate(90deg); }
+.o-more { margin: 8px 0 0; border: 1px dashed var(--o-line); background: transparent; color: var(--o-fg2); border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.o-more:hover { color: var(--o-fg); border-color: var(--o-fg2); }
 .o-group-head i { width: 12px; height: 12px; border-radius: 999px; border: 3px solid var(--o-none); }
 .o-group-head span { font-family: var(--o-mono); font-size: 11px; font-weight: 400; color: var(--o-fg2); }
 .o-group-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -394,7 +400,14 @@
 .o-task { min-height: 48px; padding: 6px 12px; border-radius: 12px; background: var(--o-bg); border: 1px solid var(--o-line); display: flex; align-items: center; gap: 12px; }
 .o-task input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--o-path); cursor: pointer; margin: 0; }
 .o-task .t { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.o-task.done { opacity: 0.6; background: transparent; }
 .o-task.done .t { text-decoration: line-through; color: var(--o-fg2); }
+.o-due-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--o-fg2); }
+.o-due-sum b { color: var(--o-fg); }
+.o-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.o-toggle input { accent-color: var(--o-path); margin: 0; }
+.o-toast { display: flex; align-items: center; gap: 14px; }
+.o-toast button { border: none; background: transparent; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
 .o-task .m { font-family: var(--o-mono); font-size: 11px; color: var(--o-fg2); white-space: nowrap; }
 .o-task .del { width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent; color: var(--o-fg2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .o-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }

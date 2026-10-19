@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Network, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useOrbit } from './OrbitShell';
 import { topicName, levelOf, levelVar, tagsOfTodo } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf } from '../river/riverUtils';
 
+const UNDO_MS = 6000;
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** Orbit · Due: tasks as a list (Tasks) or as a week (Calendar), on a sheet over the map. */
@@ -21,6 +22,21 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const [err, setErr] = useState('');
   const [week, setWeek] = useState(() => mondayOf(new Date()));
   const today = startOfDay();
+  // PEB-122: a ticked task stays where it is (light and struck through) unless "Hide completed" is on
+  const [hideDone, setHideDone] = useState(() => { try { return localStorage.getItem('peblo-orbit-hide-done') === '1'; } catch { return false; } });
+  const setHide = (v) => { setHideDone(v); try { localStorage.setItem('peblo-orbit-hide-done', v ? '1' : '0'); } catch { /* ignore */ } };
+  // PEB-123: a short "Undo" after ticking or deleting a task
+  const [toast, setToast] = useState(null); // { msg, undo }
+  const toastTimer = useRef(null);
+  const [gone, setGone] = useState([]); // ids deleted on screen, still waiting out the undo time
+  const pending = useRef(new Map()); // id -> { timer, run }
+  const say = (msg, undo) => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, undo });
+    toastTimer.current = setTimeout(() => setToast(null), UNDO_MS);
+  };
+  // leaving the screen makes any delete that is still waiting go through now
+  useEffect(() => () => { clearTimeout(toastTimer.current); for (const p of pending.current.values()) { clearTimeout(p.timer); p.run(); } }, []);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
@@ -31,14 +47,30 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     setErr('');
     try { await fn(); } catch (e) { setErr(e.response?.data?.error || failMsg); } finally { refresh(); }
   };
-  const toggle = (t) => run(async () => {
-    queryClient.setQueryData(['todos', 'orbit-all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
-    await todosAPI.update(t.id, { completed: !t.completed });
+  const setDone = (t, completed) => run(async () => {
+    queryClient.setQueryData(['todos', 'orbit-all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed } : x)));
+    await todosAPI.update(t.id, { completed });
   }, 'Could not update that task.');
+  const toggle = (t) => {
+    const next = !t.completed;
+    setDone(t, next);
+    say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
+  };
   const remove = async (t) => {
-    const scope = t.seriesId ? await askScope(t, 'delete') : (window.confirm(`Delete "${t.text}"?`) ? 'this' : null);
-    if (!scope) return;
-    await run(() => todosAPI.delete(t.id, scope), 'Could not delete that task.');
+    if (t.seriesId) { // a repeating task asks which ones, so that stays a direct question
+      const scope = await askScope(t, 'delete');
+      if (scope) await run(() => todosAPI.delete(t.id, scope), 'Could not delete that task.');
+      return;
+    }
+    // any other task goes away on screen at once and is really deleted after the undo time
+    setGone((g) => [...g, t.id]);
+    const finish = () => { pending.current.delete(t.id); return run(() => todosAPI.delete(t.id, 'this'), 'Could not delete that task.').then(() => setGone((g) => g.filter((x) => x !== t.id))); };
+    pending.current.set(t.id, { timer: setTimeout(finish, UNDO_MS), run: finish });
+    say('Deleted "' + (t.text.length > 40 ? t.text.slice(0, 40) + '…' : t.text) + '"', () => {
+      const p = pending.current.get(t.id);
+      if (p) { clearTimeout(p.timer); pending.current.delete(t.id); }
+      setGone((g) => g.filter((x) => x !== t.id));
+    });
   };
   const add = async (e) => {
     e.preventDefault();
@@ -54,20 +86,23 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   };
 
   const groups = useMemo(() => {
-    const list = todos.filter((t) => !t.completed || (t.deadline && startOfDay(t.deadline) >= today));
+    // done tasks stay (struck through) so you can check them; overdue ones that were due over two weeks ago are history
+    const list = todos.filter((t) => !gone.includes(t.id) && (!t.completed || (!hideDone && (!t.deadline || startOfDay(t.deadline) >= addDays(today, -14)))));
     const g = [];
-    const push = (key, label, items, hot) => { if (items.length) g.push({ key, label, items, hot }); };
+    const push = (key, label, items, hot) => { if (items.length) g.push({ key, label, items, hot: hot && items.some((t) => !t.completed) }); };
     const dated = list.filter((t) => t.deadline).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-    push('over', 'Overdue', dated.filter((t) => !t.completed && startOfDay(t.deadline) < today), true);
+    push('over', 'Overdue', dated.filter((t) => startOfDay(t.deadline) < today), true);
     for (let i = 0; i < 21; i++) {
       const d = addDays(today, i);
       const items = dated.filter((t) => sameDay(t.deadline, d));
       push(`d${i}`, i < 2 ? dayWord(d) : `${DOW[d.getDay()]} ${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`, items, false);
     }
     push('later', 'Later', dated.filter((t) => startOfDay(t.deadline) >= addDays(today, 21)), false);
-    push('none', 'No date', list.filter((t) => !t.deadline && !t.completed), false);
+    push('none', 'No date', list.filter((t) => !t.deadline), false);
     return g;
-  }, [todos, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [todos, gone, hideDone, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const doneCount = todos.filter((t) => t.completed && !gone.includes(t.id)).length;
+  const openCount = todos.filter((t) => !t.completed && !gone.includes(t.id)).length;
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const timeOf = (t) => (t.startTime ? clock(momentOf(t)) : isAllDay(t) ? '' : clock(t.deadline));
@@ -98,10 +133,14 @@ export default function OrbitDue({ view: initialView = 'list' }) {
 
           {view === 'list' && (
             <>
+              <div className="o-due-sum">
+                <span><b>{openCount}</b> to do · <b>{doneCount}</b> done</span>
+                <label className="o-toggle"><input type="checkbox" checked={hideDone} onChange={(e) => setHide(e.target.checked)} /> Hide completed</label>
+              </div>
               {groups.length === 0 && <p className="o-quiet">Nothing due. Add a task above, or drop one on a topic from the map.</p>}
               {groups.map((g) => (
                 <section key={g.key} className="o-day">
-                  <h2 className={`o-day-head${g.hot ? ' hot' : ''}`}>{g.label} · {g.items.length}</h2>
+                  <h2 className={`o-day-head${g.hot ? ' hot' : ''}`}>{g.label} · {g.items.filter((t) => !t.completed).length}{g.items.some((t) => t.completed) ? ` (${g.items.filter((t) => t.completed).length} done)` : ''}</h2>
                   {g.items.map((t) => {
                     const tag = tagsOfTodo(t)[0];
                     return (
@@ -129,7 +168,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
               </div>
               <div className="o-week">
                 {days.map((d) => {
-                  const items = todos.filter((t) => t.deadline && sameDay(t.deadline, d)).sort((a, b) => (momentOf(a) || 0) - (momentOf(b) || 0));
+                  const items = todos.filter((t) => t.deadline && sameDay(t.deadline, d) && !gone.includes(t.id) && !(hideDone && t.completed)).sort((a, b) => (momentOf(a) || 0) - (momentOf(b) || 0));
                   return (
                     <div key={d.toISOString()} className={`o-week-day${sameDay(d, today) ? ' today' : ''}`}>
                       <div className="h"><b>{d.getDate()}</b><span>{DOW[d.getDay()].toUpperCase()}</span></div>
@@ -146,6 +185,12 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             </>
           )}
         </div>
+        {toast && (
+          <div className="o-toast" role="status">
+            <span>{toast.msg}</span>
+            <button type="button" onClick={() => { const u = toast.undo; clearTimeout(toastTimer.current); setToast(null); u(); }}>Undo</button>
+          </div>
+        )}
       </article>
     </>
   );

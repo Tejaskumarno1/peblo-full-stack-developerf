@@ -12,6 +12,10 @@ import { clock, dayWord } from '../river/riverUtils';
 
 const words = (s) => [...new Set((s || '').toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) || [])];
 
+const BIG_GROUP = 12; // a topic with more notes than this starts folded
+const PAGE_FIRST = 8;
+const PAGE_MORE = 12;
+
 /** Orbit · Notes: one note on a sheet over the map (mockup: OrbitNote), or every note by topic. */
 export default function OrbitNotes() {
   const note = useNoteDoc();
@@ -225,6 +229,9 @@ function OrbitNoteList({ onNew }) {
   const { notes, mastery, space } = useOrbit();
   const [q, setQ] = useState('');
   const [archived, setArchived] = useState(null); // null | 'archive' | 'trash'
+  // PEB-124: big groups start folded and show a page at a time, so the list is not one endless scroll
+  const [openMap, setOpenMap] = useState({});
+  const [shown, setShown] = useState({});
   const { data: special = [] } = useQuery({
     queryKey: ['notes', 'orbit', archived],
     queryFn: () => notesAPI.getAll({ sort: 'updated', ...(archived === 'archive' ? { archived: 'true' } : { deleted: 'true' }) }).then((r) => r.data.notes || []),
@@ -249,6 +256,11 @@ function OrbitNoteList({ onNew }) {
     return [...map.entries()].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1].length - a[1].length);
   }, [notes, special, archived, topic, space, q]);
 
+  const filtering = !!q.trim() || !!topic;
+  const isOpen = (key, len) => openMap[key] ?? (len <= BIG_GROUP || filtering);
+  const allOpen = groups.every(([t, l]) => isOpen(t || 'none', l.length));
+  const setAll = (v) => setOpenMap(Object.fromEntries(groups.map(([t]) => [t || 'none', v])));
+
   return (
     <article className="o-sheet" style={{ top: 92, width: 876 }} aria-label="Notes">
       <SheetHead onBack={() => navigate('/')}>
@@ -265,29 +277,43 @@ function OrbitNoteList({ onNew }) {
         <div className="o-list-head">
           <h1>{archived === 'archive' ? 'Archive' : archived === 'trash' ? 'Trash' : topic ? topicName(topic) : 'Every note'}</h1>
           <span className="grow" />
+          {groups.length > 1 && (
+            <button type="button" className="o-chip" onClick={() => setAll(!allOpen)}>{allOpen ? 'Collapse all' : 'Expand all'}</button>
+          )}
           <label htmlFor="o-note-search" className="o-sr">Search notes</label>
           <input id="o-note-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" />
           <button type="button" className="o-btn small" style={{ height: 42 }} onClick={() => onNew(topic ? [topic] : space ? [space] : [])}>New note</button>
         </div>
         {groups.length === 0 && <p className="o-quiet">{q ? 'No notes match.' : archived ? 'Nothing here.' : 'No notes yet.'}</p>}
-        {groups.map(([t, list]) => (
-          <section key={t || 'none'} className="o-group">
-            <div className="o-group-head">
+        {groups.map(([t, list]) => {
+          const key = t || 'none';
+          const open = isOpen(key, list.length);
+          const limit = shown[key] || PAGE_FIRST;
+          return (
+          <section key={key} className="o-group">
+            <button type="button" className="o-group-head" aria-expanded={open} onClick={() => setOpenMap((m) => ({ ...m, [key]: !open }))}>
+              <ChevronRight size={14} strokeWidth={2.4} className={`chev${open ? ' open' : ''}`} />
               <i style={{ borderColor: t ? levelVar(levelOf(mastery.get(t)?.score)) : 'var(--o-line)' }} />
               {t ? topicName(t) : 'Not on a topic yet'}
               <span>{list.length} NOTE{list.length === 1 ? '' : 'S'}</span>
-            </div>
-            <div className="o-group-items">
-              {list.map((n) => (
+            </button>
+            {open && <div className="o-group-items">
+              {list.slice(0, limit).map((n) => (
                 <Link key={n.id} to={`/notes/${n.id}`} className="o-note-tile">
                   <span className="t">{n.title || 'Untitled'}</span>
                   <span className="s">{snippetOf(n.content, 120) || 'Empty note'}</span>
                   <span className="m">EDITED {agoText(n.updatedAt).toUpperCase()}</span>
                 </Link>
               ))}
-            </div>
+            </div>}
+            {open && list.length > limit && (
+              <button type="button" className="o-more" onClick={() => setShown((s) => ({ ...s, [key]: limit + PAGE_MORE }))}>
+                Show {Math.min(PAGE_MORE, list.length - limit)} more · {list.length - limit} left
+              </button>
+            )}
           </section>
-        ))}
+          );
+        })}
       </div>
     </article>
   );

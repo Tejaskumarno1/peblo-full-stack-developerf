@@ -24,5 +24,6 @@ calls.mjs = AI voice call: Call me now, snooze brings back the same agenda, all-
 riverfix.mjs = River: a failed tick shows a message and rolls back; "+ N more" on a deep stack reaches the hidden meeting (PEB-85).
 security.mjs = Content-Security-Policy: no violation in any style or page, injected inline script / onerror do not run (PEB-65).
 aioff.mjs = Settings > AI Providers > "Turn off all AI": saved on the account, status line says AI is off, server refuses AI, calls disabled, unticking restores it (PEB-106).
+orbit-due.mjs = Orbit: ticked tasks stay struck through, Hide completed, Undo after tick and delete, notes list folds and pages (PEB-122/123/124).
 deleteaccount.mjs = Settings > Data > Delete account: needs a password and a tick, a wrong password changes nothing, success signs this device out and the token stops working (PEB-25).
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).
