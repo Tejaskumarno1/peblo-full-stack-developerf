@@ -1244,6 +1244,16 @@ async function prismaOffUser() {
   check('..newest first', new Date(vs[0].createdAt) >= new Date(vs[49].createdAt));
 }
 
+// ---- UX-12 (PEB-133): a PATCH that only changes tags must work (bulk "add topic") ----
+{
+  const mk = await call('POST', '/api/notes', { title: 'Tags only', content: 'x', tags: ['one'] });
+  const tid = mk.json.note.id;
+  const r = await call('PATCH', `/api/notes/${tid}`, { tags: ['one', 'two'] });
+  check('a tags-only PATCH succeeds', r.status === 200, r.json);
+  const got = (await call('GET', `/api/notes/${tid}`)).json.note;
+  check('..and the tags are saved', JSON.stringify([...(got.tags || [])].sort()) === '["one","two"]', got.tags);
+  check('a PATCH with nothing to change on a missing note is still 404', (await call('PATCH', '/api/notes/no-such-note', { tags: ['x'] })).status === 404);
+}
 } catch (err) {
   failures++;
   console.error(err);

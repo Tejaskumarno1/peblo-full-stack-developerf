@@ -237,11 +237,13 @@ export async function updateNote(req: any, res: any, next: any) {
       ? await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { content: true } })
       : null;
 
+    // Changing only the tags still counts as an edit. (An empty update would match nothing and wrongly answer 404.)
+    if (tags !== undefined && Object.keys(data).length === 0) data.updatedAt = new Date();
+
     // Use updateMany to enforce userId ownership safely in a single query
-    const { count } = await prisma.note.updateMany({
-      where: { id: req.params.id, userId: req.user.id },
-      data
-    });
+    const { count } = Object.keys(data).length
+      ? await prisma.note.updateMany({ where: { id: req.params.id, userId: req.user.id }, data })
+      : { count: await prisma.note.count({ where: { id: req.params.id, userId: req.user.id } }) };
 
     if (count === 0) {
       return res.status(404).json({ error: 'Note not found' });
