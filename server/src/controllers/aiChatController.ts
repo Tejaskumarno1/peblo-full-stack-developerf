@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { notify } from '../utils/notify.js';
 import { tzOf } from '../utils/userTime.js';
 import prisma from '../db.js';
+import { saveVersion } from '../services/noteVersions.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import { aiReadableWhere, noteAiAccess, decideChatUpdate, PRIVATE_MESSAGE } from '../utils/aiAccess.js';
@@ -72,11 +73,7 @@ export async function applyNoteUpdate(userId: string, id: string, appendContent:
     newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
   }
 
-  await prisma.noteBackup.create({ data: { noteId: existing.id, content: existing.content || '' } });
-  const oldBackups = await prisma.noteBackup.findMany({ where: { noteId: existing.id }, orderBy: { createdAt: 'desc' }, skip: 5 });
-  if (oldBackups.length > 0) {
-    await prisma.noteBackup.deleteMany({ where: { id: { in: oldBackups.map((b) => b.id) } } });
-  }
+  await saveVersion(existing.id, existing.content || '', { force: true });
 
   await prisma.note.update({ where: { id: existing.id }, data: { content: newContent } });
   await prisma.aiGeneration.create({

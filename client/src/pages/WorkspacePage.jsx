@@ -324,8 +324,17 @@ export default function WorkspacePage() {
     }
   };
 
+  const handleCompareBackup = async (backup) => {
+    try {
+      const res = await notesAPI.getBackup(selectedNote.id, backup.id);
+      setSelectedBackupForDiff({ ...backup, content: res.data.backup.content });
+    } catch (err) {
+      console.error('Failed to load version', err);
+    }
+  };
+
   const handleRestoreBackup = async (backupId) => {
-    if (!confirm('Are you sure you want to restore this version? Current changes will be overwritten.')) return;
+    if (!confirm('Restore this version? The text you have now is saved as a version first, so you can come back to it.')) return;
     try {
       const res = await notesAPI.revertBackup(selectedNote.id, backupId);
       applyNoteToEditor(res.data.note);
@@ -966,6 +975,7 @@ export default function WorkspacePage() {
                   backupsList={backupsList}
                   selectedBackupForDiff={selectedBackupForDiff}
                   setSelectedBackupForDiff={setSelectedBackupForDiff}
+                  onCompare={handleCompareBackup}
                   noteContent={noteContent}
                   handleRestoreBackup={handleRestoreBackup}
                 />

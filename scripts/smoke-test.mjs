@@ -1016,8 +1016,10 @@ check('streaming chat also only suggests', !!sdone && sdone.suggestedUpdate?.not
 r64 = await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id, replaceContent: 'REWRITTEN BY AI' });
 check('confirming applies the change', r64.status === 200 && (await content(otherN.id)) === 'REWRITTEN BY AI', r64);
 const bk = (await call('GET', `/api/notes/${otherN.id}/backups`)).json.backups || [];
-check('..and the earlier text is kept so it can be undone', bk.some((b) => b.content === 'other text'), bk.length);
-r64 = await call('POST', `/api/notes/${otherN.id}/backups/${bk.find((b) => b.content === 'other text')?.id}/revert`);
+let bkOther = null;
+for (const b of bk) { if ((await call('GET', `/api/notes/${otherN.id}/backups/${b.id}`)).json.backup?.content === 'other text') bkOther = b; }
+check('..and the earlier text is kept so it can be undone', !!bkOther, bk.length);
+r64 = await call('POST', `/api/notes/${otherN.id}/backups/${bkOther?.id}/revert`);
 check('..and reverting brings it back', r64.status === 200 && (await content(otherN.id)) === 'other text', r64);
 r64 = await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id, appendContent: 'ADDED' });
 check('confirming an addition appends it', r64.status === 200 && /other text[\s\S]*ADDED/.test(await content(otherN.id)));
@@ -1214,6 +1216,34 @@ async function prismaOffUser() {
   return { id: me.id, pr };
 }
 }
+// ---- PEB-83: note version history ----
+{
+  const mk = await call('POST', '/api/notes', { title: 'History test', content: 'v1' });
+  const hid = mk.json.note.id;
+  const versions = async () => (await call('GET', `/api/notes/${hid}/backups`)).json.backups || [];
+  check('a new note has no versions yet', (await versions()).length === 0);
+  await call('PATCH', `/api/notes/${hid}`, { content: 'v2' });
+  let vs = await versions();
+  check('the first edit keeps the earlier text as a version', vs.length === 1, vs);
+  await call('PATCH', `/api/notes/${hid}`, { content: 'v3' });
+  await call('PATCH', `/api/notes/${hid}`, { content: 'v4' });
+  check('edits within 10 minutes do not pile up versions', (await versions()).length === 1);
+  check('the list has details but not the whole text', vs[0].content === undefined && vs[0].size === 2 && vs[0].preview === 'v1', vs[0]);
+  let one = await call('GET', `/api/notes/${hid}/backups/${vs[0].id}`);
+  check('one version is fetched on demand', one.status === 200 && one.json.backup.content === 'v1', one.json);
+  check('..only through its own note', (await call('GET', `/api/notes/no-such-note/backups/${vs[0].id}`)).status === 404);
+  const rv = await call('POST', `/api/notes/${hid}/backups/${vs[0].id}/revert`);
+  check('restoring brings the old text back', rv.status === 200 && rv.json.note.content === 'v1', rv.json);
+  vs = await versions();
+  const texts = [];
+  for (const v of vs) texts.push((await call('GET', `/api/notes/${hid}/backups/${v.id}`)).json.backup.content);
+  check('..after saving the text it replaced, so the restore can be undone', texts.includes('v4'), texts);
+  for (let i = 0; i < 55; i++) await call('POST', '/api/ai/chat/apply-update', { noteId: hid, replaceContent: `AI rewrite ${i}` });
+  vs = await versions();
+  check('a note keeps its newest 50 versions', vs.length === 50, vs.length);
+  check('..newest first', new Date(vs[0].createdAt) >= new Date(vs[49].createdAt));
+}
+
 } catch (err) {
   failures++;
   console.error(err);

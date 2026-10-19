@@ -117,7 +117,7 @@ model NoteBackup {
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
 
-  @@index([noteId])
+  @@index([noteId, createdAt])
   @@map("note_backups")
 }
 

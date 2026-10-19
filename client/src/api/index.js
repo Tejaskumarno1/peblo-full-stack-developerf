@@ -22,6 +22,7 @@ export const notesAPI = {
   restore: (id) => api.post(`/notes/${id}/restore`),
   archive: (id) => api.post(`/notes/${id}/archive`),
   getBackups: (id) => api.get(`/notes/${id}/backups`),
+  getBackup: (id, backupId) => api.get(`/notes/${id}/backups/${backupId}`),
   revertBackup: (id, backupId) => api.post(`/notes/${id}/backups/${backupId}/revert`)
 };
 

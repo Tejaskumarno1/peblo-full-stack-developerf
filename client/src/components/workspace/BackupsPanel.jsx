@@ -12,6 +12,7 @@ function BackupsPanel({
   backupsList,
   selectedBackupForDiff,
   setSelectedBackupForDiff,
+  onCompare,
   noteContent,
   handleRestoreBackup,
 }) {
@@ -38,7 +39,7 @@ function BackupsPanel({
           }}
         />
       ) : backupsList.length === 0 ? (
-        <p className="no-backups">No earlier versions yet. Peblo saves a copy each time AI changes this note, so you can undo it here.</p>
+        <p className="no-backups">No earlier versions yet. Peblo keeps a copy while you edit (at most one every 10 minutes) and each time AI changes this note, so you can go back here.</p>
       ) : (
         <div className="backups-list">
           {backupsList.map((backup) => (
@@ -48,7 +49,7 @@ function BackupsPanel({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
-                  onClick={() => setSelectedBackupForDiff(backup)}
+                  onClick={() => onCompare(backup)}
                 >
                   Compare
                 </button>

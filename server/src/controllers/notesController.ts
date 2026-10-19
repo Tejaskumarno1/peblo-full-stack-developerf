@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
+import { saveVersion } from '../services/noteVersions.js';
 
 // prisma imported from db.js
 
@@ -231,6 +232,11 @@ export async function updateNote(req: any, res: any, next: any) {
     if (category !== undefined) data.category = category || null;
     if (isArchived !== undefined) data.isArchived = isArchived;
 
+    // the text before this edit is kept as a version (at most one every 10 minutes while editing)
+    const before = content !== undefined
+      ? await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { content: true } })
+      : null;
+
     // Use updateMany to enforce userId ownership safely in a single query
     const { count } = await prisma.note.updateMany({
       where: { id: req.params.id, userId: req.user.id },
@@ -240,6 +246,7 @@ export async function updateNote(req: any, res: any, next: any) {
     if (count === 0) {
       return res.status(404).json({ error: 'Note not found' });
     }
+    if (before && before.content !== content) await saveVersion(req.params.id, before.content || '').catch(() => {});
 
     if (tags !== undefined) {
       await syncTags(req.user.id, req.params.id, tags);
@@ -334,14 +341,26 @@ export async function archiveNote(req: any, res: any, next: any) {
 
 export async function getBackups(req: any, res: any, next: any) {
   try {
-    // Single query — if the note doesn't belong to the user, the JOIN returns 0 rows
-    const backups = await prisma.noteBackup.findMany({
-      where: { noteId: req.params.id, note: { userId: req.user.id } },
-      select: { id: true, content: true, createdAt: true },
-      orderBy: { createdAt: 'desc' }
-    });
+    // Metadata only (the text of one version is fetched on demand). If the note is not the user's, the JOIN returns 0 rows.
+    const rows: any[] = await prisma.$queryRaw`
+      SELECT b.id AS id, b.created_at AS createdAt, CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview
+      FROM note_backups b JOIN notes n ON n.id = b.note_id
+      WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
+      ORDER BY b.created_at DESC LIMIT 100`;
+    res.json({ backups: rows.map((r) => ({ id: r.id, createdAt: r.createdAt, size: Number(r.size), preview: r.preview })) });
+  } catch (error) {
+    next(error);
+  }
+}
 
-    res.json({ backups });
+export async function getBackup(req: any, res: any, next: any) {
+  try {
+    const backup = await prisma.noteBackup.findFirst({
+      where: { id: req.params.backupId, noteId: req.params.id, note: { userId: req.user.id } },
+      select: { id: true, content: true, createdAt: true },
+    });
+    if (!backup) return res.status(404).json({ error: 'Backup not found' });
+    res.json({ backup });
   } catch (error) {
     next(error);
   }
@@ -361,6 +380,8 @@ export async function revertBackup(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Backup not found' });
     }
 
+    // the text being replaced is kept first, so a restore can itself be undone
+    await saveVersion(req.params.id, existing.content || '', { force: true });
     const note = await prisma.note.update({
       where: { id: req.params.id },
       data: { content: backup.content },
