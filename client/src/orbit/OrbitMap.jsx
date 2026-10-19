@@ -22,6 +22,8 @@ function fitName(name, d) {
 }
 
 /** Orbit · Map (mockup: OrbitHome). Topics around the space, notes and tasks on them, and the revision path. */
+import OrbitHelp from './OrbitHelp';
+
 export default function OrbitMap({ interactive }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -266,6 +268,7 @@ export default function OrbitMap({ interactive }) {
             <button type="button" className="o-tool" aria-label="Zoom in" onClick={() => zoomAt(1.15)}><Plus size={18} /></button>
             <button type="button" className="o-tool" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.15)}><Minus size={18} /></button>
             <button type="button" className="o-tool" aria-label="Back to the middle" onClick={() => setView({ x: 0, y: 0, k: 1 })}><LocateFixed size={18} /></button>
+            <OrbitHelp />
           </div>
 
           {!empty && (

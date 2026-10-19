@@ -26,8 +26,8 @@ try {
   check('ticked task text is struck through', deco.includes('line-through'), deco);
   await page.reload(); await page.waitForTimeout(900);
   check('ticked task is still there after a reload', await row('Orbit overdue one').isVisible());
-  await row('Orbit overdue one').getByRole('checkbox').uncheck();
-  await page.waitForTimeout(500);
+  await row('Orbit overdue one').getByRole('checkbox').click();
+  await page.waitForTimeout(700);
   check('un-ticking removes the done style', !(await row('Orbit overdue one').evaluate((e) => e.classList.contains('done'))));
 
   // Hide completed

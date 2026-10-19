@@ -195,6 +195,19 @@
 .o-tool-tip { position: absolute; left: calc(100% + 10px); top: 0; width: 280px; padding: 12px; border-radius: 14px; background: var(--o-surface); border: 1px solid var(--o-line); box-shadow: var(--o-shadow); display: flex; flex-direction: column; gap: 8px; }
 .o-tool-tip label { font-size: 12px; font-weight: 700; color: var(--o-fg2); }
 .o-tool-tip input { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; }
+.o-help-hint { position: absolute; z-index: 16; left: 84px; bottom: 24px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; font-size: 14px; max-width: 520px; flex-wrap: wrap; }
+.o-help-overlay { position: fixed; inset: 0; z-index: 120; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.o-help { width: min(460px, 100%); padding: 22px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
+.o-help-top { display: flex; align-items: center; justify-content: space-between; }
+.o-help-title { margin: 0; font-size: 22px; }
+.o-help-body { font-size: 15px; line-height: 1.5; color: var(--o-fg); }
+.o-help-body p { margin: 0 0 10px; }
+.o-help-legend { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; font-weight: 600; }
+.o-help-legend li { display: flex; align-items: center; gap: 6px; }
+.o-help-dot { width: 12px; height: 12px; border-radius: 999px; border: 3px solid; display: inline-block; }
+.o-help-dots { display: flex; gap: 6px; justify-content: center; }
+.o-help-dots span { width: 7px; height: 7px; border-radius: 999px; background: var(--o-line); }
+.o-help-dots span.on { background: var(--o-path); }
 .o-zoom { position: absolute; z-index: 15; left: 24px; bottom: 24px; display: flex; flex-direction: column; padding: 6px; border-radius: 18px; gap: 4px; }
 
 /* Selected card and whole map */
