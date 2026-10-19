@@ -35,9 +35,9 @@ export function AuthProvider({ children }) {
   const [theme, setThemeState] = useState(() => {
     try { return localStorage.getItem('peblo-theme') || 'light'; } catch { return 'light'; }
   });
-  // Style: 'studio' (sidebar), 'console' (keyboard-first) or 'soft' (friendly, with a dock).
+  // Style: 'soft' (friendly, with a dock; the default), 'river' or 'orbit'.
   const [uiStyle, setUiStyleState] = useState(() => {
-    try { return localStorage.getItem('peblo-style') || 'studio'; } catch { return 'studio'; }
+    try { const s = localStorage.getItem('peblo-style'); return VALID_STYLES.includes(s) ? s : 'soft'; } catch { return 'soft'; }
   });
   
   const [settings, setSettings] = useState(() => {
@@ -210,7 +210,7 @@ export function AuthProvider({ children }) {
   // Other windows (the quick-capture window) share localStorage: follow style / theme changes made there.
   useEffect(() => {
     const onStorage = (e) => {
-      if (e.key === 'peblo-style' && e.newValue) setUiStyleState(e.newValue);
+      if (e.key === 'peblo-style' && VALID_STYLES.includes(e.newValue)) setUiStyleState(e.newValue);
       if (e.key === 'peblo-theme' && e.newValue) setThemeState(e.newValue);
     };
     window.addEventListener('storage', onStorage);

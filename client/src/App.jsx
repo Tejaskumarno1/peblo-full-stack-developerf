@@ -47,10 +47,10 @@ const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'))
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
-/** Picks the screen for the current style. Studio and Console share pages; the others have their own. */
+/** Picks the screen for the current style (Soft, River or Orbit each have their own). */
 function Styled({ other: Other, ...byStyle }) {
   const { uiStyle } = useAuth();
-  const Screen = byStyle[uiStyle] || Other;
+  const Screen = byStyle[uiStyle] || byStyle.soft || Other;
   return <Screen />;
 }
 

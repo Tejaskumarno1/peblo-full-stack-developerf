@@ -12,7 +12,7 @@ try {
   check('the page is served with a Content-Security-Policy header', /default-src 'self'/.test(res.headers()['content-security-policy'] || ''));
 
   const routes = ['/', '/notes', '/tasks', '/calendar', '/ai', '/ai/connections'];
-  for (const style of ['studio', 'console', 'soft', 'river', 'orbit']) {
+  for (const style of ['soft', 'river', 'orbit']) {
     await page.evaluate((s) => localStorage.setItem('peblo-style', s), style);
     for (const r of routes) {
       await page.goto(base + r);

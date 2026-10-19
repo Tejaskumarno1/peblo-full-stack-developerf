@@ -136,3 +136,5 @@ The longer list of about 60 planned items (by PRD requirement ID) is in `05-plat
 2. **Before anyone outside uses the app:** PEB-56, PEB-57, PEB-58, PEB-59, PEB-60, PEB-61, PEB-62, PEB-24, PEB-26, PEB-74, PEB-29.
 3. **Quick wins for new developers:** PEB-68, PEB-69, PEB-70, PEB-78, PEB-86, PEB-88.
 4. **Then:** quality (PEB-31, PEB-72, PEB-75, PEB-77), then features (PEB-91, PEB-92, PEB-93, PEB-94).
+
+| Studio and Console removed | (no ticket) | Studio and Console styles deleted at the owner's request: removed from Settings, the Ctrl+K palette, `AppShell`, `ConsoleShell.jsx`, `Sidebar.jsx`, `useShellData.js`. Soft Studio is now the default; a saved `studio`/`console` style falls back to Soft. The shared pages (Home, Workspace, Tasks, Calendar, AI Hub, Connections) are still in the code as the fallback `other` screens. The old Studio-only status line ("AI is off") is gone, so that check was dropped from `e2e/aioff.mjs`. |

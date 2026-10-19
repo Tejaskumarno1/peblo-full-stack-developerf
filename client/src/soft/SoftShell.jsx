@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { openCommandPalette } from '../components/shell/Sidebar';
+import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
 import { firstNameOf } from './softUtils';
 import './soft.css';

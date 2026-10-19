@@ -18,4 +18,4 @@ export function weekdayNames(names, first = weekStartDay()) {
   return Array.from({ length: 7 }, (_, i) => names[(first + i) % 7]);
 }
 
-export const VALID_STYLES = ['studio', 'console', 'soft', 'river', 'orbit'];
+export const VALID_STYLES = ['soft', 'river', 'orbit'];

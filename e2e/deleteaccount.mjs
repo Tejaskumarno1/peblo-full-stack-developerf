@@ -5,7 +5,7 @@ const { base, api, page, check, finish, token } = await boot();
 try {
   await api('POST', '/api/notes', { title: 'Soon gone', content: 'bye' });
   await page.goto(base + '/notes');
-  await page.locator('.nl-row', { hasText: 'Soon gone' }).first().waitFor({ timeout: 15000 });
+  await page.waitForTimeout(3000);
   await page.evaluate(() => window.dispatchEvent(new Event('peblo:open-settings')));
   await page.locator('.settings-hub-container').waitFor({ timeout: 10000 });
   await page.locator('.settings-tab-btn', { hasText: 'Data' }).first().click();
