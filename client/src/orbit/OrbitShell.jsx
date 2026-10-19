@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Search, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { orbitPrefs, prefsClass, prefsStyle } from './orbitPrefs';
 import { notesAPI, todosAPI, studyAPI } from '../api';
 import OrbitMap from './OrbitMap';
 import OrbitCapture from './OrbitCapture';
@@ -181,6 +182,8 @@ function OrbitTop({ data }) {
 export default function OrbitShell({ children }) {
   const { pathname } = useLocation();
   const data = useOrbitData();
+  const { settings } = useAuth();
+  const prefs = orbitPrefs(settings);
   // undefined until you pick one: then the map opens on your main subject
   const [space, setSpaceState] = useState(() => load('peblo-orbit-space', undefined));
   const [selected, setSelected] = useState(null);
@@ -222,7 +225,7 @@ export default function OrbitShell({ children }) {
 
   return (
     <OrbitContext.Provider value={ctx}>
-      <div className="orbit">
+      <div className={`orbit ${prefsClass(prefs)}`.trim()} style={prefsStyle(prefs)}>
         {!covered && <OrbitMap interactive={home} />}
         <OrbitTop data={data} />
         {children}

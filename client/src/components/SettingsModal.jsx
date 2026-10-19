@@ -445,6 +445,31 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 </button>
               </div>
 
+              {uiStyle === 'orbit' && (
+                <div className="settings-field-group" role="group" aria-label="Orbit look">
+                  <h3 className="settings-field-label">Orbit look</h3>
+                  {[
+                    ['scale', 'Text size', [['small', 'Small'], ['normal', 'Default'], ['large', 'Large'], ['xlarge', 'Extra large']], 'normal'],
+                    ['font', 'Font', [['default', 'Default'], ['serif', 'Serif'], ['mono', 'Monospace']], 'default'],
+                    ['width', 'Sheet width', [['normal', 'Normal'], ['wide', 'Wide']], 'normal'],
+                    ['accent', 'Accent colour', [['blue', 'Blue'], ['green', 'Green'], ['purple', 'Purple'], ['orange', 'Orange'], ['pink', 'Pink']], 'blue'],
+                    ['goal', 'Daily goal (tasks to finish)', [['0', 'Off'], ...[1, 2, 3, 4, 5, 6, 8, 10].map((n) => [String(n), `${n} a day`])], '0'],
+                    ['motion', 'Animations', [['system', 'Follow my device'], ['on', 'Always on'], ['off', 'Reduce motion']], 'system'],
+                  ].map(([key, label, opts, dflt]) => (
+                    <label key={key} className="settings-field-label" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>
+                      {label}
+                      <select className="settings-field-input" aria-label={`Orbit ${label}`} value={settings?.orbit?.[key] || dflt} onChange={(e) => saveSetting({ orbit: { ...(settings?.orbit || {}), [key]: e.target.value } })}>
+                        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                  <label className="settings-field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    <input type="checkbox" checked={!!settings?.orbit?.contrast} onChange={(e) => saveSetting({ orbit: { ...(settings?.orbit || {}), contrast: e.target.checked } })} />
+                    High contrast
+                  </label>
+                </div>
+              )}
+
               {settingError && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{settingError}</p>}
 
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>

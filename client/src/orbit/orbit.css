@@ -681,3 +681,16 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-sheet.zen .o-sheet-body { grid-template-columns: 1fr; }
 .o-sheet.zen .o-tags { display: none; }
 
+
+/* Round 7: look preferences (font, width, contrast, motion) */
+.orbit.o-font-serif { font-family: Georgia, 'Times New Roman', serif; }
+.orbit.o-font-mono { font-family: var(--o-mono, ui-monospace, Menlo, Consolas, monospace); }
+.orbit.o-wide .o-sheet { width: min(1120px, 96vw) !important; }
+.orbit.o-contrast { --o-line: color-mix(in srgb, var(--o-fg) 60%, transparent); --o-fg2: var(--o-fg); }
+.orbit.o-contrast .o-btn.ghost, .orbit.o-contrast .o-chip { border-color: var(--o-fg); }
+.orbit.o-reduce *, .orbit.o-reduce *::before, .orbit.o-reduce *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+@media (prefers-reduced-motion: reduce) {
+  .orbit.o-motion-system *, .orbit.o-motion-system *::before, .orbit.o-motion-system *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.o-goal { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 14px; }

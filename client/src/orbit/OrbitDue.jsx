@@ -6,6 +6,8 @@ import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
 import { useOrbit } from './OrbitShell';
+import { useAuth } from '../context/AuthContext';
+import { orbitPrefs } from './orbitPrefs';
 import { TaskExportMenu } from './OrbitExport';
 import { TaskDetail, Board, Assignments, DoneLog, NextCard } from './OrbitTaskExtras';
 import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
@@ -31,6 +33,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { todos, mastery, space } = useOrbit();
+  const goal = Number(orbitPrefs(useAuth().settings).goal) || 0;
   const [view, setView] = useState(initialView);
   const [text, setText] = useState('');
   const [err, setErr] = useState('');
@@ -388,6 +391,19 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                 </span>
                 <label className="o-toggle"><input type="checkbox" checked={hideDone} onChange={(e) => setHide(e.target.checked)} /> Hide completed</label>
               </div>
+              {goal > 0 && (() => {
+                const n = live.filter((t) => t.completed && t.updatedAt && sameDay(t.updatedAt, new Date())).length;
+                const pct = Math.min(1, n / goal);
+                return (
+                  <div className="o-goal" role="progressbar" aria-label="Daily goal" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(n, goal)}>
+                    <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+                      <circle cx="22" cy="22" r="18" fill="none" stroke="var(--o-line)" strokeWidth="5" />
+                      <circle cx="22" cy="22" r="18" fill="none" stroke="var(--o-path)" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${pct * 113.1} 113.1`} transform="rotate(-90 22 22)" />
+                    </svg>
+                    <span>{n >= goal ? `Goal reached: ${n} tasks finished today` : `${n} of ${goal} tasks finished today`}</span>
+                  </div>
+                );
+              })()}
               {todayAll.length > 0 && (
                 <div className="o-prog" role="progressbar" aria-valuemin={0} aria-valuemax={todayAll.length} aria-valuenow={todayDone} aria-label="Today's progress">
                   <div className="bar"><div style={{ width: `${Math.round((todayDone / todayAll.length) * 100)}%` }} /></div>
