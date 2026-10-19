@@ -6,6 +6,7 @@ import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
 import { useOrbit } from './OrbitShell';
+import { TaskExportMenu } from './OrbitExport';
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf } from '../river/riverUtils';
 
@@ -320,6 +321,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                   </select>
                 </label>
                 {filtering && <button type="button" className="o-chip on" onClick={() => { setFTopic(''); setFPrio(''); setOnlyOver(false); }}>Clear filters ×</button>}
+                <TaskExportMenu tasks={() => (filtering ? groups.flatMap((g) => g.items) : todos)} label={filtering ? 'Export filtered' : 'Export'} />
               </div>
               {groups.length === 0 && <p className="o-quiet">{filtering ? 'No tasks match these filters.' : 'Nothing due. Add a task above, or drop one on a topic from the map.'}</p>}
               {groups.map((g) => (

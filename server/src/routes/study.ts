@@ -42,7 +42,7 @@ router.post('/quiz', ...aiLimit, async (req, res, next) => {
     const userId = req.user!.id;
     const topic = clean(req.body?.topic);
     if (!topic) return res.status(400).json({ error: 'Pick a topic to quiz.' });
-    const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 10, 3), 15);
+    const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 10, 3), 20);
 
     const notes = await prisma.note.findMany({
       where: { userId, isDeleted: false, tags: { some: { tag: { name: topic } } } },
@@ -110,6 +110,22 @@ router.post('/quiz/:id/answers', async (req, res, next) => {
       update: { score, quizzes: { increment: 1 }, lastCorrect: correct, lastTotal: total, missed: JSON.stringify(missedList) },
     });
     res.json({ correct, total, pct, before: prev ? prev.score : null, mastery: shape(row) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/study/activity: when each finished quiz was taken (last 180 days), for the streak and weekly summary
+router.get('/activity', async (req, res, next) => {
+  try {
+    const since = new Date(Date.now() - 180 * 86400000);
+    const rows = await prisma.quizRun.findMany({
+      where: { userId: req.user!.id, finishedAt: { gte: since } },
+      select: { finishedAt: true },
+      orderBy: { finishedAt: 'desc' },
+      take: 2000,
+    });
+    res.json({ quizzes: rows.map((r) => r.finishedAt) });
   } catch (error) {
     next(error);
   }

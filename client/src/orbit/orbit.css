@@ -161,6 +161,31 @@
 .o-chip { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 999px; padding: 4px 8px; background: var(--o-ink); color: var(--o-on-ink); font: inherit; font-size: 12.5px; cursor: pointer; }
 .o-jump-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); padding: 6px; border-radius: 14px; background: var(--o-surface); box-shadow: var(--o-shadow); display: flex; flex-direction: column; gap: 2px; }
 .o-templates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.o-info-wrap { position: relative; display: inline-flex; margin-left: 6px; vertical-align: middle; }
+.o-info { border: none; background: transparent; color: var(--o-fg3); cursor: pointer; padding: 2px; display: inline-flex; border-radius: 999px; }
+.o-info:hover, .o-info[aria-expanded="true"] { color: var(--o-fg); }
+.o-info-pop { position: absolute; z-index: 40; right: 0; top: calc(100% + 6px); width: 260px; padding: 12px; border-radius: 14px; background: var(--o-surface); color: var(--o-fg); box-shadow: var(--o-shadow); display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; line-height: 1.4; text-align: left; }
+.o-study-btn { position: absolute; z-index: 16; left: 24px; top: 150px; display: flex; align-items: center; gap: 8px; padding: 0 14px; height: 40px; border: none; cursor: pointer; font: inherit; font-weight: 700; font-size: 13.5px; color: var(--o-fg); border-radius: 18px; }
+.o-streak { font-family: var(--o-mono); font-size: 11.5px; background: var(--o-soft); border-radius: 999px; padding: 2px 8px; }
+.o-modal-wrap { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.28); }
+.o-modal { position: relative; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; padding: 22px; border-radius: 22px; display: flex; flex-direction: column; gap: 14px; }
+.o-modal .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.o-modal h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.o-plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.o-plan li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--o-soft); }
+.o-plan .n { width: 26px; height: 26px; flex-shrink: 0; border-radius: 999px; background: var(--o-ink); color: var(--o-on-ink); display: flex; align-items: center; justify-content: center; font-family: var(--o-mono); font-size: 12px; }
+.o-plan .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.o-plan .t b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.o-plan .acts { display: flex; gap: 6px; }
+.o-week { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--o-line); }
+.o-week .row { display: flex; flex-direction: column; gap: 4px; }
+.o-week b { display: inline-flex; align-items: center; gap: 6px; }
+.o-week .dots { display: flex; gap: 6px; }
+.o-week .dots span { width: 30px; height: 30px; border-radius: 999px; background: var(--o-soft); color: var(--o-fg3); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.o-week .dots span.on { background: var(--o-ink); color: var(--o-on-ink); }
+.o-review { display: flex; flex-direction: column; gap: 10px; }
+.o-card .o-btns { flex-wrap: wrap; }
+.o-dl { display: inline-flex; }
 .o-wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .o-node { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .o-node .ball {

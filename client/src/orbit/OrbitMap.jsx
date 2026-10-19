@@ -48,6 +48,8 @@ function fitName(name, d) {
 
 /** Orbit · Map (mockup: OrbitHome). Topics around the space, notes and tasks on them, and the revision path. */
 import OrbitHelp from './OrbitHelp';
+import OrbitStudy, { MasteryInfo } from './OrbitStudy';
+import DownloadMenu from './OrbitExport';
 
 export default function OrbitMap({ interactive }) {
   const { user } = useAuth();
@@ -387,6 +389,8 @@ export default function OrbitMap({ interactive }) {
             )}
           </div>
 
+          <OrbitStudy />
+
           <nav aria-label="Map tools" className="o-pill o-tools" ref={toolRef}>
             <button type="button" className="o-tool" aria-label="Select" title="Select (V)" aria-pressed={!tool} onClick={() => setTool(null)}><MousePointer2 size={18} strokeWidth={2.2} /></button>
             <button type="button" className="o-tool" aria-label={topicTag ? `New note in ${topicName(topicTag)}` : 'New note'} title="New note here (N)" onClick={() => draftIn([...new Set([space, sel?.tag].filter(Boolean))])}><FileText size={18} strokeWidth={2.2} /></button>
@@ -434,6 +438,7 @@ export default function OrbitMap({ interactive }) {
               center={graph.center}
               topics={lay.nodes}
               todos={todos}
+              notes={notes}
               space={space}
               path={path}
               mastery={mastery}
@@ -489,7 +494,7 @@ export default function OrbitMap({ interactive }) {
 }
 
 /** The card on the right: the selected topic, or the space itself. */
-function SelectedCard({ left, node, center, topics, todos, space, path, mastery, onClose, onOpenSpace, onQuiz, onNote }) {
+function SelectedCard({ left, node, center, topics, todos, notes, space, path, mastery, onClose, onOpenSpace, onQuiz, onNote }) {
   const navigate = useNavigate();
   const now = new Date();
 
@@ -525,7 +530,7 @@ function SelectedCard({ left, node, center, topics, todos, space, path, mastery,
         <div className="o-mastery">
           <div className="row">
             <b>{node.score !== null ? `${node.score}% mastered · ${LEVEL_LABEL[level].toLowerCase()}` : 'Not quizzed yet'}</b>
-            <span>{m ? `quizzed ${agoText(m.updatedAt)}` : `${node.count} note${node.count === 1 ? '' : 's'} to learn from`}</span>
+            <span>{m ? `quizzed ${agoText(m.updatedAt)}` : `${node.count} note${node.count === 1 ? '' : 's'} to learn from`}<MasteryInfo mastery={m} /></span>
           </div>
           <div className="o-bar" role="img" aria-label={node.score !== null ? `${node.score} percent mastered` : 'Not quizzed yet'}><div style={{ width: `${node.score ?? 0}%`, background: levelVar(level) }} /></div>
         </div>
@@ -542,6 +547,7 @@ function SelectedCard({ left, node, center, topics, todos, space, path, mastery,
         <div className="o-btns">
           <button type="button" className="o-btn wide" onClick={() => onQuiz(node.tag)}>Quiz this · 10 Q</button>
           <button type="button" className="o-btn ghost" onClick={() => navigate(`/notes?topic=${encodeURIComponent(node.tag)}`)}>Open notes</button>
+          <DownloadMenu label="Download" name={node.name} docs={() => node.notes} up className="o-btn ghost" />
         </div>
       </aside>
     );
@@ -566,7 +572,7 @@ function SelectedCard({ left, node, center, topics, todos, space, path, mastery,
       <div className="o-mastery">
         <div className="row">
           <b>{center.ready !== null ? `${center.ready}% ready overall` : 'Not quizzed yet'}</b>
-          <span>{center.due ? `${dayWord(center.due.deadline).toLowerCase()}` : ''}</span>
+          <span>{center.due ? `${dayWord(center.due.deadline).toLowerCase()}` : ''}<MasteryInfo overall /></span>
         </div>
         <div className="o-bar"><div style={{ width: `${center.ready ?? 0}%`, background: levelVar(levelOf(center.ready)) }} /></div>
       </div>
@@ -592,6 +598,7 @@ function SelectedCard({ left, node, center, topics, todos, space, path, mastery,
           ? <button type="button" className="o-btn wide" onClick={() => onQuiz(weakest.tag)}>Quiz {weakest.name}</button>
           : <button type="button" className="o-btn wide" onClick={() => navigate('/tasks')}>See what's due</button>}
         <button type="button" className="o-btn ghost" onClick={() => onNote(tags)}>New note</button>
+        <DownloadMenu label="Download" name={center.name} docs={() => notes.filter((n) => !space || tagsOfNote(n).includes(space))} up className="o-btn ghost" />
       </div>
       {center.noteMode && <p className="o-quiet" style={{ fontSize: 13 }}>Give these notes smaller tags too (like #normalization) and they will group into topics here.</p>}
     </aside>

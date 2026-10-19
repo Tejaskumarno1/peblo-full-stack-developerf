@@ -10,6 +10,7 @@ import { topicName, levelOf, levelVar, tagsOfNote, agoText, shortDate } from './
 import { snippetOf } from '../soft/softUtils';
 import { clock, dayWord } from '../river/riverUtils';
 import OrbitNoteList from './OrbitNoteList';
+import { exportDocs } from '../utils/exporters';
 
 const words = (s) => [...new Set((s || '').toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) || [])];
 
@@ -133,6 +134,9 @@ function OrbitNote({ note }) {
                 {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}>Download as PDF</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => console.error('Word export failed', e)); }}>Download as Word</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'print').catch((e) => console.error('Print failed', e)); }}>Print</button>
                 <button type="button" role="menuitem" style={{ color: 'var(--o-weak-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
               </div>
             )}

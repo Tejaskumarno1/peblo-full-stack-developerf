@@ -23,7 +23,11 @@ export default function OrbitQuiz() {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [begun, setBegun] = useState(false);
+  const [length, setLength] = useState(() => {
+    try { const n = Number(localStorage.getItem('peblo-orbit-quiz-len')); return [5, 10, 20].includes(n) ? n : 10; } catch { return 10; }
+  });
   const [submitError, setSubmitError] = useState('');
   const started = useRef('');
   const submitting = useRef(false);
@@ -45,7 +49,7 @@ export default function OrbitQuiz() {
     submitting.current = false;
     setStartBefore(undefined);
     try {
-      const { data } = await studyAPI.quiz(topic, 10);
+      const { data } = await studyAPI.quiz(topic, length);
       setStartBefore(mastery.get(topic)?.score ?? null);
       setQuiz(data);
     } catch (err) {
@@ -54,11 +58,20 @@ export default function OrbitQuiz() {
       setLoading(false);
     }
   };
+  // The person picks the length first (PEB-160); a different topic goes back to the picker
   useEffect(() => {
     if (started.current === topic) return;
     started.current = topic;
+    setBegun(false);
+    setQuiz(null);
+    setResult(null);
+    setError('');
+  }, [topic]);
+  const begin = () => {
+    try { localStorage.setItem('peblo-orbit-quiz-len', String(length)); } catch { /* ignore */ }
+    setBegun(true);
     start();
-  }, [topic]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   const q = quiz?.questions[index];
   const picked = answers[index];
@@ -113,10 +126,23 @@ export default function OrbitQuiz() {
         </header>
 
         <div className="o-quiz">
+          {!begun && (
+            <div className="o-loading">
+              <h2 className="o-q" style={{ fontSize: 24 }}>How long a quiz on {topicName(topic)}?</h2>
+              <div className="o-btns" role="radiogroup" aria-label="Quiz length">
+                {[5, 10, 20].map((n) => (
+                  <button key={n} type="button" role="radio" aria-checked={length === n} className={`o-btn${length === n ? '' : ' ghost'}`} onClick={() => setLength(n)}>{n} questions</button>
+                ))}
+              </div>
+              <p className="o-quiet">Written from your {count} note{count === 1 ? '' : 's'} on this topic. Only notes on this topic are used. #private notes are left out.</p>
+              <button type="button" className="o-btn" onClick={begin}>Start quiz</button>
+            </div>
+          )}
+
           {loading && (
             <div className="o-loading">
               <Loader2 size={28} className="o-spin" />
-              <h2 className="o-q" style={{ fontSize: 24 }}>Writing 10 questions from your {count} note{count === 1 ? '' : 's'} on {topicName(topic)}…</h2>
+              <h2 className="o-q" style={{ fontSize: 24 }}>Writing {length} questions from your {count} note{count === 1 ? '' : 's'} on {topicName(topic)}…</h2>
               <p className="o-quiet">Only notes on this topic are used. #private notes are left out.</p>
             </div>
           )}
@@ -189,6 +215,22 @@ export default function OrbitQuiz() {
                   <span>{result.mastery.missed.map((m) => `${m.concept}${m.n > 1 ? ` (${m.n} missed)` : ''}`).join(', ')}</span>
                 </div>
               )}
+              {(() => {
+                const wrong = quiz.questions.map((qq, i) => ({ qq, i })).filter(({ qq, i }) => answers[i] !== qq.answer);
+                return wrong.length > 0 && (
+                  <section className="o-review" aria-label="Questions you missed">
+                    <span className="o-eyebrow">REVIEW · {wrong.length} MISSED</span>
+                    {wrong.map(({ qq, i }) => (
+                      <div key={i} className="o-explain">
+                        <b>{i + 1}. {qq.q}</b>
+                        <span>You chose {LETTERS[answers[i]] || '-'}: {qq.options[answers[i]] ?? 'no answer'}</span>
+                        <span>Right answer {LETTERS[qq.answer]}: {qq.options[qq.answer]}</span>
+                        {qq.explain && <span>{qq.explain}</span>}
+                      </div>
+                    ))}
+                  </section>
+                );
+              })()}
               <div className="o-btns">
                 <button type="button" className="o-btn" onClick={back}>Back to the map</button>
                 <button type="button" className="o-btn ghost" onClick={start}>Another quiz</button>

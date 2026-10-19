@@ -71,6 +71,7 @@ export const studyAPI = {
   quiz: (topic, count) => api.post('/study/quiz', { topic, count }, { timeout: 5 * 60 * 1000 }),
   answer: (id, answers) => api.post(`/study/quiz/${id}/answers`, { answers }),
   noteQuestions: (noteId) => api.get(`/study/notes/${noteId}/questions`),
+  activity: () => api.get('/study/activity'),
 };
 
 // River style: meeting briefs and promises found in notes
