@@ -90,6 +90,8 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
   docRef.current = doc;
   const patch = (p) => setDoc((d) => ({ ...d, ...p }));
+  // Replace the text from outside the editor (templates, find & replace): remounts the editor with the new content
+  const applyContent = (p) => { setDoc((d) => ({ ...d, ...p })); setEditorKey(`apply-${Date.now()}`); };
 
   const refreshLists = () => {
     queryClient.invalidateQueries({ queryKey: ['notes'] });
@@ -133,7 +135,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
         : 'Saved to your account';
 
   return {
-    routeId, doc, setDoc, editorKey, allNotes, open, startDraft, patch, forceSave,
+    routeId, doc, setDoc, editorKey, allNotes, open, startDraft, patch, applyContent, forceSave,
     saveStatus, saved, archive, trash, restore, exportMd, addTag, removeTag,
     noteId: doc && !doc.isDraft ? doc.id : null,
   };

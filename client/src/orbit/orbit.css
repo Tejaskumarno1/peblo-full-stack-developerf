@@ -721,3 +721,12 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-colors { display: inline-flex; gap: 4px; }
 .o-colors .o-swatch { width: 18px; height: 18px; }
 
+
+/* Round 10: templates, find & replace, outline */
+.orbit .o-find{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px;border:1px solid var(--o-line,#ddd);border-radius:10px}
+.orbit .o-find input:not([type=checkbox]){height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--o-line,#ccc);background:transparent;color:inherit;min-width:140px}
+.orbit .o-find-case{font-size:13px;display:flex;gap:4px;align-items:center}
+.orbit .o-templates{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.orbit .o-outline{display:flex;flex-direction:column;gap:2px}
+.orbit .o-outline button{text-align:left;background:none;border:0;color:inherit;padding:4px 0;font-size:13px;cursor:pointer;min-height:28px}
+.orbit .o-outline button:hover{text-decoration:underline}

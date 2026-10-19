@@ -11,6 +11,7 @@ import { snippetOf } from '../soft/softUtils';
 import { clock, dayWord } from '../river/riverUtils';
 import OrbitNoteList from './OrbitNoteList';
 import { exportDocs } from '../utils/exporters';
+import { TEMPLATES, outlineOf, countMatches, replaceAll } from './noteTemplates';
 
 const words = (s) => [...new Set((s || '').toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) || [])];
 
@@ -50,12 +51,25 @@ function OrbitNote({ note }) {
   const [zen, setZen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [flash, setFlash] = useState('');
+  // Round 10: find & replace bar
+  const [findOpen, setFindOpen] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replText, setReplText] = useState('');
+  const [matchCase, setMatchCase] = useState(false);
   useEffect(() => {
     if (!zen) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') setZen(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [zen]);
+  // Ctrl/Cmd+F opens find and replace (instead of the browser's own find) while a note can be edited
+  const canEdit = !!doc && !doc.isDraft && !doc.isDeleted && !doc.meta?.locked;
+  useEffect(() => {
+    if (!canEdit) return undefined;
+    const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setFindOpen(true); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canEdit]);
   useEffect(() => { if (!flash) return undefined; const t = setTimeout(() => setFlash(''), 2500); return () => clearTimeout(t); }, [flash]);
 
   const { data: linked = [] } = useQuery({
@@ -125,6 +139,20 @@ function OrbitNote({ note }) {
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${noteId}`); setFlash('Link copied'); } catch { setFlash('Could not copy. Copy the address from the browser.'); }
   };
+  const outline = outlineOf(doc.content);
+  const matches = countMatches(doc.content, findText, { matchCase });
+  const doReplace = () => {
+    const r = replaceAll(doc.content, findText, replText, { matchCase });
+    if (!r.count) return;
+    note.applyContent({ content: r.text });
+    setFlash(`Replaced ${r.count} ${r.count === 1 ? 'match' : 'matches'}`);
+  };
+  const applyTemplate = (t) => note.applyContent({ content: t.content, title: doc.title || t.title });
+  const jumpTo = (h) => {
+    const els = [...document.querySelectorAll('.o-body [data-content-type="heading"], .o-body h1, .o-body h2, .o-body h3')];
+    const el = els.find((x) => (x.textContent || '').replace(/[*_`]/g, '').trim() === h.text);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const EMOJIS = ['📘', '📝', '🧠', '💡', '🔬', '📐', '💻', '🧮', '📊', '🎯', '⭐', '🔥', '✅', '📅', '🌱', '🧪'];
   const topic = tags[0];
   const created = new Date(doc.createdAt);
@@ -176,6 +204,7 @@ function OrbitNote({ note }) {
                 {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); setMeta({ locked: locked ? null : true }); }}>{locked ? 'Unlock (allow editing)' : 'Lock (read only)'}</button>}
+                {!readOnly && <button type="button" role="menuitem" onClick={() => { setMenu(false); setFindOpen(true); }}>Find and replace</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}>Duplicate</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>Copy link</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
@@ -230,6 +259,22 @@ function OrbitNote({ note }) {
               />
             ))}
           </div>
+          {findOpen && !readOnly && (
+            <div className="o-find" role="search" aria-label="Find and replace">
+              <input aria-label="Find" autoFocus value={findText} onChange={(e) => setFindText(e.target.value)} placeholder="Find" onKeyDown={(e) => { if (e.key === 'Escape') setFindOpen(false); }} />
+              <input aria-label="Replace with" value={replText} onChange={(e) => setReplText(e.target.value)} placeholder="Replace with" onKeyDown={(e) => { if (e.key === 'Escape') setFindOpen(false); }} />
+              <label className="o-find-case"><input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} /> Match case</label>
+              <span className="o-quiet" role="status" aria-live="polite">{findText ? `${matches} ${matches === 1 ? 'match' : 'matches'}` : ''}</span>
+              <button type="button" className="o-btn small" disabled={!matches} onClick={doReplace}>Replace all</button>
+              <button type="button" className="o-btn ghost small" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={14} /></button>
+            </div>
+          )}
+          {!readOnly && !String(doc.content || '').trim() && (
+            <div className="o-templates" role="group" aria-label="Start from a template">
+              <span className="o-quiet">Start from a template</span>
+              {TEMPLATES.map((t) => <button key={t.id} type="button" className="o-chip" onClick={() => applyTemplate(t)}>{t.name}</button>)}
+            </div>
+          )}
           <div className="o-body">
             <BlockEditor key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
           </div>
@@ -251,6 +296,17 @@ function OrbitNote({ note }) {
               {tags.length === 0 && linked.length === 0 && <span className="o-quiet" style={{ fontSize: 13 }}>Not on the map yet. Add a topic to place it.</span>}
             </div>
           </section>
+
+          {outline.length > 1 && (
+            <section>
+              <h2 className="o-h3">OUTLINE</h2>
+              <nav className="o-outline" aria-label="Outline">
+                {outline.map((h, i) => (
+                  <button key={`${i}-${h.text}`} type="button" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jumpTo(h)}>{h.text}</button>
+                ))}
+              </nav>
+            </section>
+          )}
 
           {linked.length > 0 && (
             <section>
