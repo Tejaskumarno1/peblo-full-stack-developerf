@@ -48,6 +48,7 @@ function fitName(name, d) {
 
 /** Orbit · Map (mockup: OrbitHome). Topics around the space, notes and tasks on them, and the revision path. */
 import OrbitHelp from './OrbitHelp';
+import OrbitChecklist from './OrbitChecklist';
 import OrbitStudy, { MasteryInfo } from './OrbitStudy';
 import DownloadMenu from './OrbitExport';
 
@@ -356,6 +357,8 @@ export default function OrbitMap({ interactive }) {
           <button type="button" className="o-btn ghost" onClick={() => draftIn([])}>Write a note</button>
         </div>
       )}
+
+      {interactive && !empty && <OrbitChecklist topics={graph.topics.length} />}
 
       {interactive && (
         <>

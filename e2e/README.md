@@ -36,3 +36,4 @@ orbit-study.mjs = Orbit study: mastery explainer, quiz length + missed-question 
 `orbit-topics.mjs` — topic manager: list, rename, merge, colour, delete
 `orbit-notes4.mjs` — note templates, outline, find and replace
 `orbit-trash.mjs` — trash and archive: restore, unarchive, empty trash
+`orbit-checklist.mjs` — getting-started checklist on the map

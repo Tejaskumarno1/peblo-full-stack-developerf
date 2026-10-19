@@ -734,3 +734,17 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 /* Round 11: trash and archive actions */
 .orbit .o-tile .o-restore{margin:6px 12px 10px}
 .orbit .o-confirm{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+
+/* Round 12: getting-started checklist */
+.orbit .o-checklist{position:absolute;left:24px;bottom:24px;width:230px;padding:12px 14px;z-index:5;display:flex;flex-direction:column;gap:8px}
+.orbit .o-checklist header{display:flex;align-items:center;gap:8px}
+.orbit .o-checklist header b{flex:1;font-size:14px}
+.orbit .o-checklist-x{background:none;border:0;color:inherit;cursor:pointer;width:28px;height:28px;display:grid;place-items:center}
+.orbit .o-checklist-bar{height:5px;border-radius:3px;background:var(--o-line,#ddd);overflow:hidden}
+.orbit .o-checklist-bar i{display:block;height:100%;background:var(--o-accent,#2350FF)}
+.orbit .o-checklist ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.orbit .o-checklist li{display:flex;align-items:center;gap:8px;font-size:13px;min-height:28px}
+.orbit .o-checklist li.done{color:var(--o-fg2,#667);text-decoration:line-through}
+.orbit .o-checklist li .tick{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--o-line,#aaa);display:grid;place-items:center;flex:none}
+.orbit .o-checklist li.done .tick{background:var(--o-accent,#2350FF);border-color:var(--o-accent,#2350FF);color:#fff}
+.orbit .o-checklist li button{background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
