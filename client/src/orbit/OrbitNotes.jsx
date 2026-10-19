@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Loader2, X, Network } from 'lucide-react';
+import { ChevronRight, Loader2, X, Network, Star, Maximize2 } from 'lucide-react';
 import { notesAPI, todosAPI, hubAPI, studyAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
@@ -46,6 +46,17 @@ function OrbitNote({ note }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useDismiss(menu, () => setMenu(false));
   const [dismissed, setDismissed] = useState([]);
+  // Round 6: focus mode, emoji picker, copied message
+  const [zen, setZen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [flash, setFlash] = useState('');
+  useEffect(() => {
+    if (!zen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setZen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zen]);
+  useEffect(() => { if (!flash) return undefined; const t = setTimeout(() => setFlash(''), 2500); return () => clearTimeout(t); }, [flash]);
 
   const { data: linked = [] } = useQuery({
     queryKey: ['todos', 'note', noteId],
@@ -91,6 +102,30 @@ function OrbitNote({ note }) {
     );
   }
 
+  const meta = doc.meta && typeof doc.meta === 'object' ? doc.meta : {};
+  const locked = !!meta.locked;
+  const readOnly = !!doc.isDeleted || locked;
+  const plain = String(doc.content || '').replace(/[#>*_`~\-\[\]()!|]/g, ' ');
+  const wordCount = (plain.match(/[\p{L}\p{N}]+/gu) || []).length;
+  const readMin = Math.max(1, Math.round(wordCount / 200));
+  const setMeta = async (p) => {
+    if (doc.isDraft) return;
+    const next = { ...meta };
+    for (const [k, v] of Object.entries(p)) { if (v === null || v === false || v === '') delete next[k]; else next[k] = v; }
+    patch({ meta: next });
+    try { await notesAPI.update(noteId, { meta: p }); } catch (e) { console.error('Could not save', e); setFlash("Couldn't save that. Try again."); patch({ meta }); } finally { queryClient.invalidateQueries({ queryKey: ['notes'] }); }
+  };
+  const duplicate = async () => {
+    try {
+      const r = await notesAPI.create({ title: `${doc.title || 'Untitled'} (copy)`, content: doc.content || '', tags: doc.tags });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      navigate(`/notes/${(r.data.note || r.data).id}`);
+    } catch (e) { console.error('Could not duplicate', e); setFlash("Couldn't duplicate the note."); }
+  };
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${noteId}`); setFlash('Link copied'); } catch { setFlash('Could not copy. Copy the address from the browser.'); }
+  };
+  const EMOJIS = ['📘', '📝', '🧠', '💡', '🔬', '📐', '💻', '🧮', '📊', '🎯', '⭐', '🔥', '✅', '📅', '🌱', '🧪'];
   const topic = tags[0];
   const created = new Date(doc.createdAt);
   const edited = new Date(doc.updatedAt || doc.createdAt);
@@ -115,7 +150,7 @@ function OrbitNote({ note }) {
   };
 
   return (
-    <article className="o-sheet" style={{ top: 92, width: 876 }} aria-label="Note">
+    <article className={`o-sheet${zen ? ' zen' : ''}`} style={{ top: 92, width: 876 }} aria-label="Note">
       <SheetHead onBack={back}>
         <span className="crumb">{space ? topicName(space) : 'Map'}</span>
         {topic && (
@@ -125,7 +160,14 @@ function OrbitNote({ note }) {
           </>
         )}
         <span className="grow" />
-        <span className="status">{doc.isDraft ? 'NEW NOTE' : status}</span>
+        <span className="status" role="status" aria-live="polite">{flash || (doc.isDraft ? 'NEW NOTE' : status)}</span>
+        {saveStatus === 'error' && <button type="button" className="o-btn small" onClick={() => note.forceSave()}>Retry</button>}
+        {!doc.isDraft && (
+          <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label={meta.favourite ? 'Remove from favourites' : 'Add to favourites'} aria-pressed={!!meta.favourite} onClick={() => setMeta({ favourite: meta.favourite ? null : true })}>
+            <Star size={18} fill={meta.favourite ? 'currentColor' : 'none'} />
+          </button>
+        )}
+        <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label={zen ? 'Leave focus mode' : 'Focus mode'} aria-pressed={zen} onClick={() => setZen(!zen)}><Maximize2 size={17} /></button>
         {!doc.isDraft && (
           <div className="o-menu-wrap" ref={menuRef}>
             <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
@@ -133,6 +175,9 @@ function OrbitNote({ note }) {
               <div className="o-pop right" role="menu" style={{ width: 210 }}>
                 {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); setMeta({ locked: locked ? null : true }); }}>{locked ? 'Unlock (allow editing)' : 'Lock (read only)'}</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}>Duplicate</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>Copy link</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}>Download as PDF</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => console.error('Word export failed', e)); }}>Download as Word</button>
@@ -148,7 +193,21 @@ function OrbitNote({ note }) {
         <div className="o-sheet-main">
           <span className="o-eyebrow">NOTE · {doc.isDraft ? 'NOT SAVED YET' : `WRITTEN ${shortDate(created)}`}{doc.isDeleted ? ' · IN TRASH' : doc.isArchived ? ' · ARCHIVED' : ''}</span>
           <label htmlFor="o-note-title" className="o-sr">Title</label>
-          <input id="o-note-title" className="o-title-input" value={doc.title} placeholder="Untitled note" onChange={(e) => patch({ title: e.target.value })} disabled={doc.isDeleted} />
+          <div className="o-title-row">
+            {!doc.isDraft && (
+              <span className="o-menu-wrap">
+                <button type="button" className="o-emoji" aria-label={meta.emoji ? `Icon ${meta.emoji}, change` : 'Add an icon'} aria-expanded={emojiOpen} disabled={readOnly} onClick={() => setEmojiOpen(!emojiOpen)}>{meta.emoji || '＋'}</button>
+                {emojiOpen && (
+                  <div className="o-pop o-emojis" role="menu">
+                    {EMOJIS.map((e) => <button key={e} type="button" role="menuitem" aria-label={`Use ${e}`} onClick={() => { setEmojiOpen(false); setMeta({ emoji: e }); }}>{e}</button>)}
+                    {meta.emoji && <button type="button" role="menuitem" onClick={() => { setEmojiOpen(false); setMeta({ emoji: null }); }}>Remove</button>}
+                  </div>
+                )}
+              </span>
+            )}
+            <input id="o-note-title" className="o-title-input" value={doc.title} placeholder="Untitled note" onChange={(e) => patch({ title: e.target.value })} disabled={readOnly} />
+          </div>
+          {locked && <p className="o-quiet" role="note">This note is locked. Unlock it from the ··· menu to edit.</p>}
           <div className="o-tags">
             {doc.tags.map((t) => (
               <span key={t} className="o-chip">
@@ -172,8 +231,9 @@ function OrbitNote({ note }) {
             ))}
           </div>
           <div className="o-body">
-            <BlockEditor key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} formattingToolbar={false} />
+            <BlockEditor key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
           </div>
+          <p className="o-wc" aria-label="Word count">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {String(doc.content || '').length} characters · {readMin} min read</p>
         </div>
 
         <aside className="o-rail" aria-label="Links">
@@ -191,6 +251,18 @@ function OrbitNote({ note }) {
               {tags.length === 0 && linked.length === 0 && <span className="o-quiet" style={{ fontSize: 13 }}>Not on the map yet. Add a topic to place it.</span>}
             </div>
           </section>
+
+          {linked.length > 0 && (
+            <section>
+              <h2 className="o-h3">TASKS ON THIS NOTE</h2>
+              {linked.map((t) => (
+                <label key={t.id} className="o-linked-task">
+                  <input type="checkbox" checked={!!t.completed} onChange={async () => { try { await todosAPI.update(t.id, { completed: !t.completed }); } catch (e) { console.error(e); } finally { queryClient.invalidateQueries({ queryKey: ['todos'] }); } }} aria-label={`Done: ${t.text}`} />
+                  <span className={t.completed ? 'done' : ''}>{t.text}</span>
+                </label>
+              ))}
+            </section>
+          )}
 
           {suggestions.length > 0 && (
             <section>

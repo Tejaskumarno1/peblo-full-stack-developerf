@@ -195,7 +195,7 @@ export default function OrbitNoteList({ onNew }) {
         </button>
       )}
       <Link to={`/notes/${n.id}`} className="o-note-tile" onClick={(e) => { if (picking) { e.preventDefault(); togglePick(n.id); } else opened(n.id); }}>
-        <span className="t"><Hit text={n.title || 'Untitled'} q={q} /></span>
+        <span className="t">{n.meta?.emoji ? `${n.meta.emoji} ` : ''}<Hit text={n.title || 'Untitled'} q={q} /></span>
         <span className="s">{snippetFor(n.content, q) ? <Hit text={snippetFor(n.content, q)} q={q} /> : 'Empty note'}</span>
         <span className="m">{sort === 'created' ? `CREATED ${agoText(n.createdAt).toUpperCase()}` : `EDITED ${agoText(n.updatedAt).toUpperCase()}`}</span>
       </Link>
