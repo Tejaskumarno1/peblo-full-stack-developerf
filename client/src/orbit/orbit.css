@@ -448,6 +448,30 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-toast { display: flex; align-items: center; gap: 14px; }
 .o-toast button { border: none; background: transparent; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
 .o-task .m { font-family: var(--o-mono); font-size: 11px; color: var(--o-fg2); white-space: nowrap; }
+.o-task-wrap { display: flex; flex-direction: column; gap: 4px; }
+.o-task:focus-visible { outline: 2px solid var(--o-path); outline-offset: 2px; }
+.o-task .acts { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.o-task .del:hover, .o-task .del[aria-expanded="true"] { background: var(--o-soft); color: var(--o-fg); }
+.o-prio { font-family: var(--o-mono); font-size: 10.5px; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--o-line); color: var(--o-fg2); }
+.o-prio.high { color: var(--o-weak-ink, #b3261e); border-color: currentColor; }
+.o-counters { display: flex; gap: 16px; }
+.o-counters .hot b { color: var(--o-weak-ink, #b3261e); }
+.o-prog { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--o-fg2); }
+.o-prog .bar { flex: 1; height: 8px; border-radius: 999px; background: var(--o-line); overflow: hidden; }
+.o-prog .bar div { height: 100%; background: var(--o-ok, var(--o-path)); border-radius: 999px; transition: width 0.25s; }
+.o-fold { border: none; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 4px; }
+.o-fold .chev { transition: transform 0.15s; }
+.o-fold .chev.open { transform: rotate(90deg); }
+.o-bulkmove { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+.o-resched { width: 200px; padding: 6px; }
+.o-resched .pick { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; font-size: 12.5px; color: var(--o-fg2); }
+.o-resched .pick input { height: 34px; border-radius: 8px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; padding: 0 8px; }
+.o-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; border-radius: 12px; background: var(--o-soft); }
+.o-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--o-fg2); }
+.o-edit input, .o-edit select { height: 36px; border-radius: 9px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; font-size: 14px; padding: 0 8px; }
+.o-edit label:first-child { flex: 1 1 100%; }
+.o-edit .btns { display: flex; gap: 6px; margin-left: auto; }
+.o-week-day.over { border-color: var(--o-path); }
 .o-task .del { width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent; color: var(--o-fg2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .o-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .o-week-day { min-height: 300px; padding: 10px; border-radius: 14px; background: var(--o-bg); border: 1px solid var(--o-line); display: flex; flex-direction: column; gap: 6px; }
