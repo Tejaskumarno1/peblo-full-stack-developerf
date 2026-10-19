@@ -35,3 +35,4 @@ orbit-map2.mjs = Orbit map: starter templates, shortcut tooltips, fit/reset, rem
 orbit-study.mjs = Orbit study: mastery explainer, quiz length + missed-question review, Study today, streak and week (PEB-159..162). orbit-export.mjs = Orbit export: note/topic/map downloads, print, tasks .ics/.csv, full zip, CSV import (PEB-163..166).
 `orbit-topics.mjs` — topic manager: list, rename, merge, colour, delete
 `orbit-notes4.mjs` — note templates, outline, find and replace
+`orbit-trash.mjs` — trash and archive: restore, unarchive, empty trash

@@ -75,6 +75,7 @@ export default function OrbitNoteList({ onNew }) {
   const [tagDraft, setTagDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
 
   const remember = (patch) => write(VIEW_KEY, { sort, groupBy, view, ...patch });
   const setSort = (v) => { setSortState(v); remember({ sort: v }); };
@@ -166,6 +167,16 @@ export default function OrbitNoteList({ onNew }) {
     setMsg(failed ? `${label}: ${picked.length - failed} done, ${failed} failed.` : `${label}: ${picked.length} note${picked.length === 1 ? '' : 's'}.`);
     stopPicking();
   };
+  const emptyTrash = async () => {
+    setBusy(true);
+    let failed = 0;
+    const ids = special.map((n) => n.id);
+    for (const id of ids) { try { await notesAPI.delete(id); } catch { failed += 1; } }
+    setBusy(false);
+    setConfirmEmpty(false);
+    refresh();
+    setMsg(failed ? `Deleted ${ids.length - failed}, ${failed} failed.` : `Trash emptied: ${ids.length} note${ids.length === 1 ? '' : 's'} deleted.`);
+  };
   const bulkTag = () => {
     const t = tagDraft.trim().toLowerCase().replace(/^#/, '').replace(/\s+/g, '-');
     if (!t) return;
@@ -197,8 +208,16 @@ export default function OrbitNoteList({ onNew }) {
       <Link to={`/notes/${n.id}`} className="o-note-tile" onClick={(e) => { if (picking) { e.preventDefault(); togglePick(n.id); } else opened(n.id); }}>
         <span className="t">{n.meta?.emoji ? `${n.meta.emoji} ` : ''}<Hit text={n.title || 'Untitled'} q={q} /></span>
         <span className="s">{snippetFor(n.content, q) ? <Hit text={snippetFor(n.content, q)} q={q} /> : 'Empty note'}</span>
-        <span className="m">{sort === 'created' ? `CREATED ${agoText(n.createdAt).toUpperCase()}` : `EDITED ${agoText(n.updatedAt).toUpperCase()}`}</span>
+        <span className="m">{archived === 'trash' && n.deletedAt ? `DELETED ${agoText(n.deletedAt).toUpperCase()}` : sort === 'created' ? `CREATED ${agoText(n.createdAt).toUpperCase()}` : `EDITED ${agoText(n.updatedAt).toUpperCase()}`}</span>
       </Link>
+      {archived && !picking && (
+        <button type="button" className="o-chip o-restore" disabled={busy} aria-label={`${archived === 'trash' ? 'Restore' : 'Unarchive'} ${n.title || 'Untitled'}`}
+          onClick={async () => {
+            try { await (archived === 'trash' ? notesAPI.restore(n.id) : notesAPI.archive(n.id)); setMsg(archived === 'trash' ? 'Restored.' : 'Moved back to your notes.'); refresh(); } catch (e) { console.error(e); setMsg("Couldn't do that. Try again."); }
+          }}>
+          {archived === 'trash' ? 'Restore' : 'Unarchive'}
+        </button>
+      )}
     </div>
   );
 
@@ -263,6 +282,16 @@ export default function OrbitNoteList({ onNew }) {
           <span>{total} note{total === 1 ? '' : 's'}{filtering ? ' match' : ''}</span>
           {filtering && <button type="button" className="o-chip on" onClick={clearFilters}>Clear filters ×</button>}
           {msg && <span className="o-msg" role="status">{msg}</span>}
+          {archived === 'trash' && special.length > 0 && !confirmEmpty && (
+            <button type="button" className="o-chip danger" disabled={busy} onClick={() => setConfirmEmpty(true)}>Empty trash</button>
+          )}
+          {archived === 'trash' && confirmEmpty && (
+            <span className="o-confirm" role="alertdialog" aria-label="Empty the trash?">
+              Delete {special.length} note{special.length === 1 ? '' : 's'} forever? This can't be undone.
+              <button type="button" className="o-chip danger" disabled={busy} onClick={emptyTrash}>Yes, delete forever</button>
+              <button type="button" className="o-chip" onClick={() => setConfirmEmpty(false)}>Keep them</button>
+            </span>
+          )}
         </div>
 
         {picking && (

@@ -730,3 +730,7 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .orbit .o-outline{display:flex;flex-direction:column;gap:2px}
 .orbit .o-outline button{text-align:left;background:none;border:0;color:inherit;padding:4px 0;font-size:13px;cursor:pointer;min-height:28px}
 .orbit .o-outline button:hover{text-decoration:underline}
+
+/* Round 11: trash and archive actions */
+.orbit .o-tile .o-restore{margin:6px 12px 10px}
+.orbit .o-confirm{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}

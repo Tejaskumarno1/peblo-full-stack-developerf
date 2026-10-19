@@ -141,6 +141,7 @@ export async function getNotes(req: any, res: any, next: any) {
         category: true,
         isArchived: true,
         isDeleted: true,
+        deletedAt: true,
         meta: true,
         createdAt: true,
         updatedAt: true,
