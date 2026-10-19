@@ -710,3 +710,14 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-time-row .bar { height: 10px; border-radius: 999px; background: var(--o-line); overflow: hidden; }
 .o-time-row .bar i { display: block; height: 100%; background: var(--o-path); border-radius: 999px; }
 
+
+/* Round 9: topic manager */
+.o-topic-search { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; }
+.o-topic-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--o-bg); border: 1px solid var(--o-line); }
+.o-topic-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.o-topic-edit { display: flex; gap: 8px; align-items: center; }
+.o-topic-edit input { height: 36px; border-radius: 9px; border: 1px solid var(--o-line); background: var(--o-surface); color: var(--o-fg); font: inherit; padding: 0 10px; }
+.o-topic-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.o-colors { display: inline-flex; gap: 4px; }
+.o-colors .o-swatch { width: 18px; height: 18px; }
+

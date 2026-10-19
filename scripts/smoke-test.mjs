@@ -1286,6 +1286,25 @@ async function prismaOffUser() {
   const lst = (await call('GET', '/api/notes')).json.notes.find((x) => x.id === nid);
   check('the notes list returns meta', lst?.meta?.emoji === '📚');
 }
+  // ---- Round 9: topic manager API ----
+  {
+    const mk = await call('POST', '/api/notes', { title: 'Topic smoke', content: 'x', tags: ['smoke-a'] });
+    check('tags: note created with a topic', mk.status === 201 || mk.status === 200, mk.status);
+    await call('POST', '/api/todos', { text: 'Topic smoke task', tags: ['smoke-a'] });
+    const l = await call('GET', '/api/tags');
+    const a = (l.json.tags || []).find((t) => t.name === 'smoke-a');
+    check('tags: list has note and task counts', a && a.notes === 1 && a.todos === 1, JSON.stringify(a));
+    const rn = await call('POST', '/api/tags/rename', { from: 'smoke-a', to: 'smoke-b' });
+    check('tags: rename works', rn.status === 200 && rn.json.merged === false, rn.status);
+    const l2 = await call('GET', '/api/tags');
+    check('tags: the new name carries the counts', (l2.json.tags || []).find((t) => t.name === 'smoke-b')?.todos === 1 && !(l2.json.tags || []).some((t) => t.name === 'smoke-a'));
+    const bad = await call('POST', '/api/tags/rename', { from: 'private', to: 'x' });
+    check('tags: built-in topics are protected', bad.status === 400, bad.status);
+    const del = await call('POST', '/api/tags/delete', { name: 'smoke-b' });
+    check('tags: delete works', del.status === 200, del.status);
+    const l3 = await call('GET', '/api/tags');
+    check('tags: deleted topic is gone', !(l3.json.tags || []).some((t) => t.name === 'smoke-b'));
+  }
 } catch (err) {
   failures++;
   console.error(err);

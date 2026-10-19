@@ -7,6 +7,7 @@ import { orbitPrefs, prefsClass, prefsStyle } from './orbitPrefs';
 import { notesAPI, todosAPI, studyAPI } from '../api';
 import OrbitMap from './OrbitMap';
 import OrbitCapture from './OrbitCapture';
+import OrbitTopics from './OrbitTopics';
 import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject } from './orbitUtils';
 import { initialsOf } from '../river/riverUtils';
 import './orbit.css';
@@ -166,6 +167,7 @@ function OrbitTop({ data }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/calendar'); }}>This week</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:topics')); }}>Manage topics</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
           </div>
@@ -189,6 +191,12 @@ export default function OrbitShell({ children }) {
   const [selected, setSelected] = useState(null);
   const [pathOn, setPathOnState] = useState(() => load('peblo-orbit-path', true));
   const [capture, setCapture] = useState(null);
+  const [topicsOpen, setTopicsOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setTopicsOpen(true);
+    window.addEventListener('peblo:topics', open);
+    return () => window.removeEventListener('peblo:topics', open);
+  }, []);
 
   const setSpace = (s) => { setSpaceState(s); setSelected(null); save('peblo-orbit-space', s); };
   const setPathOn = (v) => { setPathOnState(v); save('peblo-orbit-path', v); };
@@ -229,6 +237,7 @@ export default function OrbitShell({ children }) {
         {!covered && <OrbitMap interactive={home} />}
         <OrbitTop data={data} />
         {children}
+        {topicsOpen && <OrbitTopics onClose={() => setTopicsOpen(false)} />}
         {capture && (
           <div className="o-capture-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setCapture(null); }}>
             <OrbitCapture preset={capture} onClose={() => setCapture(null)} />

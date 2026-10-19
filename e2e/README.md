@@ -33,3 +33,4 @@ orbit-notelist.mjs = Orbit notes list: sort, filters, group, layout, pin, highli
 orbit-due2.mjs = Orbit Due: filters, sort, overdue tools, reschedule, edit, counters, progress, keys, drag to a day (PEB-136..146).
 orbit-map2.mjs = Orbit map: starter templates, shortcut tooltips, fit/reset, remembered view, hover card, jump box, filter (PEB-149..158).
 orbit-study.mjs = Orbit study: mastery explainer, quiz length + missed-question review, Study today, streak and week (PEB-159..162). orbit-export.mjs = Orbit export: note/topic/map downloads, print, tasks .ics/.csv, full zip, CSV import (PEB-163..166).
+`orbit-topics.mjs` — topic manager: list, rename, merge, colour, delete

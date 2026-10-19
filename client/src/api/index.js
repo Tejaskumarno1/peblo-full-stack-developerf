@@ -66,6 +66,12 @@ export const hubAPI = {
 };
 
 // Orbit style: quizzes and how well each topic is known
+export const tagsAPI = {
+  list: () => api.get('/tags'),
+  rename: (from, to) => api.post('/tags/rename', { from, to }),
+  remove: (name) => api.post('/tags/delete', { name })
+};
+
 export const studyAPI = {
   mastery: () => api.get('/study/mastery'),
   quiz: (topic, count) => api.post('/study/quiz', { topic, count }, { timeout: 5 * 60 * 1000 }),
