@@ -7,12 +7,13 @@ import { chromium } from 'playwright-core';
 
 export const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
 export async function boot() {
-  // server/.env gives secrets; the database is forced to peblo_test so real data is never touched
+  // server/.env gives secrets; the database is forced to a local peblo_test so real data is never touched
   const envText = fs.readFileSync(path.join(REPO, 'server', '.env'), 'utf8');
   const parsed = dotenv.parse(envText);
   Object.assign(process.env, parsed);
-  process.env.DATABASE_URL = parsed.DATABASE_URL.replace(/\/peblo(\?.*)?$/, '/peblo_test$1');
-  if (!process.env.DATABASE_URL.includes('/peblo_test')) throw new Error('refusing to run: not peblo_test');
+  // Tests never touch the real database: a throwaway local Postgres (or PEBLO_TEST_DATABASE_URL), always named peblo_test.
+  process.env.DATABASE_URL = process.env.PEBLO_TEST_DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:55432/peblo_test';
+  if (!/peblo_test/.test(process.env.DATABASE_URL)) throw new Error('refusing to run: not peblo_test');
   process.env.PEBLO_SQL_DIR = path.join(REPO, 'server', 'prisma', 'sql');
   process.env.SIGNUP_RATE_MAX = '1000';
   delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_API_KEYS;

@@ -4,13 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// The database is a MySQL server (local MySQL 8 while developing, a hosted one in production),
-// shared by every user. DATABASE_URL must be set — in the Electron app's own .env next to the
-// packaged server, or in the hosting platform's environment once this is deployed.
+// The database is Postgres (Supabase), shared by every user. DATABASE_URL must be set: in the Electron app's own .env
+// next to the packaged server, or in the hosting platform's environment once this is deployed.
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    'DATABASE_URL is not set. Point it at your MySQL connection string ' +
-    '(e.g. mysql://user:password@localhost:3306/peblo).'
+    'DATABASE_URL is not set. Point it at your Postgres connection string ' +
+    '(Supabase: Connect > Session pooler, e.g. postgresql://postgres.<ref>:<password>@<host>:5432/postgres).'
   );
 }
 
@@ -43,58 +42,41 @@ function findSqlDir(): string {
   return dir;
 }
 
-/** MySQL "it is already there" errors: a statement that was applied before a crash can safely be skipped on the next run. */
-const ALREADY_DONE = [1050, 1060, 1061, 1826, 1022, 1068, 1091];
-function alreadyDone(err: any): boolean {
-  const code = Number(err?.meta?.code ?? err?.code?.match?.(/\d+/)?.[0] ?? NaN);
-  if (ALREADY_DONE.includes(code)) return true;
-  const msg = String(err?.message || '');
-  return /Duplicate column name|Duplicate key name|already exists|Duplicate foreign key|Can't DROP|check that column\/key exists/i.test(msg);
+/** The schema named in DATABASE_URL (?schema=name), or null for the default one. */
+function schemaOf(url: string): string | null {
+  const m = /[?&]schema=([A-Za-z0-9_]+)/.exec(url);
+  return m ? m[1] : null;
 }
 
 /**
  * Applies any pending SQL migrations (NNN_name.sql in `dir`) in order.
- * The applied version is tracked in its own tiny table (`_peblo_migrations`).
- * MySQL commits each DDL statement on its own, so a migration file is not one transaction: the version row is
- * written last, once every statement has run. Two things keep that safe:
- *  - a named lock (GET_LOCK) so only one app migrates at a time; the others wait, then find nothing left to do;
- *  - statements that fail because the change is already there (a previous run died halfway) are skipped, so the
- *    file can simply be run again.
- * Statements are split on ";" + newline: write one statement per block, and no stored procedures or triggers.
+ * The applied version is tracked in its own tiny table (_peblo_migrations).
+ * Postgres can roll DDL back, so each migration file runs in one transaction together with its version row.
+ * A transaction-level advisory lock means only one app migrates at a time (the others wait, then find nothing
+ * left to do); it also works through Supabase's pooler, which a session-level lock would not.
+ * Statements are split on ";" + newline: write one statement per block, and no functions or triggers.
  */
 export async function runMigrations(dir: string = findSqlDir(), lockSeconds = 120): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    'CREATE TABLE IF NOT EXISTS `_peblo_migrations` (`version` INT NOT NULL PRIMARY KEY, `name` VARCHAR(191) NOT NULL, `applied_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))'
-  );
-  const files = readdirSync(dir)
-    .filter((f) => /^\d+_.*\.sql$/.test(f))
-    .sort();
-
-  // One pinned connection holds the lock for the whole run (GET_LOCK belongs to a connection, not to the pool).
+  const schema = schemaOf(process.env.DATABASE_URL || '');
+  if (schema) await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
   await prisma.$transaction(async (tx: any) => {
-    const got: any[] = await tx.$queryRawUnsafe(`SELECT GET_LOCK('peblo_migrate', ${Math.max(1, Math.floor(lockSeconds))}) AS got`);
-    if (Number(got?.[0]?.got) !== 1) throw new Error('Another Peblo is updating the database and did not finish in time. Try starting again in a minute.');
-    try {
-      // Read what is applied only now, after the lock: a Peblo that was ahead of us may have done the work already.
-      const applied: { version: number }[] = await tx.$queryRawUnsafe('SELECT version FROM `_peblo_migrations`');
-      const current = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
-      for (const file of files) {
-        const version = parseInt(file.split('_')[0], 10);
-        if (version <= current) continue;
-        const sql = readFileSync(path.join(dir, file), 'utf8');
-        const statements = sql
-          .split(/;\s*(?:\r?\n|$)/)
-          .map((st) => st.replace(/^\s*--.*$/gm, '').trim())
-          .filter(Boolean);
-        for (const stmt of statements) {
-          try { await tx.$executeRawUnsafe(stmt); }
-          catch (err) { if (!alreadyDone(err)) throw err; console.log(`[db] ${file}: skipped a step that was already applied`); }
-        }
-        await tx.$executeRawUnsafe(`INSERT IGNORE INTO \`_peblo_migrations\` (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}')`);
-        console.log(`[db] applied migration ${file}`);
-      }
-    } finally {
-      await tx.$queryRawUnsafe("SELECT RELEASE_LOCK('peblo_migrate')").catch(() => {});
+    await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${Math.max(1, Math.floor(lockSeconds))}s'`);
+    await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(7264001)');
+    await tx.$executeRawUnsafe('CREATE TABLE IF NOT EXISTS _peblo_migrations (version INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, applied_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+    const files = readdirSync(dir).filter((f) => /^\d+_.*\.sql$/.test(f)).sort();
+    const applied: { version: number }[] = await tx.$queryRawUnsafe('SELECT version FROM _peblo_migrations');
+    const current = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
+    for (const file of files) {
+      const version = parseInt(file.split('_')[0], 10);
+      if (version <= current) continue;
+      const sql = readFileSync(path.join(dir, file), 'utf8');
+      const statements = sql
+        .split(/;\s*(?:\r?\n|$)/)
+        .map((st) => st.replace(/^\s*--.*$/gm, '').trim())
+        .filter(Boolean);
+      for (const stmt of statements) await tx.$executeRawUnsafe(stmt);
+      await tx.$executeRawUnsafe(`INSERT INTO _peblo_migrations (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}') ON CONFLICT DO NOTHING`);
+      console.log(`[db] applied migration ${file}`);
     }
   }, { timeout: (lockSeconds + 600) * 1000, maxWait: 30_000 });
 }
@@ -103,7 +85,7 @@ const migrate = () => runMigrations();
 
 let ready: Promise<void> | null = null;
 
-/** Applies any pending migrations to the shared MySQL database. Call once at startup. */
+/** Applies any pending migrations to the shared Postgres database. Call once at startup. */
 export function initDatabase(): Promise<void> {
   if (!ready) {
     ready = migrate();

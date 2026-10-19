@@ -1,4 +1,4 @@
-// Starts the compiled server against the MySQL database in server/.env and exercises the main API routes
+// Starts the compiled server against a local Postgres named peblo_test and exercises the main API routes
 // with a throwaway account (created at the start, deleted at the end).
 // Usage: npm test      (or: npm run build:server && node scripts/smoke-test.mjs)
 import path from 'path';
@@ -7,7 +7,9 @@ import dotenv from 'dotenv';
 import { pathToFileURL } from 'url';
 
 dotenv.config({ path: path.resolve('server/.env') });
-if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is not set (server/.env).'); process.exit(1); }
+// The smoke test never touches the real database: a throwaway local Postgres (or PEBLO_TEST_DATABASE_URL), named peblo_test.
+process.env.DATABASE_URL = process.env.PEBLO_TEST_DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:55432/peblo_test';
+if (!/peblo_test/.test(process.env.DATABASE_URL)) { console.error('refusing to run: not peblo_test'); process.exit(1); }
 process.env.PEBLO_SQL_DIR = path.resolve('server/prisma/sql');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-test-secret-smoke-test-secret';
 process.env.TRUST_PROXY = '1'; // as behind a proxy: lets the test fake client addresses (PEB-63)
@@ -717,8 +719,8 @@ try {
     check('series: about 60 days of occurrences are ready (not the old 30)', rows.length >= 59 && rows.length <= 62, rows.length);
 
     // it never runs out: 40 days later the list tops it up again
-    await prismaS.$executeRawUnsafe('UPDATE todos SET deadline = DATE_SUB(deadline, INTERVAL 40 DAY) WHERE series_id = ?', sid);
-    await prismaS.$executeRawUnsafe('UPDATE todo_series SET anchor = DATE_SUB(anchor, INTERVAL 40 DAY), last_generated = DATE_SUB(last_generated, INTERVAL 40 DAY) WHERE id = ?', sid);
+    await prismaS.$executeRawUnsafe("UPDATE todos SET deadline = deadline - interval '40 days' WHERE series_id = $1", sid);
+    await prismaS.$executeRawUnsafe("UPDATE todo_series SET anchor = anchor - interval '40 days', last_generated = last_generated - interval '40 days' WHERE id = $1", sid);
     await call('GET', rangeUrl(base0, base0.getTime() + 3 * DAY));
     rows = await rowsOf(sid);
     const lastAt = rows[rows.length - 1].deadline.getTime();
@@ -812,16 +814,16 @@ try {
       check('ollama: with an owner address everyone else uses it', pol.effectiveOllamaUrl('http://10.0.0.5:11434', DEF) === 'http://ollama.internal:11434');
     } finally { restore(); await call('PUT', '/api/profile', { settings: { ollamaUrl: '' } }); }
   }
-  // ---- PEB-72: migrations take a lock and can be re-run ----
+  // ---- PEB-72: migrations take a lock and are all-or-nothing (Postgres) ----
   {
     const dbm = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
     const P = dbm.default;
     const fsm = await import('node:fs'); const osm = await import('node:os');
     const dir = fsm.mkdtempSync(path.join(osm.tmpdir(), 'peblo-mig-'));
     const put = (name, sql) => fsm.writeFileSync(path.join(dir, name), sql);
-    const cols = async () => (await P.$queryRawUnsafe("SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mig_t1'")).map((x) => x.c).sort();
-    const versions = async () => (await P.$queryRawUnsafe('SELECT version AS v FROM `_peblo_migrations` WHERE version >= 9000 ORDER BY version')).map((x) => Number(x.v));
-    const cleanup = async () => { await P.$executeRawUnsafe('DROP TABLE IF EXISTS mig_t1'); await P.$executeRawUnsafe('DELETE FROM `_peblo_migrations` WHERE version >= 9000'); };
+    const cols = async () => (await P.$queryRawUnsafe("SELECT column_name AS c FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'mig_t1'")).map((x) => x.c).sort();
+    const versions = async () => (await P.$queryRawUnsafe('SELECT version AS v FROM _peblo_migrations WHERE version >= 9000 ORDER BY version')).map((x) => Number(x.v));
+    const cleanup = async () => { await P.$executeRawUnsafe('DROP TABLE IF EXISTS mig_t1'); await P.$executeRawUnsafe('DELETE FROM _peblo_migrations WHERE version >= 9000'); };
     try {
       await cleanup();
       put('9001_a.sql', 'CREATE TABLE mig_t1 (id INT PRIMARY KEY, a INT);\nALTER TABLE mig_t1 ADD COLUMN b INT;\n');
@@ -829,21 +831,17 @@ try {
       check('migrations: four apps starting together on an old database all succeed', rs.every((x) => x.status === 'fulfilled'), rs.map((x) => x.reason?.message));
       check('migrations: the change was applied exactly once', JSON.stringify(await cols()) === '["a","b","id"]' && JSON.stringify(await versions()) === '[9001]', [await cols(), await versions()]);
 
-      put('9002_b.sql', 'ALTER TABLE mig_t1 ADD COLUMN c INT;\nALTER TABLE mig_t1 ADD COLUMN d INT;\n');
-      await P.$executeRawUnsafe('ALTER TABLE mig_t1 ADD COLUMN c INT'); // the first step ran before the app died
-      let err2 = null; try { await dbm.runMigrations(dir, 30); } catch (e) { err2 = e; }
-      check('migrations: a migration that died halfway can be run again', !err2 && (await cols()).join() === 'a,b,c,d,id' && (await versions()).join() === '9001,9002', [err2?.message, await cols()]);
-
-      put('9003_c.sql', 'ALTER TABLE mig_t1 ADD COLUMN e INT;\nALTER TABLE nope_missing ADD COLUMN x INT;\n');
+      put('9002_b.sql', 'ALTER TABLE mig_t1 ADD COLUMN c INT;\nALTER TABLE nope_missing ADD COLUMN x INT;\n');
       let failed = false; try { await dbm.runMigrations(dir, 30); } catch { failed = true; }
-      check('migrations: a real error still stops the start and is not recorded', failed && !(await versions()).includes(9003));
-      put('9003_c.sql', 'ALTER TABLE mig_t1 ADD COLUMN e INT;\nALTER TABLE mig_t1 ADD COLUMN f INT;\n');
+      check('migrations: a real error stops the start and is not recorded', failed && !(await versions()).includes(9002));
+      check('migrations: ..and the steps before the error are rolled back too', !(await cols()).includes('c'), await cols());
+      put('9002_b.sql', 'ALTER TABLE mig_t1 ADD COLUMN c INT;\nALTER TABLE mig_t1 ADD COLUMN d INT;\n');
       let err3 = null; try { await dbm.runMigrations(dir, 30); } catch (e) { err3 = e; }
-      check('migrations: after the file is fixed the rest runs (the finished step is skipped)', !err3 && (await cols()).includes('f') && (await versions()).includes(9003), [err3?.message, await cols()]);
+      check('migrations: after the file is fixed it runs from the top', !err3 && (await cols()).join() === 'a,b,c,d,id' && (await versions()).join() === '9001,9002', [err3?.message, await cols()]);
 
-      const lock = await P.$queryRawUnsafe("SELECT GET_LOCK('peblo_migrate', 1) AS got");
-      check('migrations: the lock is released when done', Number(lock[0].got) === 1);
-      await P.$queryRawUnsafe("SELECT RELEASE_LOCK('peblo_migrate')");
+      const lock = await P.$queryRawUnsafe('SELECT pg_try_advisory_lock(7264001) AS got');
+      check('migrations: the lock is released when done', lock[0].got === true);
+      await P.$queryRawUnsafe('SELECT pg_advisory_unlock(7264001)');
     } finally { await cleanup(); fsm.rmSync(dir, { recursive: true, force: true }); }
   }
   // ---- PEB-71: the right database engine for each computer ----

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
   // Generated inside the project (not node_modules/.prisma) so the desktop packager ships it.
   output   = "../generated/prisma"
   // One engine per kind of computer we ship to: the installers are built on one machine for all of them (PEB-71).
@@ -8,14 +9,15 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [citext]
 }
 
 model User {
   id           String   @id @default(uuid())
   name         String   @default("You")
-  email        String   @unique
+  email        String   @unique @db.Citext
   passwordHash String   @map("password_hash")
   tokenVersion Int      @default(0) @map("token_version")
 
@@ -44,7 +46,7 @@ model Note {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
   title      String   @default("Untitled") @db.Text
-  content    String   @default("") @db.LongText
+  content    String   @default("") @db.Text
   category   String?
   isArchived Boolean  @default(false) @map("is_archived")
   isDeleted  Boolean  @default(false) @map("is_deleted")
@@ -72,7 +74,7 @@ model Note {
 model Tag {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
-  name      String
+  name      String   @db.Citext
   createdAt DateTime @default(now()) @map("created_at")
 
   user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -99,7 +101,7 @@ model AiGeneration {
   noteId    String   @map("note_id")
   userId    String   @map("user_id")
   type      String
-  result    String   @db.LongText
+  result    String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -113,7 +115,7 @@ model AiGeneration {
 model NoteBackup {
   id        String   @id @default(uuid())
   noteId    String   @map("note_id")
-  content   String   @db.LongText
+  content   String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -177,7 +179,7 @@ model TodoSeries {
 model NoteEmbedding {
   id        String   @id @default(uuid())
   noteId    String   @unique @map("note_id")
-  vector    String   @db.LongText // JSON stringified float array representing embedding values
+  vector    String   @db.Text // JSON stringified float array representing embedding values
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
@@ -202,9 +204,9 @@ model UserApiKeys {
 model QuizRun {
   id         String    @id @default(uuid())
   userId     String    @map("user_id")
-  topic      String
-  questions  String    @db.LongText
-  answers    String?   @db.LongText
+  topic      String   @db.Citext
+  questions  String    @db.Text
+  answers    String?   @db.Text
   correct    Int?
   total      Int
   createdAt  DateTime  @default(now()) @map("created_at")
@@ -219,12 +221,12 @@ model QuizRun {
 // How well a topic (a tag) is known, 0–100, from the quizzes taken on it.
 model TopicMastery {
   userId      String   @map("user_id")
-  topic       String
+  topic       String   @db.Citext
   score       Int
   quizzes     Int      @default(0)
   lastCorrect Int      @default(0) @map("last_correct")
   lastTotal   Int      @default(0) @map("last_total")
-  missed      String   @default("[]") @db.LongText
+  missed      String   @default("[]") @db.Text
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

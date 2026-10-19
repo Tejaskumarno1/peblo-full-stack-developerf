@@ -110,12 +110,12 @@ export async function getNotes(req: any, res: any, next: any) {
 
     // Search filter
     if (search) {
-      // Title, text and tags. (MySQL's collation makes `contains` case-insensitive.)
+      // Title, text and tags, ignoring case.
       const q = String(search).trim();
       where.OR = [
-        { title: { contains: q } },
-        { content: { contains: q } },
-        { tags: { some: { tag: { name: { contains: q.replace(/^#/, '') } } } } }
+        { title: { contains: q, mode: 'insensitive' } },
+        { content: { contains: q, mode: 'insensitive' } },
+        { tags: { some: { tag: { name: { contains: q.replace(/^#/, ''), mode: 'insensitive' } } } } }
       ];
     }
 
@@ -358,7 +358,7 @@ export async function getBackups(req: any, res: any, next: any) {
   try {
     // Metadata only (the text of one version is fetched on demand). If the note is not the user's, the JOIN returns 0 rows.
     const rows: any[] = await prisma.$queryRaw`
-      SELECT b.id AS id, b.created_at AS createdAt, CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview
+      SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview
       FROM note_backups b JOIN notes n ON n.id = b.note_id
       WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
       ORDER BY b.created_at DESC LIMIT 100`;

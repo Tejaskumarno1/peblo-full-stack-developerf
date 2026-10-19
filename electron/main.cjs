@@ -1,7 +1,7 @@
 // Peblo desktop — Electron main process.
 //
 // Runs the Express API in-process on a random localhost port and shows the React UI in a window.
-// Everything is stored in the shared MySQL database named by DATABASE_URL (see loadEnvFile).
+// Everything is stored in the shared Postgres (Supabase) database named by DATABASE_URL (see loadEnvFile).
 const { app, BrowserWindow, shell, Menu, dialog, globalShortcut, Tray, nativeImage, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -160,7 +160,7 @@ function configurePrismaEngine() {
 }
 
 /**
- * The database is a MySQL server shared by every account, so the app needs its address
+ * The database is a Postgres server shared by every account, so the app needs its address
  * (DATABASE_URL) and the secret that signs sign-ins (JWT_SECRET). They come from the environment,
  * or from the first .env file found: PEBLO_ENV_FILE, one in the app-data folder, or server/.env
  * when running from the project folder.
@@ -185,7 +185,7 @@ function loadEnvFile() {
     process.env.JWT_SECRET = secret;
   }
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is not set. Put your MySQL connection string in server/.env (or set PEBLO_ENV_FILE), then start Peblo again.');
+    throw new Error('DATABASE_URL is not set. Put your Postgres connection string in server/.env (or set PEBLO_ENV_FILE), then start Peblo again.');
   }
 }
 

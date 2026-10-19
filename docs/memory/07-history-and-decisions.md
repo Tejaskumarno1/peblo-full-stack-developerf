@@ -48,3 +48,5 @@
 |---|---|
 | 8 Oct 2026 | Created from a full read of the code (server, client, five styles, Electron, scripts, docs) at commit `8b0a99b`. |
 | 9 Oct 2026 | Verification pass: static checks, the real server against a recording fake database, pure-logic tests, and the production UI in a browser (08, 09). Coverage review of everything the first pass skipped (10). Jira PEB-99…120 added; PEB-55 widened to 4 keys; PEB-68 lowered to Medium; corrections listed in 08. |
+
+| 19 Oct 2026 | Database moved from MySQL to Postgres (Supabase project "peblo") on branch `supabase`: one `001_init.sql`, `db.ts` uses a transaction-level advisory lock and all-or-nothing migrations, CITEXT keeps email/tag/topic matching case-insensitive, `mode: 'insensitive'` for search; tests run on a throwaway local Postgres (`PEBLO_TEST_DATABASE_URL`, default 127.0.0.1:55432/peblo_test) and never touch the real database | (this branch) |
