@@ -5,6 +5,8 @@ import { X } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
+import { useUndoToast, useDeferredDelete } from '../utils/useUndoToast';
+import UndoToast from '../components/UndoToast';
 import { timeOf, dayChip, daysFromToday, weekdayLong, startOfDay, addDays, tagsOf } from './softUtils';
 
 /** Soft Studio · Tasks (mockup: SoftTasks). A board of Today, Tomorrow, This week and Done. */
@@ -18,8 +20,10 @@ export default function SoftTasks() {
 
   const { data: todos = [] } = useQuery({ queryKey: ['todos', 'all'], queryFn: () => todosAPI.getAll().then((r) => r.data.todos || []) });
 
+  const { toast, say, dismiss } = useUndoToast();
+  const { gone, schedule } = useDeferredDelete(async (id) => { await todosAPI.delete(id, 'this'); refresh(); });
   const groups = useMemo(() => {
-    const open = todos.filter((t) => !t.completed);
+  const open = todos.filter((t) => !t.completed && !gone.includes(t.id));
     const rank = { high: 0, medium: 1, low: 2 };
     // Important first, then by time (the mockup lists the !high task before earlier ones)
     const byDue = (a, b) => (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1) || new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15);
@@ -29,9 +33,9 @@ export default function SoftTasks() {
     const week = open.filter((t) => t.deadline && daysFromToday(t.deadline) >= 2 && daysFromToday(t.deadline) <= 6).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
     const later = open.filter((t) => !t.deadline || daysFromToday(t.deadline) > 6).sort((a, b) => new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15));
     const weekAgo = addDays(startOfDay(), -6);
-    const done = todos.filter((t) => t.completed && new Date(t.updatedAt) >= weekAgo).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const done = todos.filter((t) => t.completed && !gone.includes(t.id) && new Date(t.updatedAt) >= weekAgo).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     return { overdue, today, tomorrow, week, later, done, open };
-  }, [todos]);
+  }, [todos, gone]);
 
   const subtitle = [
     `${groups.open.length} to do`,
@@ -45,17 +49,25 @@ export default function SoftTasks() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
-  const toggle = async (t) => {
-    queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed, updatedAt: new Date().toISOString() } : x)));
-    await todosAPI.update(t.id, { completed: !t.completed });
+  const setDone = async (t, completed) => {
+    queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed, updatedAt: new Date().toISOString() } : x)));
+    await todosAPI.update(t.id, { completed });
     refresh();
   };
+  const toggle = async (t) => {
+    const next = !t.completed;
+    await setDone(t, next);
+    say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
+  };
   const remove = async (t) => {
-    const scope = t.seriesId ? await askScope(t, 'delete') : (window.confirm(`Delete "${t.text}"?`) ? 'this' : null);
-    if (!scope) return;
-    if (scope === 'this') queryClient.setQueryData(['todos', 'all'], (old) => (old || []).filter((x) => x.id !== t.id));
-    await todosAPI.delete(t.id, scope);
-    refresh();
+    if (t.seriesId) { // a repeating task asks which ones, so that stays a direct question
+      const scope = await askScope(t, 'delete');
+      if (!scope) return;
+      await todosAPI.delete(t.id, scope);
+      refresh();
+      return;
+    }
+    schedule(t.id, t.text, say); // goes away at once, really deleted after the undo time
   };
 
   const parsed = draft.trim() ? parseTask(draft) : null;
@@ -162,6 +174,7 @@ export default function SoftTasks() {
           ))}
         </div>
       )}
+      <UndoToast toast={toast} dismiss={dismiss} />
     </div>
   );
 }

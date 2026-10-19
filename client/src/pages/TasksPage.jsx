@@ -6,6 +6,8 @@ import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { startOfWeek } from '../utils/weekStart';
 import { askScope } from '../utils/askScope';
+import { useUndoToast } from '../utils/useUndoToast';
+import UndoToast from '../components/UndoToast';
 import '../styles/tasks.css';
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
@@ -105,11 +107,18 @@ export default function TasksPage() {
   };
 
   const [actionError, setActionError] = useState('');
-  const toggle = async (t) => {
+  const { toast, say, dismiss } = useUndoToast();
+  const setDone = async (t, completed) => {
     setActionError('');
-    try { await todosAPI.update(t.id, { completed: !t.completed }); }
-    catch { setActionError('Could not update that task. Try again.'); }
+    let ok = true;
+    try { await todosAPI.update(t.id, { completed }); }
+    catch { ok = false; setActionError('Could not update that task. Try again.'); }
     refresh();
+    return ok;
+  };
+  const toggle = async (t) => {
+    const next = !t.completed;
+    if (await setDone(t, next)) say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
   };
   const remove = async (t) => {
     setActionError('');
@@ -263,6 +272,7 @@ export default function TasksPage() {
           </div>
         </aside>
       </div>
+      <UndoToast toast={toast} dismiss={dismiss} />
     </div>
   );
 }

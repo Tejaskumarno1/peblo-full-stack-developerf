@@ -7,6 +7,8 @@ import { RiverHeader, useDismiss } from './RiverShell';
 import RiverDrawer from './RiverDrawer';
 import { quickMeetingTimes, timeOfDay } from './quickAdd';
 import { hiddenClusters, nextHidden } from './hidden';
+import { useUndoToast } from '../utils/useUndoToast';
+import UndoToast from '../components/UndoToast';
 import {
   ZOOMS, DAY_START, DAY_END, dayWidth, rangeStart, rangeWidth, xOf,
   startOfDay, addDays, sameDay, momentOf, endOf, dueMomentOf, isMeeting, isAllDay,
@@ -188,14 +190,22 @@ export default function RiverHome({ initialZoom = 'day' }) {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2400); };
-  const toggle = async (t) => {
-    queryClient.setQueriesData({ queryKey: ['todos', 'range', 'river'] }, (old) => (Array.isArray(old) ? old.map((x) => (x.id === t.id ? { ...x, completed: !x.completed, updatedAt: new Date().toISOString() } : x)) : old));
+  const { toast: undoToast, say, dismiss } = useUndoToast();
+  const setDone = async (t, completed) => {
+    queryClient.setQueriesData({ queryKey: ['todos', 'range', 'river'] }, (old) => (Array.isArray(old) ? old.map((x) => (x.id === t.id ? { ...x, completed, updatedAt: new Date().toISOString() } : x)) : old));
+    let ok = true;
     try {
-      await todosAPI.update(t.id, { completed: !t.completed });
+      await todosAPI.update(t.id, { completed });
     } catch {
+      ok = false;
       flash('Could not update that task. Check your connection and try again.');
     }
     refresh(); // on failure this also puts the row back as the server has it
+    return ok;
+  };
+  const toggle = async (t) => {
+    const next = !t.completed;
+    if (await setDone(t, next)) say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
   };
 
   const onLaneDoubleClick = (lane) => (e) => {
@@ -715,6 +725,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
         </div>
       )}
       {toast && <div className="r-toast" role="status">{toast}</div>}
+      <UndoToast toast={undoToast} dismiss={dismiss} />
     </>
   );
 }
