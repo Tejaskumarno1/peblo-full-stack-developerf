@@ -57,7 +57,8 @@ export function RiverHeader({ children, tools }) {
           <div className="r-pop right" role="menu" style={{ width: 220 }}>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
           </div>
         )}
       </div>

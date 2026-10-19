@@ -26,5 +26,6 @@ security.mjs = Content-Security-Policy: no violation in any style or page, injec
 aioff.mjs = Settings > AI Providers > "Turn off all AI": saved on the account, status line says AI is off, server refuses AI, calls disabled, unticking restores it (PEB-106).
 orbit-due.mjs = Orbit: ticked tasks stay struck through, Hide completed, Undo after tick and delete, notes list folds and pages (PEB-122/123/124).
 undo-styles.mjs = Undo after a tick in Studio, Console, Soft and River; Soft delete undo (PEB-123).
+orbit-help.mjs = Orbit map guide (PEB-147/148/150). help-dialog.mjs = Help dialog in all styles (PEB-167/171).
 deleteaccount.mjs = Settings > Data > Delete account: needs a password and a tick, a wrong password changes nothing, success signs this device out and the token stops working (PEB-25).
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).

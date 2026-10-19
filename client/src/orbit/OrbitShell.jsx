@@ -165,6 +165,7 @@ function OrbitTop({ data }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/calendar'); }}>This week</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
           </div>
         )}

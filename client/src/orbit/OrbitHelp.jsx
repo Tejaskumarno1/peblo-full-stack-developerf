@@ -61,6 +61,12 @@ export default function OrbitHelp() {
   const close = () => { setOpen(false); setHint(false); markSeen(); btn.current?.focus(); };
   const start = () => { setStep(0); setOpen(true); setHint(false); markSeen(); };
 
+  useEffect(() => { // "Take the map tour" in the Help dialog
+    const go = () => start();
+    window.addEventListener('peblo:orbit-tour', go);
+    return () => window.removeEventListener('peblo:orbit-tour', go);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!open) return undefined;
     const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };

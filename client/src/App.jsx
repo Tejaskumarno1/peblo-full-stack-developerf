@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
+import HelpDialog from './components/HelpDialog';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -65,6 +66,7 @@ function ShellLayout() {
         <AiVoiceCallManager />
         <SeriesScopeDialog />
         <CommandPalette />
+        <HelpDialog />
       </Suspense>
     </AppShell>
   );

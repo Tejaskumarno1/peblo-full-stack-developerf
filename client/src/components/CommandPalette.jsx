@@ -54,6 +54,7 @@ export default function CommandPalette() {
     { id: 'nav-tasks', title: 'Go to Tasks', icon: <CheckSquare size={16} />, action: () => navigate('/tasks') },
     { id: 'nav-cal', title: 'Go to Calendar', icon: <Calendar size={16} />, action: () => navigate('/calendar') },
     { id: 'nav-ai', title: 'Open AI Hub', icon: <Sparkles size={16} />, action: () => navigate('/ai') },
+    { id: 'help', title: 'Help and shortcuts', icon: <Search size={16} />, action: () => window.dispatchEvent(new Event('peblo:help')) },
     { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') },
     ...[['studio', 'Studio'], ['console', 'Console'], ['soft', 'Soft Studio'], ['river', 'River'], ['orbit', 'Orbit']]
       .filter(([id]) => id !== uiStyle)
