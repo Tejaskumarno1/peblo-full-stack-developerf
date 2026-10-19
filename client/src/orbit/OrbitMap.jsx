@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed, Search, Image as ImageIcon, Code } from 'lucide-react';
+import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api';
 import { useOrbit, useDismiss } from './OrbitShell';
@@ -482,8 +482,6 @@ export default function OrbitMap({ interactive }) {
             <button type="button" className="o-tool" aria-label="Zoom out" title="Zoom out (-)" onClick={() => zoomAt(1 / 1.15)}><Minus size={18} /></button>
             <button type="button" className="o-tool" aria-label="Back to the middle" title="Reset view (0)" onClick={reset}><LocateFixed size={18} /></button>
             <button type="button" className="o-tool" aria-label="Fit to screen" title="Fit to screen (F)" onClick={fit}><Maximize2 size={18} /></button>
-            <button type="button" className="o-tool" aria-label="Download map as PNG" title="Download the map as a PNG picture (P)" onClick={() => saveMap('png')}><ImageIcon size={18} /></button>
-            <button type="button" className="o-tool" aria-label="Download map as SVG" title="Download the map as an SVG picture (G)" onClick={() => saveMap('svg')}><Code size={18} /></button>
             <OrbitHelp />
           </div>
 

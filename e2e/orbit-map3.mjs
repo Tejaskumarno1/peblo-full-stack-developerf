@@ -37,10 +37,10 @@ try {
   await page.waitForTimeout(600);
   check('Enter selects the focused topic', (await page.getByRole('complementary', { name: 'Selected topic' }).count()) === 1, first);
 
-  const [svgDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download map as SVG' }).click()]);
+  const [svgDl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('g')]);
   const svgText = fs.readFileSync(await svgDl.path(), 'utf8');
   check('Download as SVG gives a drawing of the map', svgDl.suggestedFilename().endsWith('.svg') && svgText.startsWith('<svg') && /alpha/i.test(svgText));
-  const [pngDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download map as PNG' }).click()]);
+  const [pngDl] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('p')]);
   const png = fs.readFileSync(await pngDl.path());
   check('Download as PNG gives a real picture', pngDl.suggestedFilename().endsWith('.png') && png[0] === 0x89 && png[1] === 0x50 && png.length > 1000, String(png.length));
 } catch (e) {
