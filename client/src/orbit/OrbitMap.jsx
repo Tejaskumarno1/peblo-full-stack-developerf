@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed } from 'lucide-react';
+import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api';
 import { useOrbit, useDismiss } from './OrbitShell';
@@ -13,6 +13,31 @@ import { dayWord } from '../river/riverUtils';
 import { firstNameOf } from '../soft/softUtils';
 
 const CARD_W = 316;
+const SOON_MS = 3 * 86400000;
+
+// Zoom and position are remembered per space, on this device (PEB-158)
+const viewKey = (s) => `peblo-orbit-view-${s || 'all'}`;
+const HOME = { x: 0, y: 0, k: 1 };
+function loadView(s) {
+  try {
+    const v = JSON.parse(localStorage.getItem(viewKey(s)));
+    if (v && [v.x, v.y, v.k].every(Number.isFinite) && v.k >= 0.55 && v.k <= 1.8) return { x: v.x, y: v.y, k: v.k };
+  } catch { /* nothing saved */ }
+  return HOME;
+}
+function saveView(s, v) {
+  try {
+    if (v.x === 0 && v.y === 0 && v.k === 1) localStorage.removeItem(viewKey(s));
+    else localStorage.setItem(viewKey(s), JSON.stringify(v));
+  } catch { /* storage may be blocked */ }
+}
+
+// One-click starter topics for an empty map (PEB-149)
+const TEMPLATES = [
+  { id: 'exams', label: 'Exams', tags: ['revision', 'past-papers', 'key-formulas'] },
+  { id: 'projects', label: 'Projects', tags: ['planning', 'research', 'deliverables'] },
+  { id: 'study', label: 'Study', tags: ['lectures', 'reading', 'practice'] },
+];
 
 /** A font size that fits the name's longest word inside a circle of diameter d. */
 function fitName(name, d) {
@@ -31,7 +56,7 @@ export default function OrbitMap({ interactive }) {
   const { notes, todos, mastery, space, setSpace, selected, setSelected, pathOn, setPathOn } = useOrbit();
   const boxRef = useRef(null);
   const [size, setSize] = useState({ width: 1440, height: 900 });
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [view, setView] = useState(() => loadView(space));
   const [tool, setTool] = useState(null); // 'connect' | 'topic'
   const drag = useRef(null);
 
@@ -44,7 +69,13 @@ export default function OrbitMap({ interactive }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  useEffect(() => { setView({ x: 0, y: 0, k: 1 }); }, [space]);
+  const skipSave = useRef(false);
+  useEffect(() => { skipSave.current = true; setView(loadView(space)); }, [space]);
+  useEffect(() => {
+    if (!interactive) return;
+    if (skipSave.current) { skipSave.current = false; return; }
+    saveView(space, view);
+  }, [view, space, interactive]);
 
   const graph = useMemo(() => buildGraph({ notes, todos, mastery, space, userName: firstNameOf(user) }), [notes, todos, mastery, space, user]);
   const lay = useMemo(() => layoutGraph(graph, size), [graph, size]);
@@ -86,7 +117,7 @@ export default function OrbitMap({ interactive }) {
 
   // ---------- pan and zoom ----------
   const onPointerDown = (e) => {
-    if (!interactive || e.button !== 0 || e.target.closest('button, a, input, .o-card, .o-tools, .o-path, .o-whole, .o-zoom')) return;
+    if (!interactive || e.button !== 0 || e.target.closest('button, a, input, select, .o-card, .o-tools, .o-path, .o-whole, .o-zoom, .o-jump')) return;
     drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
   };
   const onPointerMove = (e) => {
@@ -119,6 +150,44 @@ export default function OrbitMap({ interactive }) {
     zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale);
   };
 
+  // ---------- fit, reset, jump and filter ----------
+  const reset = () => setView(HOME);
+  const fit = () => {
+    const pts = [{ x: lay.cx, y: lay.cy, r: 110 }, ...lay.nodes.map((n) => ({ x: n.x, y: n.y, r: n.d / 2 + 40 }))];
+    const x0 = Math.min(...pts.map((p) => p.x - p.r));
+    const x1 = Math.max(...pts.map((p) => p.x + p.r));
+    const y0 = Math.min(...pts.map((p) => p.y - p.r));
+    const y1 = Math.max(...pts.map((p) => p.y + p.r));
+    const k = Math.min(1.8, Math.max(0.55, Math.min(size.width / (x1 - x0), size.height / (y1 - y0)) * 0.92));
+    setView({ k, x: size.width / 2 - ((x0 + x1) / 2) * k, y: size.height / 2 - ((y0 + y1) / 2) * k });
+  };
+  const [jumpQ, setJumpQ] = useState('');
+  const [flash, setFlash] = useState(null);
+  const [filter, setFilter] = useState('all'); // 'all' | 'weak' | 'due'
+  const [seeding, setSeeding] = useState(false);
+  const jumpRef = useRef(null);
+  const jumpHits = useMemo(() => {
+    const s = jumpQ.trim().toLowerCase();
+    return s ? lay.nodes.filter((n) => n.name.toLowerCase().includes(s)).slice(0, 6) : [];
+  }, [jumpQ, lay]);
+  const jumpTo = (n) => {
+    setView((v) => ({ ...v, x: size.width / 2 - n.x * v.k, y: size.height / 2 - n.y * v.k }));
+    if (n.kind === 'topic') setSelected(n.id);
+    setFlash(n.id);
+    setJumpQ('');
+    window.setTimeout(() => setFlash(null), 2500);
+  };
+  const dueSoon = (n) => n.tasks.filter((t) => !t.completed && t.deadline && new Date(t.deadline).getTime() <= Date.now() + SOON_MS);
+  const dimmed = useMemo(() => {
+    const out = new Set();
+    if (filter === 'all') return out;
+    for (const n of lay.nodes) {
+      const ok = n.kind === 'topic' && (filter === 'weak' ? n.level === 'weak' : dueSoon(n).length > 0);
+      if (!ok) out.add(n.id);
+    }
+    return out;
+  }, [filter, lay]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---------- tools ----------
   const topicTag = sel?.tag || space || null;
   const [connectQ, setConnectQ] = useState('');
@@ -143,6 +212,43 @@ export default function OrbitMap({ interactive }) {
   const draftIn = (tags) => navigate(`/notes?new=1${tags.length ? `&tag=${encodeURIComponent(tags.join(','))}` : ''}`);
 
   const startQuiz = (tag) => navigate(`/quiz/${encodeURIComponent(tag)}`);
+
+  const addTemplate = async (tpl) => {
+    setSeeding(true);
+    try {
+      await Promise.all(tpl.tags.map((t) => notesAPI.create({ title: `${topicName(t)}: start here`, content: `Write what you know about ${topicName(t)}.`, tags: [t] })));
+    } catch (e) {
+      console.error('Could not add the starter topics', e);
+    } finally {
+      setSeeding(false);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    }
+  };
+
+  // Keyboard shortcuts for the map (PEB-151). Ignored while typing.
+  const act = useRef({});
+  act.current = {
+    '+': () => zoomAt(1.15), '=': () => zoomAt(1.15), '-': () => zoomAt(1 / 1.15), 0: reset, f: fit,
+    v: () => setTool(null),
+    n: () => draftIn([...new Set([space, sel?.tag].filter(Boolean))]),
+    t: () => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'task', tag: topicTag } })),
+    l: () => setTool((x) => (x === 'connect' ? null : 'connect')),
+    c: () => setTool((x) => (x === 'topic' ? null : 'topic')),
+    '/': () => jumpRef.current?.focus(),
+  };
+  useEffect(() => {
+    if (!interactive) return undefined;
+    const key = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (e.target?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      const fn = act.current[e.key.toLowerCase()];
+      if (!fn) return;
+      e.preventDefault();
+      fn();
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [interactive]);
 
   // ---------- render ----------
   const empty = graph.topics.length === 0;
@@ -171,14 +277,14 @@ export default function OrbitMap({ interactive }) {
         </svg>
 
         {lay.leaves.map((l, i) => (l.kind === 'note' ? (
-          <Link key={`${l.from}-n-${l.note.id}-${i}`} to={`/notes/${l.note.id}`} className="o-leaf" style={{ left: l.x, top: l.y }} title={l.note.title}>
+          <Link key={`${l.from}-n-${l.note.id}-${i}`} to={`/notes/${l.note.id}`} className={`o-leaf${dimmed.has(l.from) ? ' dim' : ''}`} style={{ left: l.x, top: l.y }} title={l.note.title}>
             <span className="k">N</span><span>{l.note.title || 'Untitled'}</span>
           </Link>
         ) : (
           <button
             key={`${l.from}-t-${l.todo.id}-${i}`}
             type="button"
-            className={`o-leaf${l.todo.deadline && new Date(l.todo.deadline) < today ? ' hot' : ''}`}
+            className={`o-leaf${l.todo.deadline && new Date(l.todo.deadline) < today ? ' hot' : ''}${dimmed.has(l.from) ? ' dim' : ''}`}
             style={{ left: l.x, top: l.y }}
             onClick={() => navigate('/tasks')}
             title={l.todo.text}
@@ -200,14 +306,14 @@ export default function OrbitMap({ interactive }) {
           const step = pathOn ? stepOf.get(n.id) : null;
           const ring = n.kind === 'topic' ? levelVar(n.level) : 'var(--o-line)';
           return (
-            <div key={n.id} className="o-node" style={{ left: n.x - n.d / 2, top: n.y - n.d / 2, width: n.d }}>
+            <div key={n.id} className={`o-node${dimmed.has(n.id) ? ' dim' : ''}`} style={{ left: n.x - n.d / 2, top: n.y - n.d / 2, width: n.d }}>
               <button
                 type="button"
-                className={`ball${selected === n.id ? ' sel' : ''}`}
+                className={`ball${selected === n.id ? ' sel' : ''}${flash === n.id ? ' hit' : ''}`}
                 style={{ width: n.d, height: n.d, borderColor: ring }}
                 onClick={() => (n.kind === 'note' ? navigate(`/notes/${n.note.id}`) : setSelected(n.id))}
                 onDoubleClick={() => n.kind === 'topic' && setSpace(n.tag)}
-                title={n.kind === 'topic' ? `${n.name}: double-click to open it as its own map` : n.name}
+                title={n.kind === 'topic' ? undefined : n.name}
               >
                 <span className="name" style={{ fontSize: fitName(n.name, n.d) }}>{n.name}</span>
                 <span className="meta">{n.kind === 'topic' ? `${n.count} NOTE${n.count === 1 ? '' : 'S'}` : `${n.tasks.length} TASK${n.tasks.length === 1 ? '' : 'S'}`}</span>
@@ -217,6 +323,18 @@ export default function OrbitMap({ interactive }) {
                 {n.kind === 'topic' ? `${LEVEL_LABEL[n.level]}${n.score !== null ? ` · ${n.score}%` : ''}` : `edited ${agoText(n.note.updatedAt)}`}
               </span>
               {step && <span className="step">{step}</span>}
+              {n.kind === 'topic' && (() => {
+                const m = mastery.get(n.tag);
+                const due = dueSoon(n).length;
+                return (
+                  <div className="o-hover" role="tooltip">
+                    <b>{n.name}</b>
+                    <span>{n.count} note{n.count === 1 ? '' : 's'} · {due} task{due === 1 ? '' : 's'} due soon</span>
+                    <span>{n.score !== null ? `${n.score}% mastered` : 'Not quizzed yet'}{m ? ` · quizzed ${agoText(m.updatedAt)}` : ''}</span>
+                    <i>Double-click to open it as its own map</i>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
@@ -226,18 +344,55 @@ export default function OrbitMap({ interactive }) {
         <div className="o-pill o-empty-map">
           <h2>Your map is empty</h2>
           <p className="o-quiet">Tag your notes, like #dbms and #normalization, and every tag becomes a topic here. Notes that share tags sit together.</p>
-          <button type="button" className="o-btn" onClick={() => draftIn([])}>Write a note</button>
+          <button type="button" className="o-btn" onClick={() => setTool('topic')}>Add your first subject</button>
+          <div className="o-templates" role="group" aria-label="Starter templates">
+            <span className="o-quiet" style={{ fontSize: 13 }}>Or start from a template:</span>
+            {TEMPLATES.map((tpl) => (
+              <button key={tpl.id} type="button" className="o-btn ghost small" disabled={seeding} onClick={() => addTemplate(tpl)} title={tpl.tags.map(topicName).join(', ')}>{tpl.label}</button>
+            ))}
+          </div>
+          <button type="button" className="o-btn ghost" onClick={() => draftIn([])}>Write a note</button>
         </div>
       )}
 
       {interactive && (
         <>
+          <div className="o-pill o-jump" role="search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              ref={jumpRef}
+              aria-label="Jump to a topic"
+              placeholder="Jump to a topic  ( / )"
+              value={jumpQ}
+              onChange={(e) => setJumpQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && jumpHits[0]) jumpTo(jumpHits[0]);
+                if (e.key === 'Escape') { setJumpQ(''); e.currentTarget.blur(); }
+              }}
+            />
+            <select aria-label="Filter the map" value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <option value="all">All topics</option>
+              <option value="weak">Weak topics</option>
+              <option value="due">Due soon</option>
+            </select>
+            {filter !== 'all' && (
+              <button type="button" className="o-chip" aria-label="Clear filter" onClick={() => setFilter('all')}>{filter === 'weak' ? 'Weak topics' : 'Due soon'} <X size={13} /></button>
+            )}
+            {jumpHits.length > 0 && (
+              <div className="o-jump-list" role="listbox" aria-label="Matching topics">
+                {jumpHits.map((n) => (
+                  <button key={n.id} type="button" role="option" aria-selected="false" className="o-item" onClick={() => jumpTo(n)}><span className="k">{n.kind === 'topic' ? 'T' : 'N'}</span><span className="t">{n.name}</span></button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <nav aria-label="Map tools" className="o-pill o-tools" ref={toolRef}>
-            <button type="button" className="o-tool" aria-label="Select" aria-pressed={!tool} onClick={() => setTool(null)}><MousePointer2 size={18} strokeWidth={2.2} /></button>
-            <button type="button" className="o-tool" aria-label={topicTag ? `New note in ${topicName(topicTag)}` : 'New note'} title="New note here" onClick={() => draftIn([...new Set([space, sel?.tag].filter(Boolean))])}><FileText size={18} strokeWidth={2.2} /></button>
-            <button type="button" className="o-tool" aria-label="New task" title="New task here" onClick={() => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'task', tag: topicTag } }))}><SquareCheck size={18} strokeWidth={2.2} /></button>
-            <button type="button" className="o-tool" aria-label="Put a note on this topic" title="Put a note on this topic" aria-pressed={tool === 'connect'} onClick={() => setTool(tool === 'connect' ? null : 'connect')}><Link2 size={18} strokeWidth={2.2} /></button>
-            <button type="button" className="o-tool" aria-label="New topic" title="New topic" aria-pressed={tool === 'topic'} onClick={() => setTool(tool === 'topic' ? null : 'topic')}><CirclePlus size={18} strokeWidth={2.2} /></button>
+            <button type="button" className="o-tool" aria-label="Select" title="Select (V)" aria-pressed={!tool} onClick={() => setTool(null)}><MousePointer2 size={18} strokeWidth={2.2} /></button>
+            <button type="button" className="o-tool" aria-label={topicTag ? `New note in ${topicName(topicTag)}` : 'New note'} title="New note here (N)" onClick={() => draftIn([...new Set([space, sel?.tag].filter(Boolean))])}><FileText size={18} strokeWidth={2.2} /></button>
+            <button type="button" className="o-tool" aria-label="New task" title="New task here (T)" onClick={() => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'task', tag: topicTag } }))}><SquareCheck size={18} strokeWidth={2.2} /></button>
+            <button type="button" className="o-tool" aria-label="Put a note on this topic" title="Put a note on this topic (L)" aria-pressed={tool === 'connect'} onClick={() => setTool(tool === 'connect' ? null : 'connect')}><Link2 size={18} strokeWidth={2.2} /></button>
+            <button type="button" className="o-tool" aria-label="New topic" title="New topic (C)" aria-pressed={tool === 'topic'} onClick={() => setTool(tool === 'topic' ? null : 'topic')}><CirclePlus size={18} strokeWidth={2.2} /></button>
             {tool === 'connect' && (
               <div className="o-tool-tip">
                 {topicTag ? (
@@ -265,9 +420,10 @@ export default function OrbitMap({ interactive }) {
           </nav>
 
           <div className="o-pill o-zoom" role="group" aria-label="Zoom">
-            <button type="button" className="o-tool" aria-label="Zoom in" onClick={() => zoomAt(1.15)}><Plus size={18} /></button>
-            <button type="button" className="o-tool" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.15)}><Minus size={18} /></button>
-            <button type="button" className="o-tool" aria-label="Back to the middle" onClick={() => setView({ x: 0, y: 0, k: 1 })}><LocateFixed size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Zoom in" title="Zoom in (+)" onClick={() => zoomAt(1.15)}><Plus size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Zoom out" title="Zoom out (-)" onClick={() => zoomAt(1 / 1.15)}><Minus size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Back to the middle" title="Reset view (0)" onClick={reset}><LocateFixed size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Fit to screen" title="Fit to screen (F)" onClick={fit}><Maximize2 size={18} /></button>
             <OrbitHelp />
           </div>
 

@@ -78,7 +78,7 @@ export default function OrbitHelp() {
   const s = STEPS[step];
   return (
     <>
-      <button ref={btn} type="button" className="o-tool" aria-label="Help: how the map works" title="How the map works" aria-haspopup="dialog" onClick={start}>
+      <button ref={btn} type="button" className="o-tool" aria-label="Help: how the map works" title="How the map works (?)" aria-haspopup="dialog" onClick={start}>
         <CircleHelp size={18} strokeWidth={2.2} />
       </button>
       {hint && !open && (

@@ -151,6 +151,16 @@
 .o-map { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
 .o-map.dragging { cursor: grabbing; user-select: none; }
 .o-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.o-node.dim, .o-leaf.dim { opacity: 0.2; }
+.o-node .o-hover { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 30; min-width: 190px; padding: 10px 12px; border-radius: 12px; background: var(--o-ink); color: var(--o-on-ink); font-size: 12.5px; line-height: 1.35; flex-direction: column; gap: 3px; pointer-events: none; box-shadow: var(--o-shadow); }
+.o-node:hover .o-hover, .o-node:focus-within .o-hover { display: flex; }
+.o-node .o-hover i { opacity: 0.7; font-style: normal; font-size: 11.5px; }
+.o-jump { position: absolute; z-index: 16; left: 24px; top: 92px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 18px; }
+.o-jump input { border: none; background: transparent; font: inherit; font-size: 13.5px; color: var(--o-fg); width: 160px; outline: none; }
+.o-jump select { font: inherit; font-size: 13px; color: var(--o-fg); background: var(--o-soft); border: none; border-radius: 10px; padding: 4px 6px; }
+.o-chip { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 999px; padding: 4px 8px; background: var(--o-ink); color: var(--o-on-ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.o-jump-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); padding: 6px; border-radius: 14px; background: var(--o-surface); box-shadow: var(--o-shadow); display: flex; flex-direction: column; gap: 2px; }
+.o-templates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .o-wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .o-node { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .o-node .ball {

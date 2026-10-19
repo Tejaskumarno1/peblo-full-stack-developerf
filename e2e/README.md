@@ -31,3 +31,4 @@ deleteaccount.mjs = Settings > Data > Delete account: needs a password and a tic
 small-ui.mjs = Ctrl+J in every style, 06:xx tasks on the timeline, delete confirm, sidebar Inbox highlight, Hub error text, one link-preview request, capture window follows style (PEB-86).
 orbit-notelist.mjs = Orbit notes list: sort, filters, group, layout, pin, highlight, select + bulk, recent (PEB-125..135).
 orbit-due2.mjs = Orbit Due: filters, sort, overdue tools, reschedule, edit, counters, progress, keys, drag to a day (PEB-136..146).
+orbit-map2.mjs = Orbit map: starter templates, shortcut tooltips, fit/reset, remembered view, hover card, jump box, filter (PEB-149..158).
