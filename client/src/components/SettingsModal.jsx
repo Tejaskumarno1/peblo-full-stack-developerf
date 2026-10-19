@@ -454,6 +454,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     ['width', 'Sheet width', [['normal', 'Normal'], ['wide', 'Wide']], 'normal'],
                     ['accent', 'Accent colour', [['blue', 'Blue'], ['green', 'Green'], ['purple', 'Purple'], ['orange', 'Orange'], ['pink', 'Pink']], 'blue'],
                     ['goal', 'Daily goal (tasks to finish)', [['0', 'Off'], ...[1, 2, 3, 4, 5, 6, 8, 10].map((n) => [String(n), `${n} a day`])], '0'],
+                    ['dateFormat', 'Date format', [['auto', 'Mon 21 Oct'], ['dmy', '21/10/2026'], ['mdy', '10/21/2026'], ['iso', '2026-10-21']], 'auto'],
                     ['motion', 'Animations', [['system', 'Follow my device'], ['on', 'Always on'], ['off', 'Reduce motion']], 'system'],
                   ].map(([key, label, opts, dflt]) => (
                     <label key={key} className="settings-field-label" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>

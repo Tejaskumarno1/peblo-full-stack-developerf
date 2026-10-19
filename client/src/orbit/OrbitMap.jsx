@@ -189,14 +189,27 @@ export default function OrbitMap({ interactive }) {
   const [filter, setFilter] = useState('all'); // 'all' | 'weak' | 'due'
   const [seeding, setSeeding] = useState(false);
   const jumpRef = useRef(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [scope, setScope] = useState('all'); // 'all' | 'topic' | 'note'
+  const [recents, setRecents] = useState(() => {
+    try { const r = JSON.parse(localStorage.getItem('peblo-orbit-recent-search') || '[]'); return Array.isArray(r) ? r.slice(0, 5) : []; } catch { return []; }
+  });
+  const rememberSearch = (q) => {
+    const t = q.trim();
+    if (!t) return;
+    const next = [t, ...recents.filter((r) => r.toLowerCase() !== t.toLowerCase())].slice(0, 5);
+    setRecents(next);
+    try { localStorage.setItem('peblo-orbit-recent-search', JSON.stringify(next)); } catch { /* ignore */ }
+  };
   const jumpHits = useMemo(() => {
     const s = jumpQ.trim().toLowerCase();
-    return s ? lay.nodes.filter((n) => n.name.toLowerCase().includes(s)).slice(0, 6) : [];
-  }, [jumpQ, lay]);
+    return s ? lay.nodes.filter((n) => (scope === 'all' || n.kind === scope) && n.name.toLowerCase().includes(s)).slice(0, 6) : [];
+  }, [jumpQ, lay, scope]);
   const jumpTo = (n) => {
     setView((v) => ({ ...v, x: size.width / 2 - n.x * v.k, y: size.height / 2 - n.y * v.k }));
     if (n.kind === 'topic') setSelected(n.id);
     setFlash(n.id);
+    rememberSearch(jumpQ);
     setJumpQ('');
     window.setTimeout(() => setFlash(null), 2500);
   };
@@ -421,6 +434,8 @@ export default function OrbitMap({ interactive }) {
               placeholder="Jump to a topic  ( / )"
               value={jumpQ}
               onChange={(e) => setJumpQ(e.target.value)}
+              onFocus={() => setJumpOpen(true)}
+              onBlur={() => window.setTimeout(() => setJumpOpen(false), 150)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && jumpHits[0]) jumpTo(jumpHits[0]);
                 if (e.key === 'Escape') { setJumpQ(''); e.currentTarget.blur(); }
@@ -434,6 +449,7 @@ export default function OrbitMap({ interactive }) {
             {filter !== 'all' && (
               <button type="button" className="o-chip" aria-label="Clear filter" onClick={() => setFilter('all')}>{filter === 'weak' ? 'Weak topics' : 'Due soon'} <X size={13} /></button>
             )}
+            {(jumpOpen || jumpHits.length > 0) && (<div className="o-jump-drop">
             {jumpHits.length > 0 && (
               <div className="o-jump-list" role="listbox" aria-label="Matching topics">
                 {jumpHits.map((n) => (
@@ -441,6 +457,24 @@ export default function OrbitMap({ interactive }) {
                 ))}
               </div>
             )}
+            {jumpOpen && (
+              <div className="o-jump-help" aria-label="Search help">
+                <div className="o-scope" role="group" aria-label="Search in">
+                  {[['all', 'All'], ['topic', 'Topics'], ['note', 'Notes']].map(([k, l]) => (
+                    <button key={k} type="button" className={'o-chip' + (scope === k ? ' on' : '')} aria-pressed={scope === k} onMouseDown={(e) => e.preventDefault()} onClick={() => setScope(k)}>{l}</button>
+                  ))}
+                </div>
+                {!jumpQ.trim() && recents.length > 0 && (
+                  <div className="o-recent" aria-label="Recent searches">
+                    {recents.map((r) => (
+                      <button key={r} type="button" className="o-item" onMouseDown={(e) => e.preventDefault()} onClick={() => setJumpQ(r)}><span className="k">↺</span><span className="t">{r}</span></button>
+                    ))}
+                  </div>
+                )}
+                <p className="o-hint">Press <kbd>/</kbd> anywhere on the map to search. <kbd>Enter</kbd> jumps to the first match, <kbd>Esc</kbd> clears.</p>
+              </div>
+            )}
+            </div>)}
           </div>
 
           <OrbitStudy />

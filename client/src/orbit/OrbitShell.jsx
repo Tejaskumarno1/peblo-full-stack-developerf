@@ -9,7 +9,7 @@ import OrbitMap from './OrbitMap';
 import OrbitCapture from './OrbitCapture';
 import OrbitTopics from './OrbitTopics';
 import OrbitBackup from './OrbitBackup';
-import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject } from './orbitUtils';
+import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject, setDateFormat } from './orbitUtils';
 import { initialsOf } from '../river/riverUtils';
 import './orbit.css';
 
@@ -192,6 +192,7 @@ export default function OrbitShell({ children }) {
   const data = useOrbitData();
   const { settings } = useAuth();
   const prefs = orbitPrefs(settings);
+  setDateFormat(prefs.dateFormat);
   // undefined until you pick one: then the map opens on your main subject
   const [space, setSpaceState] = useState(() => load('peblo-orbit-space', undefined));
   const [selected, setSelected] = useState(null);

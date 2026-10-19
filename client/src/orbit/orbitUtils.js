@@ -32,8 +32,23 @@ export const tagsOfTodo = (t) => (Array.isArray(t?.todoTags) ? t.todoTags : []);
 export const tagsOfNote = (n) => (Array.isArray(n?.tags) ? n.tags : []).filter((t) => !HIDDEN_TAGS.has(t));
 
 /** "WED 7 OCT" */
+let dateFormat = 'auto';
+/** 'auto' (Mon 21 Oct), 'dmy' (21/10/2026), 'mdy' (10/21/2026) or 'iso' (2026-10-21). */
+export function setDateFormat(f) { dateFormat = ['dmy', 'mdy', 'iso'].includes(f) ? f : 'auto'; }
+export function formatDay(d) {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, '0');
+  const mm = String(x.getMonth() + 1).padStart(2, '0');
+  const yy = x.getFullYear();
+  if (dateFormat === 'dmy') return `${dd}/${mm}/${yy}`;
+  if (dateFormat === 'mdy') return `${mm}/${dd}/${yy}`;
+  if (dateFormat === 'iso') return `${yy}-${mm}-${dd}`;
+  return null;
+}
 export function shortDate(d) {
   const x = new Date(d);
+  const f = formatDay(x);
+  if (f) return f;
   return `${DOW[x.getDay()]} ${x.getDate()} ${MON[x.getMonth()]}`;
 }
 
@@ -221,5 +236,5 @@ export function agoText(date) {
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 30) return `${days} days ago`;
-  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return formatDay(date) || new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }

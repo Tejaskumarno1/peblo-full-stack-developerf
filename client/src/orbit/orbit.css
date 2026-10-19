@@ -759,3 +759,15 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .orbit .o-crumbs button:hover{background:var(--o-wash,rgba(0,0,0,.06))}
 .orbit .o-crumbs .here{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--o-fg2,#667);padding:4px 6px}
 .orbit .o-backup-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+
+/* Round 15: search help, scopes and recents */
+.o-jump-help { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--o-card, #fff); border: 1px solid var(--o-line, #e3e6ee); border-radius: 12px; padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 5; }
+.o-jump-help .o-scope { display: flex; gap: 6px; margin-bottom: 6px; }
+.o-jump-help .o-chip.on { background: var(--o-path-soft, #E8EDFF); color: var(--o-path-ink, #2350FF); }
+.o-jump-help .o-hint { margin: 6px 2px 0; font-size: 12px; color: var(--o-muted, #6b7280); }
+.o-jump-help kbd { font: inherit; border: 1px solid var(--o-line, #e3e6ee); border-radius: 4px; padding: 0 4px; }
+.o-jump:has(.o-jump-help) .o-jump-list { top: auto; }
+
+.o-jump-drop { position: absolute; left: 0; right: 0; top: calc(100% + 6px); display: flex; flex-direction: column; gap: 6px; }
+.o-jump-drop .o-jump-list, .o-jump-drop .o-jump-help { position: static; }
+.o-jump:focus-within { z-index: 40; }
