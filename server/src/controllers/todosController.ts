@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
 import { tzOf, dayBounds, dayBoundsOf } from '../utils/userTime.js';
 import { RECURRENCES, isRepeating, topUpSeries } from '../services/todoSeries.js';
+import { cleanTodoMeta } from '../utils/meta.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
@@ -130,7 +131,7 @@ const scopeOf = (v: unknown) => (typeof v === 'string' && SCOPES.includes(v) ? v
 
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence } = req.body;
+    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     if (!text || text.trim() === '') {
       return res.status(400).json({ error: 'Text is required' });
     }
@@ -154,7 +155,9 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
     const base = {
       text: text.trim(), priority: safePriority, startTime: startTime || null, endTime: endTime || null,
       recurrence: safeRecurrence, todoTags: cleanTags, noteId: noteId || null, userId,
-    };
+    } as any;
+    const cleanMeta = cleanTodoMeta(meta);
+    if (Object.keys(cleanMeta).length) base.meta = cleanMeta;
 
     let todo;
     if (when && isRepeating(safeRecurrence)) {
@@ -184,7 +187,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
   try {
     const { id } = req.params;
     const userId = req.user!.id;
-    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence } = req.body;
+    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     const scope = scopeOf(req.body.scope);
 
     const todo = await prisma.todo.findFirst({
@@ -198,6 +201,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     const data: any = {};
     if (text !== undefined) data.text = text.trim();
     if (completed !== undefined) data.completed = completed;
+    if (meta !== undefined) data.meta = cleanTodoMeta(meta, todo.meta);
     if (priority !== undefined) {
       const validPriorities = ['high', 'medium', 'low'];
       data.priority = validPriorities.includes(priority) ? priority : todo.priority;

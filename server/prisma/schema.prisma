@@ -49,6 +49,7 @@ model Note {
   isArchived Boolean  @default(false) @map("is_archived")
   isDeleted  Boolean  @default(false) @map("is_deleted")
   deletedAt  DateTime? @map("deleted_at")
+  meta       Json?
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -134,6 +135,7 @@ model Todo {
   endTime    String?   @map("end_time")
   recurrence String?   @default("none") @map("recurrence")
   seriesId   String?   @map("series_id")
+  meta       Json?
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

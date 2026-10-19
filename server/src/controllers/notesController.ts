@@ -3,6 +3,7 @@ import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { saveVersion } from '../services/noteVersions.js';
+import { cleanNoteMeta } from '../utils/meta.js';
 
 // prisma imported from db.js
 
@@ -140,6 +141,7 @@ export async function getNotes(req: any, res: any, next: any) {
         category: true,
         isArchived: true,
         isDeleted: true,
+        meta: true,
         createdAt: true,
         updatedAt: true,
         tags: {
@@ -190,14 +192,16 @@ export async function getNote(req: any, res: any, next: any) {
 
 export async function createNote(req: any, res: any, next: any) {
   try {
-    const { title, content, category, tags } = req.body;
+    const { title, content, category, tags, meta } = req.body;
+    const cleanMeta = cleanNoteMeta(meta);
 
     const note = await prisma.note.create({
       data: {
         userId: req.user.id,
         title: title || 'Untitled',
         content: content || '',
-        category: category || null
+        category: category || null,
+        ...(Object.keys(cleanMeta).length ? { meta: cleanMeta } : {})
       },
       include: noteInclude
     });
@@ -224,13 +228,21 @@ export async function createNote(req: any, res: any, next: any) {
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
-    const { title, content, category, isArchived, tags } = req.body;
+    const { title, content, category, isArchived, tags, meta } = req.body;
 
     const data: any = {};
     if (title !== undefined) data.title = title;
     if (content !== undefined) data.content = content;
     if (category !== undefined) data.category = category || null;
     if (isArchived !== undefined) data.isArchived = isArchived;
+    if (meta !== undefined) {
+      // a favourite or an emoji is not an edit of the text: keep the "last edited" time as it was
+      const cur = await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { meta: true, updatedAt: true } });
+      if (cur) {
+        data.meta = cleanNoteMeta(meta, cur.meta);
+        if (Object.keys(data).length === 1 && tags === undefined) data.updatedAt = cur.updatedAt;
+      }
+    }
 
     // the text before this edit is kept as a version (at most one every 10 minutes while editing)
     const before = content !== undefined

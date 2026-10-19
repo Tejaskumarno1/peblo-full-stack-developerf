@@ -628,3 +628,39 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 
 .o-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); z-index: 70; padding: 12px 18px; border-radius: 14px; background: var(--o-ink); color: var(--o-on-ink); font-weight: 600; box-shadow: var(--o-shadow); }
 .orbit.orbit-window { height: var(--pb-canvas-h); }
+
+/* Round 5: task details, board, assignments, done log, what next, bulk edit */
+.o-dot { width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; display: inline-block; margin-right: 6px; }
+.o-due-add { flex-wrap: wrap; }
+.o-preview { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--o-fg); }
+.o-preview.o-quiet { color: var(--o-fg2); }
+.o-planned.hot { color: var(--o-weak-ink, #b3261e); font-weight: 700; }
+.o-due .o-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--o-soft); }
+.o-detail { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: 12px; background: var(--o-soft); }
+.o-detail label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--o-fg2); }
+.o-detail textarea, .o-detail input:not([type="checkbox"]), .o-detail select { border-radius: 9px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; font-size: 14px; padding: 6px 8px; }
+.o-detail input:not([type="checkbox"]), .o-detail select { height: 36px; }
+.o-steps { display: flex; flex-direction: column; gap: 6px; }
+.o-steps form { display: flex; gap: 8px; }
+.o-steps form input { flex: 1; min-width: 0; }
+.o-step { display: flex; align-items: center; gap: 8px; }
+.o-step span { flex: 1; min-width: 0; }
+.o-step span.done { text-decoration: line-through; color: var(--o-fg2); }
+.o-detail-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.o-labels, .o-deps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.o-swatch { width: 24px; height: 24px; border-radius: 999px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.o-swatch.on { border-color: var(--o-fg); box-shadow: 0 0 0 2px var(--o-surface) inset; }
+.o-deps .o-chip button { border: none; background: transparent; color: inherit; cursor: pointer; display: inline-flex; padding: 0; }
+.o-board, .o-assign { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.o-col, .o-assign section { min-height: 260px; padding: 10px; border-radius: 14px; background: var(--o-bg); border: 1px solid var(--o-line); display: flex; flex-direction: column; gap: 8px; }
+.o-col h3, .o-assign h3 { font-family: var(--o-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--o-fg2); }
+.o-card-task { padding: 8px 10px; border-radius: 10px; background: var(--o-surface); border: 1px solid var(--o-line); display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 13.5px; cursor: grab; }
+.o-card-task.done { opacity: 0.6; text-decoration: line-through; }
+.o-card-task .m { font-weight: 400; font-size: 12px; color: var(--o-fg2); }
+.o-card-task .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.o-card-task select { height: 32px; border-radius: 8px; border: 1px solid var(--o-line); background: var(--o-bg); color: var(--o-fg); font: inherit; font-size: 13px; }
+.o-donelog { display: flex; flex-direction: column; gap: 10px; }
+.o-next { padding: 14px; border-radius: 14px; background: var(--o-path-soft); display: flex; flex-direction: column; gap: 6px; }
+.o-next .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+@media (max-width: 720px) { .o-board, .o-assign { grid-template-columns: 1fr; } }
+

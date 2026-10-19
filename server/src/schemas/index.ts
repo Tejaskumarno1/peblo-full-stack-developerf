@@ -7,7 +7,8 @@ export const noteSchemas = {
       content: z.string().optional(),
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
-      isArchived: z.boolean().optional()
+      isArchived: z.boolean().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   },
   update: {
@@ -16,7 +17,8 @@ export const noteSchemas = {
       content: z.string().optional(),
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
-      isArchived: z.boolean().optional()
+      isArchived: z.boolean().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   }
 };
@@ -31,7 +33,8 @@ export const todoSchemas = {
       endTime: z.string().nullable().optional(),
       recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
       tags: z.array(z.string()).optional(),
-      noteId: z.string().nullable().optional()
+      noteId: z.string().nullable().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   },
   update: {
@@ -45,7 +48,8 @@ export const todoSchemas = {
       recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
       scope: z.enum(['this', 'following', 'all']).optional(),
       tags: z.array(z.string()).optional(),
-      noteId: z.string().nullable().optional()
+      noteId: z.string().nullable().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   }
 };

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Network, Trash2, ChevronLeft, ChevronRight, CalendarClock, Pencil } from 'lucide-react';
+import { Network, Trash2, ChevronLeft, ChevronRight, CalendarClock, Pencil, ListChecks } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
 import { useOrbit } from './OrbitShell';
 import { TaskExportMenu } from './OrbitExport';
+import { TaskDetail, Board, Assignments, DoneLog, NextCard } from './OrbitTaskExtras';
+import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf } from '../river/riverUtils';
 
@@ -47,6 +49,16 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const [editId, setEditId] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [draft, setDraft] = useState(null);
+  // Round 5: task details, labels, bulk edit, board, assignments, done log, "what next"
+  const [openId, setOpenId] = useState(null);
+  const [fLabel, setFLabel] = useState('');
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState([]);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const [showWords, setShowWords] = useState(false);
+  const [doneDays, setDoneDaysState] = useState(() => { try { const v = localStorage.getItem('peblo-orbit-done-days'); return v === null ? 7 : Number(v); } catch { return 7; } });
+  const setDoneDays = (v) => { setDoneDaysState(v); try { localStorage.setItem('peblo-orbit-done-days', String(v)); } catch { /* ignore */ } };
   // PEB-123: a short "Undo" after ticking, deleting or moving a task
   const [toast, setToast] = useState(null); // { msg, undo }
   const toastTimer = useRef(null);
@@ -112,6 +124,57 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     }
   };
 
+  // Round 5: extra details (task.meta), board columns, assignments, bulk edit
+  const setMeta = (t, patch) => run(() => todosAPI.update(t.id, { meta: patch }), 'Could not save that.');
+  const COLS = { todo: 'To do', doing: 'Doing', done: 'Done' };
+  const applyCol = (t, col) => todosAPI.update(t.id, col === 'done' ? { completed: true, meta: { status: null } } : { completed: false, meta: { status: col === 'doing' ? 'doing' : null } });
+  const moveCol = async (t, col) => {
+    const was = t.completed ? 'done' : metaOf(t).status === 'doing' ? 'doing' : 'todo';
+    if (await run(() => applyCol(t, col), 'Could not move that task.')) say(`Moved to ${COLS[col]}`, () => run(() => applyCol(t, was), 'Could not undo that.'));
+  };
+  const setAStatus = (t, v) => run(() => todosAPI.update(t.id, { completed: v === 'submitted', meta: { astatus: v === 'submitted' ? 'submitted' : v } }), 'Could not update that assignment.');
+  const restore = (t) => run(() => todosAPI.update(t.id, { completed: false }), 'Could not bring that back.');
+  const selItems = todos.filter((t) => sel.includes(t.id) && !gone.includes(t.id));
+  const endSelect = () => { setSelMode(false); setSel([]); setConfirmDel(false); };
+  const bulkDone = async () => {
+    const items = selItems.filter((t) => !t.completed);
+    if (!items.length) return;
+    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { completed: true }))), 'Could not update those tasks.')) {
+      say(`Marked ${items.length} done`, () => run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { completed: false }))), 'Could not undo that.'));
+      setSel([]);
+    }
+  };
+  const bulkMove = async (day, label) => {
+    const items = selItems.filter((t) => !t.completed);
+    if (!items.length) return;
+    const prev = items.map((t) => [t.id, t.deadline || null]);
+    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { deadline: withDay(t, day).toISOString() }))), 'Could not move those tasks.')) {
+      say(`Moved ${items.length} to ${label}`, () => run(() => Promise.all(prev.map(([id, d]) => todosAPI.update(id, { deadline: d }))), 'Could not undo that.'));
+      setSel([]);
+    }
+  };
+  const bulkPrio = async (priority) => {
+    const items = selItems;
+    if (!items.length) return;
+    const prev = items.map((t) => [t.id, t.priority || 'medium']);
+    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { priority }))), 'Could not change those tasks.')) {
+      say(`Set ${items.length} to ${priority} priority`, () => run(() => Promise.all(prev.map(([id, p]) => todosAPI.update(id, { priority: p }))), 'Could not undo that.'));
+    }
+  };
+  const bulkLabel = async (label) => {
+    const items = selItems;
+    if (!items.length) return;
+    const prev = items.map((t) => [t.id, metaOf(t).label || null]);
+    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { meta: { label } }))), 'Could not label those tasks.')) {
+      say(label ? `Labelled ${items.length} ${label}` : `Cleared the label on ${items.length}`, () => run(() => Promise.all(prev.map(([id, l]) => todosAPI.update(id, { meta: { label: l } }))), 'Could not undo that.'));
+    }
+  };
+  const bulkDelete = async () => {
+    const items = selItems;
+    if (!confirmDel) { setConfirmDel(true); return; }
+    if (await run(() => Promise.all(items.map((t) => todosAPI.delete(t.id, 'this'))), 'Could not delete those tasks.')) { say(`Deleted ${items.length} tasks`); endSelect(); }
+  };
+
   // PEB-140: edit a task in place
   const startEdit = (t) => {
     const d = t.deadline ? new Date(t.deadline) : null;
@@ -158,7 +221,10 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   };
 
   const allTopics = useMemo(() => [...new Set(todos.flatMap(tagsOfTodo))].sort(), [todos]);
-  const filtering = !!fTopic || !!fPrio || onlyOver;
+  const filtering = !!fTopic || !!fPrio || onlyOver || !!fLabel;
+  const pv = text.trim() ? parseTask(text.trim()) : null;
+  const pvBits = pv ? [pv.deadline ? shortDate(pv.deadline) + (isAllDay({ deadline: pv.deadline }) ? '' : ` · ${clock(pv.deadline)}`) : '', pv.priority === 'high' || pv.priority === 'low' ? `${pv.priority} priority` : '', ...pv.tags.map((x) => `#${x}`)].filter(Boolean) : [];
+  const HINTS = ['Lab 6 file thursday #sql-joins', 'Read chapter 4 tomorrow 6pm', 'Revise normal forms !high next friday', 'Submit assignment 2026-11-02 #dbms'];
   const sortItems = (items) => {
     if (sortBy === 'priority') return [...items].sort((a, b) => (RANK[a.priority] ?? 1) - (RANK[b.priority] ?? 1) || new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15));
     if (sortBy === 'topic') return [...items].sort((a, b) => (tagsOfTodo(a)[0] || '~').localeCompare(tagsOfTodo(b)[0] || '~') || new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15));
@@ -168,9 +234,10 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const groups = useMemo(() => {
     // done tasks stay (struck through) so you can check them; overdue ones that were due over two weeks ago are history
     const list = todos
-      .filter((t) => !gone.includes(t.id) && (!t.completed || (!hideDone && (!t.deadline || startOfDay(t.deadline) >= addDays(today, -14)))))
+      .filter((t) => !gone.includes(t.id) && (!t.completed || (!hideDone && (!t.deadline || doneDays === 0 || startOfDay(t.deadline) >= addDays(today, -doneDays)))))
       .filter((t) => !fTopic || tagsOfTodo(t).includes(fTopic))
       .filter((t) => !fPrio || (t.priority || 'medium') === fPrio)
+      .filter((t) => !fLabel || metaOf(t).label === fLabel)
       .filter((t) => !onlyOver || (!t.completed && t.deadline && startOfDay(t.deadline) < today));
     const g = [];
     const push = (key, label, items, hot) => { if (items.length) g.push({ key, label, items: sortItems(items), hot: hot && items.some((t) => !t.completed) }); };
@@ -183,7 +250,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     push('later', 'Later', dated.filter((t) => startOfDay(t.deadline) >= addDays(today, 21)), false);
     push('none', 'No date', list.filter((t) => !t.deadline), false);
     return g;
-  }, [todos, gone, hideDone, fTopic, fPrio, onlyOver, sortBy, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [todos, gone, hideDone, fTopic, fPrio, fLabel, onlyOver, sortBy, doneDays, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const live = todos.filter((t) => !gone.includes(t.id));
   const doneCount = live.filter((t) => t.completed).length;
@@ -215,15 +282,26 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const taskRow = (t) => {
     const tag = tagsOfTodo(t)[0];
     const editing = editId === t.id && draft;
+    const m = metaOf(t);
+    const blocked = isBlocked(t, todos);
+    const sp = subProgress(t);
     return (
       <div key={t.id} className="o-task-wrap">
         <div className={`o-task${t.completed ? ' done' : ''}`} tabIndex={0} data-id={t.id} onKeyDown={(e) => onRowKey(e, t)} aria-label={`${t.text}. Space to tick, E to edit, Delete to remove.`}>
-          <input type="checkbox" checked={!!t.completed} onChange={() => toggle(t)} aria-label={`Done: ${t.text}`} />
+          {selMode
+            ? <input type="checkbox" checked={sel.includes(t.id)} onChange={() => setSel(sel.includes(t.id) ? sel.filter((x) => x !== t.id) : [...sel, t.id])} aria-label={`Select ${t.text}`} />
+            : <input type="checkbox" checked={!!t.completed} disabled={blocked} title={blocked ? `Waiting for ${blockersOf(t, todos).map((b) => b.text).join(', ')}` : undefined} onChange={() => toggle(t)} aria-label={`Done: ${t.text}`} />}
+          {m.label && <i className="o-dot" style={{ background: LABEL_HEX[m.label] }} title={`Label: ${m.label}`} />}
           <span className="t">{t.text}</span>
+          {blocked && <span className="o-prio low">Blocked</span>}
+          {m.status === 'doing' && !t.completed && <span className="o-prio">Doing</span>}
+          {sp.total > 0 && <span className="m" title="Steps done">{sp.done}/{sp.total} steps</span>}
+          {m.estimateMin > 0 && <span className="m">{minutesLabel(m.estimateMin)}</span>}
           {(t.priority === 'high' || t.priority === 'low') && <span className={`o-prio ${t.priority}`}>{t.priority}</span>}
           {tag && <span className="o-chip" style={{ height: 26, fontSize: 12 }}><i style={{ background: levelVar(levelOf(mastery.get(tag)?.score)) }} />{topicName(tag)}</span>}
           {t.deadline && <span className="m">{whenOf(t)}</span>}
           <span className="acts">
+            <button type="button" className="del" aria-label={`Details ${t.text}`} aria-expanded={openId === t.id} onClick={() => setOpenId(openId === t.id ? null : t.id)}><ListChecks size={15} /></button>
             <button type="button" className="del" aria-label={`Edit ${t.text}`} onClick={() => (editing ? setEditId(null) : startEdit(t))}><Pencil size={15} /></button>
             <span className="o-menu-wrap">
               <button type="button" className="del" aria-label={`Move ${t.text}`} aria-expanded={menuId === t.id} onClick={() => setMenuId(menuId === t.id ? null : t.id)}><CalendarClock size={15} /></button>
@@ -241,6 +319,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             <button type="button" className="del" aria-label={`Delete ${t.text}`} onClick={() => remove(t)}><Trash2 size={15} /></button>
           </span>
         </div>
+        {openId === t.id && <TaskDetail t={t} todos={todos} onMeta={setMeta} onOpenNote={(id) => navigate(`/notes/${id}`)} />}
         {editing && (
           <form className="o-edit" onSubmit={(e) => { e.preventDefault(); saveEdit(t); }}>
             <label>Task<input value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} aria-label="Task title" autoFocus /></label>
@@ -256,6 +335,9 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                 <option value="">None</option>
                 {[...new Set([...allTopics, draft.topic].filter(Boolean))].map((x) => <option key={x} value={x}>{topicName(x)}</option>)}
               </select>
+            </label>
+            <label>Quick date
+              <input placeholder="+1d, +2w, next mon" aria-label="Quick date" onChange={(e) => { const d = parseDateShortcut(e.target.value); if (d) setDraft((p) => ({ ...p, date: dateValue(d) })); }} />
             </label>
             <span className="btns"><button type="submit" className="o-btn small" disabled={!draft.text.trim()}>Save</button><button type="button" className="o-btn ghost small" onClick={() => setEditId(null)}>Cancel</button></span>
           </form>
@@ -273,6 +355,9 @@ export default function OrbitDue({ view: initialView = 'list' }) {
           <div className="o-seg" role="tablist" aria-label="View" style={{ marginLeft: 8 }}>
             <button type="button" role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>List</button>
             <button type="button" role="tab" aria-selected={view === 'week'} onClick={() => setView('week')}>Week</button>
+            <button type="button" role="tab" aria-selected={view === 'board'} onClick={() => setView('board')}>Board</button>
+            <button type="button" role="tab" aria-selected={view === 'assign'} onClick={() => setView('assign')}>Assignments</button>
+            <button type="button" role="tab" aria-selected={view === 'done'} onClick={() => setView('done')}>Done</button>
           </div>
           <span className="grow" />
           <button type="button" className="o-btn ghost small" style={{ height: 44 }} onClick={back}><Network size={16} strokeWidth={2.2} /> Back to map</button>
@@ -281,6 +366,13 @@ export default function OrbitDue({ view: initialView = 'list' }) {
         <div className="o-due">
           <form className="o-due-add" onSubmit={add}>
             {err && <p className="o-err" role="alert">{err}</p>}
+            {pv ? (
+              <p className="o-preview" aria-live="polite">Adds “{pv.text || text.trim()}”{pvBits.length ? ` · ${pvBits.join(' · ')}` : ''}</p>
+            ) : (
+              <p className="o-preview o-quiet">Try: {HINTS[new Date().getDate() % HINTS.length]} <button type="button" className="o-chip" aria-expanded={showWords} onClick={() => setShowWords(!showWords)}>?</button>
+                {showWords && <span> Words I understand: today, tonight, tomorrow, weekdays, next friday, 6pm, 2026-11-02, oct 21, !high, !low, #topic</span>}
+              </p>
+            )}
             <label htmlFor="o-due-input" className="o-sr">New task</label>
             <input id="o-due-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Add a task${space ? ` to ${topicName(space)}` : ''}: "Lab 6 file thursday #sql-joins"`} autoComplete="off" />
             <button type="submit" className="o-btn" disabled={!text.trim()}>Add</button>
@@ -320,9 +412,39 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                     <option value="time">By time</option><option value="priority">By priority</option><option value="topic">By topic</option>
                   </select>
                 </label>
-                {filtering && <button type="button" className="o-chip on" onClick={() => { setFTopic(''); setFPrio(''); setOnlyOver(false); }}>Clear filters ×</button>}
+                <label>Label
+                  <select value={fLabel} onChange={(e) => setFLabel(e.target.value)} aria-label="Filter by label">
+                    <option value="">Any</option>
+                    {LABELS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label>Show done
+                  <select value={doneDays} onChange={(e) => setDoneDays(Number(e.target.value))} aria-label="Show finished tasks from">
+                    <option value={1}>Today</option><option value={7}>Last 7 days</option><option value={14}>Last 14 days</option><option value={30}>Last 30 days</option><option value={0}>All</option>
+                  </select>
+                </label>
+                <button type="button" className={`o-chip${selMode ? ' on' : ''}`} aria-pressed={selMode} onClick={() => (selMode ? endSelect() : setSelMode(true))}>Select</button>
+                <button type="button" className={`o-chip${showNext ? ' on' : ''}`} aria-pressed={showNext} onClick={() => setShowNext(!showNext)}>What next?</button>
+                {filtering && <button type="button" className="o-chip on" onClick={() => { setFTopic(''); setFPrio(''); setFLabel(''); setOnlyOver(false); }}>Clear filters ×</button>}
                 <TaskExportMenu tasks={() => (filtering ? groups.flatMap((g) => g.items) : todos)} label={filtering ? 'Export filtered' : 'Export'} />
               </div>
+              {showNext && <NextCard todos={live} mastery={mastery} onStart={(t) => { setMeta(t, { status: 'doing' }); setShowNext(false); }} onDone={(t) => toggle(t)} onClose={() => setShowNext(false)} />}
+              {selMode && (
+                <div className="o-bulk" role="toolbar" aria-label="Bulk edit">
+                  <b>{sel.length} selected</b>
+                  <button type="button" className="o-chip" onClick={() => setSel(groups.flatMap((g) => g.items.map((t) => t.id)))}>All shown</button>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={bulkDone}>Done</button>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={() => bulkMove(today, 'today')}>Move to today</button>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={() => bulkMove(addDays(today, 1), 'tomorrow')}>Move to tomorrow</button>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={() => bulkPrio('high')}>High priority</button>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={() => bulkPrio('low')}>Low priority</button>
+                  <select aria-label="Label selected" value="" disabled={!sel.length} onChange={(e) => bulkLabel(e.target.value === 'none' ? null : e.target.value)}>
+                    <option value="">Label…</option><option value="none">No label</option>{LABELS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button type="button" className="o-chip" disabled={!sel.length} onClick={bulkDelete}>{confirmDel ? `Confirm: delete ${sel.length}` : 'Delete'}</button>
+                  <button type="button" className="o-chip on" onClick={endSelect}>Cancel</button>
+                </div>
+              )}
               {groups.length === 0 && <p className="o-quiet">{filtering ? 'No tasks match these filters.' : 'Nothing due. Add a task above, or drop one on a topic from the map.'}</p>}
               {groups.map((g) => (
                 <section key={g.key} className="o-day">
@@ -331,6 +453,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                       <button type="button" className="o-fold" aria-expanded={overOpen} onClick={() => setOverOpen(!overOpen)}><ChevronRight size={13} strokeWidth={2.4} className={`chev${overOpen ? ' open' : ''}`} />{g.label}</button>
                     ) : g.label}
                     {' '}· {g.items.filter((t) => !t.completed).length}{g.items.some((t) => t.completed) ? ` (${g.items.filter((t) => t.completed).length} done)` : ''}
+                    {plannedMinutes(g.items) > 0 && <span className={`o-planned${plannedMinutes(g.items) > DAY_LIMIT_MIN ? ' hot' : ''}`} title={plannedMinutes(g.items) > DAY_LIMIT_MIN ? 'More than 8 hours planned' : 'Planned time'}> · {minutesLabel(plannedMinutes(g.items))} planned{plannedMinutes(g.items) > DAY_LIMIT_MIN ? ' (too much)' : ''}</span>}
                     {g.key === 'over' && g.items.some((t) => !t.completed) && (
                       <span className="o-bulkmove">
                         <button type="button" className="o-chip" onClick={() => moveOverdue(today, 'today')}>Move all to today</button>
@@ -341,6 +464,18 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                   {(g.key !== 'over' || overOpen) && g.items.map(taskRow)}
                 </section>
               ))}
+            </>
+          )}
+
+          {view === 'board' && <Board todos={live} onMove={moveCol} />}
+          {view === 'assign' && <Assignments todos={live} mastery={mastery} onStatus={setAStatus} />}
+          {view === 'done' && (
+            <>
+              <div className="o-toolbar"><label>Show
+                <select value={doneDays} onChange={(e) => setDoneDays(Number(e.target.value))} aria-label="Finished from">
+                  <option value={1}>Today</option><option value={7}>Last 7 days</option><option value={14}>Last 14 days</option><option value={30}>Last 30 days</option><option value={0}>All</option>
+                </select></label></div>
+              <DoneLog todos={live} days={doneDays} onRestore={restore} />
             </>
           )}
 

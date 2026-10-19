@@ -1254,6 +1254,38 @@ async function prismaOffUser() {
   check('..and the tags are saved', JSON.stringify([...(got.tags || [])].sort()) === '["one","two"]', got.tags);
   check('a PATCH with nothing to change on a missing note is still 404', (await call('PATCH', '/api/notes/no-such-note', { tags: ['x'] })).status === 404);
 }
+// ---- Round 5: task and note "meta" (details, subtasks, estimate, label, dependencies; emoji, favourite) ----
+{
+  const mk = await call('POST', '/api/todos', { text: 'Meta task', meta: { details: 'Read chapter 3', estimateMin: 45, label: 'blue', subtasks: [{ text: 'first' }, { text: 'second', done: true }], bogus: 1, status: 'nope' } });
+  check('a task can be created with meta', mk.status === 201, mk.json);
+  const m = mk.json.todo.meta || {};
+  check('..known keys are kept', m.details === 'Read chapter 3' && m.estimateMin === 45 && m.label === 'blue' && m.subtasks?.length === 2 && m.subtasks[1].done === true, m);
+  check('..unknown keys and bad values are dropped', m.bogus === undefined && m.status === undefined, m);
+  const tid = mk.json.todo.id;
+  const up = await call('PATCH', `/api/todos/${tid}`, { meta: { label: 'nope', estimateMin: 9999, dependsOn: ['a', 'a', 'b'], remindMin: 30 } });
+  check('an update merges meta', up.status === 200 && up.json.todo.meta.details === 'Read chapter 3' && up.json.todo.meta.remindMin === 30, up.json);
+  check('..invalid values keep the old one', up.json.todo.meta.label === 'blue' && up.json.todo.meta.estimateMin === 45, up.json.todo.meta);
+  check('..lists are de-duplicated', JSON.stringify(up.json.todo.meta.dependsOn) === '["a","b"]', up.json.todo.meta.dependsOn);
+  const clr = await call('PATCH', `/api/todos/${tid}`, { meta: { label: null, subtasks: [] } });
+  check('null or empty removes a key', clr.json.todo.meta.label === undefined && clr.json.todo.meta.subtasks === undefined && clr.json.todo.meta.details === 'Read chapter 3', clr.json.todo.meta);
+  const plain = await call('PATCH', `/api/todos/${tid}`, { completed: true });
+  check('an update without meta leaves it alone', plain.json.todo.meta.details === 'Read chapter 3');
+  const list = (await call('GET', '/api/todos')).json.todos.find((t) => t.id === tid);
+  check('the list returns meta', list.meta?.estimateMin === 45);
+
+  const n = await call('POST', '/api/notes', { title: 'Meta note', content: 'body text', tags: ['one'], meta: { emoji: '📚', favourite: true, junk: 1 } });
+  check('a note can be created with an emoji and favourite', n.status === 201 && n.json.note.meta?.emoji === '📚' && n.json.note.meta?.favourite === true && n.json.note.meta?.junk === undefined, n.json);
+  const nid = n.json.note.id;
+  await new Promise((r) => setTimeout(r, 1100));
+  const before = (await call('GET', `/api/notes/${nid}`)).json.note.updatedAt;
+  const pm = await call('PATCH', `/api/notes/${nid}`, { meta: { favourite: false } });
+  check('a note meta PATCH works', pm.status === 200, pm.json);
+  const after = (await call('GET', `/api/notes/${nid}`)).json.note;
+  check('..a favourite does not change "last edited"', after.updatedAt === before, [before, after.updatedAt]);
+  check('..and un-favouriting keeps the emoji', after.meta?.favourite === undefined && after.meta?.emoji === '📚', after.meta);
+  const lst = (await call('GET', '/api/notes')).json.notes.find((x) => x.id === nid);
+  check('the notes list returns meta', lst?.meta?.emoji === '📚');
+}
 } catch (err) {
   failures++;
   console.error(err);
