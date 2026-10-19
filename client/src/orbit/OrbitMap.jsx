@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed, Search } from 'lucide-react';
+import { MousePointer2, FileText, SquareCheck, Link2, CirclePlus, X, Maximize2, Plus, Minus, LocateFixed, Search, Image as ImageIcon, Code } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api';
 import { useOrbit, useDismiss } from './OrbitShell';
@@ -49,11 +49,17 @@ function fitName(name, d) {
 /** Orbit · Map (mockup: OrbitHome). Topics around the space, notes and tasks on them, and the revision path. */
 import OrbitHelp from './OrbitHelp';
 import OrbitChecklist from './OrbitChecklist';
+import { orbitPrefs } from './orbitPrefs';
+import { LABEL_HEX } from './taskMeta';
+import { mapToSvg, svgToPng } from './mapImage';
+import { downloadBlob, downloadText, safeFileName } from '../utils/download';
 import OrbitStudy, { MasteryInfo } from './OrbitStudy';
 import DownloadMenu from './OrbitExport';
 
 export default function OrbitMap({ interactive }) {
-  const { user } = useAuth();
+  const { user, settings } = useAuth();
+  const tagColors = orbitPrefs(settings).tagColors || {};
+  const tagIcons = orbitPrefs(settings).tagIcons || {};
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { notes, todos, mastery, space, setSpace, selected, setSelected, pathOn, setPathOn } = useOrbit();
@@ -164,6 +170,20 @@ export default function OrbitMap({ interactive }) {
     const k = Math.min(1.8, Math.max(0.55, Math.min(size.width / (x1 - x0), size.height / (y1 - y0)) * 0.92));
     setView({ k, x: size.width / 2 - ((x0 + x1) / 2) * k, y: size.height / 2 - ((y0 + y1) / 2) * k });
   };
+  const saveMap = async (fmt) => {
+    const svg = mapToSvg({
+      nodes: lay.nodes, center: graph.center, cx: lay.cx, cy: lay.cy,
+      colours: Object.fromEntries(Object.entries(tagColors).map(([k, v]) => [k, LABEL_HEX[v]]).filter(([, v]) => v)),
+      icons: tagIcons, title: graph.center.name,
+    });
+    const base = `${safeFileName(graph.center.name || 'map')}-map`;
+    try {
+      if (fmt === 'svg') downloadText(`${base}.svg`, svg, 'image/svg+xml');
+      else downloadBlob(`${base}.png`, await svgToPng(svg));
+    } catch (e) { console.error('Could not save the map', e); }
+  };
+  const saveMapRef = useRef(saveMap);
+  saveMapRef.current = saveMap;
   const [jumpQ, setJumpQ] = useState('');
   const [flash, setFlash] = useState(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'weak' | 'due'
@@ -238,12 +258,40 @@ export default function OrbitMap({ interactive }) {
     l: () => setTool((x) => (x === 'connect' ? null : 'connect')),
     c: () => setTool((x) => (x === 'topic' ? null : 'topic')),
     '/': () => jumpRef.current?.focus(),
+    p: () => saveMapRef.current('png'), g: () => saveMapRef.current('svg'),
   };
   useEffect(() => {
     if (!interactive) return undefined;
     const key = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
       if (e.target?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key.startsWith('Arrow') && !e.shiftKey) {
+        // Arrow keys hop to the nearest node in that direction; Enter then opens it (nodes are buttons).
+        const balls = [...(boxRef.current?.querySelectorAll('.o-node .ball') || [])];
+        if (!balls.length) return;
+        const cur = document.activeElement?.closest?.('.o-node .ball') ? document.activeElement : null;
+        e.preventDefault();
+        if (!cur) { (balls.find((b) => b.classList.contains('sel')) || balls[0]).focus(); return; }
+        const c = cur.getBoundingClientRect();
+        const cx0 = c.left + c.width / 2;
+        const cy0 = c.top + c.height / 2;
+        const dir = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key];
+        if (!dir) return;
+        let best = null;
+        for (const b of balls) {
+          if (b === cur) continue;
+          const r = b.getBoundingClientRect();
+          const dx = r.left + r.width / 2 - cx0;
+          const dy = r.top + r.height / 2 - cy0;
+          const along = dx * dir[0] + dy * dir[1];
+          if (along <= 0) continue;
+          const side = Math.abs(dx * dir[1] + dy * dir[0]);
+          const score = along + side * 2;
+          if (!best || score < best.score) best = { b, score };
+        }
+        best?.b.focus();
+        return;
+      }
       const fn = act.current[e.key.toLowerCase()];
       if (!fn) return;
       e.preventDefault();
@@ -307,18 +355,21 @@ export default function OrbitMap({ interactive }) {
 
         {lay.nodes.map((n) => {
           const step = pathOn ? stepOf.get(n.id) : null;
-          const ring = n.kind === 'topic' ? levelVar(n.level) : 'var(--o-line)';
+          const own = n.kind === 'topic' ? LABEL_HEX[tagColors[n.tag]] : null; // colour chosen in Manage topics
+          const icon = n.kind === 'topic' ? tagIcons[n.tag] : null;
+          const ring = n.kind === 'topic' ? levelVar(n.level) : 'var(--o-line)'; // the ring still shows mastery
           return (
             <div key={n.id} className={`o-node${dimmed.has(n.id) ? ' dim' : ''}`} style={{ left: n.x - n.d / 2, top: n.y - n.d / 2, width: n.d }}>
               <button
                 type="button"
                 className={`ball${selected === n.id ? ' sel' : ''}${flash === n.id ? ' hit' : ''}`}
-                style={{ width: n.d, height: n.d, borderColor: ring }}
+                style={{ width: n.d, height: n.d, borderColor: ring, ...(own ? { background: `${own}26` } : null) }}
+                data-own-colour={own || undefined}
                 onClick={() => (n.kind === 'note' ? navigate(`/notes/${n.note.id}`) : setSelected(n.id))}
                 onDoubleClick={() => n.kind === 'topic' && setSpace(n.tag)}
                 title={n.kind === 'topic' ? undefined : n.name}
               >
-                <span className="name" style={{ fontSize: fitName(n.name, n.d) }}>{n.name}</span>
+                <span className="name" style={{ fontSize: fitName(n.name, n.d) }}>{icon ? `${icon} ` : ''}{n.name}</span>
                 <span className="meta">{n.kind === 'topic' ? `${n.count} NOTE${n.count === 1 ? '' : 'S'}` : `${n.tasks.length} TASK${n.tasks.length === 1 ? '' : 'S'}`}</span>
               </button>
               <span className="lbl">
@@ -431,6 +482,8 @@ export default function OrbitMap({ interactive }) {
             <button type="button" className="o-tool" aria-label="Zoom out" title="Zoom out (-)" onClick={() => zoomAt(1 / 1.15)}><Minus size={18} /></button>
             <button type="button" className="o-tool" aria-label="Back to the middle" title="Reset view (0)" onClick={reset}><LocateFixed size={18} /></button>
             <button type="button" className="o-tool" aria-label="Fit to screen" title="Fit to screen (F)" onClick={fit}><Maximize2 size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Download map as PNG" title="Download the map as a PNG picture (P)" onClick={() => saveMap('png')}><ImageIcon size={18} /></button>
+            <button type="button" className="o-tool" aria-label="Download map as SVG" title="Download the map as an SVG picture (G)" onClick={() => saveMap('svg')}><Code size={18} /></button>
             <OrbitHelp />
           </div>
 

@@ -748,3 +748,7 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .orbit .o-checklist li .tick{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--o-line,#aaa);display:grid;place-items:center;flex:none}
 .orbit .o-checklist li.done .tick{background:var(--o-accent,#2350FF);border-color:var(--o-accent,#2350FF);color:#fff}
 .orbit .o-checklist li button{background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* Round 13: map focus ring, icon picker */
+.orbit .o-node .ball:focus-visible{outline:3px solid var(--o-accent,#2350FF);outline-offset:3px}
+.orbit .o-icon-pick{height:32px;border-radius:8px;border:1px solid var(--o-line,#ccc);background:transparent;color:inherit;padding:0 4px}

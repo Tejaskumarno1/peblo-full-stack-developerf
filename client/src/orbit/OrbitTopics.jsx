@@ -7,11 +7,20 @@ import { orbitPrefs } from './orbitPrefs';
 import { LABELS, LABEL_HEX } from './taskMeta';
 import { topicName } from './orbitUtils';
 
+export const TOPIC_ICONS = ['📘', '📝', '🧠', '💡', '🔬', '📐', '💻', '🧮', '📊', '🎯', '⭐', '🔥', '🌱', '🧪'];
+
 /** Manage topics: rename, merge into another, delete, and give each a colour. */
 export default function OrbitTopics({ onClose }) {
   const queryClient = useQueryClient();
   const { settings, updateSettings } = useAuth();
   const colors = orbitPrefs(settings).tagColors || {};
+  const icons = orbitPrefs(settings).tagIcons || {};
+  const saveIcon = async (name, icon) => {
+    const next = { ...icons };
+    if (icon) next[name] = icon; else delete next[name];
+    const ok = await updateSettings({ orbit: { ...orbitPrefs(settings), tagIcons: next } });
+    if (!ok) setMsg('Could not save the icon.');
+  };
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null); // { name, to }
   const [confirm, setConfirm] = useState(null); // name waiting for a second click to delete
@@ -90,6 +99,10 @@ export default function OrbitTopics({ onClose }) {
                   <span className="o-colors" role="group" aria-label={`Colour for ${t.name}`}>
                     {LABELS.map((c) => <button key={c} type="button" className={`o-swatch${colors[t.name] === c ? ' on' : ''}`} style={{ background: LABEL_HEX[c] }} aria-label={`${c} for ${t.name}`} aria-pressed={colors[t.name] === c} onClick={() => saveColor(t.name, colors[t.name] === c ? null : c)} />)}
                   </span>
+                  <select className="o-icon-pick" aria-label={`Icon for ${t.name}`} value={icons[t.name] || ''} onChange={(e) => saveIcon(t.name, e.target.value)}>
+                    <option value="">No icon</option>
+                    {TOPIC_ICONS.map((i) => <option key={i} value={i}>{i}</option>)}
+                  </select>
                   <button type="button" className="o-chip" aria-label={`Rename ${t.name}`} onClick={() => { setConfirm(null); setEditing({ name: t.name, to: t.name }); }}>Rename</button>
                   <button type="button" className={`o-chip${confirm === t.name ? ' on' : ''}`} aria-label={`Delete ${t.name}`} onClick={() => remove(t.name)}>{confirm === t.name ? 'Confirm delete' : <X size={13} />}</button>
                 </div>
