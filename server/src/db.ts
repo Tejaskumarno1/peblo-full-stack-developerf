@@ -29,7 +29,17 @@ function loadPrismaClient(): typeof PrismaClientType {
 }
 
 const PrismaClient = loadPrismaClient();
-const prisma = new PrismaClient();
+/**
+ * Supabase's session pooler only allows ~15 connections in total, and Prisma opens (CPUs x 2 + 1) per process by default,
+ * so a hosted copy plus the desktop app could run it dry (EMAXCONNSESSION). Keep each process to a few; PEBLO_DB_CONNECTIONS changes it,
+ * and a connection_limit already in DATABASE_URL wins.
+ */
+function withPool(url: string): string {
+  if (!url || /[?&]connection_limit=/.test(url)) return url;
+  const n = Math.max(1, Math.min(20, Number(process.env.PEBLO_DB_CONNECTIONS) || 5));
+  return url + (url.includes('?') ? '&' : '?') + 'connection_limit=' + n + '&pool_timeout=30';
+}
+const prisma = new PrismaClient({ datasources: { db: { url: withPool(process.env.DATABASE_URL || '') } } });
 
 function findSqlDir(): string {
   const candidates = [
