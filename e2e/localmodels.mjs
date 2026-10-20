@@ -24,6 +24,12 @@ const fake = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.url === '/api/delete' && req.method === 'DELETE') {
+    let body = ''; req.on('data', (c) => (body += c)); req.on('end', () => {
+      const { model } = JSON.parse(body); installed = installed.filter((n) => n !== model && n !== model + ':latest'); res.end('{}');
+    });
+    return;
+  }
   res.statusCode = 404; res.end();
 });
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
@@ -72,6 +78,12 @@ try {
   await card.getByRole('button', { name: 'Use for chat' }).click();
   check('Use for chat saves it and turns Local AI on', await waitFor(async () => { const me = await api('GET', '/api/profile'); return me.user.settings.ollamaModel === 'llama3.2' && me.user.settings.ollamaEnabled === true; }));
   check('the card then says In use', await waitFor(() => card.getByText('In use').isVisible()));
+  check('the graphics card is reported when there is one', 'gpu' in (await api('GET', '/api/ai/local/status')).hardware);
+  await card.getByRole('button', { name: /^Remove/ }).click(); // the test browser accepts the confirm
+  check('a downloaded model can be removed', await waitFor(() => card.getByRole('button', { name: /Download/ }).isVisible(), 10000));
+  check('Ollama no longer has it', !installed.some((n) => n.startsWith('llama3.2:') && !n.includes('1b')) , installed.join());
+  const notListedRemove = await api('POST', '/api/ai/local/remove', { model: 'evil/model' });
+  check('only listed models can be removed', !!notListedRemove.error);
 
   // Cancel a long download in Orbit
   await page.evaluate(() => localStorage.setItem('peblo-style', 'orbit'));

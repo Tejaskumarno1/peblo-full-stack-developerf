@@ -5,7 +5,7 @@ import { checkOllama } from '../services/aiService.js';
 import { aiLimit } from '../middleware/rateLimit.js';
 import prisma from '../db.js';
 import { hosted, effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
-import { CATALOG, hardware, recommendedChat, fits, pullsSnapshot, startPull, cancelPull } from '../services/localModels.js';
+import { CATALOG, hardware, recommendedChat, fits, pullsSnapshot, startPull, cancelPull, detectGpu, removeModel } from '../services/localModels.js';
 
 const router = Router();
 
@@ -30,11 +30,12 @@ router.get('/local/status', async (req, res, next) => {
         if (r.ok) { running = true; installed = ((await r.json()) as any).models?.map((m: any) => m.name) || []; }
       } catch { /* not running */ }
     }
+    const gpu = await detectGpu();
     const rec = recommendedChat(hw.ramGb);
     const has = (id: string) => installed.some((n) => n === id || n === `${id}:latest`);
     res.json({
-      available: true, running, hardware: hw, recommendedChat: rec,
-      catalog: CATALOG.map((m) => ({ ...m, fits: fits(m, hw.ramGb), installed: has(m.id), recommended: m.id === rec || m.kind === 'search' })),
+      available: true, running, hardware: { ...hw, gpu }, recommendedChat: rec,
+      catalog: CATALOG.map((m) => ({ ...m, fits: fits(m, hw.ramGb), gpuFast: !!gpu?.vramGb && gpu.vramGb >= m.sizeGb * 1.15, installed: has(m.id), recommended: m.id === rec || m.kind === 'search' })),
       pulls: pullsSnapshot(),
     });
   } catch (error) { next(error); }
@@ -43,6 +44,14 @@ router.post('/local/pull', async (req, res, next) => {
   try {
     if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });
     const r = await startPull(await userOllamaUrl(req.user!.id), String(req.body?.model || ''));
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+router.post('/local/remove', async (req, res, next) => {
+  try {
+    if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });
+    const r = await removeModel(await userOllamaUrl(req.user!.id), String(req.body?.model || ''));
     if (!r.ok) return res.status(400).json({ error: r.error });
     res.json({ ok: true });
   } catch (error) { next(error); }

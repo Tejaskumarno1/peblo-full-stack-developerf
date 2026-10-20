@@ -3,6 +3,7 @@
 // arbitrary files. Not available on a shared server (hosted()): there the model would land on the server's disk.
 import os from 'os';
 import fs from 'fs';
+import { execFile } from 'child_process';
 import { effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
 
 export interface CatalogModel {
@@ -21,6 +22,20 @@ export const CATALOG: CatalogModel[] = [
   { id: 'qwen2.5:14b', name: 'Qwen 2.5 · Large', kind: 'chat', sizeGb: 9.0, minRamGb: 32, blurb: 'Best quality here. For powerful machines with 32 GB or more.' },
   { id: 'nomic-embed-text', name: 'Nomic Embed · Search', kind: 'search', sizeGb: 0.3, minRamGb: 4, blurb: 'Lets Peblo find notes by meaning. Small, and worth installing with any chat model.' },
 ];
+
+/** The graphics card, when there is one Ollama can use. Asked once; the answer does not change while Peblo runs. */
+let gpuCache: Promise<{ name: string; vramGb: number | null } | null> | null = null;
+export function detectGpu() {
+  gpuCache ||= new Promise((resolve) => {
+    if (process.platform === 'darwin' && process.arch === 'arm64') return resolve({ name: 'Apple silicon (shared memory)', vramGb: null });
+    execFile('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { timeout: 4000, windowsHide: true }, (err, out) => {
+      if (err) return resolve(null);
+      const [name, mb] = String(out).split('\n')[0].split(',').map((s) => s.trim());
+      resolve(name ? { name, vramGb: Math.round((Number(mb) / 1024) * 10) / 10 || null } : null);
+    });
+  });
+  return gpuCache;
+}
 
 export function hardware() {
   const gb = (n: number) => Math.round((n / 1024 ** 3) * 10) / 10;
@@ -55,6 +70,19 @@ export function cancelPull(model: string) {
 }
 
 /** Starts a download and returns at once; progress is read with pullsSnapshot(). */
+/** Removes a downloaded model from Ollama. Catalog models only. */
+export async function removeModel(userUrl: unknown, model: string): Promise<{ ok: boolean; error?: string }> {
+  if (!CATALOG.some((m) => m.id === model)) return { ok: false, error: 'That model is not in the list.' };
+  const base = effectiveOllamaUrl(userUrl, 'http://127.0.0.1:11434');
+  if (!base) return { ok: false, error: 'Local AI is not available on this server.' };
+  try {
+    const r = await fetch(`${base}/api/delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }), signal: AbortSignal.timeout(15000) });
+    if (!r.ok && r.status !== 404) return { ok: false, error: `Ollama answered with HTTP ${r.status}` };
+    jobs.delete(model);
+    return { ok: true };
+  } catch { return { ok: false, error: 'Ollama is not running.' }; }
+}
+
 export async function startPull(userUrl: unknown, model: string): Promise<{ ok: boolean; error?: string }> {
   if (!CATALOG.some((m) => m.id === model)) return { ok: false, error: 'That model is not in the list.' };
   const running = jobs.get(model);

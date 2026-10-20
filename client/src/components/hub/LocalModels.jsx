@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, HardDrive, MemoryStick, Download, Check, Sparkles, X, ExternalLink } from 'lucide-react';
+import { Cpu, HardDrive, MemoryStick, Download, Check, Sparkles, X, ExternalLink, Zap, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { aiAPI } from '../../api';
 import './localModels.css';
@@ -34,6 +34,12 @@ export default function LocalModels({ variant = 'soft' }) {
     refresh();
   };
   const cancel = async (id) => { try { await aiAPI.localCancel(id); } catch { /* it ends on its own */ } refresh(); };
+  const remove = async (m) => {
+    if (!window.confirm(`Remove ${m.name} from this computer? You can download it again later.`)) return;
+    setError('');
+    try { await aiAPI.localRemove(m.id); } catch (e) { setError(e.response?.data?.error || 'Could not remove it.'); }
+    refresh();
+  };
   const use = (m) => updateSettings(m.kind === 'search' ? { ollamaEnabled: true, ollamaEmbedModel: m.id } : { ollamaEnabled: true, ollamaModel: m.id });
   const setUp = async () => {
     setError('');
@@ -62,6 +68,7 @@ export default function LocalModels({ variant = 'soft' }) {
       <ul className="lm-hw" aria-label="This computer">
         <li><MemoryStick size={16} /> <b>{fmt(hw.ramGb)} GB</b> memory</li>
         <li><Cpu size={16} /> <b>{hw.cpuCores}</b> processor cores</li>
+        {hw.gpu && <li><Zap size={16} /> <b>{hw.gpu.name}</b>{hw.gpu.vramGb ? ` · ${fmt(hw.gpu.vramGb)} GB` : ''}</li>}
         {hw.freeDiskGb != null && <li><HardDrive size={16} /> <b>{fmt(hw.freeDiskGb)} GB</b> free space</li>}
       </ul>
 
@@ -99,6 +106,7 @@ export default function LocalModels({ variant = 'soft' }) {
             <li key={m.id} className={`lm-card${m.installed ? ' on' : ''}${!m.fits ? ' dim' : ''}`} data-model={m.id}>
               <div className="lm-card-top">
                 <span className={`lm-kind ${m.kind}`}>{m.kind === 'search' ? 'Search' : 'Chat'}</span>
+                {m.gpuFast && <span className="lm-kind" title="Fits in your graphics card memory">Fast on GPU</span>}
                 {m.id === data.recommendedChat && <span className="lm-pick">Best fit</span>}
               </div>
               <h3 className="lm-name">{m.name}</h3>
@@ -112,9 +120,10 @@ export default function LocalModels({ variant = 'soft' }) {
                     <button type="button" className="lm-link" onClick={() => cancel(m.id)} aria-label={`Cancel ${m.name}`}><X size={14} /></button>
                   </>
                 ) : m.installed ? (
-                  inUse && enabled
+                  <>{inUse && enabled
                     ? <span className="lm-chip"><Check size={14} /> In use</span>
-                    : <><span className="lm-chip soft"><Check size={14} /> Downloaded</span><button type="button" className="lm-btn small" onClick={() => use(m)}>{m.kind === 'search' ? 'Use for search' : 'Use for chat'}</button></>
+                    : <><span className="lm-chip soft"><Check size={14} /> Downloaded</span><button type="button" className="lm-btn small" onClick={() => use(m)}>{m.kind === 'search' ? 'Use for search' : 'Use for chat'}</button></>}
+                    <button type="button" className="lm-link" onClick={() => remove(m)} aria-label={`Remove ${m.name}`} title="Remove from this computer"><Trash2 size={14} /></button></>
                 ) : !m.fits ? (
                   <span className="lm-note">Needs more memory than this computer has</span>
                 ) : lowDisk ? (
