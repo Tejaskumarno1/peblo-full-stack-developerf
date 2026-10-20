@@ -21,16 +21,16 @@ function MiniCalendar({ value, onPick }) {
   const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1))];
   return (
-    <div className="s-cal" role="group" aria-label="Pick a date">
-      <div className="s-cal-head">
+    <div className="s-mcal" role="group" aria-label="Pick a date">
+      <div className="s-mcal-head">
         <b>{MONTHS[month.getMonth()]} {month.getFullYear()}</b>
         <button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={15} /></button>
         <button type="button" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={15} /></button>
       </div>
-      <div className="s-cal-grid dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
-      <div className="s-cal-grid">
+      <div className="s-mcal-grid dow">{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}</div>
+      <div className="s-mcal-grid">
         {cells.map((d, i) => (d
-          ? <button key={i} type="button" className={`s-cal-day${dateVal(d) === value ? ' on' : ''}${dateVal(d) === today ? ' today' : ''}`} aria-label={d.toDateString()} aria-pressed={dateVal(d) === value} onClick={() => onPick(dateVal(d))}>{d.getDate()}</button>
+          ? <button key={i} type="button" className={`s-mcal-day${dateVal(d) === value ? ' on' : ''}${dateVal(d) === today ? ' today' : ''}`} aria-label={d.toDateString()} aria-pressed={dateVal(d) === value} onClick={() => onPick(dateVal(d))}>{d.getDate()}</button>
           : <span key={i} />))}
       </div>
     </div>

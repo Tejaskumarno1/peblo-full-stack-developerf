@@ -28,6 +28,13 @@ export default function SoftNotes() {
   const [sort, setSortState] = useState(() => store('peblo-notes-sort', 'updated'));
   const [group, setGroupState] = useState(() => store('peblo-notes-group', 'date'));
   const setSort = (v) => { setSortState(v); try { localStorage.setItem('peblo-notes-sort', v); } catch { /* ignore */ } };
+  const [collapsed, setCollapsed] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
+  const toggleGroup = (k) => setCollapsed((c) => {
+    const n = { ...c, [k]: !c[k] };
+    if (!n[k]) delete n[k];
+    try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ }
+    return n;
+  });
   const setGroup = (v) => { setGroupState(v); try { localStorage.setItem('peblo-notes-group', v); } catch { /* ignore */ } };
   const [focus, setFocus] = useState(false);
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
@@ -352,7 +359,7 @@ export default function SoftNotes() {
         <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes here yet.'}</p>}
-          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <div className="s-grp-h">{g.label}</div>}{g.notes.map((n) => {
+          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><span className="chev" aria-hidden="true">{collapsed[`${group}:${g.key}`] ? '▸' : '▾'}</span>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
             const tone = toneVar(toneOf(n.tags?.[0]));
             const on = doc?.id === n.id;
             return (
