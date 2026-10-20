@@ -20,6 +20,7 @@ export async function boot() {
   const { startServer } = await import(pathToFileURL(path.join(REPO, 'dist', 'server', 'index.js')).href);
   const { server, port } = await startServer({ port: 0, staticDir: path.join(REPO, 'client', 'dist') });
   const base = `http://127.0.0.1:${port}`;
+  process.env.PUBLIC_URL = base; // links use the "public" address; in a test that is this server
   const email = `e2e-${Date.now()}@peblo.test`;
   const r = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'correct horse battery', name: 'E2E' }) });
   const { token } = await r.json();

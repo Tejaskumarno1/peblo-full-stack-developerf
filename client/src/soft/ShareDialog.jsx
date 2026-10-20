@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Link2, Copy, Check } from 'lucide-react';
 import api from '../api/client';
+import { usePublicUrl } from '../api/publicUrl';
 
 // Turns a public, read-only link on or off for one note or task.
 export default function ShareDialog({ kind, id, title, onClose }) {
@@ -16,8 +17,10 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     return () => { live = false; };
   }, [kind, id]);
 
-  const url = token ? `${window.location.origin}/s/${kind}/${token}` : '';
-  const local = /^(localhost|127\.|\[::1\])/.test(window.location.hostname);
+  const publicUrl = usePublicUrl();
+  const base = publicUrl || window.location.origin;
+  const url = token ? `${base}/s/${kind}/${token}` : '';
+  const local = !publicUrl && /^(localhost|127\.|\[::1\])/.test(window.location.hostname);
 
   const turnOn = async () => {
     setBusy(true); setError('');

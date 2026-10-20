@@ -10,8 +10,22 @@ const AuthContext = createContext(null);
 // Things kept on this computer that are about the *device*, not the account that just left (PEB-60).
 const DEVICE_KEYS = new Set([
   'peblo-theme', 'peblo-style', 'peblo-sidebar-collapsed', 'peblo-river-zoom', 'peblo-river-notes-view',
-  'peblo_call_gender', 'peblo_call_rate', 'peblo_call_ringtone',
+  'peblo_call_gender', 'peblo_call_rate', 'peblo_call_ringtone', 'peblo-accounts',
 ]);
+
+// Accounts signed in on this device (up to 3), so you can switch without typing a password each time.
+const ACCOUNTS_KEY = 'peblo-accounts';
+export function getSavedAccounts() {
+  try { const a = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function putAccounts(list) { try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list.slice(0, 3))); } catch { /* storage blocked */ } }
+export function rememberAccount(u) {
+  const token = getToken();
+  if (!u?.email || !token) return;
+  const id = u.id || u.email;
+  putAccounts([{ id, email: u.email, name: u.name || '', token }, ...getSavedAccounts().filter((a) => a.id !== id)]);
+}
+export function forgetAccount(id) { putAccounts(getSavedAccounts().filter((a) => a.id !== id)); }
 
 // Remove everything else Peblo stored for the previous account: cached notes, settings (which held API keys),
 // AI Hub chats, notifications, reminder state. Covers both the `peblo-` and `peblo_` key styles.
@@ -81,6 +95,11 @@ export function AuthProvider({ children }) {
     for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
   }, [uiStyle]);
 
+  // Compact mode (Settings -> Appearance): tighter lists and cards.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-compact', settings?.compact ? '1' : '0');
+  }, [settings?.compact]);
+
   // Editor text size (Settings -> Preferences): small / medium (the style's own size) / large
   useEffect(() => {
     document.documentElement.setAttribute('data-editor-font', settings?.fontSize || 'medium');
@@ -89,6 +108,7 @@ export function AuthProvider({ children }) {
   // Merge the settings saved on the account into this device's settings.
   const adoptProfile = useCallback((u) => {
     setUser(u);
+    rememberAccount(u);
     // The account decides the style on every device
     const acctStyle = u?.settings?.uiStyle;
     if (VALID_STYLES.includes(acctStyle)) {
@@ -145,13 +165,14 @@ export function AuthProvider({ children }) {
   }, [adoptProfile, queryClient]);
 
   const logout = useCallback(() => {
+    forgetAccount(user?.id || user?.email);
     clearToken();
     clearAccountData();
     setSettings({ fontSize: 'medium' });
     setNotifications([]);
     queryClient.clear();
     setUser(null);
-  }, [queryClient]);
+  }, [queryClient, user]);
 
   const retryConnect = useCallback(() => setReloadKey(k => k + 1), []);
 

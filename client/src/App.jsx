@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
@@ -24,6 +24,7 @@ const SoftTasks = lazy(() => import('./soft/SoftTasks'));
 const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
 const SoftAI = lazy(() => import('./soft/SoftAI'));
 const SoftConnections = lazy(() => import('./soft/SoftConnections'));
+const SoftSettings = lazy(() => import('./soft/SoftSettings'));
 
 // River: one timeline. Tasks and Calendar are the river itself, at Day and Week zoom.
 const RiverHome = lazy(() => import('./river/RiverHome'));
@@ -54,6 +55,13 @@ function Styled({ other: Other, ...byStyle }) {
   const { uiStyle } = useAuth();
   const Screen = byStyle[uiStyle] || byStyle.soft || Other;
   return <Screen />;
+}
+
+/** Soft Studio has a full Settings page; River and Orbit keep the Settings window. */
+function SettingsRoute() {
+  const { uiStyle } = useAuth();
+  useEffect(() => { if (uiStyle !== 'soft') window.dispatchEvent(new Event('peblo:open-settings')); }, [uiStyle]);
+  return uiStyle === 'soft' ? <SoftSettings /> : <Navigate to="/" replace />;
 }
 
 /** Wait for the account to load, then show the app shell (or the sign-in screen when nobody is signed in). */
@@ -101,7 +109,9 @@ export default function App() {
           <Route path="/calendar" element={<Styled soft={SoftCalendar} river={RiverCalendar} orbit={OrbitCalendar} other={CalendarPage} />} />
           <Route path="/quiz/:topic" element={<Styled orbit={OrbitQuiz} other={GoHome} />} />
           <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />
-          <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
+          <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
+        <Route path="/settings/:section" element={<SettingsRoute />} />
+        <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<CaptureGate />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />

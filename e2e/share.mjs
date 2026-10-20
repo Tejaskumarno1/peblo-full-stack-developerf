@@ -18,7 +18,10 @@ try {
   await input.waitFor({ timeout: 5000 });
   const url = await input.inputValue();
   check('note link looks right', /\/s\/note\/[\w-]{20,}$/.test(url), url);
-  check('local address warning shown', (await dlg.textContent()).includes('your own computer'));
+  check('no "own computer" warning when a public address is set', !(await dlg.textContent()).includes('your own computer'));
+  check('link starts with the public address', url.startsWith(base + '/s/note/'), url);
+  const cfg = await (await fetch(base + '/api/config')).json();
+  check('/api/config answers the public address', cfg.publicUrl === base, JSON.stringify(cfg));
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/share.png' });
 
   // a stranger (no sign-in) opens it

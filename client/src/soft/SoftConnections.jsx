@@ -31,7 +31,7 @@ function KeyInput({ id, label, value, placeholder, onSave }) {
 }
 
 /** Soft Studio · Your AI (mockup: SoftConnections). Same settings as Connections, friendlier layout. */
-export default function SoftConnections() {
+export default function SoftConnections({ embedded = false }) {
   const { settings, updateSettings } = useAuth();
   const queryClient = useQueryClient();
   const { data: models, refetch } = useQuery({ queryKey: ['hub-models'], queryFn: () => hubAPI.models().then((r) => r.data) });
@@ -71,11 +71,13 @@ export default function SoftConnections() {
       : { text: 'Not running', bg: 'var(--s-peach)' };
 
   return (
-    <div className="soft-page s-conn">
-      <div className="s-page-title" style={{ flexShrink: 0 }}>
-        <h1 className="s-h1">How Peblo uses AI</h1>
-        <span className="s-sub">Pick one. You can change it any time, and every answer shows what it read.</span>
-      </div>
+    <div className={embedded ? 's-conn s-conn-embedded' : 'soft-page s-conn'}>
+      {embedded ? <h2 className="s-set-sub">When Peblo needs AI</h2> : (
+        <div className="s-page-title" style={{ flexShrink: 0 }}>
+          <h1 className="s-h1">How Peblo uses AI</h1>
+          <span className="s-sub">Pick one. You can change it any time, and every answer shows what it read.</span>
+        </div>
+      )}
 
       <fieldset className="s-choices">
         <legend className="s-sr">When Peblo needs AI</legend>
@@ -139,7 +141,7 @@ export default function SoftConnections() {
 
         <LocalModels variant="soft" />
 
-        <section className="s-conn-card" style={{ background: 'var(--s-lilac)' }} aria-labelledby="s-next">
+        {!embedded && <section className="s-conn-card" style={{ background: 'var(--s-lilac)' }} aria-labelledby="s-next">
           <span className="s-count" style={{ alignSelf: 'flex-start', fontSize: 12.5, fontWeight: 800 }}>Coming next</span>
           <h2 id="s-next" className="s-conn-h2" style={{ lineHeight: 1.2 }}>Use your notes from Claude Desktop, Cursor and VS Code</h2>
           <div className="s-promises">
@@ -147,7 +149,7 @@ export default function SoftConnections() {
             <span>You approve every new task</span>
             <span>#private notes stay hidden</span>
           </div>
-        </section>
+        </section>}
       </div>
     </div>
   );

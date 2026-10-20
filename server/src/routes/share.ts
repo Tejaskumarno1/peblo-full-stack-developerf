@@ -23,6 +23,22 @@ async function setToken(kind: 'note' | 'todo', id: string, token: string | null,
   else await prisma.todo.update({ where: { id }, data, select: { id: true } });
 }
 
+// GET /api/share -> everything this person has shared: [{ kind, id, title, token, edit }]
+shareRoutes.get('/', async (req, res, next) => {
+  try {
+    const uid = req.user!.id;
+    const [notes, todos] = await Promise.all([
+      prisma.note.findMany({ where: { userId: uid, isDeleted: false, shareToken: { not: null } }, select: { id: true, title: true, shareToken: true, shareEdit: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
+      prisma.todo.findMany({ where: { userId: uid, shareToken: { not: null } }, select: { id: true, text: true, shareToken: true, shareEdit: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
+    ]);
+    const rows = [
+      ...notes.map((n) => ({ kind: 'note', id: n.id, title: n.title || 'Untitled', token: n.shareToken, edit: !!n.shareEdit, updatedAt: n.updatedAt })),
+      ...todos.map((t) => ({ kind: 'todo', id: t.id, title: t.text || 'Task', token: t.shareToken, edit: !!t.shareEdit, updatedAt: t.updatedAt })),
+    ].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+    res.json({ links: rows });
+  } catch (e) { next(e); }
+});
+
 // GET /api/share/:kind/:id -> { token: string | null }
 shareRoutes.get('/:kind/:id', async (req, res, next) => {
   try {

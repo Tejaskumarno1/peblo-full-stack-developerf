@@ -90,8 +90,21 @@ function getGeminiInstance(user: any) {
  * Choosing Local AI means local only: we never silently fall back to a cloud provider,
  * because that would send the user's notes off the computer against their choice.
  */
-function providerOrder(user: any): ProviderName[] {
+type AiFeature = 'ask' | 'improve' | 'summaries';
+/** Which settings feature an operation belongs to (Settings -> AI -> "Where each feature runs"). */
+function featureOf(operationName: string): AiFeature | undefined {
+  if (operationName === 'AI Chat') return 'ask';
+  if (operationName === 'AI Text Command') return 'improve';
+  if (operationName === 'AI Summary' || operationName === 'AI Action Items') return 'summaries';
+  return undefined;
+}
+
+function providerOrder(user: any, feature?: AiFeature): ProviderName[] {
   const choice = (user?.settings as any)?.defaultAiModel || 'auto';
+  // One feature can be pinned to this computer or to the cloud. "Only on this computer" overall always wins.
+  const pin = feature ? (user?.settings as any)?.aiFeatures?.[feature] : undefined;
+  if (pin === 'local') return ['ollama'];
+  if (pin === 'cloud' && choice !== 'ollama') return ['openai', 'gemini'];
   // "Local only" and "Ask first" never send anything to the cloud from background features.
   // (The AI Hub asks the user before using a cloud model under "Ask first".)
   if (choice === 'ollama' || choice === 'ask') return ['ollama'];
@@ -156,7 +169,7 @@ async function runWithCascade(
     gemini: getGeminiInstance(user),
   };
 
-  const order = providerOrder(user);
+  const order = providerOrder(user, featureOf(operationName));
   if (!order.some((n) => providers[n])) {
     if (order.length === 1 && (providers.openai || providers.gemini)) throw localOnlyError();
     throw noKeyError(user);
@@ -1051,9 +1064,10 @@ export async function streamHubChat(
   if (opts.provider) {
     order = [opts.provider];
   } else if (routing === 'ask') {
-    order = opts.allowCloud ? ['ollama', 'openai', 'gemini'] : ['ollama'];
+    const pin = (user?.settings as any)?.aiFeatures?.ask;
+    order = opts.allowCloud && pin !== 'local' ? ['ollama', 'openai', 'gemini'] : ['ollama'];
   } else {
-    order = providerOrder(user);
+    order = providerOrder(user, 'ask');
   }
 
   const isCloud = (n: ProviderName) => n !== 'ollama';

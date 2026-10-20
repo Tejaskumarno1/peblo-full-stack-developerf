@@ -23,7 +23,7 @@ export default function SoftNotes() {
   const queryClient = useQueryClient();
 
   const store = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(() => (new URLSearchParams(window.location.search).get('filter') === 'trash' ? 'trash' : 'all'));
   const [selTags, setSelTags] = useState(() => (params.get('tag') ? [params.get('tag')] : []));
   const [tagMatch, setTagMatch] = useState('any');
   const [sort, setSortState] = useState(() => store('peblo-notes-sort', 'updated'));

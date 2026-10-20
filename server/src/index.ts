@@ -65,6 +65,18 @@ app.use('/api', apiLimiter());
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Which address links should use. Share links and the MCP address must work for other people, so they always
+  // point at the hosted app (PUBLIC_URL), never at this computer's own address.
+  app.get('/api/config', (req, res) => {
+    const configured = (process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
+    const host = req.get('host') || '';
+    const local = /^(localhost|127\.|\[::1\])/.test(host);
+    // The desktop app runs its own server on this computer, but its notes live in the same database as the hosted app,
+    // so a link to the hosted address opens the same note for anyone.
+    const publicUrl = configured || (local ? 'https://peblo-stxo.onrender.com' : `${req.protocol}://${host}`);
+    res.json({ publicUrl });
+  });
+
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);

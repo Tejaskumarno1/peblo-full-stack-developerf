@@ -32,12 +32,12 @@ export default function AppShell({ children }) {
 
   // Other parts of the app can open Settings with window.dispatchEvent(new Event('peblo:open-settings')).
   useEffect(() => {
-    const open = () => setSettingsOpen(true);
+    const open = () => setSettingsOpen(true); // the classic Settings window (River and Orbit use it; Soft's avatar opens the full page)
     window.addEventListener('peblo:open-settings', open);
     return () => window.removeEventListener('peblo:open-settings', open);
   }, []);
 
-  const openSettings = () => setSettingsOpen(true);
+  const openSettings = () => { if (uiStyle === 'soft') navigate('/settings/profile'); else setSettingsOpen(true); };
   const settings = settingsOpen && (
     <Suspense fallback={null}>
       <SettingsModal onClose={() => setSettingsOpen(false)} />
