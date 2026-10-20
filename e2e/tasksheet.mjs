@@ -12,8 +12,9 @@ try {
   await dlg.waitFor({ timeout: 6000 }).catch(() => {});
   check('adding a task opens the set-up sheet', await dlg.isVisible().catch(() => false));
   await dlg.getByRole('button', { name: 'Tomorrow' }).click();
-  await dlg.getByLabel('Due time').fill('18:30');
+  await dlg.getByRole('button', { name: /Evening/ }).click();
   await dlg.getByRole('radio', { name: 'High' }).click();
+  await dlg.getByRole('button', { name: '+ Add tag' }).click();
   await dlg.getByLabel('Add a tag').fill('exams');
   await page.keyboard.press('Enter');
   await dlg.getByRole('button', { name: '+ Link a note' }).click();

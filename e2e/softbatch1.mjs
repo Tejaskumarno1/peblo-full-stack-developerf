@@ -32,9 +32,11 @@ try {
   check('a 4th pin is refused', /up to 3/.test((await page.locator('.s-toast').textContent().catch(() => '')) || ''));
 
   // Tag chips: all tags shown, click filters
-  const chips = await page.locator('.s-filter button').allTextContents();
-  check('every tag has a chip', ['Physics', 'Chem', 'Bio'].every((c) => chips.some((x) => x.trim() === c)), chips.join('|'));
-  await page.locator('.s-filter button', { hasText: /^Chem$/ }).click();
+  await page.getByRole('button', { name: /^Tags/ }).click();
+  const tagOpts = await page.locator('.s-nt-opt .nm').allTextContents();
+  check('the Tags menu lists every tag', ['#physics', '#chem', '#bio'].every((c) => tagOpts.includes(c)), tagOpts.join('|'));
+  await page.getByRole('menuitemcheckbox', { name: /#chem/ }).click();
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(700);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('clicking a tag filters the list', rows.length === 2 && rows.every((r) => /Beta|Gamma/.test(r)), rows.join('|'));
@@ -56,8 +58,8 @@ try {
   const loose = (await api('POST', '/api/todos', { text: 'Loose task', priority: 'medium' })).todo;
   await page.reload();
   await page.locator('#s-note-title').waitFor();
-  await page.getByRole('button', { name: 'Link an existing task' }).click();
-  await page.locator('.s-link-list button', { hasText: 'Loose task' }).click();
+  await page.getByRole('button', { name: 'Link existing' }).click();
+  await page.locator('.s-linker-row', { hasText: 'Loose task' }).click();
   await page.waitForTimeout(800);
   check('an existing task can be linked', (await page.locator('.s-side-task', { hasText: 'Loose task' }).count()) === 1);
   await page.getByRole('button', { name: /Unlink Loose task/ }).click();

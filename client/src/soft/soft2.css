@@ -1,0 +1,124 @@
+/* Soft Studio · second stylesheet: task sheet, notes toolbar, picker, capture, focus mode, blocks. Loaded after soft.css. */
+
+/* ===== task sheet ===== */
+.soft .s-sheet { gap: 16px; padding: 24px 26px; width: min(580px, 100%); }
+.soft .s-sheet.inline { padding: 0; gap: 12px; }
+.soft .s-sheet :focus-visible { outline: none; }
+.soft .s-sheet button:focus-visible, .soft .s-sheet a:focus-visible { box-shadow: 0 0 0 3px rgba(42,31,23,.28); }
+.soft .s-sheet-kicker { background: var(--s-item); border-radius: 999px; padding: 6px 12px; font-weight: 800; font-size: 12.5px; color: var(--s-fg); }
+.soft .s-sheet-kicker.new { background: var(--s-mint); }
+.soft .s-sheet .s-sheet-title { background: transparent; border-radius: 0; border-bottom: 2px solid var(--s-item); padding: 6px 0 10px; font-size: 26px; transition: border-color .15s; outline: none; }
+.soft .s-sheet .s-sheet-title:focus { border-bottom-color: var(--s-fg); }
+.soft .s-sheet-sec { display: flex; flex-direction: column; gap: 9px; }
+.soft .s-sheet-lab { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg2); }
+.soft .s-sheet-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.soft .s-sheet-pills > button { border: none; border-radius: 999px; padding: 8px 15px; font: inherit; font-size: 13.5px; font-weight: 700; background: var(--s-item); color: var(--s-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.soft .s-sheet-pills > button.on { background: var(--s-fg); color: #fff; }
+.soft .s-sheet-pills > button.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-item); color: var(--s-fg2); }
+.soft .s-sheet-pills > button.ghost.on { background: var(--s-fg); color: #fff; box-shadow: none; }
+.soft .s-sheet-pills > button i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.12); }
+.soft .s-sheet-pills.time > button { padding: 7px 13px; font-size: 13px; }
+.soft .s-sheet-time { border: none; background: var(--s-item); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13.5px; color: var(--s-fg); }
+.soft .s-sheet-tag { display: inline-flex; align-items: center; gap: 5px; padding: 7px 8px 7px 13px; font-size: 13px; }
+.soft .s-sheet-tag button { border: none; background: transparent; cursor: pointer; padding: 0; display: grid; place-items: center; color: inherit; opacity: .65; }
+.soft .s-sheet-menu { background: var(--s-bg, #faf5ec); border-radius: 18px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.soft .s-sheet-menu > input { border: none; background: #fff; border-radius: 999px; padding: 9px 14px; font: inherit; font-size: 14px; outline: none; color: var(--s-fg); }
+.soft .s-sheet-menu-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.soft .s-sheet-menu-list.col { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+.soft .s-sheet-menu-list button { border: none; background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--s-fg); text-align: left; }
+.soft .s-sheet-menu-list.col button { border-radius: 12px; padding: 8px 12px; background: transparent; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-sheet-menu-list.col button:hover { background: #fff; }
+.soft .s-sheet-menu-list button.muted { color: var(--s-fg2); font-size: 12.5px; align-self: flex-end; }
+.soft .s-sheet-notecard { display: flex; align-items: center; gap: 12px; background: var(--s-mint); border-radius: 20px; padding: 10px 12px; }
+.soft .s-sheet-notecard .ico { width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,.7); display: grid; place-items: center; flex-shrink: 0; }
+.soft .s-sheet-notecard .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.soft .s-sheet-notecard .txt b { font-size: 15px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-sheet-notecard .txt small { font-size: 12.5px; color: var(--s-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-sheet-notecard a, .soft .s-sheet-notecard button { border: none; background: rgba(255,255,255,.75); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--s-fg); cursor: pointer; text-decoration: none; display: inline-grid; place-items: center; }
+.soft .s-sheet-linkbtn { align-self: flex-start; border: none; border-radius: 999px; padding: 8px 15px; font: inherit; font-size: 13.5px; font-weight: 700; background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-item); color: var(--s-fg2); cursor: pointer; }
+.soft .s-sheet-skip, .soft .s-sheet-del { padding: 10px 14px; }
+.soft .s-cal { background: #f9f3e9; border-radius: 20px; padding: 12px 14px 10px; width: 290px; max-width: 100%; box-sizing: border-box; }
+.soft .s-cal-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.soft .s-cal-head b { flex: 1; font-size: 14px; font-weight: 800; }
+.soft .s-cal-head button { border: none; background: transparent; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: var(--s-fg); }
+.soft .s-cal-head button:hover { background: rgba(0,0,0,.07); }
+.soft .s-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); justify-items: center; row-gap: 2px; }
+.soft .s-cal-grid.dow { font-size: 11px; font-weight: 700; color: var(--s-fg2); margin-bottom: 2px; }
+.soft .s-cal-day { width: 34px; height: 34px; border: none; background: transparent; border-radius: 50%; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--s-fg); }
+.soft .s-cal-day:hover { background: rgba(0,0,0,.07); }
+.soft .s-cal-day.today { box-shadow: inset 0 0 0 2px var(--s-accent); }
+.soft .s-cal-day.on { background: var(--s-fg); color: #fff; }
+
+/* ===== notes toolbar ===== */
+.soft .s-nt { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-nt-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.soft .s-nt-btn { border: none; border-radius: 999px; padding: 7px 11px 7px 13px; font: inherit; font-size: 12.5px; font-weight: 700; background: #f4ede2; color: var(--s-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.soft .s-nt-btn.active, .soft .s-nt-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--s-fg); background: #fff; }
+.soft .s-nt-btn .badge { background: var(--s-fg); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11.5px; line-height: 18px; }
+.soft .s-nt-chosen { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.soft .s-nt-chosen .s-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px 4px 10px; font-size: 12px; }
+.soft .s-nt-chosen .s-tag button { border: none; background: transparent; padding: 0; cursor: pointer; display: grid; place-items: center; color: inherit; opacity: .65; }
+.soft .s-nt-chosen .clear, .soft .s-nt-foot .clear { border: none; background: transparent; font: inherit; font-size: 12px; font-weight: 700; color: var(--s-fg2); cursor: pointer; padding: 4px; }
+.soft .s-nt-chosen .clear:hover, .soft .s-nt-foot .clear:hover { color: var(--s-accent); }
+.soft .s-nt-pop { position: absolute; left: 0; right: 0; z-index: 30; background: #fffdf8; border-radius: 22px; box-shadow: 0 18px 50px rgba(60,40,20,.25); padding: 10px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; }
+.soft .s-nt-pop.small { right: auto; min-width: 200px; }
+.soft .s-nt-search { display: flex; align-items: center; gap: 8px; background: var(--s-item); border-radius: 999px; padding: 8px 13px; color: var(--s-fg2); margin-bottom: 4px; }
+.soft .s-nt-search input { flex: 1; border: none; background: transparent; font: inherit; font-size: 13.5px; outline: none; color: var(--s-fg); min-width: 0; }
+.soft .s-nt-scroll { max-height: 270px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.soft .s-nt-grp { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg2); padding: 8px 10px 3px; }
+.soft .s-nt-opt { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: none; background: transparent; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; color: var(--s-fg); width: 100%; }
+.soft .s-nt-opt:hover, .soft .s-nt-opt.on { background: #f9f3e9; }
+.soft .s-nt-opt .box { width: 18px; height: 18px; border-radius: 6px; border: 2px solid #cdbfae; box-sizing: border-box; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
+.soft .s-nt-opt .box.round { border-radius: 50%; }
+.soft .s-nt-opt.on .box, .soft .s-nt-opt[aria-checked="true"] .box { background: var(--s-fg); border-color: var(--s-fg); }
+.soft .s-nt-opt .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.soft .s-nt-opt .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-nt-opt .n { color: var(--s-fg2); font-size: 12.5px; }
+.soft .s-nt-foot { display: flex; align-items: center; gap: 6px; border-top: 1.5px solid var(--s-item); margin-top: 6px; padding: 8px 6px 0; font-size: 13px; font-weight: 700; color: var(--s-fg2); }
+.soft .s-nt-foot button:not(.clear) { border: none; background: transparent; font: inherit; font-weight: 700; color: var(--s-fg2); padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+.soft .s-nt-foot button.on { background: var(--s-fg); color: #fff; }
+.soft .s-grp { display: flex; flex-direction: column; gap: 2px; }
+.soft .s-grp-h { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg2); padding: 12px 12px 4px; }
+.soft .s-cnt { display: inline-block; margin-left: 6px; background: rgba(255,255,255,.7); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 800; vertical-align: middle; }
+
+/* ===== link a task card ===== */
+.soft .s-link-toggle { border: none; border-radius: 999px; padding: 7px 13px; background: rgba(255,255,255,.75); font: inherit; font-size: 13px; font-weight: 700; color: var(--s-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.soft .s-link-existing { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.soft .s-linker { align-self: stretch; background: #fffdf8; border-radius: 22px; box-shadow: 0 10px 30px rgba(60,40,20,.18); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.soft .s-linker-head { display: flex; align-items: flex-start; }
+.soft .s-linker-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.soft .s-linker-head b { font-family: var(--s-display); font-size: 17px; font-weight: 800; }
+.soft .s-linker-head small { font-size: 12.5px; color: var(--s-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-linker-head button { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--s-item); background: #fff; cursor: pointer; display: grid; place-items: center; color: var(--s-fg); }
+.soft .s-linker-search { display: flex; align-items: center; gap: 8px; border: 2px solid var(--s-fg); border-radius: 14px; padding: 8px 12px; background: #fff; color: var(--s-fg2); }
+.soft .s-linker-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 14px; color: var(--s-fg); }
+.soft .s-linker-filters { display: flex; gap: 6px; }
+.soft .s-linker-filters button { border: none; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12px; font-weight: 700; background: var(--s-item); color: var(--s-fg); cursor: pointer; }
+.soft .s-linker-filters button.on { background: var(--s-fg); color: #fff; }
+.soft .s-linker-list { display: flex; flex-direction: column; gap: 2px; }
+.soft .s-linker-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: none; background: transparent; border-radius: 14px; cursor: pointer; text-align: left; font: inherit; color: var(--s-fg); }
+.soft .s-linker-row:hover { background: #f9f3e9; }
+.soft .s-linker-row .ring { width: 17px; height: 17px; border-radius: 50%; border: 2px solid #cdbfae; flex-shrink: 0; box-sizing: border-box; }
+.soft .s-linker-row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.soft .s-linker-row b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-linker-row .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.soft .s-linker-row .c { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+.soft .s-linker-new { border: none; border-top: 1.5px solid var(--s-item); background: transparent; padding: 10px 4px 0; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--s-accent); cursor: pointer; text-align: left; }
+.soft .s-note-side { overflow-y: auto; }
+
+/* ===== notes full screen ===== */
+.soft .s-notes.focus { position: fixed; inset: 0; z-index: 70; display: block; background: #fffdf8; padding: 0; margin: 0; border-radius: 0; }
+.soft .s-notes.focus .s-notes-list, .soft .s-notes.focus .s-note-side { display: none; }
+.soft .s-notes.focus .s-note-main { width: 100%; height: 100%; max-width: none; border-radius: 0; box-shadow: none; box-sizing: border-box; padding: 12px 40px 30px 300px; overflow-y: auto; background: transparent; }
+.soft .s-notes.focus { --fw: 1040px; }
+.soft .s-notes.focus[data-width="narrow"] { --fw: 720px; }
+.soft .s-notes.focus[data-width="full"] { --fw: 100%; }
+.soft .s-notes.focus .s-note-title, .soft .s-notes.focus .s-note-tags, .soft .s-notes.focus .s-note-body, .soft .s-notes.focus .s-toast { max-width: var(--fw); width: 100%; }
+.soft .s-notes.focus .s-note-title { font-size: 54px; }
+.soft .s-notes.focus .s-note-body { overflow: visible; font-size: 19px; }
+.soft .s-focus-outline { position: fixed; left: 32px; top: 86px; width: 232px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 120px); overflow-y: auto; }
+.soft .s-focus-outline .lab { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg2); padding: 0 12px 6px; }
+.soft .s-focus-outline button { border: none; background: transparent; text-align: left; font: inherit; font-size: 14px; font-weight: 600; padding: 7px 12px; border-radius: 12px; cursor: pointer; color: var(--s-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-focus-outline button:hover { background: var(--s-item); }
+.soft .s-focus-outline .none { font-size: 13px; color: var(--s-fg2); padding: 3px 12px; }
+.soft .s-focus-width { padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; }

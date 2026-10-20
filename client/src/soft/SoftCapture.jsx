@@ -7,6 +7,7 @@ import { parseTask } from '../utils/parseTask';
 import { dayChip, timeOf, startOfDay, addDays } from './softUtils';
 import TaskSheet from './TaskSheet';
 import './soft.css';
+import './soft2.css';
 
 const words = (s) => (s || '').toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || [];
 

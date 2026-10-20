@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2 } from 'lucide-react';
+import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2 } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
+import NotesToolbar from './NotesToolbar';
+import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
 import BlockEditor from '../components/BlockEditor';
@@ -19,7 +21,16 @@ export default function SoftNotes() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [filter, setFilter] = useState(() => params.get('tag') || 'all');
+  const store = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+  const [filter, setFilter] = useState('all');
+  const [selTags, setSelTags] = useState(() => (params.get('tag') ? [params.get('tag')] : []));
+  const [tagMatch, setTagMatch] = useState('any');
+  const [sort, setSortState] = useState(() => store('peblo-notes-sort', 'updated'));
+  const [group, setGroupState] = useState(() => store('peblo-notes-group', 'date'));
+  const setSort = (v) => { setSortState(v); try { localStorage.setItem('peblo-notes-sort', v); } catch { /* ignore */ } };
+  const setGroup = (v) => { setGroupState(v); try { localStorage.setItem('peblo-notes-group', v); } catch { /* ignore */ } };
+  const [focus, setFocus] = useState(false);
+  const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
   const [editorKey, setEditorKey] = useState('none');
   const [preview, setPreview] = useState(false);
@@ -59,9 +70,40 @@ export default function SoftNotes() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [allNotes]);
   const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
-  const chipTags = tagCounts;
   const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
-  const shownList = useMemo(() => [...listed].sort((a, b) => (b.meta?.pinned ? 1 : 0) - (a.meta?.pinned ? 1 : 0)), [listed]);
+  const groups = useMemo(() => {
+    let base = filter === 'all' ? allNotes : listed;
+    if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
+      base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
+    }
+    const isPin = (n) => !!n.meta?.pinned;
+    const time = (n, k) => new Date(n[k] || 0).getTime();
+    const cmp = (a, b) => {
+      if (sort === 'title') return (a.title || '').localeCompare(b.title || '');
+      if (sort === 'created') return time(b, 'createdAt') - time(a, 'createdAt');
+      if (sort === 'pinned') return (isPin(b) ? 1 : 0) - (isPin(a) ? 1 : 0) || time(b, 'updatedAt') - time(a, 'updatedAt');
+      return time(b, 'updatedAt') - time(a, 'updatedAt');
+    };
+    const sorted = [...base].sort(cmp);
+    if (filter === 'archive' || filter === 'trash' || group === 'none') return [{ key: 'all', label: '', notes: sorted }];
+    const out = [];
+    const pins = sorted.filter(isPin);
+    if (pins.length) out.push({ key: 'pin', label: `Pinned · ${pins.length} of 3`, notes: pins });
+    const rest = sorted.filter((n) => !isPin(n));
+    if (group === 'tag') {
+      const m = new Map();
+      for (const n of rest) { const t = (n.tags || []).find((x) => x !== 'inbox') || 'untagged'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
+      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: `#${t} · ${notes.length}`, notes });
+    } else {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const week = start.getTime() - 6 * 86400000;
+      const buckets = [['today', 'Today', []], ['week', 'This week', []], ['earlier', 'Earlier', []]];
+      for (const n of rest) { const t = time(n, sort === 'created' ? 'createdAt' : 'updatedAt'); (t >= start.getTime() ? buckets[0] : t >= week ? buckets[1] : buckets[2])[2].push(n); }
+      for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
+    }
+    return out;
+  }, [allNotes, listed, filter, selTags, tagMatch, sort, group]);
+  const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
     queryKey: ['todos', 'open-unlinked'],
     queryFn: () => todosAPI.getAll({}).then((r) => (r.data.todos || []).filter((t) => !t.completed && !t.noteId)),
@@ -84,7 +126,7 @@ export default function SoftNotes() {
   }, []);
 
   const startDraft = useCallback(() => {
-    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: filter !== 'all' && filter !== 'archive' && filter !== 'trash' ? [filter] : [], createdAt: new Date().toISOString() });
+    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], createdAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
     setPreview(false);
     navigate('/notes', { replace: true });
@@ -243,6 +285,19 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
+  useEffect(() => {
+    if (!focus) return undefined;
+    const esc = (e) => { if (e.key === 'Escape' && !document.querySelector('.bn-suggestion-menu')) setFocus(false); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [focus]);
+  const outline = useMemo(() => (doc?.content || '').split('\n').map((l) => /^(#{1,3})\s+(.+)$/.exec(l)).filter(Boolean).map((m) => ({ level: m[1].length, text: m[2].replace(/[*_`]/g, '').trim() })), [doc?.content]);
+  const jump = (text) => {
+    const el = [...document.querySelectorAll('.s-note-body [data-content-type="heading"]')].find((h) => h.textContent.trim() === text);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const words = useMemo(() => (doc?.content || '').trim().split(/\s+/).filter(Boolean).length, [doc?.content]);
+
   // ---------- selection toolbar ----------
   useEffect(() => {
     const onSel = () => {
@@ -287,23 +342,17 @@ export default function SoftNotes() {
   const listTitle = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : 'Notes';
 
   return (
-    <div className="soft-page s-notes">
+    <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
       {/* ---------- list ---------- */}
       <aside className="s-notes-list" aria-label="Notes">
         <div className="s-tile-head">
           <h1 className="s-notes-h1">{listTitle}</h1>
           <button type="button" className="s-new" aria-label="New note" title="New note" onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>
         </div>
-        <div className="s-filter" role="tablist" aria-label="Filter notes">
-          <button type="button" role="tab" aria-selected={filter === 'all'} className={filter === 'all' ? 'all on' : 'all'} onClick={() => setFilter('all')}>All</button>
-          <button type="button" role="tab" aria-selected={filter === 'inbox'} className={filter === 'inbox' ? 'on' : ''} style={{ background: 'var(--s-butter)' }} onClick={() => setFilter('inbox')}>Inbox{inboxCount ? ` · ${inboxCount}` : ''}</button>
-          {chipTags.map((t) => (
-            <button key={t} type="button" role="tab" aria-selected={filter === t} className={filter === t ? 'on' : ''} style={{ background: toneVar(toneOf(t)) }} onClick={() => setFilter(t)}>{cap(t)}</button>
-          ))}
-        </div>
+        <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes here yet.'}</p>}
-          {shownList.map((n) => {
+          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <div className="s-grp-h">{g.label}</div>}{g.notes.map((n) => {
             const tone = toneVar(toneOf(n.tags?.[0]));
             const on = doc?.id === n.id;
             return (
@@ -316,7 +365,7 @@ export default function SoftNotes() {
                 </span>
               </Link>
             );
-          })}
+          })}</div>))}
         </div>
         <div className="s-notes-foot">
           <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => setFilter(filter === 'archive' ? 'all' : 'archive')}>Archive</button>
@@ -344,6 +393,14 @@ export default function SoftNotes() {
               ) : (
                 <button type="button" className="s-outline" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? 'Edit' : 'Preview'}</button>
               )}
+              {focus && (
+                <select className="s-outline s-focus-width" aria-label="Writing width" value={wide} onChange={(e) => { setWide(e.target.value); try { localStorage.setItem('peblo-focus-width', e.target.value); } catch { /* ignore */ } }}>
+                  <option value="narrow">Width: Narrow</option><option value="wide">Width: Wide</option><option value="full">Width: Full</option>
+                </select>
+              )}
+              <button type="button" className="s-outline" onClick={() => setFocus((v) => !v)} aria-pressed={focus} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
+                {focus ? <><Minimize2 size={14} /> Exit</> : <><Maximize2 size={14} /> Full screen</>}
+              </button>
               <div className="s-menu-wrap">
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
                 {menuOpen && !doc.isDraft && (
@@ -359,6 +416,16 @@ export default function SoftNotes() {
               </div>
             </div>
 
+            {focus && (
+              <nav className="s-focus-outline" aria-label="Outline">
+                <span className="lab">Outline</span>
+                {outline.length === 0 && <span className="none">Add a heading to see it here.</span>}
+                {outline.map((h, i) => <button key={i} type="button" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}</button>)}
+                <span className="lab" style={{ marginTop: 14 }}>This note</span>
+                <span className="none">{words} words · {Math.max(1, Math.round(words / 200))} min read</span>
+                <span className="none">{linked.length} linked task{linked.length === 1 ? '' : 's'}</span>
+              </nav>
+            )}
             <label htmlFor="s-note-title" className="s-sr">Title</label>
             <textarea
               id="s-note-title"
@@ -432,7 +499,7 @@ export default function SoftNotes() {
         </form>
 
         <section className="s-side-card" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
-          <h3 id="s-linked" className="s-h3">Linked tasks</h3>
+          <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>
           {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
           {linked.slice(0, 8).map((t) => (
             <div key={t.id} className="s-linked-row">
@@ -450,16 +517,17 @@ export default function SoftNotes() {
               <button type="submit" aria-label="Add task" disabled={!taskDraft.trim()}><Plus size={14} strokeWidth={2.6} /></button>
             </form>
           )}
-          {noteId && openTasks.length > 0 && (
+          {noteId && (
             <div className="s-link-existing">
-              <button type="button" className="s-link-toggle" aria-expanded={linkOpen} onClick={() => setLinkOpen((v) => !v)}><Link2 size={13} /> Link an existing task</button>
+              <button type="button" className="s-link-toggle" aria-expanded={linkOpen} onClick={() => setLinkOpen((v) => !v)}><Link2 size={13} /> Link existing</button>
               {linkOpen && (
-                <div className="s-link-list">
-                  <input aria-label="Search tasks" placeholder="Search tasks" value={linkQ} onChange={(e) => setLinkQ(e.target.value)} autoFocus />
-                  {openTasks.filter((t) => t.text.toLowerCase().includes(linkQ.trim().toLowerCase())).slice(0, 5).map((t) => (
-                    <button key={t.id} type="button" onClick={() => { linkTask(t.id); setLinkOpen(false); setLinkQ(''); }}>{t.text}</button>
-                  ))}
-                </div>
+                <TaskLinker
+                  noteTitle={doc.title}
+                  tasks={openTasks}
+                  onLink={(id) => { linkTask(id); setLinkOpen(false); }}
+                  onCreate={async (text) => { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); setLinkOpen(false); }}
+                  onClose={() => setLinkOpen(false)}
+                />
               )}
             </div>
           )}

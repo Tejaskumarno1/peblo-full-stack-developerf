@@ -86,6 +86,7 @@ export const numberWord = (n) => (n < WORDS.length ? WORDS[n] : String(n));
 
 export function snippetOf(content, max = 90) {
   return (content || '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, ' ')
     .replace(/\|/g, ' ')
     .replace(/[#*_~`>]/g, '')

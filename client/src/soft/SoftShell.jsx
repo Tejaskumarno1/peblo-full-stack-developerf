@@ -6,6 +6,7 @@ import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
 import { firstNameOf } from './softUtils';
 import './soft.css';
+import './soft2.css';
 
 const DOCK = [
   { to: '/', end: true, label: 'Home', icon: Home },
