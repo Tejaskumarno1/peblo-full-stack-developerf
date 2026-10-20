@@ -66,6 +66,16 @@ function useOrbitData() {
 function OrbitTop({ data }) {
   const { user, theme, setTheme } = useAuth();
   const navigate = useNavigate();
+  // PEB-255: Alt+Left / Alt+Right go back and forward, like a browser
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navigate(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); navigate(1); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navigate]);
   const { space, setSpace, setSelected } = useOrbit();
   const [spaceOpen, setSpaceOpen] = useState(false);
   const [menu, setMenu] = useState(false);

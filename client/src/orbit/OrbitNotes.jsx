@@ -10,6 +10,7 @@ import { topicName, levelOf, levelVar, tagsOfNote, agoText, shortDate } from './
 import { snippetOf } from '../soft/softUtils';
 import { clock, dayWord } from '../river/riverUtils';
 import OrbitNoteList from './OrbitNoteList';
+import VersionHistory from '../components/VersionHistory';
 import { exportDocs } from '../utils/exporters';
 import { TEMPLATES, outlineOf, countMatches, replaceAll } from './noteTemplates';
 
@@ -53,6 +54,7 @@ function OrbitNote({ note }) {
   const [flash, setFlash] = useState('');
   // Round 10: find & replace bar
   const [findOpen, setFindOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [findText, setFindText] = useState('');
   const [replText, setReplText] = useState('');
   const [matchCase, setMatchCase] = useState(false);
@@ -209,6 +211,7 @@ function OrbitNote({ note }) {
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                 {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); setMeta({ locked: locked ? null : true }); }}>{locked ? 'Unlock (allow editing)' : 'Lock (read only)'}</button>}
                 {!readOnly && <button type="button" role="menuitem" onClick={() => { setMenu(false); setFindOpen(true); }}>Find and replace</button>}
+                {!doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave(); setHistoryOpen(true); }}>Version history</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}>Duplicate</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>Copy link</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
@@ -221,6 +224,7 @@ function OrbitNote({ note }) {
           </div>
         )}
       </SheetHead>
+      {historyOpen && <VersionHistory noteId={doc.id} currentContent={doc.content} onClose={() => setHistoryOpen(false)} onRestored={(n) => note.applyContent({ content: n.content, title: n.title })} />}
 
       <div className="o-sheet-body">
         <div className="o-sheet-main">
@@ -282,6 +286,7 @@ function OrbitNote({ note }) {
           <div className="o-body">
             <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
           </div>
+          {!readOnly && <p className="o-quiet" style={{ margin: '6px 0 0', fontSize: 12.5 }}>Type <kbd>/</kbd> for commands, <kbd>@</kbd> to link a note.</p>}
           <p className="o-wc" aria-label="Word count">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {String(doc.content || '').length} characters · {readMin} min read</p>
         </div>
 
