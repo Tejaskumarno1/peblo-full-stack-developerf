@@ -86,10 +86,12 @@ export const numberWord = (n) => (n < WORDS.length ? WORDS[n] : String(n));
 
 export function snippetOf(content, max = 90) {
   const text = snippetText(content, max);
-  return text || (/!\[[^\]]*\]\(/.test(content || '') ? 'Picture' : '');
+  return text || (/!\[[^\]]*\]\(|<figure>|<img /.test(content || '') ? 'Picture' : '');
 }
 function snippetText(content, max) {
   return (content || '')
+    .replace(/<figure>[\s\S]*?<\/figure>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, ' ')
     .replace(/\|/g, ' ')

@@ -1,58 +1,86 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems } from '@blocknote/react';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2 } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { aiAPI, notesAPI } from '../api/index';
+import { useQueryClient } from '@tanstack/react-query';
+import { aiAPI, notesAPI, todosAPI } from '../api/index';
+import { fileToAttachment } from '../utils/imageData';
 import Backlinks from './Backlinks';
-
 import { useAuth } from '../context/AuthContext';
+import './blockEditor.css';
 
+// A picture, video, audio clip or file picked from the computer becomes a data address inside the note
+// (pictures are shrunk first). Bigger than 4 MB is refused with a message instead of silently bloating the note.
+async function uploadFile(file) {
+  const a = await fileToAttachment(file);
+  return a.url;
+}
 
-// Turn a picture picked from the computer into a compact data URL (max 1600px, JPEG).
-function uploadImageFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read file'));
-    reader.onload = () => {
-      if (!/^image\/(png|jpe?g|webp)/.test(file.type)) return resolve(reader.result);
-      const img = new Image();
-      img.onerror = () => resolve(reader.result);
-      img.onload = () => {
-        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * k);
-        c.height = Math.round(img.height * k);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', 0.85));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+/* ---------------------------------------------------------------------------
+   Notes are stored as Markdown. Markdown has no video, audio, file or toggle, so those blocks are written
+   as a plain link / a "▸ " bullet and turned back into real blocks when the note is opened.
+   ------------------------------------------------------------------------------ */
+const textOf = (content) => (Array.isArray(content) ? content.map((c) => (c.type === 'link' ? textOf(c.content) : c.text || '')).join('') : typeof content === 'string' ? content : '');
+
+function toStorage(blocks) {
+  return blocks.map((b) => {
+    const children = b.children?.length ? toStorage(b.children) : [];
+    if (b.type === 'video' || b.type === 'audio' || b.type === 'file') {
+      const url = b.props?.url;
+      if (!url) return { ...b, type: 'paragraph', props: {}, content: [], children };
+      return { id: b.id, type: 'image', props: { url, caption: b.props.name || b.props.caption || b.type }, children };
+    }
+    if (b.type === 'toggleListItem') {
+      return { id: b.id, type: 'bulletListItem', props: {}, content: [{ type: 'text', text: '▸ ', styles: {} }, ...(Array.isArray(b.content) ? b.content : [])], children };
+    }
+    return { ...b, children };
   });
 }
 
+function fromStorage(blocks) {
+  return blocks.map((b) => {
+    const children = b.children?.length ? fromStorage(b.children) : [];
+    if (b.type === 'image' && /^data:(?!image\/)/.test(b.props?.url || '')) {
+      const url = b.props.url;
+      const name = b.props.caption || b.props.name || 'file';
+      const m = /^data:(video|audio)\//.exec(url);
+      if (m) return { type: m[1], props: { url, name, showPreview: true }, children };
+      return { type: 'file', props: { url, name }, children };
+    }
+    if (b.type === 'bulletListItem' && Array.isArray(b.content) && b.content[0]?.type === 'text' && /^▸\s/.test(b.content[0].text || '')) {
+      const first = { ...b.content[0], text: b.content[0].text.replace(/^▸\s+/, '') };
+      return { type: 'toggleListItem', props: {}, content: [first, ...b.content.slice(1)], children };
+    }
+    return { ...b, children };
+  });
+}
+
+const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
+
 export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId }) {
   const navigate = useNavigate();
-  // Titles for the @ menu, refreshed every few seconds so a note made a moment ago can be linked
+  const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
-  // Initialize the editor
-  const editor = useCreateBlockNote({ uploadFile: uploadImageFile });
+  const editor = useCreateBlockNote({ uploadFile });
   const { theme } = useAuth();
-  // True while the saved content is being loaded, so opening a note doesn't count as an edit
   const loadingRef = useRef(false);
+  const [card, setCard] = useState(null); // the AI result card
+  const aiBusyRef = useRef(false);
+
+  useEffect(() => {
+    try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloEditor = editor; } catch { /* ignore */ }
+  }, [editor]);
 
   useEffect(() => {
     async function loadContent() {
-      if (!initialContent) {
-        return;
-      }
+      if (!initialContent) return;
       try {
-        const newBlocks = await editor.tryParseMarkdownToBlocks(initialContent);
+        const parsed = await editor.tryParseMarkdownToBlocks(initialContent);
         loadingRef.current = true;
-        editor.replaceBlocks(editor.document, newBlocks);
+        editor.replaceBlocks(editor.document, fromStorage(parsed));
         setTimeout(() => { loadingRef.current = false; }, 0);
       } catch (err) {
         console.error('Failed to parse markdown:', err);
@@ -62,157 +90,85 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]); // Intentionally ignore initialContent to prevent cursor reset on every keystroke
 
-  // True while an AI command is running: the "AI is processing..." placeholder must never reach autosave (PEB-70)
-  const aiBusyRef = useRef(false);
-
   const handleChange = async () => {
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
-    const markdown = await editor.blocksToMarkdownLossy(editor.document);
+    const markdown = await editor.blocksToMarkdownLossy(toStorage(editor.document));
     onChange(markdown);
   };
 
-  const handleAiCommand = async (editorInstance, command) => {
-    const cursorPos = editorInstance.getTextCursorPosition();
-    const currentBlock = cursorPos?.block;
-    if (!currentBlock) return;
-
-    // Get block text
-    let blockText = '';
-    if (Array.isArray(currentBlock.content)) {
-      blockText = currentBlock.content.map(c => c.text || '').join('');
-    } else if (typeof currentBlock.content === 'string') {
-      blockText = currentBlock.content;
+  // ---------- AI: the result lands in a card; nothing in the note changes until you pick what to do ----------
+  const sourceFor = (kind) => {
+    const pos = editor.getTextCursorPosition();
+    const block = pos?.block;
+    const sel = (editor.getSelectedText?.() || '').trim();
+    let text = sel || textOf(block?.content).trim();
+    let scope = sel ? 'selection' : 'block';
+    if (kind === 'todo' && text.length < 25) {
+      text = editor.document.map((b) => textOf(b.content)).filter(Boolean).join('\n').trim();
+      scope = 'note';
     }
-
-    if (!blockText || blockText.trim() === '') {
-      alert('Please type some text in this block first before calling AI.');
-      return;
-    }
-
-    const originalContent = currentBlock.content;
-    const originalType = currentBlock.type;
-
-    // Set thinking indicator
+    return { blockId: block?.id, text, scope };
+  };
+  const COMMANDS = { shorter: 'Rewrite much shorter, keeping the meaning:', simpler: 'Rewrite in simpler, plainer words:' };
+  const runAi = async (kind, source, command) => {
+    const src = source || sourceFor(kind);
+    if (!src.text) { setCard({ kind, src, status: 'error', error: 'Type or select some text first, then run this again.' }); return; }
+    setCard({ kind, src, status: 'loading' });
     aiBusyRef.current = true;
-    editorInstance.updateBlock(currentBlock.id, {
-      content: [{ type: 'text', text: 'AI is processing...', styles: { italic: true } }]
-    });
-
     try {
-      const response = await aiAPI.processBlock({ text: blockText, command });
-      const resultText = response.data?.result || '';
-
-      if (!resultText.trim()) {
-        throw new Error('Empty response');
-      }
-
-      const lines = resultText.split('\n').map(l => l.trim()).filter(Boolean);
-
-      if (lines.length > 0) {
-        if (command === 'todo') {
-          // Replace current block with first checklist item
-          const firstLine = lines[0].replace(/^-\s*|^\[\s*\]\s*|^[0-9]+\.\s*/, '');
-          editorInstance.updateBlock(currentBlock.id, {
-            type: 'checkListItem',
-            content: [{ type: 'text', text: firstLine, styles: {} }]
-          });
-
-          // Insert remaining lines as checklist items below
-          let lastBlockId = currentBlock.id;
-          for (let i = 1; i < lines.length; i++) {
-            const cleanLine = lines[i].replace(/^-\s*|^\[\s*\]\s*|^[0-9]+\.\s*/, '');
-            const newBlock = {
-              type: 'checkListItem',
-              content: [{ type: 'text', text: cleanLine, styles: {} }]
-            };
-            editorInstance.insertBlocks([newBlock], lastBlockId, 'after');
-            
-            // Find the inserted block to insert the next one after it
-            const doc = editorInstance.document;
-            const index = doc.findIndex(b => b.id === lastBlockId);
-            if (index !== -1 && doc[index + 1]) {
-              lastBlockId = doc[index + 1].id;
-            }
-          }
-        } else {
-          // Update block with first line
-          editorInstance.updateBlock(currentBlock.id, {
-            type: 'paragraph',
-            content: [{ type: 'text', text: lines[0], styles: {} }]
-          });
-
-          // Insert remaining lines as paragraphs below
-          let lastBlockId = currentBlock.id;
-          for (let i = 1; i < lines.length; i++) {
-            const newBlock = {
-              type: 'paragraph',
-              content: [{ type: 'text', text: lines[i], styles: {} }]
-            };
-            editorInstance.insertBlocks([newBlock], lastBlockId, 'after');
-            
-            const doc = editorInstance.document;
-            const index = doc.findIndex(b => b.id === lastBlockId);
-            if (index !== -1 && doc[index + 1]) {
-              lastBlockId = doc[index + 1].id;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('AI command failed:', err);
-      editorInstance.updateBlock(currentBlock.id, {
-        type: originalType,
-        content: originalContent
-      });
-      alert('AI processing failed. Please try again.');
+      const cmd = command ? COMMANDS[command] : { todo: 'todo', improve: 'improve', summarize: 'summarize', continue: 'continue' }[kind];
+      const res = await aiAPI.processBlock({ text: src.text.slice(0, 12000), command: cmd });
+      const result = (res.data?.result || '').trim();
+      if (!result) throw new Error('The AI sent back nothing.');
+      const items = kind === 'todo' ? result.split('\n').map(clean).filter(Boolean).slice(0, 20).map((t) => ({ text: t, on: true })) : null;
+      setCard({ kind, src, status: 'done', result, items, command });
+    } catch (e) {
+      setCard({ kind, src, status: 'error', error: e.response?.data?.error || e.message || 'The AI did not answer. Try again.' });
     } finally {
       aiBusyRef.current = false;
-      handleChange(); // save the real result (or the restored original), never the placeholder
     }
   };
+  const afterId = () => card?.src?.blockId || editor.document[editor.document.length - 1]?.id;
+  const insertBelow = (blocks) => {
+    editor.insertBlocks(blocks, afterId(), 'after');
+    setCard(null);
+  };
+  const paragraphs = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => ({ type: 'paragraph', content: [{ type: 'text', text: l, styles: {} }] }));
+  const replaceWith = (text) => {
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const id = card?.src?.blockId;
+    if (!id || !lines.length) return;
+    editor.updateBlock(id, { type: 'paragraph', content: [{ type: 'text', text: lines[0], styles: {} }] });
+    if (lines.length > 1) editor.insertBlocks(paragraphs(lines.slice(1).join('\n')), id, 'after');
+    setCard(null);
+  };
+  const addAllTasks = async () => {
+    const chosen = card.items.filter((i) => i.on);
+    if (!chosen.length) return;
+    setCard({ ...card, adding: true });
+    try {
+      for (const it of chosen) await todosAPI.create({ text: it.text.slice(0, 200), priority: 'medium', ...(noteId ? { noteId } : {}) });
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setCard({ ...card, adding: false, added: chosen.length });
+    } catch {
+      setCard({ ...card, adding: false, error: 'Could not add the tasks.' });
+    }
+  };
+  const flip = (i) => setCard({ ...card, items: card.items.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) });
 
   const getCustomSlashMenuItems = (query) => {
     const defaultItems = getDefaultReactSlashMenuItems(editor);
-
+    const icon = (I, color) => <I size={16} style={{ color }} />;
     const aiItems = [
-      {
-        title: 'AI Summarize Block',
-        onItemClick: () => handleAiCommand(editor, 'summarize'),
-        aliases: ['ai-summarize', 'summarize', 'sum', 'ai'],
-        group: 'AI Assistant',
-        icon: <Sparkles size={16} style={{ color: 'var(--accent, #6366f1)' }} />,
-        subtext: 'Summarize block text using AI.',
-      },
-      {
-        title: 'AI Action Items',
-        onItemClick: () => handleAiCommand(editor, 'todo'),
-        aliases: ['ai-todo', 'todo', 'actions', 'tasks', 'ai'],
-        group: 'AI Assistant',
-        icon: <CheckSquare size={16} style={{ color: 'var(--accent, #6366f1)' }} />,
-        subtext: 'Extract task checklist using AI.',
-      },
-      {
-        title: 'AI Improve Writing',
-        onItemClick: () => handleAiCommand(editor, 'improve'),
-        aliases: ['ai-improve', 'improve', 'rewrite', 'rephrase', 'ai'],
-        group: 'AI Assistant',
-        icon: <Wand2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />,
-        subtext: 'Rewrite and improve block using AI.',
-      },
-      {
-        title: 'AI Continue Writing',
-        onItemClick: () => handleAiCommand(editor, 'continue'),
-        aliases: ['ai-continue', 'continue', 'write', 'ai'],
-        group: 'AI Assistant',
-        icon: <Sparkles size={16} style={{ color: '#ec4899' }} />,
-        subtext: 'Let AI write the next sentences for you.',
-      }
+      { title: 'AI Action items', onItemClick: () => runAi('todo'), aliases: ['ai-todo', 'todo', 'actions', 'tasks', 'ai'], group: 'AI', icon: icon(CheckSquare, '#6366f1'), subtext: 'Pull tasks out of this note.' },
+      { title: 'AI Improve writing', onItemClick: () => runAi('improve'), aliases: ['ai-improve', 'improve', 'rewrite', 'rephrase', 'ai'], group: 'AI', icon: icon(Wand2, '#6366f1'), subtext: 'Clearer, shorter, fix grammar.' },
+      { title: 'AI Summarize', onItemClick: () => runAi('summarize'), aliases: ['ai-summarize', 'summarize', 'sum', 'ai'], group: 'AI', icon: icon(Sparkles, '#6366f1'), subtext: 'A short summary of this block.' },
+      { title: 'AI Continue writing', onItemClick: () => runAi('continue'), aliases: ['ai-continue', 'continue', 'write', 'ai'], group: 'AI', icon: icon(Sparkles, '#ec4899'), subtext: 'Write the next sentences.' },
     ];
-
-    return filterSuggestionItems([...aiItems, ...defaultItems], query);
+    return filterSuggestionItems([...defaultItems, ...aiItems], query);
   };
 
-  // PEB-273: @ opens a list of notes; choosing one inserts a normal Markdown link to /notes/<id>
   const getNoteLinkItems = async (query) => {
     if (Date.now() - linkCache.current.at > 5000) {
       try {
@@ -231,12 +187,14 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
       }));
   };
 
-  // Clicking a link to another note opens that note instead of leaving the app
   const onLinkClick = (e) => {
     const a = e.target?.closest?.('a');
     const m = a && /^\/notes\/([\w-]+)$/.exec(a.getAttribute('href') || '');
     if (m) { e.preventDefault(); e.stopPropagation(); navigate(`/notes/${m[1]}`); }
   };
+
+  const title = { todo: 'Action items', improve: 'Improve writing', summarize: 'Summary', continue: 'Continue writing' }[card?.kind];
+  const dark = theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
     <div className="block-editor-container" onClickCapture={onLinkClick} style={{ padding: '0 24px', flex: 1, height: '100%', overflowY: 'auto', cursor: editable ? 'text' : 'default' }}>
@@ -244,17 +202,64 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         editor={editor}
         editable={editable}
         onChange={handleChange}
-        theme={theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'}
+        theme={dark ? 'dark' : 'light'}
         slashMenu={false}
         formattingToolbar={formattingToolbar}
       >
-        <SuggestionMenuController
-          triggerCharacter={'/'}
-          getItems={async (query) => getCustomSlashMenuItems(query)}
-        />
+        <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />
       </BlockNoteView>
       <Backlinks noteId={noteId} />
+
+      {card && (
+        <div className={`pb-aicard ${card.kind}`} role="dialog" aria-label={title}>
+          <div className="pb-aicard-head">
+            <b>{card.kind === 'todo' && card.status === 'done' ? `${title} from this ${card.src.scope === 'note' ? 'note' : 'text'}` : title}</b>
+            {card.kind === 'todo' && card.items && <span className="n">{card.items.length} found</span>}
+            <span className="grow" />
+            <button type="button" aria-label="Close" onClick={() => setCard(null)}><X size={14} /></button>
+          </div>
+
+          {card.status === 'loading' && <p className="pb-aicard-msg"><Loader2 size={15} className="pb-spin" /> Working on it…</p>}
+          {card.status === 'error' && <p className="pb-aicard-msg err" role="alert">{card.error}</p>}
+
+          {card.status === 'done' && card.kind === 'todo' && (
+            <>
+              <div className="pb-aicard-items">
+                {card.items.map((it, i) => (
+                  <label key={i} className={it.on ? 'on' : ''}><input type="checkbox" checked={it.on} onChange={() => flip(i)} /><span>{it.text}</span></label>
+                ))}
+                {card.items.length === 0 && <p className="pb-aicard-msg">No tasks found in this text.</p>}
+              </div>
+              {card.added ? <p className="pb-aicard-msg ok" role="status">Added {card.added} task{card.added === 1 ? '' : 's'}{noteId ? ' and linked them to this note' : ''}.</p> : (
+                <div className="pb-aicard-actions">
+                  <button type="button" className="primary" disabled={card.adding || !card.items.some((i) => i.on)} onClick={addAllTasks}>{card.adding ? 'Adding…' : card.items.every((i) => i.on) ? 'Add all as tasks' : 'Add selected as tasks'}</button>
+                  <button type="button" onClick={() => insertBelow(card.items.filter((i) => i.on).map((i) => ({ type: 'checkListItem', content: [{ type: 'text', text: i.text, styles: {} }] })))}>Insert as checklist</button>
+                  <button type="button" onClick={() => setCard(null)}>Dismiss</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {card.status === 'done' && card.kind !== 'todo' && (
+            <>
+              {card.kind === 'improve' ? (
+                <div className="pb-aicard-cmp">
+                  <div><span className="lab">Before</span><p>{card.src.text}</p></div>
+                  <div className="after"><span className="lab">After</span><p>{card.result}</p></div>
+                </div>
+              ) : <div className="pb-aicard-cmp one"><div className="after"><p>{card.result}</p></div></div>}
+              <div className="pb-aicard-actions">
+                {card.kind === 'improve' && <button type="button" className="primary" onClick={() => replaceWith(card.result)}>Replace</button>}
+                <button type="button" className={card.kind === 'improve' ? '' : 'primary'} onClick={() => insertBelow(paragraphs(card.result))}>Insert below</button>
+                {card.kind === 'improve' && <><button type="button" onClick={() => runAi('improve', card.src, 'shorter')}>Shorter</button><button type="button" onClick={() => runAi('improve', card.src, 'simpler')}>Simpler</button></>}
+                <button type="button" onClick={() => runAi(card.kind, card.src, card.command)}>Try again</button>
+                <button type="button" onClick={() => setCard(null)}>Discard</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
