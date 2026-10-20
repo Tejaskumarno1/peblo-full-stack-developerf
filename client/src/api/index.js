@@ -66,6 +66,12 @@ export const hubAPI = {
 };
 
 // Orbit style: quizzes and how well each topic is known
+export const tokensAPI = {
+  list: () => api.get('/tokens'),
+  create: (name) => api.post('/tokens', { name }),
+  remove: (id) => api.delete('/tokens/' + id)
+};
+
 export const tagsAPI = {
   list: () => api.get('/tags'),
   rename: (from, to) => api.post('/tags/rename', { from, to }),

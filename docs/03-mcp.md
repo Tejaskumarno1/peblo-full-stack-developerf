@@ -916,3 +916,25 @@ Per the spec's [local server compromise guidance](https://modelcontextprotocol.i
 - Ollama: [tool calling](https://docs.ollama.com/capabilities/tool-calling), [structured outputs](https://docs.ollama.com/capabilities/structured-outputs), [chat API](https://docs.ollama.com/api/chat)
 - [Node.js April 2024 security release (.bat/.cmd spawn)](https://nodejs.org/en/blog/vulnerability/april-2024-security-releases-2), [cross-spawn](https://github.com/moxystudio/node-cross-spawn), [RFC 8252 (OAuth for native apps)](https://www.rfc-editor.org/rfc/rfc8252), [The lethal trifecta (S. Willison)](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)
 - Electron: [fuses](https://www.electronjs.org/docs/latest/tutorial/fuses), [safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+
+
+## Implemented: v1 (2026-10-21, PEB-95)
+
+What shipped is the simple version of the plan above, built on personal access tokens instead of a local socket, so it also works against a hosted Peblo.
+
+- **Tokens:** Settings > Data > Access tokens makes a token (`pbl_...`), shown once. Only its SHA-256 is stored (`api_tokens`, migration 002). Up to 10 per account; removing one cuts access at once.
+- **Limits:** a token works on notes, tasks, tags and the rest of the API, but not on `/api/auth`, `/api/tokens` or `/api/profile`, so it can never change a password, settings or AI keys, or make more tokens.
+- **Server:** `server/src/mcp/index.ts`, run with `npm run mcp` after `npm run build:server`. Environment: `PEBLO_URL` (for example `http://localhost:4000`; the desktop app picks a random port, so use `npm run serve` or a hosted server) and `PEBLO_TOKEN`.
+- **Tools (8):** `search_notes`, `get_note`, `create_note`, `append_to_note`, `list_tasks`, `create_task`, `complete_task`, `list_tags`. Nothing deletes.
+- **Claude Desktop / Cursor config:**
+
+```json
+{ "mcpServers": { "peblo": {
+  "command": "node",
+  "args": ["C:/path/to/peblo/dist/server/mcp/index.js"],
+  "env": { "PEBLO_URL": "http://localhost:4000", "PEBLO_TOKEN": "pbl_..." }
+} } }
+```
+
+- **Tests:** `e2e/mcp.mjs` (26 checks, uses the SDK's own MCP client over stdio).
+- **Not yet:** MCPB one-click bundle, resources/prompts, per-token read-only scope, approval prompts for writes.

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import prisma from '../db.js';
 
 // Each request proves who it's acting as with a JWT (issued at /api/auth/login or /signup).
@@ -18,9 +19,15 @@ if (!configured) {
   console.warn('[auth] JWT_SECRET is not set — using an insecure development default.');
 }
 
+/** Personal access tokens start with this, so they are never mistaken for a sign-in token. */
+export const TOKEN_PREFIX = 'pbl_';
+export const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+
 export interface AuthedUser {
   id: string;
   email: string;
+  /** True when the request used a personal access token instead of a sign-in. */
+  viaToken?: boolean;
 }
 
 export function signToken(user: { id: string; email: string; tokenVersion?: number }): string {
@@ -30,6 +37,16 @@ export function signToken(user: { id: string; email: string; tokenVersion?: numb
 /** Who a token belongs to, or null if it is missing, forged, expired or signed out since. */
 export async function verifyToken(token: string | null | undefined): Promise<AuthedUser | null> {
   if (!token) return null;
+  if (token.startsWith(TOKEN_PREFIX)) {
+    try {
+      const row = await prisma.apiToken.findUnique({ where: { tokenHash: hashToken(token) }, select: { id: true, userId: true, user: { select: { email: true } } } });
+      if (!row) return null;
+      prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
+      return { id: row.userId, email: row.user.email, viaToken: true };
+    } catch {
+      return null;
+    }
+  }
   try {
     const payload = jwt.verify(token, JWT_SECRET) as { sub: string; email: string; v?: number };
     const row = await prisma.user.findUnique({
@@ -51,6 +68,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
     const user = await verifyToken(token);
     if (!user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    // A token is for notes and tasks. Account settings, passwords, keys and the tokens themselves need a real sign-in.
+    if (user.viaToken && /^\/api\/(auth|tokens|profile)(\/|\?|$)/.test(req.originalUrl)) {
+      return res.status(403).json({ error: 'An access token cannot change account settings. Sign in to do that.' });
+    }
     req.user = user;
     next();
   } catch (error) {

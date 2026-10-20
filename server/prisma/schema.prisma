@@ -38,6 +38,7 @@ model User {
   apiKeys       UserApiKeys?
   quizRuns      QuizRun[]
   mastery       TopicMastery[]
+  apiTokens     ApiToken[]
 
   @@map("users")
 }
@@ -233,4 +234,21 @@ model TopicMastery {
 
   @@id([userId, topic])
   @@map("topic_mastery")
+}
+
+// A personal access token: lets another program (the Peblo MCP server, a script) act for one account.
+// Only a SHA-256 of the token is stored; the token itself is shown once, when it is made.
+model ApiToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  name       String
+  tokenHash  String    @unique @map("token_hash")
+  prefix     String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_tokens")
 }
