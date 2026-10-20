@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { dayChip, timeOf, startOfDay, addDays } from './softUtils';
+import TaskSheet from './TaskSheet';
 import './soft.css';
 
 const words = (s) => (s || '').toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || [];
@@ -21,6 +22,7 @@ export default function SoftCapture({ onClose, windowMode = false }) {
   const [linkNote, setLinkNote] = useState(null);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState(null); // the task just added, being set up
   const inputRef = useRef(null);
 
   const from = startOfDay();
@@ -62,6 +64,7 @@ export default function SoftCapture({ onClose, windowMode = false }) {
   const close = () => {
     setValue('');
     setLinkNote(null);
+    setCreated(null);
     if (windowMode) window.close();
     else onClose?.();
   };
@@ -74,13 +77,22 @@ export default function SoftCapture({ onClose, windowMode = false }) {
     try {
       if (mode === 'task') {
         const t = parseTask(raw);
-        await todosAPI.create({
+        const res = await todosAPI.create({
           text: t.text || raw,
           priority: t.priority,
           tags: t.tags,
           deadline: t.deadline ? t.deadline.toISOString() : null,
           noteId: linkNote?.id || undefined,
         });
+        const made = res.data.todo || res.data.todos?.[0];
+        if (made?.id) {
+          queryClient.invalidateQueries({ queryKey: ['todos'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+          setValue('');
+          setLinkNote(null);
+          setCreated({ ...made, note: linkNote ? { id: linkNote.id, title: linkNote.title } : made.note });
+          return;
+        }
         setStatus(t.deadline ? `Added · due ${dayChip(t.deadline)}, ${timeOf({ deadline: t.deadline })}` : 'Added to your tasks');
       } else {
         const [first, ...rest] = raw.split('\n');
@@ -104,6 +116,14 @@ export default function SoftCapture({ onClose, windowMode = false }) {
     if (e.key === 'Escape') { e.preventDefault(); close(); }
     else if (e.key === 'Tab') { e.preventDefault(); setMode((m) => (m === 'task' ? 'note' : 'task')); }
   };
+
+  if (created) {
+    return (
+      <div className={`s-capture${windowMode ? ' window' : ''}`}>
+        <TaskSheet task={created} isNew inline onClose={close} />
+      </div>
+    );
+  }
 
   return (
     <form className={`s-capture${windowMode ? ' window' : ''}`} onSubmit={save} onKeyDown={onKeyDown}>

@@ -849,3 +849,51 @@
 .soft .s-linked-add button:disabled { opacity: .35; cursor: default; }
 .soft .s-link-existing { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--s-fg2); }
 .soft .s-link-existing select { flex: 1; min-width: 0; border: none; border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,.7); font: inherit; font-size: 13px; }
+
+/* ===== task sheet ===== */
+.soft .s-sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(40,30,20,.28); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.soft .s-sheet { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; background: var(--s-surface); border-radius: 30px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 60px rgba(40,30,20,.25); }
+.soft .s-sheet.inline { width: 100%; max-height: none; box-shadow: none; border-radius: 0; padding: 0; background: transparent; gap: 10px; }
+.soft .s-sheet-top { display: flex; align-items: center; gap: 8px; }
+.soft .s-sheet-kicker { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; color: var(--s-fg2); }
+.soft .s-sheet-title { border: none; background: var(--s-item); border-radius: 18px; padding: 12px 16px; font: inherit; font-family: var(--s-display); font-size: 20px; font-weight: 800; color: var(--s-fg); width: 100%; box-sizing: border-box; }
+.soft .s-sheet-row { display: flex; gap: 14px; align-items: flex-start; }
+.soft .s-sheet-label { width: 62px; flex-shrink: 0; padding-top: 7px; font-size: 13px; font-weight: 800; color: var(--s-fg2); }
+.soft .s-sheet-grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-sheet-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.soft .s-sheet-quick button, .soft .s-sheet-suggest button { border: none; border-radius: 999px; padding: 6px 13px; background: var(--s-item); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--s-fg); }
+.soft .s-sheet-quick button.on { background: var(--s-fg); color: #fff; }
+.soft .s-sheet-when { display: flex; gap: 8px; }
+.soft .s-sheet-when input { border: none; background: var(--s-item); border-radius: 14px; padding: 8px 12px; font: inherit; font-size: 14px; color: var(--s-fg); }
+.soft .s-sheet-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.soft .s-sheet-tags .s-tag { display: inline-flex; align-items: center; gap: 4px; }
+.soft .s-sheet-tags .s-tag button { border: none; background: transparent; cursor: pointer; padding: 0; display: grid; place-items: center; color: inherit; }
+.soft .s-sheet-taginput { border: none; background: var(--s-item); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; width: 90px; color: var(--s-fg); }
+.soft .s-sheet-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.soft .s-sheet-suggest button { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-item); font-weight: 600; color: var(--s-fg2); }
+.soft .s-sheet-note { display: flex; align-items: center; gap: 8px; background: var(--s-item); border-radius: 14px; padding: 7px 8px 7px 12px; font-size: 14px; font-weight: 700; }
+.soft .s-sheet-note a { color: var(--s-fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-sheet-note button { border: none; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--s-fg2); border-radius: 999px; padding: 3px 8px; display: grid; place-items: center; }
+.soft .s-sheet-note button:hover { background: rgba(0,0,0,.07); }
+.soft .s-sheet-linkbtn { align-self: flex-start; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 999px; background: transparent; color: var(--s-fg2); }
+.soft .s-sheet-pick { display: flex; flex-direction: column; gap: 4px; background: var(--s-item); border-radius: 16px; padding: 8px; }
+.soft .s-sheet-search { display: flex; align-items: center; gap: 8px; padding: 4px 8px; color: var(--s-fg2); }
+.soft .s-sheet-search input { flex: 1; border: none; background: transparent; font: inherit; font-size: 14px; outline: none; color: var(--s-fg); }
+.soft .s-sheet-opt { border: none; background: transparent; text-align: left; padding: 8px 10px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer; color: var(--s-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-sheet-opt:hover { background: rgba(255,255,255,.75); }
+.soft .s-sheet-cancel { border: none; background: transparent; align-self: flex-end; font: inherit; font-size: 12.5px; color: var(--s-fg2); cursor: pointer; padding: 2px 8px; }
+.soft .s-sheet-foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.soft .s-sheet-del, .soft .s-sheet-skip { border: none; background: transparent; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--s-fg2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 999px; }
+.soft .s-sheet-del:hover { color: #b3261e; }
+.soft .s-sheet-error { margin: 0; color: #b3261e; font-size: 13px; }
+.soft .s-card-open { border: none; background: transparent; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.soft .s-card-open:hover { text-decoration: underline; }
+.soft .s-linked-open { border: none; background: transparent; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.soft .s-linked-open:hover { text-decoration: underline; }
+.soft .s-link-existing { display: block; margin-top: 8px; }
+.soft .s-link-toggle { border: none; background: transparent; padding: 4px 2px; font: inherit; font-size: 13px; font-weight: 700; color: var(--s-fg2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.soft .s-link-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; background: rgba(255,255,255,.7); border-radius: 14px; padding: 6px; }
+.soft .s-link-list input { border: none; background: transparent; font: inherit; font-size: 13.5px; padding: 6px 8px; outline: none; }
+.soft .s-link-list button { border: none; background: transparent; text-align: left; font: inherit; font-size: 13.5px; padding: 7px 8px; border-radius: 9px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--s-fg); }
+.soft .s-link-list button:hover { background: rgba(255,255,255,.9); }
+.soft .s-side-task .t.s-linked-open { flex: 1; min-width: 0; }

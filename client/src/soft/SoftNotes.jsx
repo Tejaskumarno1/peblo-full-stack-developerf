@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2 } from 'lucide-react';
 import { marked } from 'marked';
+import TaskSheet from './TaskSheet';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
 import BlockEditor from '../components/BlockEditor';
@@ -67,6 +68,9 @@ export default function SoftNotes() {
     enabled: !!noteId,
   });
   const [taskDraft, setTaskDraft] = useState('');
+  const [sheetTask, setSheetTask] = useState(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkQ, setLinkQ] = useState('');
 
   // ---------- open a note ----------
   const open = useCallback((note) => {
@@ -434,7 +438,7 @@ export default function SoftNotes() {
             <div key={t.id} className="s-linked-row">
               <label className={`s-side-task${t.completed ? ' done' : ''}`}>
                 <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggleTask(t)} />
-                <span className="t">{t.text}</span>
+                <button type="button" className="t s-linked-open" onClick={(e) => { e.preventDefault(); setSheetTask({ ...t, note: { id: doc.id, title: doc.title } }); }}>{t.text}</button>
                 {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
               </label>
               <button type="button" className="s-unlink" aria-label={`Unlink ${t.text}`} title="Unlink" onClick={() => unlinkTask(t)}><X size={12} /></button>
@@ -447,13 +451,19 @@ export default function SoftNotes() {
             </form>
           )}
           {noteId && openTasks.length > 0 && (
-            <label className="s-link-existing"><Link2 size={13} />
-              <select aria-label="Link an existing task" value="" onChange={(e) => linkTask(e.target.value)}>
-                <option value="">Link an existing task…</option>
-                {openTasks.slice(0, 40).map((t) => <option key={t.id} value={t.id}>{t.text.slice(0, 60)}</option>)}
-              </select>
-            </label>
+            <div className="s-link-existing">
+              <button type="button" className="s-link-toggle" aria-expanded={linkOpen} onClick={() => setLinkOpen((v) => !v)}><Link2 size={13} /> Link an existing task</button>
+              {linkOpen && (
+                <div className="s-link-list">
+                  <input aria-label="Search tasks" placeholder="Search tasks" value={linkQ} onChange={(e) => setLinkQ(e.target.value)} autoFocus />
+                  {openTasks.filter((t) => t.text.toLowerCase().includes(linkQ.trim().toLowerCase())).slice(0, 5).map((t) => (
+                    <button key={t.id} type="button" onClick={() => { linkTask(t.id); setLinkOpen(false); setLinkQ(''); }}>{t.text}</button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
+          {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
 
         <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">

@@ -7,6 +7,7 @@ import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
 import { useUndoToast, useDeferredDelete } from '../utils/useUndoToast';
 import UndoToast from '../components/UndoToast';
+import TaskSheet from './TaskSheet';
 import { timeOf, dayChip, daysFromToday, weekdayLong, startOfDay, addDays, tagsOf } from './softUtils';
 
 /** Soft Studio · Tasks (mockup: SoftTasks). A board of Today, Tomorrow, This week and Done. */
@@ -17,6 +18,7 @@ export default function SoftTasks() {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
+  const [sheet, setSheet] = useState(null); // { task, isNew }
 
   const { data: todos = [] } = useQuery({ queryKey: ['todos', 'all'], queryFn: () => todosAPI.getAll().then((r) => r.data.todos || []) });
 
@@ -76,10 +78,12 @@ export default function SoftTasks() {
     if (!parsed || saving) return;
     setSaving(true);
     try {
-      await todosAPI.create({ text: parsed.text || draft.trim(), priority: parsed.priority, tags: parsed.tags, deadline: parsed.deadline ? parsed.deadline.toISOString() : null });
+      const { data } = await todosAPI.create({ text: parsed.text || draft.trim(), priority: parsed.priority, tags: parsed.tags, deadline: parsed.deadline ? parsed.deadline.toISOString() : null });
       setDraft('');
       refresh();
-      inputRef.current?.focus();
+      const made = data.todo || data.todos?.[0] || null;
+      if (made?.id) setSheet({ task: made, isNew: true });
+      else inputRef.current?.focus();
     } finally {
       setSaving(false);
     }
@@ -101,7 +105,7 @@ export default function SoftTasks() {
     <div key={t.id} className={`s-card${t.completed ? ' done' : ''}`}>
       <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggle(t)} aria-label={`Mark "${t.text}" ${t.completed ? 'not done' : 'done'}`} />
       <div className="s-card-body">
-        <span className="t">{t.text}</span>
+        <button type="button" className="t s-card-open" onClick={() => setSheet({ task: t, isNew: false })}>{t.text}</button>
         <span className="s-card-chips">
           {chipsFor(t, column).map((c) => <span key={c.label} className={`s-mini ${c.kind || ''}`}>{c.label}</span>)}
           {t.note && <Link to={`/notes/${t.note.id}`} className="s-mini note">{t.note.title || 'Note'}</Link>}
@@ -174,6 +178,7 @@ export default function SoftTasks() {
           ))}
         </div>
       )}
+      {sheet && <TaskSheet task={sheet.task} isNew={sheet.isNew} onClose={() => { setSheet(null); inputRef.current?.focus(); }} />}
       <UndoToast toast={toast} dismiss={dismiss} />
     </div>
   );
