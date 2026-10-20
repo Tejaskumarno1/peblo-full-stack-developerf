@@ -10,12 +10,36 @@ import Backlinks from './Backlinks';
 
 import { useAuth } from '../context/AuthContext';
 
+
+// Turn a picture picked from the computer into a compact data URL (max 1600px, JPEG).
+function uploadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.onload = () => {
+      if (!/^image\/(png|jpe?g|webp)/.test(file.type)) return resolve(reader.result);
+      const img = new Image();
+      img.onerror = () => resolve(reader.result);
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k);
+        c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId }) {
   const navigate = useNavigate();
   // Titles for the @ menu, refreshed every few seconds so a note made a moment ago can be linked
   const linkCache = useRef({ at: 0, notes: [] });
   // Initialize the editor
-  const editor = useCreateBlockNote();
+  const editor = useCreateBlockNote({ uploadFile: uploadImageFile });
   const { theme } = useAuth();
   // True while the saved content is being loaded, so opening a note doesn't count as an edit
   const loadingRef = useRef(false);

@@ -826,3 +826,13 @@
 .soft .s-key-ok { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--s-local); white-space: nowrap; }
 .soft .s-promises { display: flex; flex-direction: column; gap: 8px; }
 .soft .s-promises span { padding: 10px 14px; border-radius: 16px; background: var(--s-item); font-size: 14px; font-weight: 600; }
+
+/* ===== cosmetic fixes (Oct 21) ===== */
+.soft .s-ev .t { flex-shrink: 0; }
+.soft .s-ev.short { flex-direction: row; align-items: center; gap: 6px; padding-top: 0; padding-bottom: 0; }
+.soft .s-ev.short .t { flex-shrink: 1; min-width: 0; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.soft .s-ev.short .m { flex-shrink: 0; white-space: nowrap; }
+.soft .s-conn-cards { flex: 0 0 auto; }
+.soft .s-conn-card { min-height: 240px; overflow: visible; }
+.soft textarea.s-note-title { height: auto; min-height: 44px; line-height: 1.2; padding: 4px 0; resize: none; overflow: hidden; white-space: normal; font-family: inherit; }
+.soft .s-note-body :focus-visible, .soft .s-note-body .bn-editor:focus, .soft .s-note-body .bn-container:focus-within { outline: none !important; box-shadow: none !important; }

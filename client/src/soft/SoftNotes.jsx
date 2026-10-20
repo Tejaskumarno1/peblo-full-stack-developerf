@@ -299,12 +299,15 @@ export default function SoftNotes() {
             </div>
 
             <label htmlFor="s-note-title" className="s-sr">Title</label>
-            <input
+            <textarea
               id="s-note-title"
               className="s-note-title"
+              rows={1}
               value={doc.title}
               placeholder="Untitled note"
-              onChange={(e) => patch({ title: e.target.value })}
+              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+              onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
               disabled={doc.isDeleted}
             />
             <div className="s-note-tags">
