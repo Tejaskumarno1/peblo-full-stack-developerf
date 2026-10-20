@@ -122,3 +122,40 @@
 .soft .s-focus-outline button:hover { background: var(--s-item); }
 .soft .s-focus-outline .none { font-size: 13px; color: var(--s-fg2); padding: 3px 12px; }
 .soft .s-focus-width { padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+
+/* ===== quick capture ===== */
+.soft .s-capture { gap: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.soft .s-capture.window { max-height: none; overflow-y: auto; }
+.soft .s-capture kbd { font: inherit; font-size: 11.5px; font-weight: 700; background: #f4ede2; border-radius: 6px; padding: 1px 6px; }
+.soft .s-cap-keep { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; color: var(--s-fg2); cursor: pointer; padding: 6px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px #eadfce; }
+.soft .s-cap-keep input { accent-color: var(--s-fg); margin: 0; }
+.soft .s-cap-lab { font-size: 12.5px; font-weight: 700; color: var(--s-fg2); }
+.soft .s-cap-quick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.soft .s-cap-quick > button { border: none; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 700; background: #f4ede2; color: var(--s-fg); cursor: pointer; }
+.soft .s-cap-quick > button.on { background: var(--s-fg); color: #fff; }
+.soft .s-cap-quick > button.on.tag { background: var(--s-butter); color: var(--s-fg); }
+.soft .s-cap-quick > button.on.note { background: var(--s-mint); color: var(--s-fg); }
+.soft .s-cap-quick > button.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px #eadfce; color: var(--s-fg2); }
+.soft .s-cap-tag { border: none; background: #f4ede2; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; width: 100px; outline: none; color: var(--s-fg); }
+.soft .s-cap-pick { background: #f9f3e9; border-radius: 18px; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.soft .s-cap-search { display: flex; align-items: center; gap: 8px; padding: 6px 10px; color: var(--s-fg2); }
+.soft .s-cap-search input { flex: 1; border: none; background: transparent; outline: none; font: inherit; font-size: 14px; color: var(--s-fg); }
+.soft .s-cap-pick > button { border: none; background: transparent; border-radius: 12px; padding: 7px 10px; text-align: left; cursor: pointer; font: inherit; color: var(--s-fg); display: flex; flex-direction: column; }
+.soft .s-cap-pick > button:hover { background: #fff; }
+.soft .s-cap-pick > button b { font-size: 14px; font-weight: 700; }
+.soft .s-cap-pick > button small { font-size: 12px; color: var(--s-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-cap-tools { display: flex; flex-wrap: wrap; gap: 6px; background: #f9f3e9; border-radius: 18px; padding: 6px; }
+.soft .s-cap-tools button { border: none; border-radius: 999px; background: #fff; padding: 7px 13px; font: inherit; font-size: 13px; font-weight: 700; color: var(--s-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.soft .s-cap-body { width: 100%; box-sizing: border-box; border: 1.5px solid #eadfce; border-radius: 20px; padding: 14px 16px; font: inherit; font-size: 16px; line-height: 1.55; background: #fff; color: var(--s-fg); resize: vertical; min-height: 110px; outline: none; }
+.soft .s-cap-body:focus { border-color: var(--s-fg); }
+.soft .s-cap-attach { display: flex; }
+.soft .s-cap-drop { flex: 1; border: 2px dashed #e3d6c3; background: transparent; border-radius: 20px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; color: var(--s-fg2); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left; }
+.soft .s-cap-drop .plus { width: 36px; height: 36px; border-radius: 12px; background: var(--s-lilac); color: var(--s-fg); display: grid; place-items: center; font-size: 20px; font-weight: 800; flex-shrink: 0; }
+.soft .s-cap-thumbs { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.soft .s-cap-thumb { position: relative; width: 96px; height: 72px; border-radius: 16px; overflow: hidden; background: var(--s-butter); display: grid; place-items: center; }
+.soft .s-cap-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.soft .s-cap-thumb .f { display: flex; flex-direction: column; align-items: center; padding: 4px 8px; text-align: center; max-width: 100%; }
+.soft .s-cap-thumb .f b { font-size: 11.5px; font-weight: 800; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .s-cap-thumb .f small { font-size: 10.5px; }
+.soft .s-cap-thumb > button { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(42,31,23,.75); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.soft .s-cap-more { width: 48px; border-radius: 16px; border: 2px dashed #e3d6c3; background: transparent; font-size: 22px; color: var(--s-fg2); cursor: pointer; }

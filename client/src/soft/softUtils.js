@@ -85,6 +85,10 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 export const numberWord = (n) => (n < WORDS.length ? WORDS[n] : String(n));
 
 export function snippetOf(content, max = 90) {
+  const text = snippetText(content, max);
+  return text || (/!\[[^\]]*\]\(/.test(content || '') ? 'Picture' : '');
+}
+function snippetText(content, max) {
   return (content || '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, ' ')

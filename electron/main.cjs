@@ -73,7 +73,7 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
 // Keep these sizes in sync with client/src/styles/canvas.css.
 const CANVAS = { width: 1440, height: 900 };
 const CAPTURE_CANVAS = {
-  soft: { width: 760, height: 400 },
+  soft: { width: 800, height: 680 },
   river: { width: 640, height: 200 },
   orbit: { width: 640, height: 220 },
   other: { width: 620, height: 256 },
@@ -302,8 +302,14 @@ function createCaptureWindow() {
     event.preventDefault();
     captureWindow.hide();
   });
-  captureWindow.on('blur', () => {
-    if (captureWindow && !captureWindow.webContents.isDevToolsOpened()) captureWindow.hide();
+  // Hide when you click away, unless something is typed or attached: then taking a screenshot (or looking
+  // something up) does not make the box disappear. Esc, the close button or saving still close it.
+  captureWindow.on('blur', async () => {
+    if (!captureWindow || captureWindow.webContents.isDevToolsOpened()) return;
+    try {
+      if (await captureWindow.webContents.executeJavaScript('window.__pebloCaptureDirty === true', true)) return;
+    } catch { /* page not ready: just hide */ }
+    if (captureWindow && !captureWindow.isDestroyed()) captureWindow.hide();
   });
   captureWindow.on('closed', () => { captureWindow = null; });
 }
