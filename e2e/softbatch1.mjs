@@ -56,7 +56,8 @@ try {
   const loose = (await api('POST', '/api/todos', { text: 'Loose task', priority: 'medium' })).todo;
   await page.reload();
   await page.locator('#s-note-title').waitFor();
-  await page.getByLabel('Link an existing task').selectOption({ label: 'Loose task' });
+  await page.getByRole('button', { name: 'Link an existing task' }).click();
+  await page.locator('.s-link-list button', { hasText: 'Loose task' }).click();
   await page.waitForTimeout(800);
   check('an existing task can be linked', (await page.locator('.s-side-task', { hasText: 'Loose task' }).count()) === 1);
   await page.getByRole('button', { name: /Unlink Loose task/ }).click();
