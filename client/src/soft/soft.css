@@ -836,3 +836,16 @@
 .soft .s-conn-card { min-height: 240px; overflow: visible; }
 .soft textarea.s-note-title { height: auto; min-height: 44px; line-height: 1.2; padding: 4px 0; resize: none; overflow: hidden; white-space: normal; font-family: inherit; }
 .soft .s-note-body :focus-visible, .soft .s-note-body .bn-editor:focus, .soft .s-note-body .bn-container:focus-within { outline: none !important; box-shadow: none !important; }
+
+/* ===== batch 1: tags, pins, linked tasks ===== */
+.soft .s-filter { flex-wrap: wrap; row-gap: 6px; max-height: 96px; overflow-y: auto; }
+.soft .s-linked-row { display: flex; align-items: center; gap: 4px; }
+.soft .s-linked-row .s-side-task { flex: 1; min-width: 0; }
+.soft .s-unlink { border: none; background: transparent; color: var(--s-fg2); cursor: pointer; border-radius: 999px; width: 22px; height: 22px; display: grid; place-items: center; opacity: .6; }
+.soft .s-unlink:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.soft .s-linked-add { display: flex; gap: 6px; margin-top: 8px; }
+.soft .s-linked-add input { flex: 1; min-width: 0; border: none; border-radius: 999px; padding: 8px 12px; background: rgba(255,255,255,.7); font: inherit; font-size: 13.5px; }
+.soft .s-linked-add button { width: 32px; border: none; border-radius: 999px; background: var(--s-fg); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.soft .s-linked-add button:disabled { opacity: .35; cursor: default; }
+.soft .s-link-existing { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--s-fg2); }
+.soft .s-link-existing select { flex: 1; min-width: 0; border: none; border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,.7); font: inherit; font-size: 13px; }

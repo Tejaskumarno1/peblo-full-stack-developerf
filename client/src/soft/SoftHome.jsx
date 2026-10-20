@@ -29,6 +29,7 @@ export default function SoftHome() {
     queryKey: ['notes', 'sidebar'],
     queryFn: () => notesAPI.getAll({ sort: 'updated' }).then((r) => r.data.notes || []),
   });
+  const pinnedNotes = notes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).slice(0, 3);
   const { data: insights } = useQuery({ queryKey: ['dashboard', 'insights'], queryFn: () => dashboardAPI.insights().then((r) => r.data) });
   const { data: models } = useQuery({ queryKey: ['hub-models'], queryFn: () => hubAPI.models().then((r) => r.data), staleTime: 30000 });
 
@@ -168,8 +169,8 @@ export default function SoftHome() {
             <button type="button" className="s-round-sm" aria-label="New note" onClick={() => navigate('/notes?new=1')}><Plus size={18} strokeWidth={2.4} /></button>
           </div>
           <div className="s-stack">
-            {notes.length === 0 && <p className="s-empty">Your latest notes will pile up here.</p>}
-            {notes.slice(0, 3).map((note, i) => (
+            {pinnedNotes.length === 0 && <p className="s-empty">Pin up to 3 notes and they will show here.</p>}
+            {pinnedNotes.map((note, i) => (
               <Link key={note.id} to={`/notes/${note.id}`} className={`s-paper ${TILT[i].cls}`} style={{ transform: `rotate(${TILT[i].rot}deg)` }}>
                 <span className="t">
                   <span className="title">{note.title || 'Untitled'}</span>

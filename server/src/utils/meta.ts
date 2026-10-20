@@ -52,6 +52,7 @@ export function cleanNoteMeta(input: unknown, current: unknown = {}): Meta {
   return apply(current as Meta, input, {
     emoji: (v) => (typeof v === 'string' && v.trim() ? Array.from(v.trim()).slice(0, 4).join('') : undefined),
     favourite: (v) => (v === true ? true : undefined),
+    pinned: (v) => (v === true ? true : undefined),
     locked: (v) => (v === true ? true : undefined),
   });
 }

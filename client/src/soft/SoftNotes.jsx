@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2 } from 'lucide-react';
+import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2 } from 'lucide-react';
+import { marked } from 'marked';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
 import BlockEditor from '../components/BlockEditor';
@@ -57,8 +58,15 @@ export default function SoftNotes() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [allNotes]);
   const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
-  const chipTags = tagCounts.slice(0, 2);
-  if (filter !== 'all' && filter !== 'inbox' && filter !== 'archive' && filter !== 'trash' && !chipTags.includes(filter)) chipTags.splice(1, 1, filter);
+  const chipTags = tagCounts;
+  const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
+  const shownList = useMemo(() => [...listed].sort((a, b) => (b.meta?.pinned ? 1 : 0) - (a.meta?.pinned ? 1 : 0)), [listed]);
+  const { data: openTasks = [] } = useQuery({
+    queryKey: ['todos', 'open-unlinked'],
+    queryFn: () => todosAPI.getAll({}).then((r) => (r.data.todos || []).filter((t) => !t.completed && !t.noteId)),
+    enabled: !!noteId,
+  });
+  const [taskDraft, setTaskDraft] = useState('');
 
   // ---------- open a note ----------
   const open = useCallback((note) => {
@@ -156,6 +164,52 @@ export default function SoftNotes() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
+  const fileBase = () => (doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
+  const noteHtml = () => `<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(doc.content || '')}`;
+  const exportWord = () => {
+    setMenuOpen(false);
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${fileBase()}</title></head><body style="font-family:Calibri,Arial,sans-serif">${noteHtml()}</body></html>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff', html], { type: 'application/msword' }));
+    a.download = `${fileBase()}.doc`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const exportPdf = async () => {
+    setMenuOpen(false);
+    const { default: html2pdf } = await import('html2pdf.js');
+    const el = document.createElement('div');
+    el.style.cssText = 'font-family:Arial,sans-serif;font-size:13px;line-height:1.5;padding:8px;color:#111;max-width:680px';
+    el.innerHTML = noteHtml();
+    el.querySelectorAll('img').forEach((i) => { i.style.maxWidth = '100%'; });
+    await html2pdf().set({ margin: 14, filename: `${fileBase()}.pdf`, image: { type: 'jpeg', quality: 0.92 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(el).save();
+  };
+  const togglePin = async () => {
+    setMenuOpen(false);
+    const next = !doc.meta?.pinned;
+    if (next && pinnedCount >= 3) { flash('You can pin up to 3 notes. Unpin one first.'); return; }
+    await notesAPI.update(doc.id, { meta: { pinned: next } });
+    patch({ meta: { ...(doc.meta || {}), pinned: next || undefined } });
+    refreshLists();
+    flash(next ? 'Pinned to Home' : 'Unpinned');
+  };
+  const addLinkedTask = async (e) => {
+    e.preventDefault();
+    const text = taskDraft.trim();
+    if (!text || !noteId) return;
+    setTaskDraft('');
+    await todosAPI.create({ text, priority: 'medium', noteId });
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  };
+  const linkTask = async (id) => {
+    if (!id) return;
+    await todosAPI.update(id, { noteId });
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  };
+  const unlinkTask = async (t) => {
+    await todosAPI.update(t.id, { noteId: null });
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  };
   const restoreVersion = async (v) => {
     await notesAPI.revertBackup(doc.id, v.id);
     const { data } = await notesAPI.get(doc.id);
@@ -244,15 +298,15 @@ export default function SoftNotes() {
           ))}
         </div>
         <div className="s-notes-rows">
-          {listed.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes here yet.'}</p>}
-          {listed.map((n) => {
+          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes here yet.'}</p>}
+          {shownList.map((n) => {
             const tone = toneVar(toneOf(n.tags?.[0]));
             const on = doc?.id === n.id;
             return (
               <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on ? ' on' : ''}`} style={on ? { background: tone } : undefined} onClick={() => forceSave()}>
                 <span className="dot" style={{ background: tone }} aria-hidden="true" />
                 <span className="txt">
-                  <span className="t">{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
+                  <span className="t">{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
                   <span className="s">{snippetOf(n.content) || 'Empty note'}</span>
                   <span className="m">{relTime(n.updatedAt)}</span>
                 </span>
@@ -291,6 +345,9 @@ export default function SoftNotes() {
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <button type="button" role="menuitem" onClick={exportPdf}>Export as PDF</button>
+                    <button type="button" role="menuitem" onClick={exportWord}>Export as Word</button>
                     <button type="button" role="menuitem" onClick={exportMd}>Export as Markdown</button>
                     <button type="button" role="menuitem" className="danger" onClick={trash}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
@@ -372,14 +429,31 @@ export default function SoftNotes() {
 
         <section className="s-side-card" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
           <h3 id="s-linked" className="s-h3">Linked tasks</h3>
-          {linked.length === 0 && <p className="s-empty small">Select text in the note and press Make a task.</p>}
-          {linked.slice(0, 4).map((t) => (
-            <label key={t.id} className={`s-side-task${t.completed ? ' done' : ''}`}>
-              <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggleTask(t)} />
-              <span className="t">{t.text}</span>
-              {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
-            </label>
+          {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
+          {linked.slice(0, 8).map((t) => (
+            <div key={t.id} className="s-linked-row">
+              <label className={`s-side-task${t.completed ? ' done' : ''}`}>
+                <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggleTask(t)} />
+                <span className="t">{t.text}</span>
+                {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
+              </label>
+              <button type="button" className="s-unlink" aria-label={`Unlink ${t.text}`} title="Unlink" onClick={() => unlinkTask(t)}><X size={12} /></button>
+            </div>
           ))}
+          {noteId && (
+            <form className="s-linked-add" onSubmit={addLinkedTask}>
+              <input aria-label="Add a task to this note" value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} placeholder="Add a task…" autoComplete="off" />
+              <button type="submit" aria-label="Add task" disabled={!taskDraft.trim()}><Plus size={14} strokeWidth={2.6} /></button>
+            </form>
+          )}
+          {noteId && openTasks.length > 0 && (
+            <label className="s-link-existing"><Link2 size={13} />
+              <select aria-label="Link an existing task" value="" onChange={(e) => linkTask(e.target.value)}>
+                <option value="">Link an existing task…</option>
+                {openTasks.slice(0, 40).map((t) => <option key={t.id} value={t.id}>{t.text.slice(0, 60)}</option>)}
+              </select>
+            </label>
+          )}
         </section>
 
         <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
