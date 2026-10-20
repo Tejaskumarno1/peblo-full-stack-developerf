@@ -39,6 +39,7 @@ model User {
   quizRuns      QuizRun[]
   mastery       TopicMastery[]
   apiTokens     ApiToken[]
+  oauthCodes   OauthCode[]
 
   @@map("users")
 }
@@ -256,4 +257,31 @@ model ApiToken {
 
   @@index([userId])
   @@map("api_tokens")
+}
+
+/// An app (Claude, Cursor...) that registered itself to ask for access through "Connect" sign-in.
+model OauthClient {
+  id           String      @id
+  name         String
+  redirectUris Json        @map("redirect_uris")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  codes        OauthCode[]
+
+  @@map("oauth_clients")
+}
+
+/// A one-time approval code, valid for a few minutes, swapped for an access token.
+model OauthCode {
+  codeHash      String      @id @map("code_hash")
+  clientId      String      @map("client_id")
+  userId        String      @map("user_id")
+  redirectUri   String      @map("redirect_uri")
+  codeChallenge String      @map("code_challenge")
+  scope         String      @default("write")
+  expiresAt     DateTime    @map("expires_at")
+  client        OauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_codes")
 }

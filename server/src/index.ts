@@ -23,6 +23,7 @@ import hubRoutes from './routes/hub.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { shareRoutes, publicRoutes } from './routes/share.js';
+import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
@@ -48,6 +49,12 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.disable('x-powered-by');
   app.use(securityHeaders(staticDir));
 
+  // MCP sign-in (OAuth) and the hosted MCP endpoint: public by design, so any MCP client may call them from anywhere.
+  const open = [cors({ origin: '*', exposedHeaders: ['WWW-Authenticate'], allowedHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'] }), apiLimiter(), express.json({ limit: '1mb' })];
+  app.use(wellKnown);
+  app.use('/oauth', ...open, oauthRoutes);
+  app.use('/mcp', ...open, mcpRoutes);
+
   // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
   app.use(cors(corsDelegate));
 app.use('/api', apiLimiter());
@@ -63,6 +70,7 @@ app.use('/api', apiLimiter());
   app.use('/api/ai/hub', hubRoutes);
   app.use('/api/tags', tagsRoutes);
 app.use('/api/tokens', tokensRoutes);
+  app.use('/api/oauth', oauthApi);
   app.use('/api/notes', notesRoutes);
   app.use('/api/notes', noteAiRoutes);
   app.use('/api/ai', aiRoutes);
