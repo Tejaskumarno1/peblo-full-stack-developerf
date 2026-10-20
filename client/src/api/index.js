@@ -29,6 +29,9 @@ export const notesAPI = {
 };
 
 export const aiAPI = {
+  localStatus: () => api.get('/ai/local/status'),
+  localPull: (model) => api.post('/ai/local/pull', { model }),
+  localCancel: (model) => api.post('/ai/local/cancel', { model }),
   summary: (id, data, config) => api.post(`/notes/${id}/ai/summary`, data, config),
   actions: (id, data, config) => api.post(`/notes/${id}/ai/actions`, data, config),
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),

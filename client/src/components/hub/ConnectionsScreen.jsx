@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { aiAPI, hubAPI } from '../../api';
 import { normalizeRouting } from '../../utils/aiRouting';
 import { unreadableKeyMessage } from '../../utils/keyStatus';
+import LocalModels from './LocalModels';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', icon: Monitor, tone: 'a' },
@@ -116,7 +117,7 @@ export default function ConnectionsScreen({ p, extra }) {
                   </div>
                 );
               })}
-              {ok && installed.length === 0 && <p className={c('quiet')}>No models yet. In a terminal run: ollama pull llama3.2</p>}
+              {ok && installed.length === 0 && <p className={c('quiet')}>No models yet. Pick one in the Model store below.</p>}
               <div className={c('field')}>
                 <label htmlFor={`${p}-ollama-url`}>Ollama address</label>
                 <div className="row">
@@ -138,6 +139,7 @@ export default function ConnectionsScreen({ p, extra }) {
           <span className={c('quiet')} style={{ fontSize: 13 }}>Notes tagged #private are never sent to any AI.</span>
         </section>
       </div>
+      <LocalModels variant={p === 'r' ? 'river' : 'orbit'} />
       {extra}
     </div>
   );

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { aiAPI, hubAPI } from '../api';
 import { normalizeRouting } from '../utils/aiRouting';
 import { unreadableKeyMessage } from '../utils/keyStatus';
+import LocalModels from '../components/hub/LocalModels';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', tone: 'mint', icon: Monitor },
@@ -115,7 +116,7 @@ export default function SoftConnections() {
                     </div>
                   );
                 })}
-                {ok && installed.length === 0 && <p className="s-empty small">No models yet. In a terminal run: ollama pull llama3.2</p>}
+                {ok && installed.length === 0 && <p className="s-empty small">No models yet. Pick one in the Model store below.</p>}
               </div>
               <span className="grow" />
               <div className="s-key-row">
@@ -135,6 +136,8 @@ export default function SoftConnections() {
 <KeyInput id="s-openai" label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput id="s-gemini" label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
         </section>
+
+        <LocalModels variant="soft" />
 
         <section className="s-conn-card" style={{ background: 'var(--s-lilac)' }} aria-labelledby="s-next">
           <span className="s-count" style={{ alignSelf: 'flex-start', fontSize: 12.5, fontWeight: 800 }}>Coming next</span>
