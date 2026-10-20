@@ -74,7 +74,8 @@ export async function runMigrations(dir: string = findSqlDir(), lockSeconds = 12
         .split(/;\s*(?:\r?\n|$)/)
         .map((st) => st.replace(/^\s*--.*$/gm, '').trim())
         .filter(Boolean);
-      for (const stmt of statements) await tx.$executeRawUnsafe(stmt);
+      // Extensions go in the schema Peblo uses, so CITEXT is found even when DATABASE_URL names its own schema (?schema=peblo)
+      for (const stmt of statements) await tx.$executeRawUnsafe(schema ? stmt.replace(/WITH SCHEMA public\b/i, `WITH SCHEMA "${schema}"`) : stmt);
       await tx.$executeRawUnsafe(`INSERT INTO _peblo_migrations (version, name) VALUES (${version}, '${file.replace(/'/g, "''")}') ON CONFLICT DO NOTHING`);
       console.log(`[db] applied migration ${file}`);
     }
