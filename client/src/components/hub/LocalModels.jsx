@@ -14,6 +14,7 @@ export default function LocalModels({ variant = 'soft' }) {
   const { settings, updateSettings } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
+  const [starting, setStarting] = useState(false);
   const { data } = useQuery({
     queryKey: ['local-models'],
     queryFn: () => aiAPI.localStatus().then((r) => r.data),
@@ -32,6 +33,11 @@ export default function LocalModels({ variant = 'soft' }) {
     setError('');
     try { await aiAPI.localPull(id); } catch (e) { setError(e.response?.data?.error || 'Could not start the download.'); }
     refresh();
+  };
+  const startOllama = async () => {
+    setError(''); setStarting(true);
+    try { await aiAPI.localStart(); } catch (e) { setError(e.response?.data?.error || 'Could not start Ollama.'); }
+    setStarting(false); refresh();
   };
   const cancel = async (id) => { try { await aiAPI.localCancel(id); } catch { /* it ends on its own */ } refresh(); };
   const remove = async (m) => {
@@ -75,10 +81,12 @@ export default function LocalModels({ variant = 'soft' }) {
       {!data.running && (
         <div className="lm-install" role="status">
           <div>
-            <b>Peblo needs the free Ollama app to run models.</b>
-            <span> Install it once and keep it open. This page notices by itself and unlocks the downloads.</span>
+            <b>{data.onDisk ? 'Ollama is installed but not running.' : 'Peblo needs the free Ollama app to run models.'}</b>
+            <span>{data.onDisk ? ' Start it here. No terminal needed.' : ' Install it once. This page notices by itself and unlocks the downloads.'}</span>
           </div>
-          <a className="lm-btn" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Get Ollama <ExternalLink size={14} /></a>
+          {data.onDisk
+            ? <button type="button" className="lm-btn primary" onClick={startOllama} disabled={starting}>{starting ? 'Starting…' : 'Start Ollama'}</button>
+            : <a className="lm-btn" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Get Ollama <ExternalLink size={14} /></a>}
         </div>
       )}
 

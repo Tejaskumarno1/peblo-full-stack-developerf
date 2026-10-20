@@ -3,6 +3,8 @@
 // arbitrary files. Not available on a shared server (hosted()): there the model would land on the server's disk.
 import os from 'os';
 import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
 import { execFile } from 'child_process';
 import { effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
 
@@ -123,4 +125,40 @@ export async function startPull(userUrl: unknown, model: string): Promise<{ ok: 
     }
   })();
   return { ok: true };
+}
+
+// --- Start Ollama from Peblo (no terminal) ---
+/** Where an installed Ollama lives on this computer, or null. PEBLO_OLLAMA_EXE / PEBLO_OLLAMA_ARGS are for tests. */
+export function findOllama(): { exe: string; args: string[] } | null {
+  if (process.env.PEBLO_OLLAMA_EXE) return { exe: process.env.PEBLO_OLLAMA_EXE, args: JSON.parse(process.env.PEBLO_OLLAMA_ARGS || '[]') };
+  const local = process.env.LOCALAPPDATA || '';
+  const candidates = process.platform === 'win32'
+    ? [path.join(local, 'Programs', 'Ollama', 'ollama.exe'), 'C:\\Program Files\\Ollama\\ollama.exe']
+    : process.platform === 'darwin'
+      ? ['/Applications/Ollama.app/Contents/Resources/ollama', '/usr/local/bin/ollama', '/opt/homebrew/bin/ollama']
+      : ['/usr/local/bin/ollama', '/usr/bin/ollama'];
+  const exe = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+  return exe ? { exe, args: ['serve'] } : null;
+}
+
+/** Starts the person's installed Ollama in the background and waits until it answers. */
+export async function startOllama(userUrl: unknown): Promise<{ ok: boolean; error?: string }> {
+  const base = effectiveOllamaUrl(userUrl, 'http://127.0.0.1:11434');
+  if (!base) return { ok: false, error: 'Local AI is not available on this server.' };
+  const alive = async () => { try { return (await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
+  if (await alive()) return { ok: true };
+  const found = findOllama();
+  if (!found) return { ok: false, error: 'Ollama is not installed on this computer yet.' };
+  try {
+    const child = spawn(found.exe, found.args, { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => { /* reported by the wait below */ });
+    child.unref();
+  } catch {
+    return { ok: false, error: 'Could not start Ollama.' };
+  }
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (await alive()) return { ok: true };
+  }
+  return { ok: false, error: 'Ollama did not start in time.' };
 }

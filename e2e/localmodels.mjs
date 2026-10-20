@@ -117,6 +117,19 @@ try {
   check('downloads are disabled until it runs', await page.locator('.lm-card button:has-text("Download")').first().isDisabled().catch(() => true));
   await shot('models-river-no-ollama');
 
+  // Start Ollama from the app: a stand-in program plays the installed Ollama and answers on the same address
+  const port = new URL(fakeUrl).port;
+  process.env.PEBLO_OLLAMA_EXE = process.execPath;
+  process.env.PEBLO_OLLAMA_ARGS = JSON.stringify(['-e', `require('http').createServer((q,s)=>{s.setHeader('Content-Type','application/json');s.end('{"models":[]}')}).listen(${port},'127.0.0.1');setTimeout(()=>process.exit(),25000)`]);
+  await page.reload();
+  const startBtn = page.getByRole('button', { name: 'Start Ollama' });
+  check('when Ollama is installed but off, the page offers Start Ollama', await startBtn.waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  await startBtn.click();
+  check('Start Ollama brings it up without a terminal', await page.getByText('Ollama is running').waitFor({ timeout: 15000 }).then(() => true).catch(() => false));
+  const st2 = await api('GET', '/api/ai/local/status');
+  check('status then says running', st2.running === true && st2.onDisk === true);
+  delete process.env.PEBLO_OLLAMA_EXE; delete process.env.PEBLO_OLLAMA_ARGS;
+
   // On a shared web server the whole store disappears and downloads are refused
   process.env.PEBLO_HOSTED = '1';
   const web = await api('GET', '/api/ai/local/status');
