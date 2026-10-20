@@ -144,9 +144,15 @@ export function AccountsSection() {
 }
 
 const STYLES = [
-  { id: 'soft', name: 'Soft Studio', desc: 'Friendly and warm, with a dock. The default.', tone: 'peach' },
-  { id: 'river', name: 'River', desc: 'A flowing timeline of your days.', tone: 'sky' },
-  { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying.', tone: 'lilac' },
+  { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock', tags: ['Beginners', 'Visual'] },
+  { id: 'river', name: 'River', desc: 'Your day as one timeline, past to future', tags: ['Meetings', 'Planners'] },
+  { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying', tags: ['Students', 'Exams'] },
+];
+const THEMES = [
+  { id: 'light', name: 'Light', icon: Sun },
+  { id: 'dark', name: 'Dark', icon: Moon },
+  { id: 'midnight', name: 'Midnight', icon: Moon },
+  { id: 'system', name: 'System', icon: Monitor },
 ];
 
 export function AppearanceSection() {
@@ -154,25 +160,27 @@ export function AppearanceSection() {
   const save = useSave();
   return (
     <>
-      <Card title="Style" hint="Changes the whole look of Peblo. Your notes stay exactly the same.">
-        <div className="s-set-styles" role="radiogroup" aria-label="Style">
-          {STYLES.map((s) => (
-            <button key={s.id} type="button" role="radio" aria-checked={uiStyle === s.id} className={`s-set-style${uiStyle === s.id ? ' on' : ''}`} style={{ background: `var(--s-${s.tone})` }} onClick={() => save(async () => { setUiStyle(s.id); return true; })}>
-              <b>{s.name}</b><small>{s.desc}</small>
-              {uiStyle === s.id && <span className="s-set-pill"><Check size={13} strokeWidth={3} /> In use</span>}
+      <Card title="Style" hint="Changes the layout, type and colours of the whole app. Your notes stay exactly the same. Light, dark and midnight work with every style.">
+        <div className="style-grid s-set-stylegrid" role="radiogroup" aria-label="Style">
+          {STYLES.map((o) => (
+            <button key={o.id} type="button" role="radio" aria-checked={uiStyle === o.id} className={`style-card${uiStyle === o.id ? ' active' : ''}`} onClick={() => save(async () => { setUiStyle(o.id); return true; })}>
+              <span className={`style-preview ${o.id}`} aria-hidden="true"><i className="a" /><i className="b" /><i className="c" /><i className="d" /><i className="e" /></span>
+              <span className="style-name">{o.name}</span>
+              <span className="style-desc">{o.desc}</span>
+              <span className="style-tags">{o.tags.map((t) => <span key={t}>{t}</span>)}</span>
             </button>
           ))}
         </div>
       </Card>
-      <Card title="Colours">
-        <Row label="Theme" hint="System follows your computer.">
-          <Seg label="Theme" value={theme} onChange={(v) => save(async () => { setTheme(v); return true; })} options={[
-            { id: 'light', label: <><Sun size={14} /> Light</> },
-            { id: 'dark', label: <><Moon size={14} /> Dark</> },
-            { id: 'midnight', label: <><Moon size={14} /> Midnight</> },
-            { id: 'system', label: <><Monitor size={14} /> System</> },
-          ]} />
-        </Row>
+      <Card title="Colours" hint="System follows your computer.">
+        <div className="settings-theme-grid s-set-themegrid" role="radiogroup" aria-label="Theme">
+          {THEMES.map(({ id, name, icon: Icon }) => (
+            <button key={id} type="button" role="radio" aria-checked={theme === id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => save(async () => { setTheme(id); return true; })}>
+              <span className={`theme-preview ${id === 'midnight' ? 'dark' : id}`} style={id === 'midnight' ? { background: '#000' } : undefined} />
+              <span className="s-set-themename"><Icon size={14} /> {name}</span>
+            </button>
+          ))}
+        </div>
         <Row label="Compact" hint="Tighter lists and cards, so more fits on screen.">
           <Switch label="Compact" checked={!!settings?.compact} onChange={(v) => save({ compact: v })} />
         </Row>

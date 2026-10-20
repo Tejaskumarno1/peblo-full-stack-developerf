@@ -324,3 +324,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 
 .soft .s-set .s-sg { display: inline-flex; flex-direction: row !important; align-items: center; width: auto; }
 .soft .s-set .s-sg button { width: auto; height: auto; flex: 0 0 auto; }
+
+.soft .s-set-stylegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.soft .s-set-themegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.soft .s-set-themegrid .theme-card { border: 2px solid var(--s-line); background: var(--s-surface); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; font: inherit; color: var(--s-fg); text-align: left; }
+.soft .s-set-themegrid .theme-card.active { border-color: var(--s-fg); }
+.soft .s-set-themename { font-size: 13.5px; font-weight: 700; display: inline-flex; gap: 5px; align-items: center; }
