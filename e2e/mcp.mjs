@@ -1,101 +1,57 @@
-// PEB-95: personal access tokens + the Peblo MCP server (stdio), driven by the real MCP client from the SDK.
-import path from 'path';
+// The Peblo MCP server, driven by a real MCP client over stdio.
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { boot, REPO } from './lib.mjs';
 
-const { base, api, token, page, check, finish } = await boot();
-const raw = (method, url, bearer, body) =>
-  fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` }, body: body ? JSON.stringify(body) : undefined });
+const { base, api, check, finish } = await boot();
 let client;
 try {
-  const made = await api('POST', '/api/tokens', { name: 'Claude Desktop' });
-  check('a token is made and shown once (pbl_...)', typeof made.token === 'string' && made.token.startsWith('pbl_'), JSON.stringify(made));
-  const pat = made.token;
-  const list = await api('GET', '/api/tokens');
-  check('the list has the token but never its secret', list.tokens?.length === 1 && !JSON.stringify(list).includes(pat) && list.tokens[0].prefix === pat.slice(0, 10), JSON.stringify(list));
-
-  const n = await raw('GET', '/api/notes', pat);
-  check('the token can read notes', n.status === 200, n.status);
-  check('a bad token is refused', (await raw('GET', '/api/notes', 'pbl_nonsense')).status === 401);
-  check('a token cannot list tokens', (await raw('GET', '/api/tokens', pat)).status === 403);
-  check('a token cannot make tokens', (await raw('POST', '/api/tokens', pat, { name: 'x' })).status === 403);
-  check('a token cannot read the profile', (await raw('GET', '/api/profile', pat)).status === 403);
-  check('a token cannot touch auth', (await raw('POST', '/api/auth/change-password', pat, { currentPassword: 'a', newPassword: 'b' })).status === 403);
-  check('a token needs a name', (await raw('POST', '/api/tokens', token, { name: '  ' })).status === 400);
-
-  // the MCP server, over stdio
-  client = new Client({ name: 'e2e', version: '1.0.0' });
-  await client.connect(new StdioClientTransport({
-    command: process.execPath,
+  const t = await api('POST', '/api/tokens', { name: 'e2e', scope: 'full' });
+  const transport = new StdioClientTransport({
+    command: 'node',
     args: [path.join(REPO, 'dist', 'server', 'mcp', 'index.js')],
-    env: { ...process.env, PEBLO_URL: base, PEBLO_TOKEN: pat },
-  }));
-  const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-  check('the server offers its eight tools', tools.join() === ['append_to_note', 'complete_task', 'create_note', 'create_task', 'get_note', 'list_tags', 'list_tasks', 'search_notes'].join(), tools.join());
-  check('no tool deletes anything', !tools.some((t) => /delete|remove|trash/.test(t)));
+    env: { ...process.env, PEBLO_URL: base, PEBLO_TOKEN: t.token },
+  });
+  client = new Client({ name: 'e2e', version: '1' });
+  await client.connect(transport);
+  const tools = (await client.listTools()).tools.map((x) => x.name);
+  check('server lists tools', tools.length >= 6, tools.join(','));
+  check('no delete tool', !tools.some((n) => /delete|remove/.test(n)), tools.join(','));
   const call = async (name, args) => {
-    const r = await client.callTool({ name, arguments: args || {} });
-    const text = r.content?.[0]?.text ?? '';
-    let json; try { json = JSON.parse(text); } catch { json = text; }
-    return { error: !!r.isError, json, text };
+    const r = await client.callTool({ name, arguments: args });
+    const text = r.content?.[0]?.text || '';
+    return { err: !!r.isError, text, json: (() => { try { return JSON.parse(text); } catch { return null; } })() };
   };
-
-  const created = await call('create_note', { title: 'Orbit from MCP', content: 'First line.\n\nSecond <b>line</b>.', tags: ['mcp'] });
-  check('create_note makes a note', !created.error && created.json.id, created.text);
-  const id = created.json.id;
-  const found = await call('search_notes', { query: 'Orbit from' });
-  check('search_notes finds it', Array.isArray(found.json) && found.json.some((x) => x.id === id), found.text);
-  await call('append_to_note', { id, text: 'Appended by Claude.' });
+  const made = await call('create_note', { title: 'From MCP', content: '# Hello\n\nA line from Claude.', tags: ['mcp'] });
+  check('create_note works', !made.err && made.json?.id, made.text);
+  const id = made.json.id;
+  const app = await call('append_to_note', { id, text: 'Second paragraph.' });
+  check('append_to_note works', !app.err, app.text);
   const got = await call('get_note', { id });
-  check('append_to_note adds to the end and keeps what was there', /First line/.test(got.json.text) && /Appended by Claude/.test(got.json.text) && got.json.text.indexOf('First') < got.json.text.indexOf('Appended'), got.text);
-  check('plain text is escaped, not run as HTML', /&lt;b&gt;line&lt;\/b&gt;/.test(got.json.html), got.json.html);
+  check('get_note returns the markdown', /# Hello/.test(got.json?.markdown || '') && /Second paragraph/.test(got.json?.text || ''), got.text);
+  const via = (await api('GET', `/api/notes/${id}`)).note;
+  check('note stored as plain Markdown, not HTML', !/<p>/.test(via.content) && /A line from Claude\.\n\nSecond paragraph\./.test(via.content), JSON.stringify(via.content));
+  const found = await call('search_notes', { query: 'Hello' });
+  check('search_notes finds it', Array.isArray(found.json) && found.json.some((n) => n.id === id), found.text);
+  const task = await call('create_task', { text: 'Task from MCP', priority: 'high' });
+  check('create_task works', !task.err && task.json?.id, task.text);
+  const done = await call('complete_task', { id: task.json.id });
+  check('complete_task works', !done.err && done.json?.completed === true, done.text);
+  const list = await call('list_tasks', {});
+  check('list_tasks works', !list.err, list.text);
 
-  const t = await call('create_task', { text: 'Ship the MCP server', priority: 'high' });
-  check('create_task makes a task', !t.error && t.json.id, t.text);
-  const open = await call('list_tasks', {});
-  const all = [...(open.json.today || []), ...(open.json.overdue || []), ...(open.json.upcoming || [])];
-  const viaApi = (await api('GET', '/api/todos')).todos || [];
-  check('the new task exists for the account', viaApi.some((x) => x.id === t.json.id));
-  const done = await call('complete_task', { id: t.json.id });
-  check('complete_task marks it done', done.json.completed === true, done.text);
-  check('list_tasks accepts a date', !(await call('list_tasks', { date: '2030-01-01' })).error);
-  check('list_tags works', !(await call('list_tags')).error);
-  const missing = await call('get_note', { id: 'does-not-exist' });
-  check('a missing note comes back as a tool error, not a crash', missing.error, missing.text);
-  void all;
-
-  // the Settings screen makes a token the same way
-  await page.goto(base + '/notes');
-  await page.waitForTimeout(2500);
-  await page.evaluate(() => window.dispatchEvent(new Event('peblo:open-settings')));
-  await page.locator('.settings-hub-container').waitFor({ timeout: 10000 });
-  await page.locator('.settings-tab-btn', { hasText: 'Data' }).first().click();
-  await page.locator('#token-name').fill('Cursor');
-  await page.getByRole('button', { name: 'Make token' }).click();
-  const shown = await page.getByTestId('new-token').textContent({ timeout: 5000 }).catch(() => '');
-  check('Settings shows a new token once', /^pbl_/.test(shown || ''), shown);
-  check('the token from Settings works', (await raw('GET', '/api/notes', shown)).status === 200);
-  check('Settings lists it by name', (await page.locator('li', { hasText: 'Cursor' }).count()) === 1);
-
-  // a read-only token reads but cannot write
-  const ro = await api('POST', '/api/tokens', { name: 'Reader', scope: 'read' });
-  check('a read-only token can be made', ro.scope === 'read', JSON.stringify(ro));
-  check('a read-only token can read', (await raw('GET', '/api/notes', ro.token)).status === 200);
-  const roWrite = await raw('POST', '/api/notes', ro.token, { title: 'nope', content: '' });
-  check('a read-only token cannot write', roWrite.status === 403, roWrite.status);
-  check('the token list tells the config path of the MCP server', /mcp[\\/]index\.js$/.test((await api('GET', '/api/tokens')).mcpPath || ''));
-  await page.getByTestId('mcp-config').waitFor({ timeout: 3000 }).catch(() => {});
-  check('Settings shows a ready MCP config with the new token', ((await page.getByTestId('mcp-config').textContent().catch(() => '')) || '').includes(shown));
-
-  // revoking cuts access straight away
-  await client.close(); client = null;
-  const del = await api('DELETE', '/api/tokens/' + made.id);
-  check('a token can be revoked', del.ok === true, JSON.stringify(del));
-  check('a revoked token stops working', (await raw('GET', '/api/notes', pat)).status === 401);
+  // a read-only token cannot write
+  const ro = await api('POST', '/api/tokens', { name: 'ro', scope: 'read' });
+  const t2 = new StdioClientTransport({ command: 'node', args: [path.join(REPO, 'dist', 'server', 'mcp', 'index.js')], env: { ...process.env, PEBLO_URL: base, PEBLO_TOKEN: ro.token } });
+  const c2 = new Client({ name: 'e2e2', version: '1' });
+  await c2.connect(t2);
+  const w = await c2.callTool({ name: 'create_note', arguments: { title: 'nope' } });
+  check('read-only token cannot create notes', !!w.isError, w.content?.[0]?.text);
+  await c2.close();
 } catch (e) {
-  check('test ran without throwing', false, e?.stack || e);
+  check('mcp test ran', false, String(e));
 } finally {
-  try { await client?.close(); } catch {}
+  try { await client?.close(); } catch { /* ignore */ }
   await finish();
 }

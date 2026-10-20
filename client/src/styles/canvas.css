@@ -93,3 +93,9 @@ body {
 /* Scrollbars are drawn by the app, not the OS, so they look the same everywhere */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+
+/* Quick capture is a frameless window: any empty part of it drags the window; controls stay clickable. */
+html.pb-canvas-capture body { -webkit-app-region: drag; }
+html.pb-canvas-capture :is(input, textarea, select, button, a, label, kbd, [role="button"], [role="tab"], [role="dialog"], [role="menu"], [contenteditable], [tabindex], .s-cap-drop, .s-cap-thumb, .s-cap-card input) { -webkit-app-region: no-drag; }
+html.pb-canvas-capture .s-capture-top, html.pb-canvas-capture .s-capture-hint { cursor: move; }

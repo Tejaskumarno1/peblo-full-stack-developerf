@@ -38,8 +38,8 @@ const run = (fn: () => Promise<unknown>) => fn().then(ok, fail);
 
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** Plain text becomes paragraphs; anything that already looks like HTML is kept. */
-const toHtml = (s: string) => (/^\s*</.test(s) ? s : s.split(/\n{2,}/).map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join(''));
-const strip = (html: string) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const toHtml = (s: string) => s.trim(); // notes are stored as Markdown now, so plain text and Markdown go in as they are
+const strip = (md: string) => String(md || '').replace(/<figure>[\s\S]*?<\/figure>/g, ' [attachment] ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' [picture] ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
 const server = new McpServer({ name: 'peblo', version: '1.0.0' });
 const readOnly = { readOnlyHint: true, openWorldHint: false };
@@ -63,7 +63,7 @@ server.registerTool('get_note', {
   annotations: readOnly,
 }, ({ id }) => run(async () => {
   const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
-  return { id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt, text: strip(note.content), html: note.content };
+  return { id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt, text: strip(note.content), markdown: note.content };
 }));
 
 server.registerTool('create_note', {
@@ -81,7 +81,7 @@ server.registerTool('append_to_note', {
   annotations: writes,
 }, ({ id, text }) => run(async () => {
   const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
-  await api('PATCH', '/notes/' + encodeURIComponent(id), { content: (note.content || '') + toHtml(text) });
+  await api('PATCH', '/notes/' + encodeURIComponent(id), { content: (note.content || '').replace(/\s+$/, '') + '\n\n' + toHtml(text) });
   return `Added to "${note.title}".`;
 }));
 

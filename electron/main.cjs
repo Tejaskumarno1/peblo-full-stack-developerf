@@ -46,6 +46,7 @@ if (!app.requestSingleInstanceLock()) {
 
 let mainWindow = null;
 let captureWindow = null;
+let captureMovedTo = null; // where the person last dragged the quick capture window
 let tray = null;
 let serverPort = null;
 // Hosted mode: when set, the app is just a window onto a Peblo server running elsewhere.
@@ -311,6 +312,7 @@ function createCaptureWindow() {
     } catch { /* page not ready: just hide */ }
     if (captureWindow && !captureWindow.isDestroyed()) captureWindow.hide();
   });
+  captureWindow.on('moved', () => { const [x, y] = captureWindow.getPosition(); captureMovedTo = { x, y }; });
   captureWindow.on('closed', () => { captureWindow = null; });
 }
 
@@ -335,7 +337,13 @@ async function toggleCapture() {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { x, y, width, height } = display.workArea;
   const [w, h] = captureWindow.getSize();
-  captureWindow.setPosition(Math.round(x + (width - w) / 2), Math.round(y + height * 0.28));
+  // Reopen where the person last dragged it, as long as that spot is still on a screen.
+  const saved = captureMovedTo && screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return captureMovedTo.x + 60 > a.x && captureMovedTo.x + 60 < a.x + a.width && captureMovedTo.y >= a.y && captureMovedTo.y + 60 < a.y + a.height;
+  });
+  if (saved) captureWindow.setPosition(captureMovedTo.x, captureMovedTo.y);
+  else captureWindow.setPosition(Math.round(x + (width - w) / 2), Math.round(y + height * 0.28));
   captureWindow.show();
   captureWindow.focus();
 }
