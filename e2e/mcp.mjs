@@ -78,6 +78,16 @@ try {
   check('the token from Settings works', (await raw('GET', '/api/notes', shown)).status === 200);
   check('Settings lists it by name', (await page.locator('li', { hasText: 'Cursor' }).count()) === 1);
 
+  // a read-only token reads but cannot write
+  const ro = await api('POST', '/api/tokens', { name: 'Reader', scope: 'read' });
+  check('a read-only token can be made', ro.scope === 'read', JSON.stringify(ro));
+  check('a read-only token can read', (await raw('GET', '/api/notes', ro.token)).status === 200);
+  const roWrite = await raw('POST', '/api/notes', ro.token, { title: 'nope', content: '' });
+  check('a read-only token cannot write', roWrite.status === 403, roWrite.status);
+  check('the token list tells the config path of the MCP server', /mcp[\\/]index\.js$/.test((await api('GET', '/api/tokens')).mcpPath || ''));
+  await page.getByTestId('mcp-config').waitFor({ timeout: 3000 }).catch(() => {});
+  check('Settings shows a ready MCP config with the new token', ((await page.getByTestId('mcp-config').textContent().catch(() => '')) || '').includes(shown));
+
   // revoking cuts access straight away
   await client.close(); client = null;
   const del = await api('DELETE', '/api/tokens/' + made.id);

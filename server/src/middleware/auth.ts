@@ -28,6 +28,8 @@ export interface AuthedUser {
   email: string;
   /** True when the request used a personal access token instead of a sign-in. */
   viaToken?: boolean;
+  /** A read-only token may only make GET requests. */
+  readOnly?: boolean;
 }
 
 export function signToken(user: { id: string; email: string; tokenVersion?: number }): string {
@@ -39,10 +41,10 @@ export async function verifyToken(token: string | null | undefined): Promise<Aut
   if (!token) return null;
   if (token.startsWith(TOKEN_PREFIX)) {
     try {
-      const row = await prisma.apiToken.findUnique({ where: { tokenHash: hashToken(token) }, select: { id: true, userId: true, user: { select: { email: true } } } });
+      const row = await prisma.apiToken.findUnique({ where: { tokenHash: hashToken(token) }, select: { id: true, userId: true, scope: true, user: { select: { email: true } } } });
       if (!row) return null;
       prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
-      return { id: row.userId, email: row.user.email, viaToken: true };
+      return { id: row.userId, email: row.user.email, viaToken: true, readOnly: row.scope === 'read' };
     } catch {
       return null;
     }
@@ -71,6 +73,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     // A token is for notes and tasks. Account settings, passwords, keys and the tokens themselves need a real sign-in.
     if (user.viaToken && /^\/api\/(auth|tokens|profile)(\/|\?|$)/.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot change account settings. Sign in to do that.' });
+    }
+    if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      return res.status(403).json({ error: 'This access token is read-only.' });
     }
     req.user = user;
     next();

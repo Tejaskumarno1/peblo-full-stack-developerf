@@ -6,12 +6,14 @@ import { tokensAPI } from '../api';
 export default function AccessTokens() {
   const [tokens, setTokens] = useState([]);
   const [name, setName] = useState('');
+  const [scope, setScope] = useState('full');
+  const [mcpPath, setMcpPath] = useState('');
   const [fresh, setFresh] = useState(null); // the secret, shown once
   const [msg, setMsg] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const load = async () => {
-    try { const { data } = await tokensAPI.list(); setTokens(data.tokens || []); } catch { /* the list stays empty */ }
+    try { const { data } = await tokensAPI.list(); setTokens(data.tokens || []); setMcpPath(data.mcpPath || ''); } catch { /* the list stays empty */ }
   };
   useEffect(() => { load(); }, []);
 
@@ -19,7 +21,7 @@ export default function AccessTokens() {
     e.preventDefault();
     setMsg(null); setCopied(false);
     try {
-      const { data } = await tokensAPI.create(name.trim());
+      const { data } = await tokensAPI.create(name.trim(), scope);
       setFresh(data.token); setName(''); load();
     } catch (err) { setMsg(err.response?.data?.error || 'Could not make the token.'); }
   };
@@ -27,6 +29,8 @@ export default function AccessTokens() {
     if (!window.confirm(`Remove "${t.name}"? Anything using it stops working straight away.`)) return;
     try { await tokensAPI.remove(t.id); setFresh(null); load(); } catch (err) { setMsg(err.response?.data?.error || 'Could not remove it.'); }
   };
+  const configFor = (tok) => JSON.stringify({ mcpServers: { peblo: { command: 'node', args: [mcpPath || 'C:/path/to/peblo/dist/server/mcp/index.js'], env: { PEBLO_URL: window.location.origin, PEBLO_TOKEN: tok } } } }, null, 2);
+  const copyConfig = async () => { try { await navigator.clipboard.writeText(configFor(fresh)); setCopied('config'); } catch { /* select by hand */ } };
   const copy = async () => {
     try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { /* select the text by hand */ }
   };
@@ -45,6 +49,10 @@ export default function AccessTokens() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <input id="token-name" aria-label="Token name" className="settings-field-input" style={{ flex: '1 1 14rem' }} placeholder='Name, e.g. "Claude Desktop"' maxLength={60} value={name} onChange={(e) => setName(e.target.value)} required />
+          <select aria-label="What the token can do" className="settings-field-input" style={{ flex: '0 0 auto', width: 'auto' }} value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="full">Read and write</option>
+            <option value="read">Read only</option>
+          </select>
           <button type="submit" className="btn btn-primary">Make token</button>
         </div>
         {fresh && (
@@ -52,8 +60,11 @@ export default function AccessTokens() {
             <p style={{ margin: '0 0 0.35rem', fontWeight: 500 }}>Copy it now. It will not be shown again.</p>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <code data-testid="new-token" style={{ flex: 1, padding: '0.5rem', overflowWrap: 'anywhere', userSelect: 'all' }}>{fresh}</code>
-              <button type="button" className="btn btn-outline" onClick={copy}><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button>
+              <button type="button" className="btn btn-outline" onClick={copy}><Copy size={14} /> {copied === true ? 'Copied' : 'Copy'}</button>
             </div>
+            <p style={{ margin: '0.75rem 0 0.35rem' }}>For Claude Desktop or Cursor, add this to the MCP servers file. The address changes each time the desktop app starts, so a fixed server (<code>npm run serve</code>) is easier.</p>
+            <pre data-testid="mcp-config" style={{ margin: 0, padding: '0.5rem', overflowX: 'auto', fontSize: '0.8rem' }}>{configFor(fresh)}</pre>
+            <button type="button" className="btn btn-outline" style={{ marginTop: '0.4rem' }} onClick={copyConfig}><Copy size={14} /> {copied === 'config' ? 'Config copied' : 'Copy config'}</button>
           </div>
         )}
         {msg && <p role="alert" style={{ margin: '0.5rem 0', color: '#ef4444' }}>{msg}</p>}
@@ -62,7 +73,7 @@ export default function AccessTokens() {
             {tokens.map((t) => (
               <li key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0' }}>
                 <span style={{ flex: 1 }}>
-                  <strong>{t.name}</strong> <code>{t.prefix}…</code>
+                  <strong>{t.name}</strong> <code>{t.prefix}…</code> <span style={{ opacity: 0.7 }}>{t.scope === 'read' ? '· read only' : ''}</span>
                   <span style={{ opacity: 0.7 }}> · {t.lastUsedAt ? `used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'never used'}</span>
                 </span>
                 <button type="button" className="btn btn-outline" aria-label={`Remove ${t.name}`} onClick={() => revoke(t)}><Trash2 size={14} /></button>

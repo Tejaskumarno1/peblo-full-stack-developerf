@@ -244,6 +244,7 @@ model ApiToken {
   name       String
   tokenHash  String    @unique @map("token_hash")
   prefix     String
+  scope      String    @default("full")
   createdAt  DateTime  @default(now()) @map("created_at")
   lastUsedAt DateTime? @map("last_used_at")
 

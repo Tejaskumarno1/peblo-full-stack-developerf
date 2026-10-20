@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 import prisma from '../db.js';
 import { authenticate, TOKEN_PREFIX, hashToken } from '../middleware/auth.js';
 
@@ -17,10 +18,10 @@ router.get('/', async (req, res, next) => {
   try {
     const tokens = await prisma.apiToken.findMany({
       where: { userId: req.user!.id },
-      select: { id: true, name: true, prefix: true, createdAt: true, lastUsedAt: true },
+      select: { id: true, name: true, prefix: true, scope: true, createdAt: true, lastUsedAt: true },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ tokens });
+    res.json({ tokens, mcpPath: fileURLToPath(new URL('../mcp/index.js', import.meta.url)) });
   } catch (error) { next(error); }
 });
 
@@ -29,12 +30,13 @@ router.post('/', async (req, res, next) => {
   try {
     const name = String(req.body?.name || '').trim().slice(0, 60);
     if (!name) return res.status(400).json({ error: 'Give the token a name, for example "Claude Desktop".' });
+    const scope = req.body?.scope === 'read' ? 'read' : 'full';
     const count = await prisma.apiToken.count({ where: { userId: req.user!.id } });
     if (count >= MAX_TOKENS) return res.status(400).json({ error: `You can have ${MAX_TOKENS} tokens. Remove one you no longer use first.` });
     const token = TOKEN_PREFIX + crypto.randomBytes(24).toString('base64url');
     const row = await prisma.apiToken.create({
-      data: { userId: req.user!.id, name, tokenHash: hashToken(token), prefix: token.slice(0, 10) },
-      select: { id: true, name: true, prefix: true, createdAt: true, lastUsedAt: true },
+      data: { userId: req.user!.id, name, scope, tokenHash: hashToken(token), prefix: token.slice(0, 10) },
+      select: { id: true, name: true, prefix: true, scope: true, createdAt: true, lastUsedAt: true },
     });
     res.status(201).json({ token, ...row });
   } catch (error) { next(error); }
