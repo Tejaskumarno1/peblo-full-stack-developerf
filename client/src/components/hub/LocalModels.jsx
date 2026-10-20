@@ -18,7 +18,7 @@ export default function LocalModels({ variant = 'soft' }) {
   const { data } = useQuery({
     queryKey: ['local-models'],
     queryFn: () => aiAPI.localStatus().then((r) => r.data),
-    refetchInterval: (q) => (q.state.data?.pulls?.some((j) => !j.done) ? 1200 : 5000),
+    refetchInterval: (q) => (q.state.data?.pulls?.some((j) => !j.done) || ['downloading', 'installing'].includes(q.state.data?.install?.status) ? 1200 : 5000),
   });
   if (!data || data.available === false) return null;
 
@@ -38,6 +38,11 @@ export default function LocalModels({ variant = 'soft' }) {
     setError(''); setStarting(true);
     try { await aiAPI.localStart(); } catch (e) { setError(e.response?.data?.error || 'Could not start Ollama.'); }
     setStarting(false); refresh();
+  };
+  const install = async () => {
+    setError('');
+    try { await aiAPI.localInstall(); } catch (e) { setError(e.response?.data?.error || 'Could not start the install.'); }
+    refresh();
   };
   const cancel = async (id) => { try { await aiAPI.localCancel(id); } catch { /* it ends on its own */ } refresh(); };
   const remove = async (m) => {
@@ -86,7 +91,17 @@ export default function LocalModels({ variant = 'soft' }) {
           </div>
           {data.onDisk
             ? <button type="button" className="lm-btn primary" onClick={startOllama} disabled={starting}>{starting ? 'Starting…' : 'Start Ollama'}</button>
-            : <a className="lm-btn" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Get Ollama <ExternalLink size={14} /></a>}
+            : ['downloading', 'installing'].includes(data.install?.status)
+              ? (
+                <div className="lm-act" style={{ flex: '1 1 220px', minWidth: 220 }}>
+                  <div className="lm-bar" role="progressbar" aria-label="Installing Ollama" aria-valuenow={data.install.percent || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${data.install.status === 'installing' ? 100 : data.install.percent}%` }} /></div>
+                  <span className="lm-pct">{data.install.status === 'installing' ? 'Installing…' : `${data.install.percent}%`}</span>
+                  {data.install.status === 'downloading' && <button type="button" className="lm-link" aria-label="Cancel install" onClick={() => aiAPI.localInstallCancel().then(refresh)}><X size={14} /></button>}
+                </div>
+              )
+              : data.canInstall
+                ? <div className="lm-act"><button type="button" className="lm-btn primary" onClick={install}><Download size={15} /> Install Ollama for me</button><a className="lm-btn" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Website <ExternalLink size={14} /></a></div>
+                : <a className="lm-btn" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Get Ollama <ExternalLink size={14} /></a>}
         </div>
       )}
 
@@ -101,6 +116,7 @@ export default function LocalModels({ variant = 'soft' }) {
       )}
       {data.running && todo.length === 0 && enabled && <p className="lm-done"><Check size={15} /> Local AI is ready on this computer.</p>}
 
+      {data.install?.status === 'failed' && !data.running && <p role="alert" className="lm-err">{data.install.error === 'Cancelled' ? 'Install cancelled.' : `Install failed: ${data.install.error}`}</p>}
       {error && <p role="alert" className="lm-err">{error}</p>}
 
       <ul className="lm-grid">

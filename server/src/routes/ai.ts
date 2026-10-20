@@ -5,7 +5,7 @@ import { checkOllama } from '../services/aiService.js';
 import { aiLimit } from '../middleware/rateLimit.js';
 import prisma from '../db.js';
 import { hosted, effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
-import { CATALOG, hardware, recommendedChat, fits, pullsSnapshot, startPull, cancelPull, findOllama, startOllama, detectGpu, removeModel } from '../services/localModels.js';
+import { CATALOG, hardware, recommendedChat, fits, pullsSnapshot, startPull, cancelPull, findOllama, startOllama, startInstall, cancelInstall, installSnapshot, canInstallOllama, detectGpu, removeModel } from '../services/localModels.js';
 
 const router = Router();
 
@@ -34,7 +34,7 @@ router.get('/local/status', async (req, res, next) => {
     const rec = recommendedChat(hw.ramGb);
     const has = (id: string) => installed.some((n) => n === id || n === `${id}:latest`);
     res.json({
-      available: true, running, onDisk: !!findOllama(), hardware: { ...hw, gpu }, recommendedChat: rec,
+      available: true, running, onDisk: !!findOllama(), canInstall: canInstallOllama(), install: installSnapshot(), hardware: { ...hw, gpu }, recommendedChat: rec,
       catalog: CATALOG.map((m) => ({ ...m, fits: fits(m, hw.ramGb), gpuFast: !!gpu?.vramGb && gpu.vramGb >= m.sizeGb * 1.15, installed: has(m.id), recommended: m.id === rec || m.kind === 'search' })),
       pulls: pullsSnapshot(),
     });
@@ -63,6 +63,16 @@ router.post('/local/start', async (req, res, next) => {
     if (!r.ok) return res.status(400).json({ error: r.error });
     res.json({ ok: true });
   } catch (error) { next(error); }
+});
+router.post('/local/install', (req, res) => {
+  if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });
+  const r = startInstall();
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+router.post('/local/install/cancel', (req, res) => {
+  if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });
+  res.json({ ok: cancelInstall() });
 });
 router.post('/local/cancel', (req, res) => {
   if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });

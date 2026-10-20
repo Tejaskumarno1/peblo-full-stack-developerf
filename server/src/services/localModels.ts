@@ -162,3 +162,54 @@ export async function startOllama(userUrl: unknown): Promise<{ ok: boolean; erro
   }
   return { ok: false, error: 'Ollama did not start in time.' };
 }
+
+// --- Install Ollama from Peblo (Windows). Only runs when the person presses the button. ---
+const OLLAMA_INSTALLER = 'https://ollama.com/download/OllamaSetup.exe';
+export const canInstallOllama = () => process.platform === 'win32';
+interface Install { status: 'downloading' | 'installing' | 'done' | 'failed'; completed: number; total: number; error?: string; abort: AbortController }
+let install: Install | null = null;
+
+export function installSnapshot() {
+  if (!install) return null;
+  const { abort, ...i } = install;
+  return { ...i, percent: i.total > 0 ? Math.min(100, Math.floor((i.completed / i.total) * 100)) : 0 };
+}
+
+export function startInstall(): { ok: boolean; error?: string } {
+  if (!canInstallOllama()) return { ok: false, error: 'One-click install is only available on Windows for now. Use the Get Ollama button.' };
+  if (install && (install.status === 'downloading' || install.status === 'installing')) return { ok: true };
+  const job: Install = { status: 'downloading', completed: 0, total: 0, abort: new AbortController() };
+  install = job;
+  (async () => {
+    const file = path.join(os.tmpdir(), `PebloOllamaSetup-${Date.now()}.exe`);
+    try {
+      const res = await fetch(OLLAMA_INSTALLER, { signal: job.abort.signal, redirect: 'follow' });
+      if (!res.ok || !res.body) throw new Error(`Download failed (HTTP ${res.status}).`);
+      job.total = Number(res.headers.get('content-length')) || 0;
+      const out = fs.createWriteStream(file);
+      const reader = res.body.getReader();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        job.completed += value.length;
+        if (!out.write(value)) await new Promise((r) => out.once('drain', r));
+      }
+      await new Promise<void>((r, j) => out.end((e: any) => (e ? j(e) : r())));
+      if (job.completed < 1024 * 1024) throw new Error('The installer download looks incomplete.');
+      job.status = 'installing';
+      const child = spawn(file, ['/SILENT', '/NORESTART'], { stdio: 'ignore', windowsHide: false });
+      child.on('error', (e) => { job.status = 'failed'; job.error = String(e.message); });
+      child.on('exit', (code) => { if (job.status === 'installing') { if (code === 0) job.status = 'done'; else { job.status = 'failed'; job.error = `The installer stopped (code ${code}).`; } } fs.unlink(file, () => {}); });
+    } catch (e: any) {
+      job.status = 'failed';
+      job.error = job.abort.signal.aborted ? 'Cancelled' : String(e?.message || e).slice(0, 200);
+      fs.unlink(file, () => {});
+    }
+  })();
+  return { ok: true };
+}
+
+export function cancelInstall() {
+  if (install && install.status === 'downloading') { install.abort.abort(); return true; }
+  return false;
+}

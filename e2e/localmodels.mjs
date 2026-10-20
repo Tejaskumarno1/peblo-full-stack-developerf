@@ -116,6 +116,7 @@ try {
   check('without Ollama the page says how to get it', await page.getByText('Peblo needs the free Ollama app').isVisible().catch(() => false));
   check('downloads are disabled until it runs', await page.locator('.lm-card button:has-text("Download")').first().isDisabled().catch(() => true));
   await shot('models-river-no-ollama');
+  check('with no Ollama on the computer, Install Ollama for me is offered', await page.getByRole('button', { name: /Install Ollama for me/ }).isVisible().catch(() => false));
 
   // Start Ollama from the app: a stand-in program plays the installed Ollama and answers on the same address
   const port = new URL(fakeUrl).port;
@@ -139,6 +140,8 @@ try {
   await page.reload();
   await page.waitForTimeout(2500);
   check('the web version shows no model store', (await page.getByTestId('local-models').count()) === 0);
+  const webInstall = await api('POST', '/api/ai/local/install');
+  check('the web version refuses to install anything', !!webInstall.error && /desktop/.test(webInstall.error), JSON.stringify(webInstall));
   delete process.env.PEBLO_HOSTED;
 } catch (e) {
   check('test ran without throwing', false, e?.stack || e);
