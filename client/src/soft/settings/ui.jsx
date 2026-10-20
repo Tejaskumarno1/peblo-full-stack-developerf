@@ -43,7 +43,7 @@ export function Switch({ checked, onChange, label, disabled }) {
 
 export function Seg({ value, options, onChange, label, disabled }) {
   return (
-    <div className="s-seg" role="radiogroup" aria-label={label}>
+    <div className="s-sg" role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled || o.disabled} title={o.title} className={value === o.id ? 'on' : ''} onClick={() => onChange(o.id)}>{o.label}</button>
       ))}

@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Plug, Trash2, Copy } from 'lucide-react';
 import { tokensAPI } from '../api';
+import { usePublicUrl } from '../api/publicUrl';
 
 // PEB-95: personal access tokens for the Peblo MCP server (Claude Desktop, Cursor) and scripts.
 export default function AccessTokens() {
   const [tokens, setTokens] = useState([]);
   const [name, setName] = useState('');
   const [scope, setScope] = useState('full');
-  const [mcpPath, setMcpPath] = useState('');
+  const publicUrl = usePublicUrl();
   const [fresh, setFresh] = useState(null); // the secret, shown once
   const [msg, setMsg] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const load = async () => {
-    try { const { data } = await tokensAPI.list(); setTokens(data.tokens || []); setMcpPath(data.mcpPath || ''); } catch { /* the list stays empty */ }
+    try { const { data } = await tokensAPI.list(); setTokens(data.tokens || []); } catch { /* the list stays empty */ }
   };
   useEffect(() => { load(); }, []);
 
@@ -29,7 +30,8 @@ export default function AccessTokens() {
     if (!window.confirm(`Remove "${t.name}"? Anything using it stops working straight away.`)) return;
     try { await tokensAPI.remove(t.id); setFresh(null); load(); } catch (err) { setMsg(err.response?.data?.error || 'Could not remove it.'); }
   };
-  const configFor = (tok) => JSON.stringify({ mcpServers: { peblo: { command: 'node', args: [mcpPath || 'C:/path/to/peblo/dist/server/mcp/index.js'], env: { PEBLO_URL: window.location.origin, PEBLO_TOKEN: tok } } } }, null, 2);
+  const mcpUrl = `${publicUrl || window.location.origin}/mcp`;
+  const configFor = (tok) => JSON.stringify({ mcpServers: { peblo: { command: 'npx', args: ['-y', 'mcp-remote', mcpUrl, '--header', `Authorization: Bearer ${tok}`] } } }, null, 2);
   const copyConfig = async () => { try { await navigator.clipboard.writeText(configFor(fresh)); setCopied('config'); } catch { /* select by hand */ } };
   const copy = async () => {
     try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { /* select the text by hand */ }
@@ -43,7 +45,7 @@ export default function AccessTokens() {
           <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Plug size={16} /> Connect Claude, Cursor and other tools</h4>
           <p>
             A token lets another program read and write your notes and tasks, for example the Peblo MCP server
-            (<code>npm run mcp</code>). It can never change your password or settings or delete anything through the MCP server.
+            at <code>{mcpUrl}</code>. It can never change your password or settings or delete anything through the MCP server.
             You see the token once, so copy it straight away.
           </p>
         </div>
@@ -62,7 +64,7 @@ export default function AccessTokens() {
               <code data-testid="new-token" style={{ flex: 1, padding: '0.5rem', overflowWrap: 'anywhere', userSelect: 'all' }}>{fresh}</code>
               <button type="button" className="btn btn-outline" onClick={copy}><Copy size={14} /> {copied === true ? 'Copied' : 'Copy'}</button>
             </div>
-            <p style={{ margin: '0.75rem 0 0.35rem' }}>For Claude Desktop or Cursor, add this to the MCP servers file. The address changes each time the desktop app starts, so a fixed server (<code>npm run serve</code>) is easier.</p>
+            <p style={{ margin: '0.75rem 0 0.35rem' }}>For tools that only take a settings file (Claude Desktop, Cursor), add this to the MCP servers file. It points at your hosted Peblo, so nothing on this computer is needed. It uses Node, which must be installed.</p>
             <pre data-testid="mcp-config" style={{ margin: 0, padding: '0.5rem', overflowX: 'auto', fontSize: '0.8rem' }}>{configFor(fresh)}</pre>
             <button type="button" className="btn btn-outline" style={{ marginTop: '0.4rem' }} onClick={copyConfig}><Copy size={14} /> {copied === 'config' ? 'Config copied' : 'Copy config'}</button>
           </div>

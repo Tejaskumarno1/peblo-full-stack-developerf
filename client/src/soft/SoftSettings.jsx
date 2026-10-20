@@ -30,6 +30,20 @@ const GROUPS = [
     { id: 'about', name: 'About', icon: Info, view: AboutSection, words: 'version feedback address' },
   ] },
 ];
+const TONES = { You: 'mint', 'Look and feel': 'butter', AI: 'lilac', Connections: 'sky', 'Your data': 'peach', Help: 'line' };
+const SUBS = {
+  profile: 'How you appear in Peblo and in notes you share.',
+  accounts: 'Who you are, and which account Peblo is using right now.',
+  appearance: 'Make Peblo look the way you like to work.',
+  notes: 'Writing, calendar and voice.',
+  ai: 'Choose where Peblo\'s AI runs. Your notes only leave this computer when you pick the cloud.',
+  connect: 'Let other AI apps work with your Peblo, safely.',
+  shared: 'Everything you have shared with a link, and who can change it.',
+  data: 'Take your notes with you, bring notes in, and find deleted ones.',
+  shortcuts: 'Keys that save time.',
+  about: 'Version, address and feedback.',
+};
+GROUPS.forEach((g) => { g.tone = TONES[g.label]; g.items.forEach((i) => { i.sub = SUBS[i.id]; }); });
 const ALL = GROUPS.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })));
 
 export default function SoftSettings() {
@@ -63,20 +77,9 @@ export default function SoftSettings() {
 
   return (
     <div className="soft-page s-set">
-      <div className="s-page-title s-set-title">
-        <div>
-          <h1 className="s-h1">Settings</h1>
-          <span className="s-sub">Changes save as you make them.</span>
-        </div>
-        <span className={`s-set-status ${status}`} role="status" aria-live="polite">
-          {status === 'saving' && 'Saving…'}
-          {status === 'saved' && <><Check size={14} strokeWidth={3} /> Saved</>}
-          {status === 'local' && 'Saved on this computer only. Could not reach your account.'}
-        </span>
-      </div>
-
       <div className="s-set-body">
         <nav className="s-set-nav" aria-label="Settings sections">
+          <h1 className="s-set-h1">Settings</h1>
           <div className="s-set-find">
             <Search size={15} aria-hidden="true" />
             <input type="search" value={q} placeholder="Find a setting" aria-label="Find a setting" onChange={(e) => setQ(e.target.value)}
@@ -94,14 +97,25 @@ export default function SoftSettings() {
             <div key={g.label} className="s-set-group">
               <span>{g.label}</span>
               {g.items.map((i) => (
-                <NavLink key={i.id} to={`/settings/${i.id}`} className={({ isActive }) => `s-set-link${isActive ? ' on' : ''}`}><i.icon size={16} /> {i.name}</NavLink>
+                <NavLink key={i.id} to={`/settings/${i.id}`} className={({ isActive }) => `s-set-link${isActive ? ' on' : ''}`}><i className="dot" style={{ background: `var(--s-${g.tone})` }} />{i.name}</NavLink>
               ))}
             </div>
           ))}
         </nav>
 
         <main className="s-set-main" aria-label={current.name}>
-          <h2 className="s-set-h2">{current.name}</h2>
+          <header className="s-set-head">
+            <div>
+              <h2 className="s-set-h2">{current.name}</h2>
+              <span className="s-set-subtitle">{current.sub}</span>
+            </div>
+            <span className={`s-set-status ${status}`} role="status" aria-live="polite">
+              {status === 'idle' && 'Saved automatically'}
+              {status === 'saving' && 'Saving…'}
+              {status === 'saved' && <><Check size={14} strokeWidth={3} /> Saved</>}
+              {status === 'local' && 'Saved on this computer only'}
+            </span>
+          </header>
           <SaveCtx.Provider value={save}><View /></SaveCtx.Provider>
         </main>
       </div>
