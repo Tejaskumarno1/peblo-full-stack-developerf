@@ -280,7 +280,7 @@ function OrbitNote({ note }) {
             </div>
           )}
           <div className="o-body">
-            <BlockEditor key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
           </div>
           <p className="o-wc" aria-label="Word count">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {String(doc.content || '').length} characters · {readMin} min read</p>
         </div>

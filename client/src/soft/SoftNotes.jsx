@@ -332,6 +332,7 @@ export default function SoftNotes() {
 
             <div className="s-note-body" ref={bodyRef}>
               <BlockEditor
+                noteId={doc.id}
                 key={editorKey}
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}

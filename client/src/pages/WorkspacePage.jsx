@@ -1041,6 +1041,7 @@ export default function WorkspacePage() {
                   <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
                     <EditorErrorBoundary key={editorKey}>
                       <BlockEditor
+                        noteId={selectedNote?.id}
                         initialContent={noteContent}
                         onChange={(content) => setNoteContent(content)}
                         editable={!showPreview && !selectedNote?.isDeleted}

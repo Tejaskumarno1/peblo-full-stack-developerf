@@ -191,7 +191,7 @@ function RiverNote({ note }) {
             ))}
           </div>
           <div className="r-body">
-            <BlockEditor key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} formattingToolbar={false} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} formattingToolbar={false} />
           </div>
         </article>
 

@@ -4,11 +4,16 @@ import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuI
 import { filterSuggestionItems } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
 import { Sparkles, CheckSquare, Wand2 } from 'lucide-react';
-import { aiAPI } from '../api/index';
+import { useNavigate } from 'react-router-dom';
+import { aiAPI, notesAPI } from '../api/index';
+import Backlinks from './Backlinks';
 
 import { useAuth } from '../context/AuthContext';
 
-export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true }) {
+export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId }) {
+  const navigate = useNavigate();
+  // Titles for the @ menu, refreshed every few seconds so a note made a moment ago can be linked
+  const linkCache = useRef({ at: 0, notes: [] });
   // Initialize the editor
   const editor = useCreateBlockNote();
   const { theme } = useAuth();
@@ -183,8 +188,34 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     return filterSuggestionItems([...aiItems, ...defaultItems], query);
   };
 
+  // PEB-273: @ opens a list of notes; choosing one inserts a normal Markdown link to /notes/<id>
+  const getNoteLinkItems = async (query) => {
+    if (Date.now() - linkCache.current.at > 5000) {
+      try {
+        const { data } = await notesAPI.getAll({ sort: 'updated', limit: 200 });
+        linkCache.current = { at: Date.now(), notes: data.notes || [] };
+      } catch { /* keep whatever we had */ }
+    }
+    const q = String(query || '').trim().toLowerCase();
+    return linkCache.current.notes
+      .filter((n) => n.id !== noteId && (n.title || 'Untitled').toLowerCase().includes(q))
+      .slice(0, 8)
+      .map((n) => ({
+        title: n.title || 'Untitled',
+        group: 'Link to a note',
+        onItemClick: () => editor.insertInlineContent([{ type: 'link', href: `/notes/${n.id}`, content: n.title || 'Untitled' }, ' ']),
+      }));
+  };
+
+  // Clicking a link to another note opens that note instead of leaving the app
+  const onLinkClick = (e) => {
+    const a = e.target?.closest?.('a');
+    const m = a && /^\/notes\/([\w-]+)$/.exec(a.getAttribute('href') || '');
+    if (m) { e.preventDefault(); e.stopPropagation(); navigate(`/notes/${m[1]}`); }
+  };
+
   return (
-    <div className="block-editor-container" style={{ padding: '0 24px', flex: 1, height: '100%', overflowY: 'auto', cursor: editable ? 'text' : 'default' }}>
+    <div className="block-editor-container" onClickCapture={onLinkClick} style={{ padding: '0 24px', flex: 1, height: '100%', overflowY: 'auto', cursor: editable ? 'text' : 'default' }}>
       <BlockNoteView
         editor={editor}
         editable={editable}
@@ -197,7 +228,9 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
           triggerCharacter={'/'}
           getItems={async (query) => getCustomSlashMenuItems(query)}
         />
+        <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />
       </BlockNoteView>
+      <Backlinks noteId={noteId} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api/index';
+import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
 
 export default function CommandPalette() {
@@ -48,7 +49,18 @@ export default function CommandPalette() {
     ? notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5)
     : [];
 
+  const openNew = async (data) => {
+    try { const r = await notesAPI.create(data); navigate(`/notes/${r.data.note.id}`); } catch { /* the palette just closes */ }
+  };
+  const openToday = async () => {
+    const d = new Date();
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try { const r = await notesAPI.daily(date); navigate(`/notes/${r.data.note.id}`); } catch { /* the palette just closes */ }
+  };
+
   const navigationCommands = [
+    { id: 'daily-note', title: "Open today's daily note", icon: <Calendar size={16} />, action: openToday },
+    ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, title: `New note from template: ${t.name}`, icon: <FileText size={16} />, action: () => openNew({ title: t.title.trim() || t.name, content: t.content, tags: [] }) })),
     { id: 'nav-dashboard', title: 'Go to Home', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
     { id: 'nav-notes', title: 'Go to Notes', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
     { id: 'nav-tasks', title: 'Go to Tasks', icon: <CheckSquare size={16} />, action: () => navigate('/tasks') },

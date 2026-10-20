@@ -428,3 +428,36 @@ export async function saveEmbeddingForNote(userId: string, noteId: string, title
     console.error('Failed to save embedding for note:', noteId, error);
   }
 }
+
+/** Notes that link to this one. A link is written as a normal Markdown link to /notes/<id>, so it survives export and import. */
+export async function getBacklinks(req: any, res: any, next: any) {
+  try {
+    const id = String(req.params.id);
+    const rows = await prisma.note.findMany({
+      where: { userId: req.user.id, isDeleted: false, id: { not: id }, content: { contains: `](/notes/${id})` } },
+      select: { id: true, title: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+    res.json({ backlinks: rows });
+  } catch (error) {
+    next(error);
+  }
+}
+
+const DAILY_BODY = '## Today I did\n\n- \n\n## What I learned\n\n- \n\n## Tomorrow\n\n- \n\n';
+
+/** Today's note: opens it if it exists, otherwise makes it. The client sends its own local date so time zones cannot shift the day. */
+export async function openDailyNote(req: any, res: any, next: any) {
+  try {
+    const date = String(req.body?.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must look like 2026-10-21' });
+    const title = `Daily note ${date}`;
+    const existing = await prisma.note.findFirst({ where: { userId: req.user.id, isDeleted: false, title }, include: noteInclude });
+    if (existing) return res.json({ note: formatNote(existing), created: false });
+    const made = await prisma.note.create({ data: { userId: req.user.id, title, content: DAILY_BODY }, include: noteInclude });
+    res.status(201).json({ note: formatNote(made), created: true });
+  } catch (error) {
+    next(error);
+  }
+}
