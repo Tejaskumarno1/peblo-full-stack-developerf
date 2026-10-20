@@ -60,7 +60,7 @@ function fromStorage(blocks) {
 
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
-export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId }) {
+export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
@@ -166,7 +166,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
       { title: 'AI Summarize', onItemClick: () => runAi('summarize'), aliases: ['ai-summarize', 'summarize', 'sum', 'ai'], group: 'AI', icon: icon(Sparkles, '#6366f1'), subtext: 'A short summary of this block.' },
       { title: 'AI Continue writing', onItemClick: () => runAi('continue'), aliases: ['ai-continue', 'continue', 'write', 'ai'], group: 'AI', icon: icon(Sparkles, '#ec4899'), subtext: 'Write the next sentences.' },
     ];
-    return filterSuggestionItems([...defaultItems, ...aiItems], query);
+    return filterSuggestionItems(guest ? defaultItems : [...defaultItems, ...aiItems], query);
   };
 
   const getNoteLinkItems = async (query) => {
@@ -207,9 +207,9 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         formattingToolbar={formattingToolbar}
       >
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
-        <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />
+        {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
       </BlockNoteView>
-      <Backlinks noteId={noteId} />
+      {!guest && <Backlinks noteId={noteId} />}
 
       {card && (
         <div className={`pb-aicard ${card.kind}`} role="dialog" aria-label={title}>

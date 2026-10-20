@@ -14,12 +14,13 @@ const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);
 
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
-  if (kind === 'note') return prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, shareToken: true } });
-  return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true } });
+  if (kind === 'note') return prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, shareToken: true, shareEdit: true } });
+  return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true } });
 }
-async function setToken(kind: 'note' | 'todo', id: string, token: string | null) {
-  if (kind === 'note') await prisma.note.update({ where: { id }, data: { shareToken: token }, select: { id: true } });
-  else await prisma.todo.update({ where: { id }, data: { shareToken: token }, select: { id: true } });
+async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false) {
+  const data = { shareToken: token, shareEdit: token ? edit : false };
+  if (kind === 'note') await prisma.note.update({ where: { id }, data, select: { id: true } });
+  else await prisma.todo.update({ where: { id }, data, select: { id: true } });
 }
 
 // GET /api/share/:kind/:id -> { token: string | null }
@@ -29,7 +30,7 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    res.json({ token: row.shareToken ?? null });
+    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit });
   } catch (e) { next(e); }
 });
 
@@ -40,9 +41,11 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
+    const edit = typeof req.body?.edit === 'boolean' ? req.body.edit : !!row.shareEdit;
     let token = row.shareToken;
-    if (!token) { token = newToken(); await setToken(kind, row.id, token); }
-    res.status(201).json({ token });
+    if (!token) token = newToken();
+    if (token !== row.shareToken || edit !== !!row.shareEdit) await setToken(kind, row.id, token, edit);
+    res.status(201).json({ token, edit });
   } catch (e) { next(e); }
 });
 
@@ -73,10 +76,10 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const note = await prisma.note.findFirst({
       where: { shareToken: req.params.token, isDeleted: false },
-      select: { title: true, content: true, updatedAt: true, user: { select: { name: true } } },
+      select: { title: true, content: true, updatedAt: true, shareEdit: true, user: { select: { name: true } } },
     });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
-    res.json({ kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, author: note.user?.name || null });
+    res.json({ kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: note.shareEdit, author: note.user?.name || null });
   } catch (e) { next(e); }
 });
 
@@ -86,7 +89,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     const t = await prisma.todo.findFirst({
       where: { shareToken: req.params.token },
       select: {
-        text: true, completed: true, priority: true, deadline: true, todoTags: true, updatedAt: true,
+        text: true, completed: true, priority: true, deadline: true, todoTags: true, updatedAt: true, shareEdit: true,
         note: { select: { title: true, content: true, isDeleted: true } },
         user: { select: { name: true } },
       },
@@ -94,8 +97,47 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
     res.json({
       kind: 'todo', text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline,
-      tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, author: t.user?.name || null,
+      tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: t.shareEdit, author: t.user?.name || null,
       note: t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
     });
+  } catch (e) { next(e); }
+});
+
+const MAX_NOTE = 8_000_000;
+
+// PUT /api/public/note/:token { title?, content, baseUpdatedAt, force? } -> save an edit made through an "can edit" link.
+// If the owner (or someone else) saved after the editor opened the note, answer 409 with the latest copy instead of overwriting.
+publicRoutes.put('/note/:token', async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, isDeleted: false }, select: { id: true, title: true, content: true, updatedAt: true, shareEdit: true } });
+    if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (!note.shareEdit) return res.status(403).json({ error: 'This link is view only.' });
+    const { title, content, baseUpdatedAt, force } = req.body || {};
+    if (typeof content !== 'string' || content.length > MAX_NOTE) return res.status(400).json({ error: 'That note is too big to save.' });
+    if (!force && baseUpdatedAt && new Date(baseUpdatedAt).getTime() < note.updatedAt.getTime() && content !== note.content) {
+      return res.status(409).json({ error: 'Someone else changed this note while you were editing.', latest: { title: note.title, content: note.content, updatedAt: note.updatedAt } });
+    }
+    const saved = await prisma.note.update({
+      where: { id: note.id },
+      data: { content, ...(typeof title === 'string' ? { title: title.slice(0, 300) || 'Untitled' } : {}) },
+      select: { updatedAt: true },
+    });
+    res.json({ ok: true, updatedAt: saved.updatedAt });
+  } catch (e) { next(e); }
+});
+
+// PUT /api/public/todo/:token { completed?, text? } -> an editor can tick the task off or reword it.
+publicRoutes.put('/todo/:token', async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const t = await prisma.todo.findFirst({ where: { shareToken: req.params.token }, select: { id: true, shareEdit: true } });
+    if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (!t.shareEdit) return res.status(403).json({ error: 'This link is view only.' });
+    const data: { completed?: boolean; text?: string } = {};
+    if (typeof req.body?.completed === 'boolean') data.completed = req.body.completed;
+    if (typeof req.body?.text === 'string' && req.body.text.trim()) data.text = req.body.text.trim().slice(0, 500);
+    const saved = await prisma.todo.update({ where: { id: t.id }, data, select: { updatedAt: true, completed: true, text: true } });
+    res.json({ ok: true, ...saved });
   } catch (e) { next(e); }
 });
