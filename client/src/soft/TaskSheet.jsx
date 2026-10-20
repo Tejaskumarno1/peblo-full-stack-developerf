@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, FileText, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
+import ShareDialog from './ShareDialog';
 import { tagsOf, addDays, startOfDay, snippetOf } from './softUtils';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -45,6 +46,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const queryClient = useQueryClient();
   const due = task.deadline ? new Date(task.deadline) : null;
   const [text, setText] = useState(task.text || '');
+  const [shareOpen, setShareOpen] = useState(false);
   const [date, setDate] = useState(dateVal(due));
   const [time, setTime] = useState(timeVal(due));
   const [cal, setCal] = useState(false);
@@ -199,9 +201,11 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         )}
       </section>
 
+      {shareOpen && <ShareDialog kind="todo" id={task.id} title={text} onClose={() => setShareOpen(false)} />}
       {error && <p className="s-sheet-error" role="alert">{error}</p>}
       <div className="s-sheet-foot">
-        {!isNew && <button type="button" className="s-sheet-del" onClick={remove}>Delete</button>}
+        {!isNew && <button type="button" className="s-sheet-del" style={{ marginRight: 8 }} onClick={() => setShareOpen(true)}>Share</button>}
+          {!isNew && <button type="button" className="s-sheet-del" onClick={remove}>Delete</button>}
         <span className="grow" />
         {isNew && <button type="button" className="s-sheet-skip" onClick={onClose}>Skip</button>}
         <button type="button" className="s-capture-add" disabled={!text.trim() || saving} onClick={save}>{saving ? 'Saving…' : isNew ? 'Done' : 'Save'}</button>

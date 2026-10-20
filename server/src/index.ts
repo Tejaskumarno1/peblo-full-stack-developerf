@@ -22,6 +22,7 @@ import transferRoutes from './routes/transfer.js';
 import hubRoutes from './routes/hub.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
+import { shareRoutes, publicRoutes } from './routes/share.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
@@ -70,6 +71,8 @@ app.use('/api/tokens', tokensRoutes);
   app.use('/api/todos', todosRoutes);
   app.use('/api/study', studyRoutes);
   app.use('/api/river', riverRoutes);
+app.use('/api/share', shareRoutes);
+app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 
   // Unknown API paths answer JSON, never an HTML page.

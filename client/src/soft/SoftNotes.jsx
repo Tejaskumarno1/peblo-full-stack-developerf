@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2 } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
+import ShareDialog from './ShareDialog';
 import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
@@ -37,6 +38,7 @@ export default function SoftNotes() {
   });
   const setGroup = (v) => { setGroupState(v); try { localStorage.setItem('peblo-notes-group', v); } catch { /* ignore */ } };
   const [focus, setFocus] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
   const [editorKey, setEditorKey] = useState('none');
@@ -350,6 +352,7 @@ export default function SoftNotes() {
 
   return (
     <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
+      {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
       <aside className="s-notes-list" aria-label="Notes">
         <div className="s-tile-head">
@@ -414,6 +417,7 @@ export default function SoftNotes() {
                   <div className="s-menu" role="menu">
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}>Share link…</button>
                     <button type="button" role="menuitem" onClick={exportPdf}>Export as PDF</button>
                     <button type="button" role="menuitem" onClick={exportWord}>Export as Word</button>
                     <button type="button" role="menuitem" onClick={exportMd}>Export as Markdown</button>

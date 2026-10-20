@@ -53,6 +53,7 @@ model Note {
   isDeleted  Boolean  @default(false) @map("is_deleted")
   deletedAt  DateTime? @map("deleted_at")
   meta       Json?
+  shareToken String? @unique @map("share_token")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -139,6 +140,7 @@ model Todo {
   recurrence String?   @default("none") @map("recurrence")
   seriesId   String?   @map("series_id")
   meta       Json?
+  shareToken String? @unique @map("share_token")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

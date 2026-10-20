@@ -8,6 +8,7 @@ import HelpDialog from './components/HelpDialog';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
+const SharedPage = lazy(() => import('./pages/SharedPage'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const TasksPage = lazy(() => import('./pages/TasksPage'));
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<CaptureGate />} />
+        <Route path="/s/:kind/:token" element={<SharedPage />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />
         <Route path="/todolist" element={<Navigate to="/tasks" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
