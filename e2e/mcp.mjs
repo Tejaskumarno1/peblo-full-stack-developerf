@@ -65,6 +65,27 @@ try {
   await api('DELETE', '/api/tokens/activity');
   check('activity can be cleared', ((await api('GET', '/api/tokens/activity')).activity || []).length === 0);
 
+  // more tools
+  const ev = await call('create_task', { text: 'Weekly sync', deadline: '2026-11-04T00:00:00.000Z', startTime: '10:00', endTime: '10:30', recurrence: 'weekly' });
+  check('create_task makes a repeating event with times', !ev.err && ev.json?.id, ev.text);
+  const ar = await call('archive_note', { id });
+  check('archive_note archives', !ar.err, ar.text);
+  await call('archive_note', { id, archived: false });
+  const pn = await call('pin_note', { id });
+  check('pin_note pins', !pn.err && (await api('GET', '/api/notes/' + id)).note.meta?.pinned === true, pn.text);
+  const tr = await call('trash_note', { id });
+  const lt = await call('list_trash', {});
+  check('trash_note moves it to the trash (listed)', !tr.err && Array.isArray(lt.json) && lt.json.some((n) => n.id === id), lt.text);
+  const rs = await call('restore_note', { id });
+  check('restore_note brings it back', !rs.err && !(await api('GET', '/api/notes/' + id)).note.isDeleted, rs.text);
+  const bl = await call('get_backlinks', { id });
+  check('get_backlinks answers', !bl.err, bl.text);
+  const hist = await call('list_note_history', { id });
+  check('list_note_history answers', !hist.err, hist.text);
+  const rt = await call('rename_tag', { from: 'edited', to: 'edited-2' });
+  check('rename_tag renames', !rt.err && (await api('GET', '/api/notes/' + id)).note.tags.includes('edited-2'), rt.text);
+  check('no permanent-delete tool', !(await client.listTools()).tools.some((x) => /delete|remove|empty|purge/.test(x.name)));
+
   // a read-only token cannot write
   const ro = await api('POST', '/api/tokens', { name: 'ro', scope: 'read' });
   const t2 = new StdioClientTransport({ command: 'node', args: [path.join(REPO, 'dist', 'server', 'mcp', 'index.js')], env: { ...process.env, PEBLO_URL: base, PEBLO_TOKEN: ro.token } });

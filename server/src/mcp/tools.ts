@@ -1,7 +1,7 @@
 /*
  * The Peblo MCP tools. One place builds the server so the local (stdio) program and the hosted /mcp endpoint offer exactly the same tools.
  * It is a thin client of the Peblo REST API (base + bearer token), so every rule the app enforces (ownership, validation, read-only tokens) still applies.
- * It never deletes anything: no tool removes a note or a task.
+ * It never permanently deletes anything: notes can be moved to the trash (and restored), but no tool empties it or removes a task.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -100,7 +100,11 @@ server.registerTool('list_tasks', {
 
 server.registerTool('create_task', {
   description: 'Add a task. deadline is an ISO date or date-time; priority is low, medium or high.',
-  inputSchema: { text: z.string().min(1), deadline: z.string().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), tags: z.array(z.string()).optional() },
+  inputSchema: {
+    text: z.string().min(1), deadline: z.string().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), tags: z.array(z.string()).optional(),
+    startTime: z.string().optional().describe('Start time of day, HH:MM, to make it a calendar event'), endTime: z.string().optional().describe('End time, HH:MM'),
+    recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(), noteId: z.string().optional().describe('Link the task to a note'),
+  },
   annotations: writes,
 }, (args) => run(async () => {
   const { todo } = await api('POST', '/todos', args);
@@ -133,7 +137,11 @@ server.registerTool('update_note', {
 
 server.registerTool('update_task', {
   description: 'Change a task: its text, deadline (ISO date or date-time), priority, or the note it is linked to (noteId, or null to unlink).',
-  inputSchema: { id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional() },
+  inputSchema: {
+    id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional(),
+    startTime: z.string().nullable().optional(), endTime: z.string().nullable().optional(), recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+    tags: z.array(z.string()).optional(), scope: z.enum(['this', 'following', 'all']).optional().describe('For repeating tasks: which occurrences to change'),
+  },
   annotations: { ...writes, idempotentHint: true },
 }, ({ id, ...patch }) => run(async () => {
   const body = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
@@ -167,6 +175,70 @@ server.registerTool('stop_sharing', {
   inputSchema: { kind: z.enum(['note', 'todo']), id: z.string() },
   annotations: { ...writes, idempotentHint: true },
 }, ({ kind, id }) => run(async () => { await api('DELETE', `/share/${kind}/${encodeURIComponent(id)}`); return 'The link is off.'; }));
+
+server.registerTool('archive_note', {
+  description: 'Archive a note (hide it from the main list) or bring it back (archived=false). Nothing is lost.',
+  inputSchema: { id: z.string(), archived: z.boolean().optional().describe('Defaults to true') },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id, archived }) => run(async () => {
+  await api('PATCH', '/notes/' + encodeURIComponent(id), { isArchived: archived ?? true });
+  return (archived ?? true) ? 'Archived.' : 'Back in the main list.';
+}));
+
+server.registerTool('pin_note', {
+  description: 'Pin a note to the top of the list, or unpin it (pinned=false).',
+  inputSchema: { id: z.string(), pinned: z.boolean().optional().describe('Defaults to true') },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id, pinned }) => run(async () => {
+  const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
+  await api('PATCH', '/notes/' + encodeURIComponent(id), { meta: { ...(note.meta || {}), pinned: pinned ?? true } });
+  return (pinned ?? true) ? 'Pinned.' : 'Unpinned.';
+}));
+
+server.registerTool('trash_note', {
+  description: 'Move a note to the trash. It is NOT deleted: it stays in the trash and restore_note brings it back.',
+  inputSchema: { id: z.string() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id }) => run(async () => { await api('DELETE', '/notes/' + encodeURIComponent(id)); return 'Moved to the trash. restore_note brings it back.'; }));
+
+server.registerTool('restore_note', {
+  description: 'Bring a note back from the trash.',
+  inputSchema: { id: z.string() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id }) => run(async () => { await api('POST', '/notes/' + encodeURIComponent(id) + '/restore'); return 'Restored.'; }));
+
+server.registerTool('list_trash', {
+  description: 'List notes in the trash (title and id), so one can be restored.',
+  inputSchema: {},
+  annotations: readOnly,
+}, () => run(async () => {
+  const { notes } = await api('GET', '/notes?deleted=true&limit=50');
+  return (notes || []).map((n: any) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt }));
+}));
+
+server.registerTool('get_backlinks', {
+  description: 'Which notes link to this note.',
+  inputSchema: { id: z.string() },
+  annotations: readOnly,
+}, ({ id }) => run(async () => (await api('GET', '/notes/' + encodeURIComponent(id) + '/backlinks')).backlinks));
+
+server.registerTool('list_note_history', {
+  description: 'Saved earlier versions of a note (newest first), with their ids.',
+  inputSchema: { id: z.string() },
+  annotations: readOnly,
+}, ({ id }) => run(async () => (await api('GET', '/notes/' + encodeURIComponent(id) + '/backups')).backups));
+
+server.registerTool('restore_note_version', {
+  description: 'Put a note back to one of its earlier versions (from list_note_history). The current text is saved as a version first, so this can be undone.',
+  inputSchema: { id: z.string(), versionId: z.string() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id, versionId }) => run(async () => { await api('POST', '/notes/' + encodeURIComponent(id) + '/backups/' + encodeURIComponent(versionId) + '/revert'); return 'Restored that version.'; }));
+
+server.registerTool('rename_tag', {
+  description: 'Rename a tag everywhere. If the new name already exists the two are merged.',
+  inputSchema: { from: z.string().min(1), to: z.string().min(1) },
+  annotations: writes,
+}, ({ from, to }) => run(() => api('POST', '/tags/rename', { from, to })));
 
 server.registerTool('list_tags', {
   description: 'List the tags (topics) the user has, with how many notes use each.',

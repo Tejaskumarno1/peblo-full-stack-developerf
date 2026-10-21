@@ -58,6 +58,8 @@ const TOOL_LABELS = {
   search_notes: 'Searched notes', get_note: 'Read a note', create_note: 'Added a note', append_to_note: 'Added to a note', update_note: 'Changed a note',
   list_tasks: 'Looked at tasks', create_task: 'Added a task', complete_task: 'Ticked a task', update_task: 'Changed a task', get_calendar: 'Looked at the calendar',
   list_tags: 'Listed tags', create_share_link: 'Made a share link', stop_sharing: 'Stopped sharing',
+  archive_note: 'Archived a note', pin_note: 'Pinned a note', trash_note: 'Moved a note to the trash', restore_note: 'Restored a note', list_trash: 'Looked at the trash',
+  get_backlinks: 'Looked at backlinks', list_note_history: 'Looked at note history', restore_note_version: 'Restored an older version', rename_tag: 'Renamed a tag',
 };
 const ago = (d) => {
   const s = Math.max(0, (Date.now() - new Date(d).getTime()) / 1000);
@@ -161,7 +163,7 @@ export function ConnectSection() {
         <ol className="s-set-steps">
           <li><b>1.</b> In Claude, open Settings, then Connectors, then <i>Add custom connector</i>, and paste the address above.</li>
           <li><b>2.</b> Press <i>Connect</i>. Peblo opens, you sign in and press <i>Allow</i>.</li>
-          <li><b>3.</b> Ask Claude about your notes. It can search, read, add notes and tasks. It cannot delete anything.</li>
+          <li><b>3.</b> Ask Claude about your notes. It can search, read, add notes and tasks. It cannot permanently delete anything.</li>
         </ol>
       </Card>
 

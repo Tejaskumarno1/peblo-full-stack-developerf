@@ -7,7 +7,7 @@ import { unreadableKeyMessage } from '../utils/keyStatus';
 import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
 import DataTools from './DataTools';
-import AccessTokens from './AccessTokens';
+import { ConnectSection } from '../soft/settings/sections2';
 import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Trash2 } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
@@ -507,7 +507,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
 
               <DataTools />
 
-              <AccessTokens />
+              <div className="soft s-embed"><ConnectSection /></div>
 
               <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Password &amp; sessions</h3>
               <form onSubmit={handleChangePassword} className="settings-toggle-row" style={{ display: 'block' }}>

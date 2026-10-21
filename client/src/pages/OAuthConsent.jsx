@@ -77,7 +77,7 @@ export default function OAuthConsent() {
                 <div><b>Read only</b><span>It can look things up but never change anything.</span></div>
               </div>
             </div>
-            <div className="can">It can never delete anything, change your password or settings, or see your saved AI keys. You can remove its access any time in Settings.</div>
+            <div className="can">It can never permanently delete anything (a note it trashes can be restored), change your password or settings, or see your saved AI keys. You can remove its access any time in Settings.</div>
             {error && <p className="err" role="alert">{error}</p>}
             <div className="row">
               <button type="button" className="no" disabled={busy} onClick={() => decide(true)}>Cancel</button>

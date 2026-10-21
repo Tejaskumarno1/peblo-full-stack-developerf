@@ -347,3 +347,6 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-set-log .what { min-width: 0; overflow-wrap: anywhere; }
 .soft .s-set-log .what i { color: var(--s-fg3); font-style: normal; }
 .soft .s-set-log li.bad .what { color: #b3261e; }
+
+.soft.s-embed { background: transparent !important; padding: 0 !important; min-height: 0 !important; height: auto !important; display: flex; flex-direction: column; gap: 14px; margin-top: 24px; font-family: var(--s-body); }
+.soft.s-embed .s-set-card { border-radius: 18px; }
