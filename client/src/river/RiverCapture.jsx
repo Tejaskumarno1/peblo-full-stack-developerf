@@ -93,9 +93,9 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
       const want = Math.max(200, Math.ceil(el.getBoundingClientRect().height));
       const have = document.documentElement.clientHeight;
       const cw = document.documentElement.clientWidth;
-      const z = window.outerWidth && cw ? window.outerWidth / cw : 1; // the window's zoom
+      // resizeTo takes CSS pixels (the window's zoom is applied for us), so keep the CSS width and set the CSS height
       if (Math.abs(want - have) > 1) {
-        try { window.resizeTo(window.outerWidth, Math.round(window.outerHeight + (want - have) * z)); } catch { /* not a resizable window */ }
+        try { window.resizeTo(cw, want); } catch { /* not a resizable window */ }
       }
     };
     const ro = new ResizeObserver(fit);
