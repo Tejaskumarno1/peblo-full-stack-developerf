@@ -461,7 +461,7 @@ export default function SoftNotes() {
                 <span className="txt">
                   <span className="t">{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
                   <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>
-                  <span className="m">{n.meta?.folder ? `${n.meta.folder} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}</span>
+                  <span className="m">{n.meta?.folder ? `${n.meta.folder} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{(() => { const w = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; return w >= 30 ? ` · ${w} words` : ''; })()}</span>
                 </span>
               </Link>
             );
@@ -473,6 +473,7 @@ export default function SoftNotes() {
           <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}>Trash</button>
           <span aria-hidden="true">·</span>
           <button type="button" onClick={() => setTagsOpen(true)}>Manage tags</button>
+          {filter === 'trash' && shownList.length > 0 && <><span aria-hidden="true">·</span><button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}>Empty Trash</button></>}
         </div>
         {folderOpen && <FolderDialog folders={folders} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} onPick={moveTo} onClose={() => setFolderOpen(false)} />}
         {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} onChanged={() => refreshLists()} />}
@@ -513,6 +514,8 @@ export default function SoftNotes() {
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}>Find in note  (Ctrl+F)</button>
                     <button type="button" role="menuitem" onClick={duplicate}>Duplicate note</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}>Copy as Markdown</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}>Copy link to note</button>
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setFolderOpen(true); }}>{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}>Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}>Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>

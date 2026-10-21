@@ -362,6 +362,13 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     };
     const extra = [
       ...CALLOUTS.map(([emoji, kind, title]) => ({ title, onItemClick: () => insertCallout(emoji), aliases: ['callout', 'box', 'note', kind], group: 'Callouts', icon: <span style={{ fontSize: 15 }}>{emoji}</span>, subtext: 'A highlighted box for something to notice.' })),
+      { title: 'Table of contents', onItemClick: () => {
+        const heads = editor.document.filter((b) => b.type === 'heading').map((b) => textOf(b.content).trim()).filter(Boolean);
+        const cur = editor.getTextCursorPosition().block;
+        if (!heads.length) { editor.insertBlocks([{ type: 'paragraph', content: 'Add some headings first, then insert the table of contents.' }], cur, 'after'); return; }
+        editor.insertBlocks(heads.map((h) => ({ type: 'bulletListItem', content: h })), cur, 'after');
+      }, aliases: ['toc', 'contents', 'outline'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📑</span>, subtext: 'A list of this note\'s headings.' },
+      { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🕒</span>, subtext: 'Type the time as text.' },
       { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📅</span>, subtext: 'Type today as text.' },
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
       ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <span style={{ fontSize: 15 }}>📄</span>, subtext: 'A ready layout to fill in.' })),
