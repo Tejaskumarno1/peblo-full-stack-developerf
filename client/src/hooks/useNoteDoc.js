@@ -6,6 +6,11 @@ import { useAutoSave } from './index';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 
+/** The starting text of a meeting note: when it is, then the usual sections. */
+const meetingTemplate = (when) => (when ? '**When:** ' + when + '\n\n' : '') + '## Agenda\n\n- \n\n## Notes\n\n- \n\n## Decisions\n\n- \n\n## Action items\n\n- [ ] \n';
+/** Text with the empty list markers and spacing removed, to tell an untouched template from a note. */
+const bare = (s) => (s || '').replace(/\[ ?\]|[\s*\\-]/g, '');
+
 /**
  * One open note for the River and Orbit note screens: loads it from the route,
  * starts drafts (?new=1, optionally ?tag=x), saves as you type and offers the note actions.
@@ -31,8 +36,8 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   }, []);
 
   // `forTask`: the draft belongs to a task (River's "Take notes"); the task is linked when the note is first saved.
-  const startDraft = useCallback((tags, forTask) => {
-    setDoc({ id: '__draft__', isDraft: true, forTask: forTask || null, title: '', content: '', tags: tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  const startDraft = useCallback((tags, forTask, template) => {
+    setDoc({ id: '__draft__', isDraft: true, forTask: forTask || null, title: '', content: template || '', template: template || null, tags: tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
   }, [draftTags]);
 
@@ -44,6 +49,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
       startDraft(
         tag ? tag.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
         forTask ? { id: forTask, text: params.get('forTaskText') || '' } : undefined,
+        params.get('tpl') === 'meeting' ? meetingTemplate(params.get('when')) : undefined,
       );
       return;
     }
@@ -60,9 +66,10 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
 
   const saveData = useMemo(() => {
     if (!doc || doc.isDeleted) return null;
-    if (doc.isDraft && !doc.title.trim() && !doc.content.trim()) return null;
+    // A draft that is still only the template is not worth saving yet
+    if (doc.isDraft && !doc.title.trim() && (!doc.content.trim() || (doc.template && bare(doc.content) === bare(doc.template)))) return null;
     return { title: doc.title, content: doc.content, tags: doc.tags };
-  }, [doc?.title, doc?.content, doc?.tags, doc?.isDraft, doc?.isDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc?.title, doc?.content, doc?.tags, doc?.isDraft, doc?.isDeleted, doc?.template]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {

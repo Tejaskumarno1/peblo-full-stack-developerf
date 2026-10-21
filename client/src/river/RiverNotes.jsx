@@ -54,6 +54,26 @@ function RiverNote({ note }) {
     queryFn: () => riverAPI.promises(noteId).then((r) => r.data.promises || []),
     enabled: !!noteId,
   });
+  // The last time this meeting happened (same title, earlier, with notes): what those notes were and what is still open
+  const meetingUsed = linked.find(isMeeting);
+  const { data: prev = null } = useQuery({
+    queryKey: ['river', 'last-time', meetingUsed?.id],
+    enabled: !!meetingUsed,
+    queryFn: async () => {
+      const m = momentOf(meetingUsed);
+      const r = await todosAPI.getRange(addDays(m, -120).toISOString(), m.toISOString());
+      const key = meetingUsed.text.trim().toLowerCase();
+      const same = (r.data.todos || [])
+        .filter((t) => t.id !== meetingUsed.id && isMeeting(t) && t.noteId && t.text.trim().toLowerCase() === key && momentOf(t) < m)
+        .sort((a, b) => momentOf(b) - momentOf(a))[0];
+      if (!same) return null;
+      const [note, gens] = await Promise.all([
+        notesAPI.get(same.noteId).then((x) => x.data.note),
+        riverAPI.promises(same.noteId).then((x) => x.data.promises || []).catch(() => []),
+      ]);
+      return { todo: same, note, open: gens.flatMap((g) => g.items || []).filter((i) => i.status === 'open') };
+    },
+  });
   const [finding, setFinding] = useState(false);
   const [findError, setFindError] = useState('');
 
@@ -227,6 +247,22 @@ function RiverNote({ note }) {
             )}
           </section>
 
+          {prev && (
+            <section className="r-card" aria-labelledby="r-last">
+              <h2 id="r-last" className="r-h3">LAST TIME · {dayWord(momentOf(prev.todo)).toUpperCase()}</h2>
+              <Link to={`/notes/${prev.note.id}`} className="r-used task"><span>{prev.note.title || 'Untitled'}</span><span className="m">open</span></Link>
+              {prev.open.length > 0 && <p className="r-quiet small">{prev.open.length} promise{prev.open.length === 1 ? '' : 's'} still open: {prev.open.slice(0, 2).map((p) => p.text).join('; ')}</p>}
+            </section>
+          )}
+          {meetingUsed && !doc.isDeleted && (
+            <section className="r-card" aria-labelledby="r-after">
+              <h2 id="r-after" className="r-h3">AFTER THE MEETING</h2>
+              <div className="r-btns">
+                <button type="button" className="r-btn ghost small" onClick={() => { navigator.clipboard?.writeText(`# ${doc.title}\n\n${doc.content}`).then(() => flash('Notes copied'), () => flash('Could not copy')); }}>Copy notes</button>
+                <button type="button" className="r-btn ghost small" onClick={() => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'meeting', text: `Follow-up: ${meetingUsed.text} ` } }))}>Schedule a follow-up</button>
+              </div>
+            </section>
+          )}
           <section className="r-card fill" aria-labelledby="r-used">
             <h2 id="r-used" className="r-h3">USED IN</h2>
             {linked.length === 0 && <p className="r-quiet small">Nothing on the river points here yet. Promises you put on the river, and meetings you take notes in, show up here.</p>}

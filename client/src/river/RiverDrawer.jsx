@@ -93,6 +93,10 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
     if (linkedNote) { navigate(`/notes/${linkedNote.id}`); return; }
     const qs = new URLSearchParams({ new: '1', forTask: selected.id, forTaskText: selected.text });
     if (tags.length) qs.set('tag', tags.join(','));
+    if (meeting) {
+      qs.set('tpl', 'meeting');
+      qs.set('when', at.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + clockRange(at, end));
+    }
     navigate(`/notes?${qs.toString()}`);
   };
 
