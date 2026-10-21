@@ -12,6 +12,7 @@ import '../soft/dialogs.css';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
 import { parseTask } from '../utils/parseTask';
+import RSelect from './RSelect';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -366,6 +367,20 @@ function whenLabel(d) {
   if (date.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
   return date.toLocaleDateString('en-GB', opts);
 }
+const GROUPS = [['month', 'Month'], ['day', 'Day'], ['tag', 'Tag'], ['letter', 'A to Z'], ['none', 'No grouping']];
+const SORTS = [['edited', 'Recently edited'], ['written', 'Recently written'], ['title', 'Title A to Z'], ['oldest', 'Oldest first']];
+const WHENS = [['any', 'Any time'], ['today', 'Today'], ['week', 'Past 7 days'], ['month', 'Past 30 days']];
+const OPTS_KEY = 'peblo-river-notes-opts';
+function readOpts() {
+  const base = { group: 'month', sort: 'edited', when: 'any', pinned: false };
+  try {
+    const o = JSON.parse(localStorage.getItem(OPTS_KEY) || 'null');
+    if (o) return { ...base, ...o };
+    if (readView() === 'day') return { ...base, group: 'day', sort: 'written' };
+  } catch { /* no storage */ }
+  return base;
+}
+function saveOpts(o) { try { localStorage.setItem(OPTS_KEY, JSON.stringify(o)); } catch { /* no storage */ } }
 const monthOf = (d) => new Date(d).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
 /** A short piece of the note around the first word that matched. */
@@ -384,10 +399,10 @@ function Marked({ text, words }) {
   return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
 }
 
-function NoteRow({ n, words = [], acts }) {
+function NoteRow({ n, words = [], acts, basis = 'updatedAt' }) {
   const row = (
     <Link to={`/notes/${n.id}`} className="r-row flat">
-      <span className="tm">{whenLabel(n.updatedAt)}<small>edited</small></span>
+      <span className="tm">{whenLabel(n[basis])}<small>{basis === 'createdAt' ? 'written' : 'edited'}</small></span>
       <span style={{ minWidth: 0 }}>
         <span className="t"><Marked text={n.title || 'Untitled'} words={words} /></span>
         <span className="s" style={{ display: 'block' }}>
@@ -415,7 +430,9 @@ function RiverNoteList({ onNew }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState(() => location.state?.filter || 'all');
   const [moreTags, setMoreTags] = useState(false);
-  const [view, setView] = useState(readView);
+  const [opts, setOpts] = useState(readOpts);
+  const { group, sort, when, pinned } = opts;
+  const setOpt = (k, v) => setOpts((o) => { const n = { ...o, [k]: v }; saveOpts(n); return n; });
   const [q, setQ] = useState('');
   const params = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
   const { data: all = [] } = useQuery({
@@ -461,33 +478,32 @@ function RiverNoteList({ onNew }) {
     return hits.sort((a, b) => b.score - a.score || new Date(b.n.updatedAt) - new Date(a.n.updatedAt)).map((h) => h.n);
   }, [searching, words, all, listed, inBin, ranked]);
 
-  const byEdit = useMemo(() => [...listed].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)), [listed]);
-  const latest = filter === 'all' ? byEdit.slice(0, 4) : [];
-  const months = useMemo(() => {
-    const rest = filter === 'all' ? byEdit.slice(4) : byEdit;
-    const groups = [];
-    for (const n of rest) {
-      const label = monthOf(n.updatedAt);
-      let g = groups[groups.length - 1];
-      if (!g || g.label !== label) { g = { label, notes: [] }; groups.push(g); }
-      g.notes.push(n);
-    }
-    return groups;
-  }, [byEdit, filter]);
-
-  const days = useMemo(() => {
-    const list = [...listed].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const groups = [];
-    for (const n of list) {
-      const d = startOfDay(n.createdAt);
-      let g = groups[groups.length - 1];
-      if (!g || g.d.getTime() !== d.getTime()) { g = { d, notes: [] }; groups.push(g); }
-      g.notes.push(n);
-    }
-    return groups;
-  }, [listed]);
-
-  const pickView = (v) => { setView(v); saveView(v); };
+  const basis = sort === 'written' ? 'createdAt' : 'updatedAt';
+  const since = when === 'today' ? startOfDay().getTime() : when === 'week' ? Date.now() - 7 * 86400000 : when === 'month' ? Date.now() - 30 * 86400000 : 0;
+  const items = useMemo(() => {
+    const l = listed.filter((n) => (!since || new Date(n[basis]).getTime() >= since) && (!pinned || n.meta?.pinned));
+    const by = sort === 'title' ? (a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled')
+      : sort === 'oldest' ? (a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)
+        : (a, b) => new Date(b[basis]) - new Date(a[basis]);
+    return [...l].sort(by);
+  }, [listed, since, pinned, sort, basis]);
+  const plain = group === 'month' && sort === 'edited' && when === 'any' && !pinned && filter === 'all';
+  const latest = plain ? items.slice(0, 4) : [];
+  const groups = useMemo(() => {
+    const rest = plain ? items.slice(4) : items;
+    if (group === 'none') return [{ label: '', notes: rest }];
+    const key = group === 'month' ? (n) => monthOf(n[basis]).toUpperCase()
+      : group === 'day' ? (n) => dayWord(startOfDay(n[basis])).toUpperCase()
+        : group === 'tag' ? (n) => ((n.tags || [])[0] ? '#' + n.tags[0] : 'UNTAGGED')
+          : (n) => (((n.title || '').trim()[0]) || '#').toUpperCase();
+    const map = new Map();
+    for (const n of rest) { const k = key(n); if (!map.has(k)) map.set(k, []); map.get(k).push(n); }
+    const arr = [...map.entries()].map(([label, notes]) => ({ label, notes }));
+    if (group === 'tag') arr.sort((a, b) => (a.label === 'UNTAGGED') - (b.label === 'UNTAGGED') || b.notes.length - a.notes.length);
+    return arr;
+  }, [items, group, basis, plain]);
+  const changed = group !== 'month' || sort !== 'edited' || when !== 'any' || pinned;
+  const resetOpts = () => { const n = { group: 'month', sort: 'edited', when: 'any', pinned: false }; setOpts(n); saveOpts(n); };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notes'] });
   const actions = filter === 'archive'
     ? [
@@ -518,12 +534,6 @@ function RiverNoteList({ onNew }) {
         <section className="r-list" aria-label="Notes">
           <div className="r-list-head">
             <h1>{title}</h1>
-            {!searching && (
-              <div className="r-seg" role="tablist" aria-label="How to list notes">
-                <button type="button" role="tab" aria-selected={view === 'recent'} onClick={() => pickView('recent')}>Recently edited</button>
-                <button type="button" role="tab" aria-selected={view === 'day'} onClick={() => pickView('day')}>By day written</button>
-              </div>
-            )}
             <span className="grow" />
             <label htmlFor="r-note-search" className="r-sr">Search notes</label>
             <input
@@ -538,6 +548,17 @@ function RiverNoteList({ onNew }) {
             <button type="button" className="r-btn" onClick={onNew}>New note</button>
           </div>
 
+          {!searching && (
+            <div className="r-toolbar" role="toolbar" aria-label="Group, sort and filter notes">
+              <RSelect label="Group by" value={group} options={GROUPS} onChange={(v) => setOpt('group', v)} />
+              <RSelect label="Sort" value={sort} options={SORTS} onChange={(v) => setOpt('sort', v)} />
+              <RSelect label="Show" value={when} options={WHENS} onChange={(v) => setOpt('when', v)} />
+              <button type="button" className={'r-pillbtn' + (pinned ? ' on' : '')} aria-pressed={pinned} onClick={() => setOpt('pinned', !pinned)}>Pinned only</button>
+              <span className="grow" />
+              <span className="r-quiet small">{items.length} note{items.length === 1 ? '' : 's'}{changed ? ' · ' : ''}{changed && <button type="button" className="r-link" onClick={resetOpts}>Reset</button>}</span>
+            </div>
+          )}
+
           {searching ? (
             <>
               <p className="r-quiet small">
@@ -548,7 +569,9 @@ function RiverNoteList({ onNew }) {
             </>
           ) : listed.length === 0 ? (
             <p className="r-quiet">{empty}</p>
-          ) : view === 'recent' ? (
+          ) : items.length === 0 ? (
+            <p className="r-quiet">No notes match these settings. <button type="button" className="r-link" onClick={resetOpts}>Reset</button></p>
+          ) : (
             <>
               {latest.length > 0 && (
                 <div>
@@ -564,30 +587,13 @@ function RiverNoteList({ onNew }) {
                   </div>
                 </div>
               )}
-              {months.map((g) => (
-                <div key={g.label}>
-                  <h2 className="r-h3" style={{ margin: '4px 0 8px' }}>{g.label.toUpperCase()}</h2>
-                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} acts={actions} />)}</div>
+              {groups.map((g) => (
+                <div key={g.label || 'all'}>
+                  {g.label && <h2 className="r-h3" style={{ margin: '4px 0 8px' }}>{g.label} <span className="r-count">{g.notes.length}</span></h2>}
+                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} acts={actions} basis={basis} />)}</div>
                 </div>
               ))}
             </>
-          ) : (
-            days.map((g) => (
-              <div key={g.d.toISOString()} className="r-day">
-                <span className={`r-day-label${sameDay(g.d, new Date()) ? ' today' : ''}`}>{dayWord(g.d)}</span>
-                <div className="r-day-items">
-                  {g.notes.map((n) => (
-                    <Link key={n.id} to={`/notes/${n.id}`} className="r-row">
-                      <span className="tm">{clock(n.createdAt)}</span>
-                      <span style={{ minWidth: 0 }}>
-                        <span className="t">{n.title || 'Untitled'}</span>
-                        <span className="s" style={{ display: 'block' }}>{snippetOf(n.content, 140) || 'Empty note'}</span>
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))
           )}
         </section>
         <aside className="r-side">
@@ -606,8 +612,8 @@ function RiverNoteList({ onNew }) {
             </div>
           </section>
           <section className="r-card">
-            <h2 className="r-h3">TWO WAYS TO LOOK</h2>
-            <p className="r-quiet small"><b>Recently edited</b> puts the notes you touched last at the top, whatever day you first wrote them. <b>By day written</b> is the river: each note sits at the moment you wrote it. Open one and Peblo can find the promises in it.</p>
+            <h2 className="r-h3">HOW TO LOOK</h2>
+            <p className="r-quiet small"><b>Group by</b> month, day, tag or letter. <b>Sort</b> by what you touched last, what you wrote last, title or oldest. <b>Show</b> only recent notes or pinned ones. Your choices are remembered. Open a note and Peblo can find the promises in it.</p>
           </section>
         </aside>
       </div>

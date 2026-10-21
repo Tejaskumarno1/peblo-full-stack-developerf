@@ -57,7 +57,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const [selId, setSelId] = useState(null);
   const [quick, setQuick] = useState(null); // { lane, x, at }
   // A new meeting opens the full capture card (length, start, people, repeat, reminder) at the time that was clicked
-  const openMeeting = (when) => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'meeting', text: '', at: new Date(when).toISOString() } }));
+  const openMeeting = (when) => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'meeting', text: '', at: new Date(Math.round(new Date(when).getTime() / 900000) * 900000).toISOString() } }));
   const [undatedOpen, setUndatedOpen] = useState(false); // false or { left, top } inside the frame
   const [toast, setToast] = useState('');
   const [dropDay, setDropDay] = useState(null); // a day (ms) an unscheduled task is being dragged over
@@ -775,10 +775,10 @@ export default function RiverHome({ initialZoom = 'day' }) {
         flash={flash}
       />
       {undatedOpen && (
-        <div className="r-pop" ref={undatedRef} style={{ left: undatedOpen.left, top: undatedOpen.top, width: 380 }}>
+        <div className="r-pop r-od" ref={undatedRef} style={{ left: undatedOpen.left, top: undatedOpen.top }}>
           {overdue.length > 0 && <span className="r-pop-h late">Overdue</span>}
           {overdue.slice(0, 8).map((t) => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
+            <div key={t.id} className="r-od-row">
               <span className="t">{t.text}<small className="r-late-when"> {dayWord(dueMomentOf(t))}</small></span>
               <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 0)}>Today</button>
               <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 1)}>Tomorrow</button>
@@ -787,7 +787,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
           ))}
           {overdue.length > 0 && undated.length > 0 && <span className="r-pop-h">No date</span>}
           {undated.slice(0, 8).map((t) => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
+            <div key={t.id} className="r-od-row">
               <span className="t">{t.text}</span>
               <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 0)}>Today</button>
               <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 1)}>Tomorrow</button>
@@ -796,7 +796,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
           {undated.length > 8 && <span className="empty">and {undated.length - 8} more</span>}
           {promises.length > 0 && <span className="r-pop-h">Promises from your notes</span>}
           {promises.slice(0, 6).map((pr) => (
-            <div key={pr.genId + '-' + pr.index} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
+            <div key={pr.genId + '-' + pr.index} className="r-od-row">
               <span className="t" title={pr.noteTitle}>{pr.owner && pr.owner.toLowerCase() !== 'you' ? pr.owner + ': ' : ''}{pr.text}<small className="r-late-when" style={{ color: 'var(--r-fg3)' }}> {pr.due ? 'by ' + dayWord(pr.due) : 'no date'}</small></span>
               <button type="button" className="r-btn ghost small" onClick={() => addPromise(pr)}>Add to river</button>
               <button type="button" className="r-btn ghost small" onClick={() => dismissPromise(pr)}>Dismiss</button>

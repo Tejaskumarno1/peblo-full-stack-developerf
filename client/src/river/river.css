@@ -757,3 +757,34 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 .r-btn.join { text-decoration: none; align-self: flex-start; }
 .r-mrow.grid.one { grid-template-columns: 1fr; }
 .r-btn.join { text-decoration: none; align-self: flex-start; }
+
+/* ---- River dropdown (RSelect) ---- */
+.r-sel { position: relative; display: inline-block; min-width: 0; }
+.r-sel.block { display: block; }
+.r-sel-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 10px 0 12px; border-radius: 10px; border: 1px solid var(--r-line); background: var(--r-bg); color: var(--r-fg); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.r-sel-btn:hover, .r-sel-btn[aria-expanded="true"] { border-color: var(--r-fg3); background: var(--r-surface); }
+.r-sel-btn small { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--r-fg2); }
+.r-sel-btn b { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-sel-btn svg { color: var(--r-fg2); flex-shrink: 0; }
+.r-sel-pop { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; min-width: 100%; width: max-content; max-width: 260px; padding: 6px; border-radius: 14px; background: var(--r-surface); border: 1px solid var(--r-line); box-shadow: var(--r-shadow); display: flex; flex-direction: column; gap: 2px; }
+.r-sel-pop.up { top: auto; bottom: calc(100% + 6px); }
+.r-sel-pop button { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 36px; padding: 6px 10px; border: none; border-radius: 9px; background: transparent; color: var(--r-fg); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; white-space: nowrap; }
+.r-sel-pop button:hover { background: var(--r-lane); }
+.r-sel-pop button.on { font-weight: 700; }
+.r-mrow.grid .r-sel-btn { display: grid; grid-template-columns: 1fr auto; row-gap: 2px; height: auto; min-height: 46px; padding: 6px 10px 6px 12px; }
+.r-mrow.grid .r-sel-btn small { grid-column: 1 / -1; }
+.r-mrow.grid .r-sel-btn svg { grid-row: 2; grid-column: 2; }
+.r-capture .r-sel-pop { position: static; max-width: none; width: 100%; margin-top: 4px; box-shadow: none; }
+
+/* ---- overdue / no date list ---- */
+.r-pop.r-od { width: 460px; min-width: 0; max-width: calc(100vw - 32px); }
+.r-od-row { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; min-width: 0; }
+.r-od-row .t { flex: 1 1 0; min-width: 0; }
+.r-od-row .r-btn { flex: 0 0 auto; }
+
+/* ---- notes list toolbar ---- */
+.r-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0 6px; }
+.r-toolbar .r-sel-btn { width: auto; }
+.r-pillbtn { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--r-line); background: var(--r-bg); color: var(--r-fg); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.r-pillbtn.on { background: var(--r-ink); color: var(--r-on-ink); border-color: transparent; }
+.r-count { margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: var(--r-lane); color: var(--r-fg2); font-size: 11px; letter-spacing: 0; }

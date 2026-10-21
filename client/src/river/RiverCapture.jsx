@@ -8,6 +8,7 @@ import { freeGaps, dur } from './planner';
 import { extras, noteForLine } from './captureParse';
 import { fileToAttachment, attachmentMarkdown } from '../utils/imageData';
 import { snippetOf } from '../soft/softUtils';
+import RSelect from './RSelect';
 import './river.css';
 
 const TRY = {
@@ -162,7 +163,11 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
       when = { deadline: parsed.deadline, startTime: parsed.startTime, endTime: parsed.endTime };
     }
   }
-  if (mode === 'meeting' && parsed && (pickDate || pickTime)) {
+  if (mode === 'meeting' && !when && at) {
+    const s = new Date(at);
+    when = { deadline: s, startTime: hhmm(s), endTime: hhmm(new Date(s.getTime() + 60 * 60000)) };
+  }
+  if (mode === 'meeting' && (pickDate || pickTime)) {
     const day = pickDate ? new Date(`${pickDate}T00:00`) : (when ? startOfDay(when.deadline) : startOfDay());
     const t = pickTime || when?.startTime || hhmm(new Date(Math.ceil(Date.now() / 900000) * 900000));
     const s = at24(day, t);
@@ -421,7 +426,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         className="r-capture-input"
         value={value}
         onChange={(e) => { setValue(e.target.value); setStatus(null); setOverride(null); setKeepClash(false); }}
-        placeholder={mode === 'note' ? 'Title (optional)' : HINTS[mode]}
+        placeholder={mode === 'note' ? 'Title (optional)' : mode === 'meeting' && at ? 'Meeting title, like "Client call"' : HINTS[mode]}
         autoComplete="off"
       />
 
@@ -476,16 +481,8 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
             <label>Day<input type="date" value={pickDate || (when ? ymd(when.deadline) : '')} onChange={(e) => { setPickDate(e.target.value); setOverride(null); }} /></label>
             <label>Starts<input type="time" step="900" value={pickTime || (when?.startTime || '')} onChange={(e) => { setPickTime(e.target.value); setOverride(null); }} /></label>
             <label>With<input value={withText || names.join(', ')} onChange={(e) => setWithText(e.target.value)} placeholder="Priya, Sam" autoComplete="off" /></label>
-            <label>Repeat
-              <select value={rep ?? recurrence ?? 'none'} onChange={(e) => setRep(e.target.value)}>
-                {REPEATS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-              </select>
-            </label>
-            <label>Reminder
-              <select value={rem ?? remindMin ?? 0} onChange={(e) => setRem(Number(e.target.value))}>
-                {REMINDS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-              </select>
-            </label>
+            <RSelect block label="Repeat" value={rep ?? recurrence ?? 'none'} options={REPEATS} onChange={setRep} />
+            <RSelect block label="Reminder" value={rem ?? remindMin ?? 0} options={REMINDS} onChange={(v) => setRem(Number(v))} />
           </div>
         </div>
       )}
