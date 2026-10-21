@@ -3,10 +3,26 @@
 export const TONES = ['peach', 'mint', 'butter', 'lilac', 'sky'];
 const FIXED = { inbox: 'butter', exams: 'peach', exam: 'peach', ideas: 'mint', idea: 'mint', reading: 'lilac', internship: 'sky', work: 'sky', college: 'lilac', personal: 'mint', ai: 'lilac' };
 
+// Colours chosen in Manage tags are kept on this device.
+let overrides = null;
+const loadTones = () => {
+  if (overrides) return overrides;
+  try { overrides = JSON.parse(localStorage.getItem('peblo-tag-tones') || '{}') || {}; } catch { overrides = {}; }
+  return overrides;
+};
+export function setTagTone(tag, tone) {
+  const o = { ...loadTones() };
+  if (tone) o[String(tag).toLowerCase()] = tone; else delete o[String(tag).toLowerCase()];
+  overrides = o;
+  try { localStorage.setItem('peblo-tag-tones', JSON.stringify(o)); } catch { /* ignore */ }
+}
+
 /** Each tag always gets the same pastel. */
 export function toneOf(tag) {
   if (!tag) return 'butter';
   const key = tag.toLowerCase();
+  const chosen = loadTones()[key];
+  if (chosen && TONES.includes(chosen)) return chosen;
   if (FIXED[key]) return FIXED[key];
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;

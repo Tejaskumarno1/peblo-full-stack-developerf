@@ -54,5 +54,6 @@ export function cleanNoteMeta(input: unknown, current: unknown = {}): Meta {
     favourite: (v) => (v === true ? true : undefined),
     pinned: (v) => (v === true ? true : undefined),
     locked: (v) => (v === true ? true : undefined),
+    folder: (v) => str(v, 60),
   });
 }

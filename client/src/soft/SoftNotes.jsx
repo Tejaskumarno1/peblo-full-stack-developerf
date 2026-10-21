@@ -6,6 +6,8 @@ import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import VersionDiff from './VersionDiff';
+import FolderDialog from './FolderDialog';
+import TagManager from './TagManager';
 import { inlineMedia } from '../utils/imageData';
 import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
@@ -58,6 +60,25 @@ export default function SoftNotes() {
   const [font, setFont] = useState(() => store('peblo-note-font', 'm')); // s, m, l, xl
   const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
   const keep = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
+  // folders, filters and bulk actions
+  const [folderSel, setFolderSel] = useState('');
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState([]);
+  const [onlyTasks, setOnlyTasks] = useState(false);
+  const [onlyPics, setOnlyPics] = useState(false);
+  const [onlyPinned, setOnlyPinned] = useState(false);
+  const [edited, setEdited] = useState(0);
+  const passes = (n) => {
+    if (folderSel && (n.meta?.folder || '') !== (folderSel === '__none' ? '' : folderSel)) return false;
+    if (onlyTasks && !(n.taskCount > 0)) return false;
+    if (onlyPics && !/!\[|<figure>/.test(n.content || '')) return false;
+    if (onlyPinned && !n.meta?.pinned) return false;
+    if (edited && Date.now() - new Date(n.updatedAt || 0).getTime() > edited * 86400000) return false;
+    return true;
+  };
+  const anyFilter = !!(folderSel || onlyTasks || onlyPics || onlyPinned || edited);
   const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
   const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
   const FONTS = ['s', 'm', 'l', 'xl'];
@@ -100,8 +121,8 @@ export default function SoftNotes() {
   const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
   const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
   const groups = useMemo(() => {
-    if (dq) return [{ key: 'found', label: '', notes: found }]; // best match first, as the server ranked them
-    let base = filter === 'all' ? allNotes : listed;
+    if (dq) return [{ key: 'found', label: '', notes: found.filter(passes) }]; // best match first, as the server ranked them
+    let base = (filter === 'all' ? allNotes : listed).filter(passes);
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
     }
@@ -131,7 +152,8 @@ export default function SoftNotes() {
       for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
     }
     return out;
-  }, [allNotes, listed, filter, selTags, tagMatch, sort, group, dq, found]);
+  }, [allNotes, listed, filter, selTags, tagMatch, sort, group, dq, found, folderSel, onlyTasks, onlyPics, onlyPinned, edited]);
+  const folders = useMemo(() => [...new Set(allNotes.map((n) => n.meta?.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [allNotes]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
     queryKey: ['todos', 'open-unlinked'],
@@ -293,6 +315,28 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['notes', 'backups', doc.id] });
   };
 
+  const moveTo = async (name) => {
+    setFolderOpen(false);
+    const ids = selectMode && picked.length ? picked : doc ? [doc.id] : [];
+    try {
+      await Promise.all(ids.map((id) => notesAPI.update(id, { meta: { folder: name || '' } })));
+      if (!selectMode && doc) patch({ meta: { ...(doc.meta || {}), folder: name || '' } });
+      refreshLists();
+      flash(name ? `Moved to ${name}` : 'Removed from folder');
+    } catch { flash('Could not move'); }
+    setPicked([]); setSelectMode(false);
+  };
+  const bulk = async (kind) => {
+    if (!picked.length) return;
+    if (kind === 'trash' && !window.confirm(`Move ${picked.length} note(s) to the Trash?`)) return;
+    try {
+      await Promise.all(picked.map((id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true }))));
+      refreshLists();
+      flash(kind === 'trash' ? 'Moved to the Trash' : 'Archived');
+      if (picked.includes(routeId)) navigate('/notes');
+    } catch { flash('Something went wrong'); }
+    setPicked([]); setSelectMode(false);
+  };
   const duplicate = async () => {
     setMenuOpen(false);
     forceSave();
@@ -396,18 +440,28 @@ export default function SoftNotes() {
         <label className="s-nsearch"><Search size={14} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
         {savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
         <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
+        <div className="s-filters" aria-label="Filters">
+          <select aria-label="Folder" value={folderSel} onChange={(e) => setFolderSel(e.target.value)}><option value="">All folders</option>{folders.map((f) => <option key={f} value={f}>{f}</option>)}<option value="__none">No folder</option></select>
+          <button type="button" className={onlyTasks ? 'on' : ''} aria-pressed={onlyTasks} onClick={() => setOnlyTasks((v) => !v)}>With tasks</button>
+          <button type="button" className={onlyPics ? 'on' : ''} aria-pressed={onlyPics} onClick={() => setOnlyPics((v) => !v)}>With pictures</button>
+          <button type="button" className={onlyPinned ? 'on' : ''} aria-pressed={onlyPinned} onClick={() => setOnlyPinned((v) => !v)}>Pinned</button>
+          <select aria-label="Edited" value={edited} onChange={(e) => setEdited(Number(e.target.value))}><option value={0}>Any time</option><option value={1}>Today</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select>
+          {anyFilter && <button type="button" className="clr" onClick={() => { setFolderSel(''); setOnlyTasks(false); setOnlyPics(false); setOnlyPinned(false); setEdited(0); }}>Clear</button>}
+          <button type="button" className={selectMode ? 'on' : ''} onClick={() => { setSelectMode((v) => !v); setPicked([]); }}>{selectMode ? 'Done' : 'Select'}</button>
+        </div>
+        {selectMode && <div className="s-bulk" role="toolbar" aria-label="Bulk actions"><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(shownList.map((n) => n.id))}>All</button><button type="button" disabled={!picked.length} onClick={() => setFolderOpen(true)}>Folder</button><button type="button" disabled={!picked.length} onClick={() => bulk('archive')}>Archive</button><button type="button" disabled={!picked.length} onClick={() => bulk('trash')}>Trash</button></div>}
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : 'No notes here yet.'}</p>}
           {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><span className="chev" aria-hidden="true">{collapsed[`${group}:${g.key}`] ? '▸' : '▾'}</span>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
             const tone = toneVar(toneOf(n.tags?.[0]));
             const on = doc?.id === n.id;
             return (
-              <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on ? ' on' : ''}`} style={on ? { background: tone } : undefined} onClick={() => forceSave()}>
-                <span className="dot" style={{ background: tone }} aria-hidden="true" />
+              <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on ? ' on' : ''}`} style={on ? { background: tone } : undefined} onClick={(e) => { if (selectMode) { e.preventDefault(); setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id])); } else forceSave(); }}>
+                {selectMode ? <input type="checkbox" className="s-pick" aria-label={`Select ${n.title || 'Untitled'}`} checked={picked.includes(n.id)} readOnly /> : <span className="dot" style={{ background: tone }} aria-hidden="true" />}
                 <span className="txt">
                   <span className="t">{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
                   <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>
-                  <span className="m">{relTime(n.updatedAt)}</span>
+                  <span className="m">{n.meta?.folder ? `${n.meta.folder} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}</span>
                 </span>
               </Link>
             );
@@ -417,7 +471,11 @@ export default function SoftNotes() {
           <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => setFilter(filter === 'archive' ? 'all' : 'archive')}>Archive</button>
           <span aria-hidden="true">·</span>
           <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}>Trash</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" onClick={() => setTagsOpen(true)}>Manage tags</button>
         </div>
+        {folderOpen && <FolderDialog folders={folders} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} onPick={moveTo} onClose={() => setFolderOpen(false)} />}
+        {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} onChanged={() => refreshLists()} />}
       </aside>
 
       {/* ---------- editor ---------- */}
@@ -455,6 +513,7 @@ export default function SoftNotes() {
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}>Find in note  (Ctrl+F)</button>
                     <button type="button" role="menuitem" onClick={duplicate}>Duplicate note</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setFolderOpen(true); }}>{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}>Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}>Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}>Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
@@ -516,6 +575,7 @@ export default function SoftNotes() {
             {!doc.isDraft && <div className="s-note-stats" aria-label="Length of this note">{words} word{words === 1 ? '' : 's'} · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</div>}
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
+          mentions={false}
                 noteId={doc.id}
                 key={editorKey}
                 initialContent={doc.content}

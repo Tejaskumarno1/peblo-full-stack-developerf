@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
@@ -165,9 +167,21 @@ function ImageTools() {
 }
 const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />]}</FormattingToolbar>;
 
+// Ready-made starting points, offered in the slash menu.
+const TEMPLATES = {
+  'Meeting notes': '## Meeting\n\n**Date:** \n\n**People:** \n\n## Agenda\n\n- \n\n## Notes\n\n- \n\n## Decisions\n\n- \n\n## Action items\n\n- [ ] \n',
+  'Daily plan': '## Top 3 today\n\n- [ ] \n- [ ] \n- [ ] \n\n## Schedule\n\n- \n\n## Notes\n\n',
+  'Project brief': '## Goal\n\n\n## Why it matters\n\n\n## Scope\n\n- \n\n## Milestones\n\n- [ ] \n\n## Risks\n\n- \n',
+  'Study notes': '## Topic\n\n## Key ideas\n\n- \n\n## Examples\n\n## Questions to revisit\n\n- \n\n## Summary\n\n',
+};
+const CALLOUTS = [['💡', 'tip', 'Callout: tip'], ['⚠️', 'warn', 'Callout: warning'], ['✅', 'ok', 'Callout: done'], ['ℹ️', 'info', 'Callout: info']];
+const RECENT_KEY = 'peblo-slash-recent';
+const readRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
+const remember = (title) => { try { localStorage.setItem(RECENT_KEY, JSON.stringify([title, ...readRecent().filter((t) => t !== title)].slice(0, 3))); } catch { /* ignore */ } };
+
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
-export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false }) {
+export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
@@ -331,7 +345,30 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
       { title: 'AI Summarize', onItemClick: () => runAi('summarize'), aliases: ['ai-summarize', 'summarize', 'sum', 'ai'], group: 'AI', icon: icon(Sparkles, '#6366f1'), subtext: 'A short summary of this block.' },
       { title: 'AI Continue writing', onItemClick: () => runAi('continue'), aliases: ['ai-continue', 'continue', 'write', 'ai'], group: 'AI', icon: icon(Sparkles, '#ec4899'), subtext: 'Write the next sentences.' },
     ];
-    return filterSuggestionItems(guest ? defaultItems : [...defaultItems, ...aiItems], query);
+    // Callouts are a quote that starts with a symbol (so they survive as plain Markdown); templates drop a ready layout in.
+    const insertCallout = (emoji) => {
+      const cur = editor.getTextCursorPosition().block;
+      const content = [{ type: 'text', text: `${emoji} `, styles: {} }];
+      if (cur.type === 'paragraph' && !textOf(cur.content).trim()) { editor.updateBlock(cur, { type: 'quote', content }); editor.setTextCursorPosition(cur, 'end'); return; }
+      const [made] = editor.insertBlocks([{ type: 'quote', content }], cur, 'after');
+      if (made) editor.setTextCursorPosition(made, 'end');
+    };
+    const insertTemplate = async (md) => {
+      const blocks = fromStorage(await editor.tryParseMarkdownToBlocks(md));
+      const cur = editor.getTextCursorPosition().block;
+      const empty = cur.type === 'paragraph' && !textOf(cur.content).trim();
+      editor.insertBlocks(blocks, cur, 'after');
+      if (empty) editor.removeBlocks([cur]);
+    };
+    const extra = [
+      ...CALLOUTS.map(([emoji, kind, title]) => ({ title, onItemClick: () => insertCallout(emoji), aliases: ['callout', 'box', 'note', kind], group: 'Callouts', icon: <span style={{ fontSize: 15 }}>{emoji}</span>, subtext: 'A highlighted box for something to notice.' })),
+      { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📅</span>, subtext: 'Type today as text.' },
+      ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
+      ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <span style={{ fontSize: 15 }}>📄</span>, subtext: 'A ready layout to fill in.' })),
+    ];
+    const all = [...defaultItems, ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
+    const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
+    return filterSuggestionItems([...recent, ...all], query);
   };
 
   const getNoteLinkItems = async (query) => {
@@ -367,7 +404,45 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     return items;
   };
 
+  // Code blocks get a Copy chip in their top-right corner (drawn by CSS, so the block itself is untouched).
+  const copyCode = (e) => {
+    const cb = e.target?.closest?.('.bn-block-content[data-content-type="codeBlock"]');
+    if (!cb) return false;
+    const r = cb.getBoundingClientRect();
+    if (e.clientX < r.right - 84 || e.clientY > r.top + 38) return false;
+    e.preventDefault(); e.stopPropagation();
+    const text = (cb.querySelector('code') || cb).innerText;
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setNotice({ state: 'done', message: 'Code copied' });
+    setTimeout(() => setNotice(null), 1600);
+    return true;
+  };
+
+  // Callouts: a quote that starts with a symbol is shown as a coloured box.
+  // (the editor rewrites attributes it did not set itself, so this is a decoration it keeps)
+  useEffect(() => {
+    const plugin = new Plugin({
+      key: new PluginKey('pb-callouts'),
+      props: {
+        decorations(state) {
+          const out = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'quote') return true;
+            const t = node.textContent.trim();
+            const k = CALLOUTS.find(([emoji]) => t.startsWith(emoji) || t.startsWith(emoji.replace('\uFE0F', '')));
+            if (k) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-callout': k[1] }));
+            return false;
+          });
+          return DecorationSet.create(state.doc, out);
+        },
+      },
+    });
+    editor.registerExtension({ key: 'pb-callouts', prosemirrorPlugins: [plugin] });
+    return () => { try { editor.unregisterExtension('pb-callouts'); } catch { /* editor already gone */ } };
+  }, [editor]);
+
   const onLinkClick = (e) => {
+    if (copyCode(e)) return;
     const pic = e.target?.closest?.('img.bn-visual-media');
     if (pic && !editable) { e.preventDefault(); setLightbox(pic.currentSrc || pic.src); return; }
     const a = e.target?.closest?.('a');
@@ -392,7 +467,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
       </BlockNoteView>
-      {!guest && <Backlinks noteId={noteId} />}
+      {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
       {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}

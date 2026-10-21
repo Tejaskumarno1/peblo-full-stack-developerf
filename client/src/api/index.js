@@ -25,7 +25,9 @@ export const notesAPI = {
   archive: (id) => api.post(`/notes/${id}/archive`),
   getBackups: (id) => api.get(`/notes/${id}/backups`),
   getBackup: (id, backupId) => api.get(`/notes/${id}/backups/${backupId}`),
-  revertBackup: (id, backupId) => api.post(`/notes/${id}/backups/${backupId}/revert`)
+  revertBackup: (id, backupId) => api.post(`/notes/${id}/backups/${backupId}/revert`),
+  mentions: (id) => api.get(`/notes/${id}/mentions`),
+  linkMention: (id, otherId) => api.post(`/notes/${id}/mentions/${otherId}/link`)
 };
 
 export const aiAPI = {

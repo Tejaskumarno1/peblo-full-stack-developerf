@@ -56,3 +56,13 @@
 ::highlight(pb-find-cur) { background: #ff9f43; color: #000; }
 .block-editor-container.pb-focus .bn-editor { padding-bottom: 40vh; }
 .block-editor-container .tableWrapper, .block-editor-container .bn-block-content[data-content-type="table"] { max-width: 100%; overflow-x: auto; }
+
+/* ---- callouts and code copy ---- */
+.block-editor-container .bn-block-content[data-content-type="quote"][data-callout] { border-left: 4px solid var(--co, #f2c744); background: var(--cb, rgba(242,199,68,.16)); border-radius: 10px; padding: 8px 14px; font-style: normal; }
+.block-editor-container .bn-block-content[data-callout="warn"] { --co: #f08a4b; --cb: rgba(240,138,75,.16); }
+.block-editor-container .bn-block-content[data-callout="ok"] { --co: #4caf6a; --cb: rgba(76,175,106,.16); }
+.block-editor-container .bn-block-content[data-callout="info"] { --co: #4a90e2; --cb: rgba(74,144,226,.16); }
+.block-editor-container .bn-block-content[data-content-type="codeBlock"] { position: relative; }
+.block-editor-container .bn-block-content[data-content-type="codeBlock"]::after { content: 'Copy'; position: absolute; top: 8px; right: 10px; font: 700 11px system-ui, sans-serif; padding: 3px 10px; border-radius: 999px; background: rgba(128,128,128,.3); color: inherit; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.block-editor-container .bn-block-content[data-content-type="codeBlock"]:hover::after { opacity: 1; }
+.block-editor-container .bn-block-content[data-content-type="codeBlock"][data-copied]::after { content: 'Copied ✓'; opacity: 1; }

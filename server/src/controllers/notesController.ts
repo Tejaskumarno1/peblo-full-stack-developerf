@@ -76,9 +76,77 @@ function formatNote(note: any) {
   return {
     ...note,
     tags: note.tags ? note.tags.map((nt: any) => nt.tag.name) : [],
+    taskCount: note._count ? note._count.linkedTodos : undefined,
     hasSummary: note.aiGenerations ? note.aiGenerations.some((ai: any) => ai.type === 'summary') : false,
     linkedTodos: note.linkedTodos || []
   };
+}
+
+// ---------- links between notes ----------
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Rewrites the list of notes this note links to. A failure here never blocks saving: the next save rebuilds it. */
+async function syncLinks(userId: string, noteId: string, content: string) {
+  try {
+    const ids = [...new Set([...String(content || '').matchAll(/\]\(\/notes\/([\w-]+)(?:#[^)]*)?\)/g)].map((m) => m[1]))].filter((x) => x !== noteId).slice(0, 200);
+    await prisma.$executeRaw`DELETE FROM note_links WHERE source_id = ${noteId}`;
+    if (!ids.length) return;
+    const valid = await prisma.note.findMany({ where: { id: { in: ids }, userId }, select: { id: true } });
+    for (const v of valid) await prisma.$executeRaw`INSERT INTO note_links (source_id, target_id) VALUES (${noteId}, ${v.id}) ON CONFLICT DO NOTHING`;
+  } catch { /* rebuilt by the next save */ }
+}
+
+/** Other notes that say this note's title but do not link to it yet. */
+export async function getMentions(req: any, res: any, next: any) {
+  try {
+    const id = String(req.params.id);
+    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
+    const title = (me?.title || '').trim();
+    if (!me || title.length < 3 || /^untitled/i.test(title)) return res.json({ mentions: [] });
+    const rows = await prisma.note.findMany({
+      where: { userId: req.user.id, isDeleted: false, id: { not: id }, content: { contains: title, mode: 'insensitive' } },
+      select: { id: true, title: true, content: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 40,
+    });
+    const re = new RegExp(`(?<![\\[\\w])${escRe(title)}(?![\\]\\w])`, 'i');
+    const out: any[] = [];
+    for (const r of rows) {
+      if ((r.content || '').includes(`](/notes/${id})`)) continue;
+      const text = stripMedia(r.content || '').replace(/\s+/g, ' ');
+      const m = re.exec(text);
+      if (!m) continue;
+      const start = Math.max(0, m.index - 50);
+      out.push({ id: r.id, title: r.title, snippet: (start > 0 ? '…' : '') + text.slice(start, m.index + title.length + 60) + '…' });
+      if (out.length >= 10) break;
+    }
+    res.json({ mentions: out });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** Turns the first plain mention of this note's title, in another note, into a link to this note. */
+export async function linkMention(req: any, res: any, next: any) {
+  try {
+    const id = String(req.params.id);
+    const otherId = String(req.params.otherId);
+    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
+    const other = await prisma.note.findFirst({ where: { id: otherId, userId: req.user.id, isDeleted: false }, select: { content: true } });
+    if (!me || !other) return res.status(404).json({ error: 'Note not found' });
+    const title = (me.title || '').trim();
+    const content = other.content || '';
+    const m = title ? new RegExp(`(?<![\\[\\w])${escRe(title)}(?![\\]\\w])`, 'i').exec(content) : null;
+    if (!m) return res.status(404).json({ error: 'That note no longer mentions this one.' });
+    const next2 = content.slice(0, m.index) + `[${m[0]}](/notes/${id})` + content.slice(m.index + m[0].length);
+    await saveVersion(otherId, content, { force: true }).catch(() => {});
+    await prisma.note.update({ where: { id: otherId }, data: { content: next2 }, select: { id: true } });
+    await syncLinks(req.user.id, otherId, next2);
+    notify(req, 'notes_changed');
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 }
 
 // ---------- search ----------
@@ -213,7 +281,8 @@ export async function getNotes(req: any, res: any, next: any) {
         },
         aiGenerations: {
           select: { type: true }
-        }
+        },
+        _count: { select: { linkedTodos: true } }
       },
       orderBy,
       // Optional paging. Without `limit` every note comes back: the sidebar and the editor
@@ -289,6 +358,8 @@ export async function createNote(req: any, res: any, next: any) {
       await syncTags(req.user.id, note.id, tags);
     }
 
+    await syncLinks(req.user.id, note.id, content || '');
+
     // Re-fetch with tags
     const updated = await prisma.note.findUnique({
       where: { id: note.id },
@@ -340,6 +411,7 @@ export async function updateNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
     if (before && before.content !== content) await saveVersion(req.params.id, before.content || '').catch(() => {});
+    if (content !== undefined) await syncLinks(req.user.id, req.params.id, content);
 
     if (tags !== undefined) {
       await syncTags(req.user.id, req.params.id, tags);
@@ -480,6 +552,7 @@ export async function revertBackup(req: any, res: any, next: any) {
       data: { content: backup.content },
       include: noteInclude
     });
+    await syncLinks(req.user.id, req.params.id, backup.content || '');
 
     notify(req, 'notes_changed');
     res.json({ note: formatNote(note) });
@@ -511,12 +584,11 @@ export async function saveEmbeddingForNote(userId: string, noteId: string, title
 export async function getBacklinks(req: any, res: any, next: any) {
   try {
     const id = String(req.params.id);
-    const rows = await prisma.note.findMany({
-      where: { userId: req.user.id, isDeleted: false, id: { not: id }, content: { contains: `](/notes/${id})` } },
-      select: { id: true, title: true, updatedAt: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
-    });
+    const rows = await prisma.$queryRaw`
+      SELECT n.id, n.title, n.updated_at AS "updatedAt"
+      FROM note_links l JOIN notes n ON n.id = l.source_id
+      WHERE l.target_id = ${id} AND n.user_id = ${req.user.id} AND n.is_deleted = false AND n.id <> ${id}
+      ORDER BY n.updated_at DESC LIMIT 50`;
     res.json({ backlinks: rows });
   } catch (error) {
     next(error);

@@ -388,3 +388,28 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-saved-searches button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 4px 4px 4px 10px; }
 .soft .s-saved-searches button.x { padding: 4px 9px 4px 2px; opacity: .6; }
 .soft .s-outl-item { display: block; width: 100%; text-align: left; background: transparent; border: 0; font: inherit; cursor: pointer; }
+
+/* ---- filters, bulk, folders ---- */
+.s-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 8px; }
+.s-filters button, .s-filters select { font: inherit; font-size: 12px; border: 1px solid var(--s-line, rgba(128,128,128,.3)); background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.s-filters button.on { background: var(--s-ink, #2b2b2b); color: var(--s-paper, #fff); }
+.s-bulk { display: flex; align-items: center; gap: 6px; padding: 4px 12px 8px; font-size: 12px; }
+.s-bulk b { flex: 1; }
+.s-bulk button { font: inherit; font-size: 12px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.s-bulk button:disabled { opacity: .4; cursor: default; }
+.s-pick { width: 16px; height: 16px; margin: 3px 8px 0 0; flex: none; }
+
+/* ---- tag manager ---- */
+.s-tm { max-height: min(80vh, 640px); overflow: auto; }
+.s-tm-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.s-tm-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: rgba(128,128,128,.08); flex-wrap: wrap; }
+.s-tm-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.s-tm-name { flex: 1; min-width: 90px; font-weight: 700; display: flex; flex-direction: column; }
+.s-tm-name small { font-weight: 400; opacity: .65; font-size: 11px; }
+.s-tm-edit { flex: 1; display: flex; gap: 4px; min-width: 120px; }
+.s-tm-edit input { flex: 1; min-width: 0; font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; }
+.s-tm-edit button, .s-tm-btn { font: inherit; font-size: 12px; border: 0; background: rgba(128,128,128,.18); color: inherit; border-radius: 8px; padding: 5px 8px; cursor: pointer; display: inline-flex; align-items: center; }
+.s-tm-btn.danger { background: #c0392b; color: #fff; }
+.s-tm-tones { display: flex; gap: 4px; }
+.s-tm-tones button { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
+.s-tm-tones button.on { border-color: currentColor; }
