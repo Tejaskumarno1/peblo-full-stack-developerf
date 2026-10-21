@@ -425,19 +425,6 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         autoComplete="off"
       />
 
-      {!value.trim() && TRY[mode] && mode !== 'note' && (
-        <div className="r-try" aria-label="Try one of these">
-          <span className="r-under-h">ALSO WORKS</span>
-          <div className="r-try-row">
-            {TRY[mode].map(([line, what]) => (
-              <button key={line} type="button" onClick={() => { setValue(line); inputRef.current?.focus(); }}>
-                <b>“{line}”</b><span>{what}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {understood && (
         <div className="r-under" aria-label="What Peblo understood">
           <span className="r-under-h">PEBLO UNDERSTOOD</span>
