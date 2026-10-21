@@ -6,6 +6,7 @@ import { notesAPI } from '../api';
 import { useOrbit } from './OrbitShell';
 import { topicName, levelOf, levelVar, tagsOfNote, agoText } from './orbitUtils';
 import { snippetOf } from '../soft/softUtils';
+import useNoteSearch from '../hooks/useNoteSearch';
 import { downloadText, safeFileName } from '../utils/download';
 
 // PEB-124/125/126/127/128/129/130/131/132/133/134/135: the Orbit "Every note" list.
@@ -94,17 +95,19 @@ export default function OrbitNoteList({ onNew }) {
     return c;
   }, [notes]);
 
+  const { hits } = useNoteSearch(q, archived === 'archive' ? { archived: 'true' } : archived === 'trash' ? { deleted: 'true' } : {});
   const filtering = !!q.trim() || !!topic || range !== 'any';
   const clearFilters = () => { setQ(''); setRange('any'); setParams({}); };
 
   const { groups, total } = useMemo(() => {
     const s = q.trim().toLowerCase();
+    const hitIds = hits ? new Set(hits.map((h) => h.id)) : null;
     const now = Date.now();
     const key = sort === 'created' ? 'createdAt' : 'updatedAt';
     const list = (archived ? special : notes)
       .filter((n) => !topic || tagsOfNote(n).includes(topic))
       .filter((n) => range === 'any' || new Date(n.updatedAt) >= now - Number(range) * DAY)
-      .filter((n) => !s || (n.title || '').toLowerCase().includes(s) || (n.content || '').toLowerCase().includes(s))
+      .filter((n) => !s || (hitIds ? hitIds.has(n.id) : (n.title || '').toLowerCase().includes(s) || (n.content || '').toLowerCase().includes(s)))
       .sort((a, b) => (sort === 'title'
         ? (a.title || 'Untitled').localeCompare(b.title || 'Untitled', undefined, { sensitivity: 'base' })
         : new Date(b[key]) - new Date(a[key])));
@@ -136,7 +139,7 @@ export default function OrbitNoteList({ onNew }) {
       out.push(...[...map.entries()].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1].notes.length - a[1].notes.length).map(([, g]) => g));
     }
     return { groups: out, total: list.length };
-  }, [notes, special, archived, topic, range, q, sort, groupBy, pinned, allTopics]);
+  }, [notes, special, archived, topic, range, q, sort, groupBy, pinned, allTopics, hits]);
 
   const isOpen = (g) => openMap[g.key] ?? (g.notes.length <= BIG_GROUP || filtering || groupBy === 'none' || g.key === 'pinned');
   const allOpen = groups.every(isOpen);

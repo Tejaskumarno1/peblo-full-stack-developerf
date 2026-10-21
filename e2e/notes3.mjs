@@ -43,10 +43,13 @@ try {
 
   // slash menu extras
   await page.locator('.bn-inline-content', { hasText: 'The end.' }).click();
+  await page.waitForTimeout(600);
   await page.keyboard.press('Control+End');
   await page.keyboard.press('Enter');
-  await page.keyboard.type('/templ');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
+  await page.keyboard.type('/templ', { delay: 60 });
+  await page.locator('.bn-suggestion-menu-item').first().waitFor({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(400);
   const slash = await page.locator('.bn-suggestion-menu-item').allTextContents();
   check('the slash menu offers templates', /Template: Meeting notes/.test(slash.join(' ')), slash.join(' ').slice(0, 200));
   await page.keyboard.press('Enter');

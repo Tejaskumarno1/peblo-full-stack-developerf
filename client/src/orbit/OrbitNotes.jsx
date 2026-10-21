@@ -11,6 +11,8 @@ import { snippetOf } from '../soft/softUtils';
 import { clock, dayWord } from '../river/riverUtils';
 import OrbitNoteList from './OrbitNoteList';
 import VersionHistory from '../components/VersionHistory';
+import ShareDialog from '../soft/ShareDialog';
+import '../soft/dialogs.css';
 import { exportDocs } from '../utils/exporters';
 import { TEMPLATES, outlineOf, countMatches, replaceAll } from './noteTemplates';
 
@@ -46,6 +48,7 @@ function OrbitNote({ note }) {
   const { doc, editorKey, patch, noteId, saveStatus } = note;
   const [tagDraft, setTagDraft] = useState(null);
   const [menu, setMenu] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const menuRef = useDismiss(menu, () => setMenu(false));
   const [dismissed, setDismissed] = useState([]);
   // Round 6: focus mode, emoji picker, copied message
@@ -213,6 +216,7 @@ function OrbitNote({ note }) {
                 {!readOnly && <button type="button" role="menuitem" onClick={() => { setMenu(false); setFindOpen(true); }}>Find and replace</button>}
                 {!doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave(); setHistoryOpen(true); }}>Version history</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}>Duplicate</button>
+                {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>Copy link</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}>Download as PDF</button>
@@ -224,6 +228,7 @@ function OrbitNote({ note }) {
           </div>
         )}
       </SheetHead>
+      {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
       {historyOpen && <VersionHistory noteId={doc.id} currentContent={doc.content} onClose={() => setHistoryOpen(false)} onRestored={(n) => note.applyContent({ content: n.content, title: n.title })} />}
 
       <div className="o-sheet-body">

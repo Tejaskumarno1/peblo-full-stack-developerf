@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import useNoteSearch from '../hooks/useNoteSearch';
 import { notesAPI, aiAPI, todosAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
@@ -760,15 +761,17 @@ export default function WorkspacePage() {
     }
   };
 
+  const { hits: noteHits } = useNoteSearch(searchQuery, { archived: showArchived.toString(), deleted: showDeleted.toString() });
   const filteredNotes = useMemo(() => {
     if (!searchQuery.trim()) return notes;
+    if (noteHits) { const byId = new Map(notes.map((n) => [n.id, n])); return noteHits.map((h) => byId.get(h.id)).filter(Boolean); }
     const query = searchQuery.toLowerCase();
     return notes.filter((note) => {
       const titleMatch = note.title?.toLowerCase().includes(query);
       const contentMatch = note.content?.toLowerCase().includes(query);
       return titleMatch || contentMatch;
     });
-  }, [notes, searchQuery]);
+  }, [notes, searchQuery, noteHits]);
 
 
 

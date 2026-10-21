@@ -7,6 +7,9 @@ import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
 import { RiverHeader, useDismiss } from './RiverShell';
 import { snippetOf } from '../soft/softUtils';
+import ShareDialog from '../soft/ShareDialog';
+import '../soft/dialogs.css';
+import useNoteSearch from '../hooks/useNoteSearch';
 import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
@@ -25,6 +28,7 @@ function RiverNote({ note }) {
   const queryClient = useQueryClient();
   const { doc, editorKey, patch, noteId, saved, saveStatus } = note;
   const [menu, setMenu] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const menuRef = useDismiss(menu, () => setMenu(false));
   const [tagDraft, setTagDraft] = useState(null);
   const [toast, setToast] = useState('');
@@ -162,7 +166,8 @@ function RiverNote({ note }) {
                   <div className="r-pop right" role="menu" style={{ width: 210, letterSpacing: 0, textTransform: 'none' }}>
                     {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
+                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
                     <button type="button" role="menuitem" style={{ color: 'var(--r-now-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
@@ -191,7 +196,8 @@ function RiverNote({ note }) {
             ))}
           </div>
           <div className="r-body">
-            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
+            {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
+      <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
           </div>
         </article>
 
@@ -318,11 +324,13 @@ function RiverNoteList({ onNew }) {
   const words = useMemo(() => q.trim().toLowerCase().split(/\s+/).filter(Boolean), [q]);
   const searching = words.length > 0;
   const inBin = filter === 'archive' || filter === 'trash';
+  const { hits: ranked } = useNoteSearch(q, filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : {});
 
   // Search looks in titles, tags and the text of every note (the Archive and Trash only search themselves),
   // best match first: a title that starts with the word, then a title that has it, then a tag, then the text.
   const results = useMemo(() => {
     if (!searching) return [];
+    if (ranked) return ranked;
     const pool = inBin ? listed : all;
     const hits = [];
     for (const n of pool) {
@@ -339,7 +347,7 @@ function RiverNoteList({ onNew }) {
       if (every) hits.push({ n, score });
     }
     return hits.sort((a, b) => b.score - a.score || new Date(b.n.updatedAt) - new Date(a.n.updatedAt)).map((h) => h.n);
-  }, [searching, words, all, listed, inBin]);
+  }, [searching, words, all, listed, inBin, ranked]);
 
   const byEdit = useMemo(() => [...listed].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)), [listed]);
   const latest = filter === 'all' ? byEdit.slice(0, 4) : [];

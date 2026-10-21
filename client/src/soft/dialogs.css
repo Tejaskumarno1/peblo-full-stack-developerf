@@ -1,0 +1,105 @@
+/* Share and compare dialogs, for the styles that do not load the Soft stylesheet. Wrap them in <div className="pb-dlg-host">. */
+.pb-dlg-host { display: contents; }
+
+.pb-dlg-host {
+  --s-bg: #FBF6EE;
+  --s-surface: #FFFFFF;
+  --s-line: #EADFD0;
+  --s-fg: #241F1A;
+  --s-fg2: #564D43;
+  --s-fg3: #6E6559;
+  --s-peach: #FFD9C4;
+  --s-mint: #CDEBD9;
+  --s-butter: #FFE9A6;
+  --s-lilac: #DDD8FF;
+  --s-sky: #CFE5F8;
+  --s-item: rgba(255, 255, 255, 0.66);
+  --s-chip: rgba(255, 255, 255, 0.7);
+  --s-chip-solid: #F4EEE5;
+  --s-dash: rgba(36, 31, 26, 0.35);
+  --s-accent: #C4441C;
+  --s-accent-ink: #A8380F;
+  --s-accent-soft: #FCE3D8;
+  --s-on-accent: #FFFFFF;
+  --s-local: #1E7A46;
+  --s-col: #FAF5EE;
+  --s-shadow: 0 10px 24px rgba(70, 45, 20, 0.12);
+  --s-soft-shadow: 0 2px 6px rgba(70, 45, 20, 0.08);
+  --s-card-shadow: 0 6px 16px rgba(70, 45, 20, 0.10);
+  --s-dock: #241F1A;
+  --s-dock-fg: #E9E1D5;
+  --s-dock-on: #FFE9A6;
+  --s-dock-on-fg: #241F1A;
+  --s-dock-line: rgba(255, 255, 255, 0.16);
+  --s-dock-shadow: 0 18px 40px rgba(36, 31, 26, 0.28);
+  --s-backdrop: rgba(58, 42, 26, 0.32);
+  --s-capture-shadow: 0 30px 70px rgba(60, 40, 20, 0.28);
+  --s-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --s-body: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --s-blob: 52% 48% 46% 54% / 60% 58% 42% 40%;
+}
+.theme-dark .pb-dlg-host {
+  --s-bg: #120F17;
+  --s-surface: #1F1A27;
+  --s-line: #2F2839;
+  --s-fg: #F5F0F7;
+  --s-fg2: #CFC6D8;
+  --s-fg3: #A59BB0;
+  --s-peach: #3A261E;
+  --s-mint: #18302A;
+  --s-butter: #332B13;
+  --s-lilac: #2A2549;
+  --s-sky: #162739;
+  --s-item: rgba(255, 255, 255, 0.07);
+  --s-chip: rgba(255, 255, 255, 0.09);
+  --s-chip-solid: #2A2433;
+  --s-dash: rgba(245, 240, 247, 0.3);
+  --s-accent: #FF8F6B;
+  --s-accent-ink: #FFA585;
+  --s-accent-soft: #3E2219;
+  --s-on-accent: #1A1210;
+  --s-local: #6FE0A0;
+  --s-col: #1A1621;
+  --s-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  --s-soft-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --s-card-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  --s-dock: #2A2334;
+  --s-dock-fg: #D9D0E2;
+  --s-dock-on: #FF8F6B;
+  --s-dock-on-fg: #1A1210;
+  --s-dock-line: rgba(255, 255, 255, 0.12);
+  --s-dock-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  --s-backdrop: rgba(0, 0, 0, 0.6);
+  --s-capture-shadow: 0 30px 70px rgba(0, 0, 0, 0.8);
+}
+
+.s-share-back { position: fixed; inset: 0; background: rgba(42,31,23,.35); display: grid; place-items: center; z-index: 400; }
+.s-share { width: min(440px, calc(100vw - 32px)); background: #fffdf8; border-radius: 26px; box-shadow: 0 24px 60px rgba(60,40,20,.3); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; color: #2a1f17; font-family: inherit; }
+.s-share-head { display: flex; align-items: flex-start; gap: 10px; }
+.s-share-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.s-share-head b { font-size: 19px; font-weight: 800; }
+.s-share-head small { color: #6b5b4e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-share-msg { margin: 0; font-size: 14px; line-height: 1.5; color: #6b5b4e; font-weight: 600; }
+.s-share-msg.warn { background: #fce8a8; color: #2a1f17; border-radius: 14px; padding: 10px 12px; }
+.s-share-row { display: flex; gap: 8px; }
+.s-share-row input { flex: 1; min-width: 0; border: 1.5px solid #eadfce; border-radius: 14px; padding: 10px 12px; font: inherit; font-size: 13px; background: #fff; color: #2a1f17; }
+.s-share-go { border: none; border-radius: 999px; background: #c8421d; color: #fff; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 18px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+.s-share-go:disabled { opacity: .6; cursor: default; }
+.s-share-off { align-self: flex-start; border: none; background: #f4ede2; border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; color: #2a1f17; }
+.s-share-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.s-share-mode button { border: none; border-radius: 999px; padding: 7px 16px; font: inherit; font-weight: 700; font-size: 13px; background: #f4ede2; color: #2a1f17; cursor: pointer; }
+.s-share-mode button.on { background: #2a1f17; color: #fff; }
+.s-share-mode small { flex-basis: 100%; color: #6b5b4e; font-size: 12.5px; font-weight: 600; }
+.s-vd { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 64px); background: #fffdf8; color: #2a1f17; border-radius: 26px; box-shadow: 0 24px 60px rgba(60,40,20,.3); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.s-vd-grid { overflow: auto; border: 1.5px solid #eadfce; border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr; font-size: 13px; line-height: 1.5; min-height: 80px; }
+.s-vd-cap { position: sticky; top: 0; background: #f4ede2; font-weight: 800; font-size: 12px; padding: 6px 12px; letter-spacing: .04em; text-transform: uppercase; z-index: 1; }
+.s-vd-row { display: contents; }
+.s-vd-cell { padding: 3px 12px; white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid #f1e9db; min-height: 1.5em; }
+.s-vd-cell.del { background: #fde4dc; }
+.s-vd-cell.add { background: #dcf3dd; }
+.s-vd-gap { grid-column: 1 / -1; text-align: center; font-size: 12px; font-weight: 700; color: #8a7a6a; background: #faf5ec; padding: 4px; border-top: 1px solid #f1e9db; }
+.s-vd-foot { display: flex; justify-content: flex-end; gap: 8px; }
+.s-share-exp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.s-share-exp label { font-weight: 700; font-size: 13px; }
+.s-share-exp select { border: 1.5px solid #eadfce; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; background: #f4ede2; color: #2a1f17; }
+.s-share-exp small { flex-basis: 100%; color: #6b5b4e; font-size: 12.5px; font-weight: 600; }
