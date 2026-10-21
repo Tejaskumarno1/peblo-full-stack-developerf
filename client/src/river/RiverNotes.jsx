@@ -13,6 +13,8 @@ import useNoteSearch from '../hooks/useNoteSearch';
 import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
 import { parseTask } from '../utils/parseTask';
 import RSelect from './RSelect';
+import FolderDialog from '../soft/FolderDialog';
+import { exportMarkdown, exportManyMarkdown, exportWord, exportPdf } from '../utils/exportNote';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -30,6 +32,8 @@ function RiverNote({ note }) {
   const queryClient = useQueryClient();
   const { doc, editorKey, patch, noteId, saved, saveStatus } = note;
   const [menu, setMenu] = useState(false);
+  const navigate2 = useNavigate();
+  const qc2 = useQueryClient();
   const [shareOpen, setShareOpen] = useState(false);
   const menuRef = useDismiss(menu, () => setMenu(false));
   const [tagDraft, setTagDraft] = useState(null);
@@ -229,7 +233,21 @@ function RiverNote({ note }) {
                     {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
-                    <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
+                    {!doc.isDraft && !doc.isDeleted && <button type="button" role="menuitem" onClick={async () => {
+              setMenu(false);
+              const next = !doc.meta?.pinned;
+              const pinnedCount = (note.allNotes || []).filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
+              if (next && pinnedCount >= 3) { setToast('You can pin up to 3 notes. Unpin one first.'); return; }
+              try { await notesAPI.update(doc.id, { meta: { pinned: next } }); note.patch({ meta: { ...(doc.meta || {}), pinned: next || undefined } }); qc2.invalidateQueries({ queryKey: ['notes'] }); setToast(next ? 'Pinned to Home' : 'Unpinned'); } catch { setToast('Could not pin it'); }
+            }}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+            {!doc.isDraft && !doc.isDeleted && <button type="button" role="menuitem" onClick={async () => {
+              setMenu(false);
+              try { note.forceSave?.(); const { data } = await notesAPI.create({ title: 'Copy of ' + (doc.title || 'Untitled'), content: doc.content || '', tags: doc.tags || [] }); qc2.invalidateQueries({ queryKey: ['notes'] }); navigate2('/notes/' + data.note.id); } catch { setToast('Could not duplicate the note'); }
+            }}>Duplicate</button>}
+            <span className="r-pop-h">Download</span>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportMarkdown(doc).then(() => setToast('Downloaded as Markdown')); }}>Markdown (.md)</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportWord(doc).then(() => setToast('Downloaded as Word')); }}>Word (.doc)</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); setToast('Making the PDF'); exportPdf(doc).then(() => setToast('Downloaded as PDF')).catch(() => setToast('Could not make the PDF')); }}>PDF (.pdf)</button>
                     <button type="button" role="menuitem" style={{ color: 'var(--r-now-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
@@ -399,9 +417,10 @@ function Marked({ text, words }) {
   return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
 }
 
-function NoteRow({ n, words = [], acts, basis = 'updatedAt' }) {
+function NoteRow({ n, words = [], acts, basis = 'updatedAt', selecting = false, picked = false, onPick }) {
   const row = (
-    <Link to={`/notes/${n.id}`} className="r-row flat">
+    <Link to={`/notes/${n.id}`} className={'r-row flat' + (selecting && picked ? ' picked' : '')} onClick={(e) => { if (selecting) { e.preventDefault(); onPick?.(); } }}>
+      {selecting && <input type="checkbox" className="r-pick" aria-label={'Select ' + (n.title || 'Untitled')} checked={picked} readOnly />}
       <span className="tm">{whenLabel(n[basis])}<small>{basis === 'createdAt' ? 'written' : 'edited'}</small></span>
       <span style={{ minWidth: 0 }}>
         <span className="t"><Marked text={n.title || 'Untitled'} words={words} /></span>
@@ -432,6 +451,16 @@ function RiverNoteList({ onNew }) {
   const [moreTags, setMoreTags] = useState(false);
   const [opts, setOpts] = useState(readOpts);
   const { group, sort, when, pinned } = opts;
+  const [collapsed, setCollapsed] = useState({});
+  const [folderSel, setFolderSel] = useState('');
+  const [onlyTasks, setOnlyTasks] = useState(false);
+  const [onlyPics, setOnlyPics] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState([]);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
+  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 3000); };
   const setOpt = (k, v) => setOpts((o) => { const n = { ...o, [k]: v }; saveOpts(n); return n; });
   const [q, setQ] = useState('');
   const params = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
@@ -478,16 +507,21 @@ function RiverNoteList({ onNew }) {
     return hits.sort((a, b) => b.score - a.score || new Date(b.n.updatedAt) - new Date(a.n.updatedAt)).map((h) => h.n);
   }, [searching, words, all, listed, inBin, ranked]);
 
+  const byId = useMemo(() => new Map(all.map((n) => [n.id, n])), [all]);
+  const folders = useMemo(() => [...new Set(all.map((n) => n.meta?.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [all]);
+  const hasPic = (n) => /!\[|<figure>/.test((byId.get(n.id)?.content ?? n.content) || '');
   const basis = sort === 'written' ? 'createdAt' : 'updatedAt';
   const since = when === 'today' ? startOfDay().getTime() : when === 'week' ? Date.now() - 7 * 86400000 : when === 'month' ? Date.now() - 30 * 86400000 : 0;
   const items = useMemo(() => {
-    const l = listed.filter((n) => (!since || new Date(n[basis]).getTime() >= since) && (!pinned || n.meta?.pinned));
+    const l = listed.filter((n) => (!since || new Date(n[basis]).getTime() >= since) && (!pinned || n.meta?.pinned)
+      && (!folderSel || (n.meta?.folder || '') === (folderSel === '__none' ? '' : folderSel))
+      && (!onlyTasks || n.taskCount > 0) && (!onlyPics || hasPic(n)));
     const by = sort === 'title' ? (a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled')
       : sort === 'oldest' ? (a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)
         : (a, b) => new Date(b[basis]) - new Date(a[basis]);
     return [...l].sort(by);
-  }, [listed, since, pinned, sort, basis]);
-  const plain = group === 'month' && sort === 'edited' && when === 'any' && !pinned && filter === 'all';
+  }, [listed, since, pinned, sort, basis, folderSel, onlyTasks, onlyPics, byId]);
+  const plain = group === 'month' && sort === 'edited' && when === 'any' && !pinned && filter === 'all' && !folderSel && !onlyTasks && !onlyPics;
   const latest = plain ? items.slice(0, 4) : [];
   const groups = useMemo(() => {
     const rest = plain ? items.slice(4) : items;
@@ -502,8 +536,47 @@ function RiverNoteList({ onNew }) {
     if (group === 'tag') arr.sort((a, b) => (a.label === 'UNTAGGED') - (b.label === 'UNTAGGED') || b.notes.length - a.notes.length);
     return arr;
   }, [items, group, basis, plain]);
-  const changed = group !== 'month' || sort !== 'edited' || when !== 'any' || pinned;
-  const resetOpts = () => { const n = { group: 'month', sort: 'edited', when: 'any', pinned: false }; setOpts(n); saveOpts(n); };
+  const changed = group !== 'month' || sort !== 'edited' || when !== 'any' || pinned || !!folderSel || onlyTasks || onlyPics;
+  const resetOpts = () => { const n = { group: 'month', sort: 'edited', when: 'any', pinned: false }; setOpts(n); saveOpts(n); setFolderSel(''); setOnlyTasks(false); setOnlyPics(false); };
+  const ck = (label) => group + ':' + label;
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed[ck(g.label)]);
+  const collapseAll = () => setCollapsed(Object.fromEntries(groups.map((g) => [ck(g.label), true])));
+  const expandAll = () => setCollapsed({});
+  const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); try { localStorage.setItem('peblo-saved-searches', JSON.stringify(n)); } catch { /* no storage */ } };
+  const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); try { localStorage.setItem('peblo-saved-searches', JSON.stringify(n)); } catch { /* no storage */ } };
+  const full = (list) => list.map((n) => byId.get(n.id) || n);
+  const togglePick = (n) => setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id]));
+  const endSelect = () => { setPicked([]); setSelectMode(false); };
+  const bulk = async (kind) => {
+    if (!picked.length) return;
+    if (kind === 'trash' && !window.confirm('Move ' + picked.length + ' note(s) to the Trash?')) return;
+    if (kind === 'forever' && !window.confirm('Delete ' + picked.length + ' note(s) forever? This cannot be undone.')) return;
+    try {
+      for (const id of picked) {
+        if (kind === 'archive' || kind === 'unarchive') await notesAPI.archive(id);
+        else if (kind === 'restore') await notesAPI.restore(id);
+        else await notesAPI.delete(id);
+      }
+      flash(({ archive: 'Archived', unarchive: 'Unarchived', restore: 'Restored', trash: 'Moved to the Trash', forever: 'Deleted' })[kind]);
+      refresh();
+    } catch { flash('Something went wrong'); }
+    endSelect();
+  };
+  const moveTo = async (name) => {
+    setFolderOpen(false);
+    try {
+      for (const id of picked) await notesAPI.update(id, { meta: { folder: name || '' } });
+      flash(name ? 'Moved to ' + name : 'Taken out of its folder');
+      refresh();
+    } catch { flash('Could not move them'); }
+    endSelect();
+  };
+  const download = async () => {
+    const list = picked.length ? full(items.filter((n) => picked.includes(n.id))) : full(items);
+    if (!list.length) return;
+    flash('Downloading ' + list.length + ' note' + (list.length === 1 ? '' : 's'));
+    try { await exportManyMarkdown(list); } catch { flash('Could not download'); }
+  };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notes'] });
   const actions = filter === 'archive'
     ? [
@@ -544,6 +617,7 @@ function RiverNoteList({ onNew }) {
               onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }}
               placeholder="Search titles, tags and text…"
             />
+            {q.trim() && <button type="button" className="r-btn ghost small" onClick={saveSearch} disabled={savedQ.includes(q.trim())}>{savedQ.includes(q.trim()) ? 'Saved' : 'Save search'}</button>}
             {filter === 'trash' && listed.length > 0 && <button type="button" className="r-btn ghost danger" onClick={emptyTrash}>Empty Trash</button>}
             <button type="button" className="r-btn" onClick={onNew}>New note</button>
           </div>
@@ -553,9 +627,51 @@ function RiverNoteList({ onNew }) {
               <RSelect label="Group by" value={group} options={GROUPS} onChange={(v) => setOpt('group', v)} />
               <RSelect label="Sort" value={sort} options={SORTS} onChange={(v) => setOpt('sort', v)} />
               <RSelect label="Show" value={when} options={WHENS} onChange={(v) => setOpt('when', v)} />
-              <button type="button" className={'r-pillbtn' + (pinned ? ' on' : '')} aria-pressed={pinned} onClick={() => setOpt('pinned', !pinned)}>Pinned only</button>
+              <RSelect label="Folder" value={folderSel} options={[['', 'All folders'], ...folders.map((f) => [f, f]), ['__none', 'No folder']]} onChange={setFolderSel} />
+              <button type="button" className={'r-pillbtn' + (pinned ? ' on' : '')} aria-pressed={pinned} onClick={() => setOpt('pinned', !pinned)}>Pinned</button>
+              <button type="button" className={'r-pillbtn' + (onlyTasks ? ' on' : '')} aria-pressed={onlyTasks} onClick={() => setOnlyTasks((v) => !v)}>With tasks</button>
+              <button type="button" className={'r-pillbtn' + (onlyPics ? ' on' : '')} aria-pressed={onlyPics} onClick={() => setOnlyPics((v) => !v)}>With pictures</button>
+            </div>
+          )}
+          {!searching && (
+            <div className="r-toolbar r-toolbar2">
+              {group !== 'none' && groups.length > 0 && (
+                <>
+                  <button type="button" className="r-pillbtn" onClick={collapseAll} disabled={allCollapsed}>Collapse all</button>
+                  <button type="button" className="r-pillbtn" onClick={expandAll} disabled={!Object.values(collapsed).some(Boolean)}>Expand all</button>
+                </>
+              )}
+              <button type="button" className={'r-pillbtn' + (selectMode ? ' on' : '')} aria-pressed={selectMode} onClick={() => { setSelectMode((v) => !v); setPicked([]); }}>{selectMode ? 'Done selecting' : 'Select'}</button>
+              <button type="button" className="r-pillbtn" onClick={download} disabled={items.length === 0}>{picked.length ? 'Download ' + picked.length : 'Download shown'}</button>
               <span className="grow" />
+              {msg && <span className="r-quiet small" role="status">{msg}</span>}
               <span className="r-quiet small">{items.length} note{items.length === 1 ? '' : 's'}{changed ? ' · ' : ''}{changed && <button type="button" className="r-link" onClick={resetOpts}>Reset</button>}</span>
+            </div>
+          )}
+          {!searching && selectMode && (
+            <div className="r-bulk" role="toolbar" aria-label="Actions for the selected notes">
+              <b>{picked.length} selected</b>
+              <button type="button" className="r-btn ghost small" onClick={() => setPicked(items.map((n) => n.id))}>All</button>
+              <button type="button" className="r-btn ghost small" onClick={() => setPicked([])} disabled={!picked.length}>None</button>
+              {filter !== 'trash' && <button type="button" className="r-btn ghost small" disabled={!picked.length} onClick={() => setFolderOpen(true)}>Folder</button>}
+              {filter === 'trash' ? (
+                <>
+                  <button type="button" className="r-btn ghost small" disabled={!picked.length} onClick={() => bulk('restore')}>Restore</button>
+                  <button type="button" className="r-btn ghost small danger" disabled={!picked.length} onClick={() => bulk('forever')}>Delete forever</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="r-btn ghost small" disabled={!picked.length} onClick={() => bulk(filter === 'archive' ? 'unarchive' : 'archive')}>{filter === 'archive' ? 'Unarchive' : 'Archive'}</button>
+                  <button type="button" className="r-btn ghost small danger" disabled={!picked.length} onClick={() => bulk('trash')}>Trash</button>
+                </>
+              )}
+            </div>
+          )}
+          {!searching && savedQ.length > 0 && null}
+          {savedQ.length > 0 && (
+            <div className="r-saved-q" aria-label="Saved searches">
+              <span className="r-under-h">SAVED SEARCHES</span>
+              {savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={'Forget the search ' + t} onClick={() => dropSearch(t)}>×</button></span>)}
             </div>
           )}
 
@@ -589,8 +705,14 @@ function RiverNoteList({ onNew }) {
               )}
               {groups.map((g) => (
                 <div key={g.label || 'all'}>
-                  {g.label && <h2 className="r-h3" style={{ margin: '4px 0 8px' }}>{g.label} <span className="r-count">{g.notes.length}</span></h2>}
-                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} acts={actions} basis={basis} />)}</div>
+                  {g.label && (
+                    <h2 className="r-h3 r-gh" style={{ margin: '4px 0 8px' }}>
+                      <button type="button" aria-expanded={!collapsed[ck(g.label)]} onClick={() => setCollapsed((c) => ({ ...c, [ck(g.label)]: !c[ck(g.label)] }))}>
+                        <span className="chev" aria-hidden="true">{collapsed[ck(g.label)] ? '▸' : '▾'}</span>{g.label} <span className="r-count">{g.notes.length}</span>
+                      </button>
+                    </h2>
+                  )}
+                  {!collapsed[ck(g.label)] && <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} acts={actions} basis={basis} selecting={selectMode} picked={picked.includes(n.id)} onPick={() => togglePick(n)} />)}</div>}
                 </div>
               ))}
             </>
@@ -617,6 +739,7 @@ function RiverNoteList({ onNew }) {
           </section>
         </aside>
       </div>
+      {folderOpen && <div className="pb-dlg-host"><FolderDialog folders={folders} current="" count={picked.length} onPick={moveTo} onClose={() => setFolderOpen(false)} /></div>}
     </>
   );
 }

@@ -788,3 +788,22 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 .r-pillbtn { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--r-line); background: var(--r-bg); color: var(--r-fg); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .r-pillbtn.on { background: var(--r-ink); color: var(--r-on-ink); border-color: transparent; }
 .r-count { margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: var(--r-lane); color: var(--r-fg2); font-size: 11px; letter-spacing: 0; }
+
+/* ---- notes list: collapse, select, saved searches ---- */
+.r-toolbar2 { padding-top: 0; }
+.r-pillbtn:disabled { opacity: .45; cursor: default; }
+.r-gh button { display: inline-flex; align-items: center; gap: 8px; border: none; background: transparent; padding: 4px 2px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
+.r-gh .chev { width: 14px; color: var(--r-fg2); }
+.r-bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--r-lane); border: 1px solid var(--r-line); font-size: 13px; }
+.r-bulk b { margin-right: 4px; }
+.r-row.picked { background: color-mix(in srgb, var(--r-ink) 7%, var(--r-surface)); }
+.r-pick { width: 18px; height: 18px; accent-color: var(--r-ink); flex-shrink: 0; align-self: center; margin-right: 4px; }
+.r-saved-q { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.r-saved-q > span:not(.r-under-h) { display: inline-flex; align-items: center; border: 1px solid var(--r-line); border-radius: 999px; background: var(--r-lane); overflow: hidden; }
+.r-saved-q > span.on { background: var(--r-ink); color: var(--r-on-ink); }
+.r-saved-q button { border: none; background: transparent; color: inherit; font: inherit; font-size: 12.5px; padding: 4px 10px; cursor: pointer; }
+.r-saved-q button.x { padding: 4px 8px 4px 0; opacity: .7; }
+
+/* night hours are real time now: a cool tint, a small label, no folded block */
+.r-band-night { background: linear-gradient(180deg, color-mix(in srgb, #3B4A8C 11%, transparent), color-mix(in srgb, #3B4A8C 4%, transparent)); align-items: flex-start; justify-content: flex-start; padding: 6px 0 0; }
+.r-band-night span { writing-mode: horizontal-tb; position: sticky; left: 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, #3B4A8C 70%, var(--r-fg3)); padding-left: 10px; }

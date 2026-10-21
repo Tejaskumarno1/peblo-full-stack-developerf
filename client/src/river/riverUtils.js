@@ -4,18 +4,18 @@ import { startOfDay, addDays, sameDay, spanOf } from '../soft/softUtils';
 
 export { startOfDay, addDays, sameDay, spanOf };
 
-/** Awake hours are drawn to scale; the night (22:00 → 08:00) folds into a thin band. */
+/** Working hours (08:00 to 22:00): used for free gaps and suggestions. The river itself draws all 24 hours to scale; night hours are only tinted. */
 export const DAY_START = 8;
 export const DAY_END = 22;
-const AWAKE = DAY_END - DAY_START;
+const AWAKE = 24;
 
 /**
  * Zoom levels. "time" zooms place things at their exact time;
  * "bins" zooms group them by day (Week) or by week (Quarter).
  */
 export const ZOOMS = {
-  hours: { label: 'Hours', mode: 'time', pxh: 150, night: 40, back: 3, ahead: 14 },
-  day: { label: 'Day', mode: 'time', pxh: 78, night: 40, back: 7, ahead: 30 },
+  hours: { label: 'Hours', mode: 'time', pxh: 150, night: 0, back: 3, ahead: 14 },
+  day: { label: 'Day', mode: 'time', pxh: 78, night: 0, back: 7, ahead: 30 },
   week: { label: 'Week', mode: 'bins', bin: 'day', binW: 200, back: 14, ahead: 42 },
   quarter: { label: 'Quarter', mode: 'bins', bin: 'week', binW: 150, back: 28, ahead: 98 },
 };
@@ -47,12 +47,7 @@ export function xOf(date, z, start) {
   const dayIndex = Math.round((startOfDay(d) - start) / 86400000);
   const h = d.getHours() + d.getMinutes() / 60;
   const base = dayIndex * dayWidth(z);
-  if (h < DAY_START) {
-    // early morning sits in the previous day's night band
-    return base - z.night + (z.night * (h + 24 - DAY_END)) / (24 - AWAKE);
-  }
-  if (h <= DAY_END) return base + (h - DAY_START) * z.pxh;
-  return base + AWAKE * z.pxh + (z.night * (h - DAY_END)) / (24 - AWAKE);
+  return base + h * z.pxh;
 }
 
 /** Total width of the range. */

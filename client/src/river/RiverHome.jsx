@@ -32,8 +32,7 @@ function timeAt(x, z, start) {
   const dw = dayWidth(z);
   const day = Math.floor(x / dw);
   const within = x - day * dw;
-  const awake = (DAY_END - DAY_START) * z.pxh;
-  const h = within <= awake ? DAY_START + within / z.pxh : DAY_END + ((within - awake) / z.night) * (24 - (DAY_END - DAY_START));
+  const h = within / z.pxh;
   const d = addDays(start, day);
   const mins = Math.round((h * 60) / 15) * 15;
   d.setHours(0, 0, 0, 0);
@@ -380,13 +379,15 @@ export default function RiverHome({ initialZoom = 'day' }) {
     for (let i = 0; i < days; i++) {
       const d = addDays(start, i);
       const base = PAD + i * dw;
-      for (let h = DAY_START; h < DAY_END; h++) {
-        const first = h === DAY_START;
+      for (let h = 0; h < 24; h++) {
+        const first = h === 0;
         const hh = h % 12 === 0 ? 12 : h % 12;
         const label = first ? `${DOW[d.getDay()]} ${d.getDate()} · ${hh} am` : zoom === 'hours' ? `${hh}:00 ${h < 12 ? 'am' : 'pm'}` : `${hh} ${h < 12 ? 'am' : 'pm'}`;
-        ticks.push({ key: `${i}-${h}`, x: base + (h - DAY_START) * z.pxh, label, day: first, today: first && sameDay(d, today) });
+        ticks.push({ key: `${i}-${h}`, x: base + h * z.pxh, label, day: first, today: first && sameDay(d, today) });
       }
-      nights.push({ key: i, x: base + (DAY_END - DAY_START) * z.pxh, w: z.night });
+      // the night hours are real, usable time: only tinted
+      nights.push({ key: i + 'a', x: base, w: DAY_START * z.pxh, label: 'Night' });
+      nights.push({ key: i + 'b', x: base + DAY_END * z.pxh, w: (24 - DAY_END) * z.pxh, label: 'Night' });
     }
 
     // Meetings
@@ -561,7 +562,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
           <div className="r-track" style={{ width }}>
             <div className="r-band-past" style={{ width: nowX }} />
             {lay && lay.nights.map((n) => (
-              <div key={n.key} className="r-band-night" style={{ left: n.x, width: n.w }}><span>NIGHT</span></div>
+              <div key={n.key} className="r-band-night" style={{ left: n.x, width: n.w }}><span>{n.label}</span></div>
             ))}
             {bins && bins.map((b) => b.today && <div key={b.i} className="r-band-today" style={{ left: b.x, width: z.binW }} />)}
             {bins && bins.map((b) => <div key={`l${b.i}`} className="r-bin-line" style={{ left: b.x }} />)}
