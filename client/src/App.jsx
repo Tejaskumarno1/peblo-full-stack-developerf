@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
-import { useAuth } from './context/AuthContext';
+import { useAuth, getSavedAccounts } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
@@ -57,6 +57,7 @@ function Styled({ other: Other, ...byStyle }) {
   return <Screen />;
 }
 
+const ProfilePicker = lazy(() => import('./pages/ProfilePicker'));
 const RiverSettings = lazy(() => import('./river/RiverSettings'));
 const OrbitSettings = lazy(() => import('./orbit/OrbitSettings'));
 /** Soft Studio, River and Orbit share one Settings page (same data, each in its own look); the older style keeps the window. */
@@ -74,6 +75,10 @@ function ShellLayout() {
   const { loading, user } = useAuth();
   if (loading) return <Loader />;
   if (!user) return <AuthScreen />;
+  // Several profiles on this computer: ask who is using Peblo, once each time it starts (like Chrome).
+  try {
+    if (sessionStorage.getItem('peblo-profile-chosen') !== '1' && localStorage.getItem('peblo-profile-ask') !== '0' && getSavedAccounts().length >= 2) return <Navigate to="/profiles" replace />;
+  } catch { /* storage blocked */ }
   return (
     <AppShell>
       <Suspense fallback={<Loader />}><Outlet /></Suspense>
@@ -106,7 +111,8 @@ export default function App() {
   return (
     <Suspense fallback={<Loader />}>
       <Routes>
-        <Route element={<ShellLayout />}>
+        <Route path="/profiles" element={<Suspense fallback={<Loader />}><ProfilePicker /></Suspense>} />
+      <Route element={<ShellLayout />}>
           <Route path="/" element={<Styled soft={SoftHome} river={RiverHome} orbit={OrbitHome} other={HomePage} />} />
           <Route path="/notes" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
           <Route path="/notes/:id" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
