@@ -37,3 +37,13 @@
 .lm-bar i { display: block; height: 100%; background: var(--lm-accent); transition: width .4s ease; }
 .lm-pct { font-size: 13px; font-weight: 800; min-width: 3ch; } .lm-link { border: none; background: none; cursor: pointer; color: var(--lm-fg2); padding: 4px; display: inline-flex; }
 @media (prefers-reduced-motion: reduce) { .lm-bar i { transition: none; } }
+
+/* ---- cloud model picker (works in every style) ---- */
+.cm { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.cm-h { display: block; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; opacity: .7; margin-bottom: 6px; }
+.cm-h em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.cm-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.cm-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.cm-chip small { opacity: .65; font-size: 12px; }
+.cm-chip:hover { background: color-mix(in srgb, currentColor 6%, transparent); }
+.cm-chip.on { border-color: currentColor; background: color-mix(in srgb, currentColor 10%, transparent); }

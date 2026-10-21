@@ -6,6 +6,7 @@ import { aiAPI, hubAPI } from '../../api';
 import { normalizeRouting } from '../../utils/aiRouting';
 import { unreadableKeyMessage } from '../../utils/keyStatus';
 import LocalModels from './LocalModels';
+import CloudModels from './CloudModels';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', icon: Monitor, tone: 'a' },
@@ -106,7 +107,7 @@ export default function ConnectionsScreen({ p, extra }) {
           ) : (
             <>
               <span className={c('quiet')}>{ok ? `Runs on this computer. ${installed.length} model${installed.length === 1 ? '' : 's'} installed.` : (check?.error || local?.error || 'Start the Ollama app, then test the connection.')}</span>
-              {installed.slice(0, 5).map((m) => {
+              {installed.map((m) => {
                 const embed = /embed/i.test(m);
                 return (
                   <div key={m} className={c('model-row')}>
@@ -136,6 +137,7 @@ export default function ConnectionsScreen({ p, extra }) {
           {unreadableKeyMessage(settings) && <p role="alert" className={c('quiet')} style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
 <KeyInput p={p} id={`${p}-openai`} label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput p={p} id={`${p}-gemini`} label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
+          <CloudModels apply={apply} />
           <span className={c('quiet')} style={{ fontSize: 13 }}>Notes tagged #private are never sent to any AI.</span>
         </section>
       </div>

@@ -6,6 +6,7 @@ import { aiAPI, hubAPI } from '../api';
 import { normalizeRouting } from '../utils/aiRouting';
 import { unreadableKeyMessage } from '../utils/keyStatus';
 import LocalModels from '../components/hub/LocalModels';
+import CloudModels from '../components/hub/CloudModels';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', tone: 'mint', icon: Monitor },
@@ -107,7 +108,7 @@ export default function SoftConnections({ embedded = false }) {
             <>
               <span className="s-empty small">{ok ? `Runs on this computer. ${installed.length} model${installed.length === 1 ? '' : 's'} installed.` : (check?.error || local?.error || 'Start the Ollama app, then test the connection.')}</span>
               <div className="s-models">
-                {installed.slice(0, 4).map((m) => {
+                {installed.map((m) => {
                   const embed = /embed/i.test(m);
                   return (
                     <div key={m} className="s-model-row">
@@ -137,6 +138,7 @@ export default function SoftConnections({ embedded = false }) {
           {unreadableKeyMessage(settings) && <p role="alert" className="s-empty small" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
 <KeyInput id="s-openai" label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput id="s-gemini" label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
+          <CloudModels apply={apply} />
         </section>
 
         <LocalModels variant="soft" />

@@ -8,6 +8,16 @@ import { serverZone, dayKey, dayBounds } from '../utils/userTime.js';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
+/** The cloud models the person picked on the AI page (falls back to the defaults, or GEMINI_MODEL on the server). */
+export function openAiModelOf(user: any): string {
+  const m = (user?.settings as any)?.openAiModel;
+  return typeof m === 'string' && /^(gpt|o\d|chatgpt)[\w.-]{0,40}$/i.test(m.trim()) ? m.trim() : DEFAULT_OPENAI_MODEL;
+}
+export function geminiModelOf(user?: any): string {
+  const m = (user?.settings as any)?.geminiModel;
+  return typeof m === 'string' && /^gemini-[\w.-]{1,40}$/i.test(m.trim()) ? m.trim() : (process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL);
+}
+
 async function getUserSettings(userId: string) {
   return await prisma.user.findUnique({ 
     where: { id: userId },
@@ -48,7 +58,7 @@ function getOpenAIProvider(user: any): OAIProvider | null {
     if (envKey && !envKey.includes('your-openai')) apiKey = envKey;
   }
   if (!apiKey) return null;
-  return { name: 'openai', client: new OpenAI({ apiKey, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }), model: DEFAULT_OPENAI_MODEL, embedModel: 'text-embedding-3-small' };
+  return { name: 'openai', client: new OpenAI({ apiKey, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }), model: openAiModelOf(user), embedModel: 'text-embedding-3-small' };
 }
 
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
@@ -70,19 +80,29 @@ function getOllamaProvider(user: any): OAIProvider | null {
   };
 }
 
+/** Every call asks for the default Gemini model; if the person picked another one, this swaps it in. */
+function withChosenModel(g: GoogleGenerativeAI, user: any): GoogleGenerativeAI {
+  const chosen = geminiModelOf(user);
+  const asked = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+  if (chosen === asked) return g;
+  const orig = g.getGenerativeModel.bind(g);
+  (g as any).getGenerativeModel = (p: any, o?: any) => orig(p && p.model === asked ? { ...p, model: chosen } : p, o);
+  return g;
+}
+
 function getGeminiInstance(user: any) {
   if (aiIsOff(user)) return null;
   const settings = user?.settings as any || {};
   const forceCustomModels = settings.forceCustomModels === true;
   const key = decryptSecret(user?.apiKeys?.geminiKey)?.trim();
 
-  if (key) return new GoogleGenerativeAI(key);
+  if (key) return withChosenModel(new GoogleGenerativeAI(key), user);
   if (forceCustomModels) return null;
 
   const keysStr = serverKeysAllowed() ? (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '') : '';
   const keys = keysStr.split(',').map(k => k.trim()).filter(k => k && k !== 'your-gemini-api-key-here');
   if (keys.length === 0) return null;
-  return new GoogleGenerativeAI(keys[0]);
+  return withChosenModel(new GoogleGenerativeAI(keys[0]), user);
 }
 
 /**
@@ -1022,8 +1042,8 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
       error: check.error,
     },
     cloud: [
-      { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), unreadable: isUnreadable(user?.apiKeys?.openAiKey), model: DEFAULT_OPENAI_MODEL },
-      { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), unreadable: isUnreadable(user?.apiKeys?.geminiKey), model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL },
+      { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), unreadable: isUnreadable(user?.apiKeys?.openAiKey), model: openAiModelOf(user) },
+      { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), unreadable: isUnreadable(user?.apiKeys?.geminiKey), model: geminiModelOf(user) },
     ],
   };
 }
