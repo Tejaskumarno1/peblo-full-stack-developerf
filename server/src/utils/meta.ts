@@ -40,6 +40,12 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     status: (v) => (v === 'doing' ? 'doing' : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
+      link: (v) => { const s = str(v, 300); return s && /^https?:\/\/\S+$/i.test(s) ? s : undefined; },
+      linkedTasks: (v) => {
+        if (!Array.isArray(v)) return undefined;
+        const list = v.map((x) => (x && typeof x === 'object' ? { id: str((x as any).id, 64), text: str((x as any).text, 120) } : null)).filter((x): x is { id: string; text: string } => !!x && !!x.id && !!x.text).slice(0, 8);
+        return list.length ? list : undefined;
+      },
     attendees: (v) => {
       if (!Array.isArray(v)) return undefined;
       const names = [...new Set(v.map((x) => str(x, 40)).filter(Boolean))].slice(0, 12);

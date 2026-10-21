@@ -128,6 +128,8 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
               ? `Due ${isAllDay(selected) ? dayWord(at).toLowerCase() : `${dayWord(at).toLowerCase()}, ${clock(at)}`} · ${selected.priority} priority`
               : `No date yet · ${selected.priority} priority`}
         </span>
+        {meeting && selected.meta?.link && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Join {/meet\.google/i.test(selected.meta.link) ? 'Google Meet' : /teams\./i.test(selected.meta.link) ? 'Teams' : /zoom\./i.test(selected.meta.link) ? 'Zoom' : 'meeting'}</a>}
+        {meeting && selected.meta?.linkedTasks?.length > 0 && <div className="r-chips" aria-label="Tasks for this meeting">{selected.meta.linkedTasks.map((t) => <span key={t.id} className="r-tag">Task: {t.text}</span>)}</div>}
         {tags.length > 0 && <div className="r-chips">{tags.map((t) => <span key={t} className="r-tag">#{t}</span>)}</div>}
         <span className="grow" />
         <div className="r-btns">

@@ -92,6 +92,10 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   const [withText, setWithText] = useState('');
   const [rep, setRep] = useState(null);
   const [rem, setRem] = useState(null);
+  const [link, setLink] = useState('');
+  const [mTasks, setMTasks] = useState([]); // existing tasks tied to the meeting
+  const [newTask, setNewTask] = useState('');
+  const [taskPick, setTaskPick] = useState(false);
   // task / note settings (as in Soft Studio)
   const [due, setDue] = useState(null);
   const [prio, setPrio] = useState(null);
@@ -235,6 +239,9 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
     if (mode !== 'task' || typed.length === 0) return null;
     return upcoming.find((t) => !t.completed && !isMeeting(t) && words(t.text).some((w) => typed.includes(w))) || null;
   }, [upcoming, mode, value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openTasks = useMemo(() => upcoming.filter((t) => !t.completed && !isMeeting(t) && !mTasks.some((m) => m.id === t.id)).slice(0, 5), [upcoming, mTasks]);
+  const linkFixed = (() => { const s = link.trim(); if (!s) return ''; return /^https?:\/\//i.test(s) ? s : 'https://' + s; })();
+  const provider = /meet\.google/i.test(linkFixed) ? 'Google Meet' : /teams\.(microsoft|live)/i.test(linkFixed) ? 'Teams' : /zoom\.us|zoom\.com/i.test(linkFixed) ? 'Zoom' : /webex/i.test(linkFixed) ? 'Webex' : linkFixed ? 'Link' : '';
   const found = useMemo(() => {
     const s = q.trim().toLowerCase();
     return allNotes.filter((n) => !s || (n.title || '').toLowerCase().includes(s)).slice(0, 4);
@@ -252,7 +259,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   const reset = () => {
     setValue(''); setBody(''); setAtts([]); setDue(null); setPrio(null); setExtraTags([]); setTagOpen(false); setTagDraft('');
     setLinkChosen(null); setPicking(false); setQ(''); setPin(false); setMakeTasks(false); setNoLink(false);
-    setLen(null); setPickDate(''); setPickTime(''); setWithText(''); setRep(null); setRem(null); setOverride(null); setKeepClash(false);
+    setLink(''); setMTasks([]); setNewTask(''); setTaskPick(false); setLen(null); setPickDate(''); setPickTime(''); setWithText(''); setRep(null); setRem(null); setOverride(null); setKeepClash(false);
   };
   const close = () => {
     reset();
@@ -336,6 +343,16 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         if (deadline && mode === 'task' && !parsed.dueTime && !at) { deadline = new Date(deadline); deadline.setHours(23, 59, 0, 0); }
         const meta = {};
         if (mode === 'meeting' && names.length) meta.attendees = names;
+        if (mode === 'meeting' && linkFixed) meta.link = linkFixed;
+        if (mode === 'meeting') {
+          const tied = [...mTasks];
+          if (newTask.trim()) {
+            const day = new Date(deadline || when.deadline); day.setHours(23, 59, 0, 0);
+            const made = (await todosAPI.create({ text: newTask.trim().slice(0, 200), priority: 'medium', deadline: day.toISOString(), noteId })).data.todo;
+            if (made?.id) tied.push({ id: made.id, text: made.text });
+          }
+          if (tied.length) meta.linkedTasks = tied.map((t) => ({ id: t.id, text: t.text }));
+        }
         if (remindMin) meta.remindMin = remindMin;
         await todosAPI.create({
           text: parsed.text || raw,
@@ -440,6 +457,26 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
 
       {mode === 'meeting' && (
         <div className="r-mset" role="group" aria-label="Meeting settings">
+          <div className="r-mrow grid one">
+            <label>Meeting link<input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a Google Meet, Teams or Zoom link" autoComplete="off" /></label>
+          </div>
+          {provider && <p className="r-capture-status">{provider === 'Link' ? 'Link added.' : provider + ' link added.'} A Join button shows on the meeting.</p>}
+          <div className="r-qk" role="group" aria-label="Connect notes and tasks">
+            {linkNote
+              ? <button type="button" className="on" onClick={() => { setLinkChosen(null); setNoLink(true); }}>Note: {linkNote.title || 'Untitled'} ×</button>
+              : <button type="button" className="ghost" onClick={() => setPicking((p) => !p)} aria-expanded={picking}>+ Connect a note</button>}
+            {mTasks.map((t) => <button key={t.id} type="button" className="on" onClick={() => setMTasks(mTasks.filter((x) => x.id !== t.id))}>Task: {t.text.slice(0, 24)} ×</button>)}
+            <button type="button" className="ghost" onClick={() => setTaskPick((p) => !p)} aria-expanded={taskPick}>+ Connect a task</button>
+          </div>
+          {taskPick && (
+            <div className="r-cap-pick">
+              {openTasks.map((t) => <button key={t.id} type="button" onClick={() => { setMTasks([...mTasks, { id: t.id, text: t.text }]); setTaskPick(false); }}><b>{t.text}</b><small>{t.deadline ? 'Due ' + dayWord(t.deadline).toLowerCase() : 'No date yet'}</small></button>)}
+              {openTasks.length === 0 && <span className="r-quiet small">No open tasks to connect.</span>}
+            </div>
+          )}
+          <div className="r-mrow grid one">
+            <label>New task for this meeting<input value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder="Prepare the agenda" autoComplete="off" /></label>
+          </div>
           <div className="r-mrow">
             <span className="r-under-h">LENGTH</span>
             <div className="r-qk">
@@ -478,7 +515,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
             : <button type="button" className="ghost" onClick={() => setPicking((p) => !p)} aria-expanded={picking}>+ Link a note</button>}
         </div>
       )}
-      {mode === 'task' && picking && !linkNote && (
+      {mode !== 'note' && picking && !linkNote && (
         <div className="r-cap-pick">
           <label className="r-cap-search"><Search size={14} /><input autoFocus aria-label="Search notes" placeholder="Search your notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setPicking(false); } }} /></label>
           {found.map((n) => <button key={n.id} type="button" onClick={() => { setLinkChosen({ id: n.id, title: n.title }); setNoLink(false); setPicking(false); setQ(''); }}><b>{n.title || 'Untitled'}</b><small>{snippetOf(n.content, 50)}</small></button>)}
