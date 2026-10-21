@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2 } from 'lucide-react';
+import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
+import VersionDiff from './VersionDiff';
+import { inlineMedia } from '../utils/imageData';
 import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
@@ -49,6 +51,9 @@ export default function SoftNotes() {
   const [question, setQuestion] = useState('');
   const [pill, setPill] = useState(null); // selection toolbar {x, y, text}
   const [toast, setToast] = useState('');
+  const [q, setQ] = useState(''); // the search box
+  const [dq, setDq] = useState(''); // what was typed, after a short pause
+  const [diffV, setDiffV] = useState(null); // the earlier version being compared
   const bodyRef = useRef(null);
 
   // ---------- data ----------
@@ -60,6 +65,12 @@ export default function SoftNotes() {
   const { data: listed = [] } = useQuery({
     queryKey: ['notes', 'soft', filter],
     queryFn: () => notesAPI.getAll({ sort: 'updated', ...listParams }).then((r) => r.data.notes || []),
+  });
+  useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 250); return () => clearTimeout(t); }, [q]);
+  const { data: found = [] } = useQuery({
+    queryKey: ['notes', 'find', dq, filter],
+    enabled: dq.length > 0,
+    queryFn: () => notesAPI.getAll({ search: dq, snippet: '1', ...listParams }).then((r) => r.data.notes || []),
   });
   const noteId = doc && !doc.isDraft ? doc.id : null;
   const { data: linked = [] } = useQuery({
@@ -81,6 +92,7 @@ export default function SoftNotes() {
   const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
   const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
   const groups = useMemo(() => {
+    if (dq) return [{ key: 'found', label: '', notes: found }]; // best match first, as the server ranked them
     let base = filter === 'all' ? allNotes : listed;
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
@@ -111,7 +123,7 @@ export default function SoftNotes() {
       for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
     }
     return out;
-  }, [allNotes, listed, filter, selTags, tagMatch, sort, group]);
+  }, [allNotes, listed, filter, selTags, tagMatch, sort, group, dq, found]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
     queryKey: ['todos', 'open-unlinked'],
@@ -210,9 +222,9 @@ export default function SoftNotes() {
     patch({ isDeleted: false });
     setPreview(false);
   };
-  const exportMd = () => {
+  const exportMd = async () => {
     setMenuOpen(false);
-    const blob = new Blob([`# ${doc.title || 'Untitled'}\n\n${doc.content}`], { type: 'text/markdown' });
+    const blob = new Blob([`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content)}`], { type: 'text/markdown' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${(doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note'}.md`;
@@ -220,10 +232,10 @@ export default function SoftNotes() {
     URL.revokeObjectURL(a.href);
   };
   const fileBase = () => (doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
-  const noteHtml = () => `<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(doc.content || '')}`;
-  const exportWord = () => {
+  const noteHtml = async () => `<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(doc.content || ''))}`;
+  const exportWord = async () => {
     setMenuOpen(false);
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${fileBase()}</title></head><body style="font-family:Calibri,Arial,sans-serif">${noteHtml()}</body></html>`;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${fileBase()}</title></head><body style="font-family:Calibri,Arial,sans-serif">${await noteHtml()}</body></html>`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['\ufeff', html], { type: 'application/msword' }));
     a.download = `${fileBase()}.doc`;
@@ -235,7 +247,7 @@ export default function SoftNotes() {
     const { default: html2pdf } = await import('html2pdf.js');
     const el = document.createElement('div');
     el.style.cssText = 'font-family:Arial,sans-serif;font-size:13px;line-height:1.5;padding:8px;color:#111;max-width:680px';
-    el.innerHTML = noteHtml();
+    el.innerHTML = await noteHtml();
     el.querySelectorAll('img').forEach((i) => { i.style.maxWidth = '100%'; });
     await html2pdf().set({ margin: 14, filename: `${fileBase()}.pdf`, image: { type: 'jpeg', quality: 0.92 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4' } }).from(el).save();
   };
@@ -317,7 +329,7 @@ export default function SoftNotes() {
       if (text.length < 3) { setPill(null); return; }
       const r = sel.getRangeAt(0).getBoundingClientRect();
       const b = box.getBoundingClientRect();
-      setPill({ x: Math.min(Math.max(r.left + r.width / 2 - b.left, 150), b.width - 150), y: r.top - b.top - 50 + box.scrollTop, text: text.slice(0, 400) });
+      setPill({ x: Math.min(Math.max(r.left + r.width / 2 - b.left, 150), b.width - 150), y: r.bottom - b.top + 10 + box.scrollTop, text: text.slice(0, 400) });
     };
     document.addEventListener('selectionchange', onSel);
     return () => document.removeEventListener('selectionchange', onSel);
@@ -352,6 +364,7 @@ export default function SoftNotes() {
 
   return (
     <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
+      {diffV && doc && <VersionDiff doc={doc} version={diffV} onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await restoreVersion(v); }} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
       <aside className="s-notes-list" aria-label="Notes">
@@ -359,9 +372,10 @@ export default function SoftNotes() {
           <h1 className="s-notes-h1">{listTitle}</h1>
           <button type="button" className="s-new" aria-label="New note" title="New note" onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>
         </div>
+        <label className="s-nsearch"><Search size={14} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
         <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
         <div className="s-notes-rows">
-          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : 'No notes here yet.'}</p>}
           {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><span className="chev" aria-hidden="true">{collapsed[`${group}:${g.key}`] ? '▸' : '▾'}</span>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
             const tone = toneVar(toneOf(n.tags?.[0]));
             const on = doc?.id === n.id;
@@ -370,7 +384,7 @@ export default function SoftNotes() {
                 <span className="dot" style={{ background: tone }} aria-hidden="true" />
                 <span className="txt">
                   <span className="t">{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
-                  <span className="s">{snippetOf(n.content) || 'Empty note'}</span>
+                  <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>
                   <span className="m">{relTime(n.updatedAt)}</span>
                 </span>
               </Link>
@@ -479,7 +493,7 @@ export default function SoftNotes() {
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}
                 editable={!preview && !doc.isDeleted}
-                formattingToolbar={false}
+                formattingToolbar
               />
               {pill && !preview && (
                 <div className="s-sel-pill" style={{ left: pill.x, top: Math.max(pill.y, 0) }} onMouseDown={(e) => e.preventDefault()}>
@@ -559,8 +573,8 @@ export default function SoftNotes() {
             {historyOpen && versions.length > 0 && (
               <div className="s-menu up" role="menu">
                 {versions.slice(0, 8).map((v) => (
-                  <button key={v.id} type="button" role="menuitem" onClick={() => { setHistoryOpen(false); restoreVersion(v); }}>
-                    Restore · {relTime(v.createdAt)}
+                  <button key={v.id} type="button" role="menuitem" onClick={() => { setHistoryOpen(false); setDiffV(v); }}>
+                    Compare · {relTime(v.createdAt)}
                   </button>
                 ))}
               </div>
@@ -570,4 +584,12 @@ export default function SoftNotes() {
       </aside>
     </div>
   );
+}
+
+// Shows the words that matched in bold-yellow.
+function Hl({ text, q }) {
+  const words = [...new Set(q.toLowerCase().replace(/#/g, ' ').split(/\s+/).filter(Boolean))].map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!words.length) return text;
+  const parts = text.split(new RegExp(`(${words.join('|')})`, 'ig'));
+  return parts.map((p, i) => (i % 2 ? <mark key={i}>{p}</mark> : p));
 }

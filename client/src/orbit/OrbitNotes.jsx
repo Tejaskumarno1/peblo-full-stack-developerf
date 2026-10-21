@@ -284,7 +284,7 @@ function OrbitNote({ note }) {
             </div>
           )}
           <div className="o-body">
-            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} formattingToolbar={false} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} />
           </div>
           {!readOnly && <p className="o-quiet" style={{ margin: '6px 0 0', fontSize: 12.5 }}>Type <kbd>/</kbd> for commands, <kbd>@</kbd> to link a note.</p>}
           <p className="o-wc" aria-label="Word count">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {String(doc.content || '').length} characters · {readMin} min read</p>

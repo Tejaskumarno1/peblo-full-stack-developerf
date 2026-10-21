@@ -350,3 +350,27 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 
 .soft.s-embed { background: transparent !important; padding: 0 !important; min-height: 0 !important; height: auto !important; display: flex; flex-direction: column; gap: 14px; margin-top: 24px; font-family: var(--s-body); }
 .soft.s-embed .s-set-card { border-radius: 18px; }
+
+/* ---- notes search box ---- */
+.soft .s-nsearch { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; padding: 8px 12px; border-radius: 999px; background: var(--s-surface); border: 1.5px solid var(--s-line); color: var(--s-fg2); }
+.soft .s-nsearch:focus-within { border-color: var(--s-fg); }
+.soft .s-nsearch input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; color: var(--s-fg); }
+.soft .s-nsearch button { border: 0; background: transparent; color: var(--s-fg2); cursor: pointer; display: grid; place-items: center; padding: 2px; }
+.soft .s-note-row .s mark { background: var(--s-butter); color: inherit; border-radius: 4px; padding: 0 2px; }
+
+/* ---- compare versions ---- */
+.s-vd { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 64px); background: #fffdf8; color: #2a1f17; border-radius: 26px; box-shadow: 0 24px 60px rgba(60,40,20,.3); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.s-vd-grid { overflow: auto; border: 1.5px solid #eadfce; border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr; font-size: 13px; line-height: 1.5; min-height: 80px; }
+.s-vd-cap { position: sticky; top: 0; background: #f4ede2; font-weight: 800; font-size: 12px; padding: 6px 12px; letter-spacing: .04em; text-transform: uppercase; z-index: 1; }
+.s-vd-row { display: contents; }
+.s-vd-cell { padding: 3px 12px; white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid #f1e9db; min-height: 1.5em; }
+.s-vd-cell.del { background: #fde4dc; }
+.s-vd-cell.add { background: #dcf3dd; }
+.s-vd-gap { grid-column: 1 / -1; text-align: center; font-size: 12px; font-weight: 700; color: #8a7a6a; background: #faf5ec; padding: 4px; border-top: 1px solid #f1e9db; }
+.s-vd-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- share expiry ---- */
+.s-share-exp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.s-share-exp label { font-weight: 700; font-size: 13px; }
+.s-share-exp select { border: 1.5px solid #eadfce; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; background: #f4ede2; color: #2a1f17; }
+.s-share-exp small { flex-basis: 100%; color: #6b5b4e; font-size: 12.5px; font-weight: 600; }

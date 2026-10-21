@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
-import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems } from '@blocknote/react';
-import { filterSuggestionItems } from '@blocknote/core/extensions';
+import {
+  useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
+  FormattingToolbarController, FormattingToolbar, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
+} from '@blocknote/react';
+import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
 import { Sparkles, CheckSquare, Wand2, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +28,16 @@ async function uploadFile(file) {
    ------------------------------------------------------------------------------ */
 const textOf = (content) => (Array.isArray(content) ? content.map((c) => (c.type === 'link' ? textOf(c.content) : c.text || '')).join('') : typeof content === 'string' ? content : '');
 
+// A picture's size and side are kept in the address ("...#pw=320&ta=right") because Markdown has nowhere else for them.
+// A picture made smaller than the column floats to its side, so the text beside it uses the space.
+const withLayout = (p) => {
+  const q = [];
+  if (p.previewWidth) q.push(`pw=${Math.round(p.previewWidth)}`);
+  if (p.textAlignment && p.textAlignment !== 'left') q.push(`ta=${p.textAlignment}`);
+  const base = String(p.url).split('#')[0];
+  return q.length ? `${base}#${q.join('&')}` : base;
+};
+
 function toStorage(blocks) {
   return blocks.map((b) => {
     const children = b.children?.length ? toStorage(b.children) : [];
@@ -33,6 +46,7 @@ function toStorage(blocks) {
       if (!url) return { ...b, type: 'paragraph', props: {}, content: [], children };
       return { id: b.id, type: 'image', props: { url, caption: b.props.name || b.props.caption || b.type }, children };
     }
+    if (b.type === 'image' && b.props?.url) return { ...b, props: { ...b.props, url: withLayout(b.props) }, children };
     if (b.type === 'toggleListItem') {
       return { id: b.id, type: 'bulletListItem', props: {}, content: [{ type: 'text', text: '▸ ', styles: {} }, ...(Array.isArray(b.content) ? b.content : [])], children };
     }
@@ -50,6 +64,13 @@ function fromStorage(blocks) {
       if (m) return { type: m[1], props: { url, name, showPreview: true }, children };
       return { type: 'file', props: { url, name }, children };
     }
+    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta)=/.test(b.props.url)) {
+      const [u, ...h] = b.props.url.split('#');
+      const q = new URLSearchParams(h.join('#'));
+      const pw = Number(q.get('pw'));
+      const ta = q.get('ta');
+      return { ...b, props: { ...b.props, url: u, ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
+    }
     if (b.type === 'bulletListItem' && Array.isArray(b.content) && b.content[0]?.type === 'text' && /^▸\s/.test(b.content[0].text || '')) {
       const first = { ...b.content[0], text: b.content[0].text.replace(/^▸\s+/, '') };
       return { type: 'toggleListItem', props: {}, content: [first, ...b.content.slice(1)], children };
@@ -57,6 +78,32 @@ function fromStorage(blocks) {
     return { ...b, children };
   });
 }
+
+// Buttons that appear above a picture when it is clicked: where it sits and how wide it is.
+function ImageTools() {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext();
+  const sel = editor.getSelection();
+  const blocks = sel ? sel.blocks : [editor.getTextCursorPosition().block];
+  const b = blocks.length === 1 ? blocks[0] : null;
+  if (!b || b.type !== 'image' || !Components) return null;
+  const width = () => editor.domElement?.clientWidth || 700;
+  const set = (props) => editor.updateBlock(b, { props });
+  const Btn = Components.FormattingToolbar.Button;
+  const pw = b.props.previewWidth;
+  const pct = (p) => Math.round(width() * p);
+  const near = (p) => pw && Math.abs(pw - pct(p)) < 12;
+  const tag = (t) => <span style={{ fontWeight: 800, fontSize: 12 }}>{t}</span>;
+  return (
+    <>
+      <Btn key="s" mainTooltip="Small picture. Smaller than the page, it sits to one side (use the align buttons) and text wraps beside it" icon={tag('S')} isSelected={near(0.25)} onClick={() => set({ previewWidth: pct(0.25) })} />
+      <Btn key="m" mainTooltip="Medium picture" icon={tag('M')} isSelected={near(0.45)} onClick={() => set({ previewWidth: pct(0.45) })} />
+      <Btn key="l" mainTooltip="Large picture" icon={tag('L')} isSelected={near(0.7)} onClick={() => set({ previewWidth: pct(0.7) })} />
+      <Btn key="f" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />
+    </>
+  );
+}
+const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />]}</FormattingToolbar>;
 
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
@@ -90,7 +137,21 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]); // Intentionally ignore initialContent to prevent cursor reset on every keystroke
 
+  // Typing [[ opens the note picker (the two brackets are swapped for the picker's @).
+  const checkDoubleBracket = () => {
+    if (guest || !editable || loadingRef.current) return;
+    try {
+      const st = editor.prosemirrorState;
+      const { from, empty } = st.selection;
+      if (!empty || from < 2) return;
+      if (st.doc.textBetween(from - 2, from, '\n', '\n') !== '[[') return;
+      editor.transact((tr) => tr.delete(from - 2, from));
+      editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@');
+    } catch { /* if the editor cannot do this, @ still works */ }
+  };
+
   const handleChange = async () => {
+    checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
     const markdown = await editor.blocksToMarkdownLossy(toStorage(editor.document));
     onChange(markdown);
@@ -176,15 +237,30 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         linkCache.current = { at: Date.now(), notes: data.notes || [] };
       } catch { /* keep whatever we had */ }
     }
-    const q = String(query || '').trim().toLowerCase();
-    return linkCache.current.notes
-      .filter((n) => n.id !== noteId && (n.title || 'Untitled').toLowerCase().includes(q))
-      .slice(0, 8)
-      .map((n) => ({
-        title: n.title || 'Untitled',
+    const raw = String(query || '').replace(/\]\]?$/, '').trim();
+    const q = raw.toLowerCase();
+    const mine = linkCache.current.notes.filter((n) => n.id !== noteId && (n.title || 'Untitled').toLowerCase().includes(q));
+    mine.sort((a, b) => ((b.title || '').toLowerCase().startsWith(q) ? 1 : 0) - ((a.title || '').toLowerCase().startsWith(q) ? 1 : 0));
+    const items = mine.slice(0, 8).map((n) => ({
+      title: n.title || 'Untitled',
+      group: 'Link to a note',
+      onItemClick: () => editor.insertInlineContent([{ type: 'link', href: `/notes/${n.id}`, content: n.title || 'Untitled' }, ' ']),
+    }));
+    if (raw && !linkCache.current.notes.some((n) => (n.title || '').toLowerCase() === q)) {
+      items.push({
+        title: `Create a note called “${raw}”`,
         group: 'Link to a note',
-        onItemClick: () => editor.insertInlineContent([{ type: 'link', href: `/notes/${n.id}`, content: n.title || 'Untitled' }, ' ']),
-      }));
+        onItemClick: async () => {
+          try {
+            const r = await notesAPI.create({ title: raw, content: '' });
+            linkCache.current.at = 0;
+            editor.insertInlineContent([{ type: 'link', href: `/notes/${r.data.note.id}`, content: raw }, ' ']);
+            queryClient.invalidateQueries({ queryKey: ['notes'] });
+          } catch { /* nothing is inserted if the note could not be made */ }
+        },
+      });
+    }
+    return items;
   };
 
   const onLinkClick = (e) => {
@@ -204,10 +280,11 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         onChange={handleChange}
         theme={dark ? 'dark' : 'light'}
         slashMenu={false}
-        formattingToolbar={formattingToolbar}
+        formattingToolbar={false}
       >
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
+        {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
       </BlockNoteView>
       {!guest && <Backlinks noteId={noteId} />}
 

@@ -81,6 +81,68 @@ function formatNote(note: any) {
   };
 }
 
+// ---------- search ----------
+// Several words match in any order; results are ranked (exact title > title start > title > tags > text), a near-miss
+// in a title ("meetng") is still found, and each result carries the line around the match with pictures removed.
+const stripMedia = (s: string) => (s || '')
+  .replace(/<figure>[\s\S]*?<\/figure>/g, ' ')
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+  .replace(/data:[a-z]+\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/g, ' ');
+const searchWords = (q: string) => [...new Set(q.toLowerCase().replace(/#/g, ' ').split(/\s+/).filter(Boolean))].slice(0, 6);
+function lev(a: string, b: string) {
+  const d: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return d[b.length];
+}
+function nearTitle(title: string, words: string[]) {
+  const toks = (title || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return words.some((w) => w.length >= 4 && toks.some((t) => Math.abs(t.length - w.length) <= 2 && lev(t, w) <= (w.length >= 7 ? 2 : 1)));
+}
+function rankNotes(list: any[], q: string, words: string[], fuzzy: Set<string>) {
+  const full = q.toLowerCase().replace(/#/g, ' ').replace(/\s+/g, ' ').trim();
+  const now = Date.now();
+  return list.map((n) => {
+    const title = (n.title || '').toLowerCase();
+    const flat = stripMedia(n.content || '').replace(/[#*_>`|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const lower = flat.toLowerCase();
+    const tags: string[] = n.tags || [];
+    let s = 0;
+    if (full) {
+      if (title === full) s += 100; else if (title.startsWith(full)) s += 70; else if (title.includes(full)) s += 50;
+      if (lower.includes(full)) s += 10;
+    }
+    let hitsAll = true;
+    for (const w of words) {
+      const inT = title.includes(w);
+      const inTag = tags.some((t) => t.toLowerCase().includes(w));
+      let c = 0; let i = lower.indexOf(w);
+      while (i >= 0 && c < 8) { c++; i = lower.indexOf(w, i + w.length); }
+      if (inT) s += 15;
+      if (inTag) s += 12;
+      s += c * 2;
+      if (!inT && !inTag && !c) hitsAll = false;
+    }
+    if (hitsAll && words.length > 1) s += 20;
+    if (fuzzy.has(n.id)) s += 25;
+    s += Math.max(0, 5 - (now - new Date(n.updatedAt).getTime()) / 86400000 / 30);
+    let at = -1;
+    for (const w of words) { at = lower.indexOf(w); if (at >= 0) break; }
+    let matchSnippet: string | null = null;
+    if (at >= 0) {
+      const start = Math.max(0, at - 40);
+      matchSnippet = (start > 0 ? '…' : '') + flat.slice(start, start + 160) + (start + 160 < flat.length ? '…' : '');
+    }
+    return { ...n, matchSnippet, score: Math.round(s * 10) / 10 };
+  }).sort((a, b) => b.score - a.score);
+}
+
 export async function getNotes(req: any, res: any, next: any) {
   try {
     const { search, tag, category, sort = 'updated', archived, deleted, snippet } = req.query;
@@ -112,11 +174,12 @@ export async function getNotes(req: any, res: any, next: any) {
     if (search) {
       // Title, text and tags, ignoring case.
       const q = String(search).trim();
-      where.OR = [
-        { title: { contains: q, mode: 'insensitive' } },
-        { content: { contains: q, mode: 'insensitive' } },
-        { tags: { some: { tag: { name: { contains: q.replace(/^#/, ''), mode: 'insensitive' } } } } }
-      ];
+      const words = searchWords(q);
+      where.OR = (words.length ? words : [q]).flatMap((w) => [
+        { title: { contains: w, mode: 'insensitive' } },
+        { content: { contains: w, mode: 'insensitive' } },
+        { tags: { some: { tag: { name: { contains: w, mode: 'insensitive' } } } } }
+      ]);
     }
 
     // Sort
@@ -158,7 +221,22 @@ export async function getNotes(req: any, res: any, next: any) {
       ...(limit ? { take: limit, skip: offset } : {})
     });
 
-    let out: any[] = notes.map(formatNote);
+    let found: any[] = notes;
+    const fuzzy = new Set<string>();
+    const sq = search ? String(search).trim() : '';
+    if (sq && found.length < 3 && sq.length >= 4) {
+      // Few hits: also look for titles that are one or two letters off (typing "meetng" finds "Meeting").
+      const words = searchWords(sq);
+      const titles = await prisma.note.findMany({ where: { userId, isArchived: where.isArchived, isDeleted: where.isDeleted }, select: { id: true, title: true } });
+      const have = new Set(found.map((n: any) => n.id));
+      const near = titles.filter((t) => !have.has(t.id) && nearTitle(t.title, words)).slice(0, 10).map((t) => t.id);
+      if (near.length) {
+        near.forEach((id) => fuzzy.add(id));
+        found = found.concat(await prisma.note.findMany({ where: { id: { in: near }, userId }, include: noteInclude }));
+      }
+    }
+    let out: any[] = found.map(formatNote);
+    if (sq) out = rankNotes(out, sq, searchWords(sq), fuzzy);
     // `snippet=1`: list views that only show a preview get the first 400 characters, not whole notes.
     // Never open or save a note from a snippet list (it is cut short) — use GET /notes/:id.
     if (snippet === '1' || snippet === 'true') {

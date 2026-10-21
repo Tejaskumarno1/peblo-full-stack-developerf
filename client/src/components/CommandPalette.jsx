@@ -45,8 +45,18 @@ export default function CommandPalette() {
     }
   }, [isOpen]);
 
+  // Typing asks the server, which ranks by title, tags and text and forgives a typo; until it answers, titles are matched here.
+  const [hits, setHits] = useState(null);
+  useEffect(() => {
+    const t = query.trim();
+    if (t.length < 2) { setHits(null); return undefined; }
+    const timer = setTimeout(() => {
+      notesAPI.getAll({ search: t, snippet: '1', limit: 6 }).then((r) => setHits({ q: t, notes: r.data.notes || [] })).catch(() => {});
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [query]);
   const filteredNotes = query.trim()
-    ? notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5)
+    ? (hits && hits.q === query.trim() ? hits.notes.slice(0, 6) : notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5))
     : [];
 
   const openNew = async (data) => {

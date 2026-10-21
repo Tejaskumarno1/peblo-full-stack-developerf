@@ -2,6 +2,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { downloadBlob, downloadText, safeFileName } from './download';
+import { inlineMedia } from './imageData';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -56,6 +57,7 @@ export function printHtml(html) {
 export async function exportDocs(docs, fmt, name) {
   if (!docs.length) throw new Error('There is nothing to export here yet.');
   const base = safeFileName(name || docs[0].title, 'peblo');
+  docs = await Promise.all(docs.map(async (d) => ({ ...d, content: await inlineMedia(d.content) }))); // pictures stored on the server go inside the file
   if (fmt === 'md') return downloadText(`${base}.md`, docsToMarkdown(docs), 'text/markdown');
   const html = docsToHtml(docs);
   if (fmt === 'doc') return downloadBlob(`${base}.doc`, new Blob([wordPage(base, html)], { type: 'application/msword' }));

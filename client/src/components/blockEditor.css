@@ -26,3 +26,16 @@
 .pb-aicard-actions button.primary{background:#c8421d;color:#fff}
 .pb-aicard-actions button:disabled{opacity:.5;cursor:default}
 @media (max-width:640px){.pb-aicard-cmp{grid-template-columns:1fr}}
+
+/* ---- Pictures: made smaller than the column, they float to a side so the text beside them uses the space ---- */
+.block-editor-container .bn-block-outer:has(> .bn-block > .bn-block-content[data-content-type="image"]:not([data-text-alignment="center"]):not([data-text-alignment="right"]):not([data-text-alignment="justify"])[data-preview-width]) {
+  float: left; max-width: 65%; margin: 4px 0 10px 0 !important; padding-right: 18px !important;
+}
+.block-editor-container .bn-block-outer:has(> .bn-block > .bn-block-content[data-content-type="image"][data-text-alignment="right"][data-preview-width]) {
+  float: right; max-width: 65%; margin: 4px 0 10px 0 !important; padding-left: 18px !important;
+}
+.block-editor-container .bn-editor::after { content: ''; display: block; clear: both; }
+.block-editor-container .bn-visual-media-wrapper img { max-width: 100%; height: auto; }
+@media (max-width: 560px) {
+  .block-editor-container .bn-block-outer:has([data-preview-width]) { float: none !important; max-width: 100%; padding: 0 !important; }
+}
