@@ -8,6 +8,11 @@ import { freeGaps, dur } from './planner';
 import { extras, noteForLine } from './captureParse';
 import './river.css';
 
+const TRY = {
+  meeting: [['Call Priya Friday 4pm for 30 min', 'Friday 4:00–4:30 pm, with Priya'], ['Standup every weekday 10am', 'Repeats Monday to Friday']],
+  task: [['Submit assignment by Sunday', 'Due Sunday, end of day'], ['Send report friday 5pm !high', 'High priority, Friday 5 pm']],
+};
+
 const HINTS = {
   meeting: 'Design crit tomorrow 3-4pm #work',
   task: 'Send metrics to Ananya tuesday 10am !high',
@@ -243,6 +248,18 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         placeholder={HINTS[mode]}
         autoComplete="off"
       />
+      {!value.trim() && TRY[mode] && (
+        <div className="r-try" aria-label="Try one of these">
+          <span className="r-under-h">ALSO WORKS</span>
+          <div className="r-try-row">
+            {TRY[mode].map(([line, what]) => (
+              <button key={line} type="button" onClick={() => { setValue(line); inputRef.current?.focus(); }}>
+                <b>“{line}”</b><span>{what}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {(when || parsed?.attendees?.length || linkNote) && mode !== 'note' && (
         <div className="r-under" aria-label="What Peblo understood">
           <span className="r-under-h">PEBLO UNDERSTOOD</span>

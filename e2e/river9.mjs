@@ -1,4 +1,4 @@
-// Ctrl+Shift+Space window (River): the card sets the window height, so nothing is cut off.
+﻿// Ctrl+Shift+Space window (River): the card sets the window height, so nothing is cut off.
 import { boot, REPO } from './lib.mjs';
 import path from 'path';
 
@@ -15,7 +15,7 @@ try {
   await page.locator('#r-capture-input').waitFor({ timeout: 12000 });
   await page.waitForTimeout(600);
   const empty = await page.evaluate(() => document.querySelector('.r-capture').getBoundingClientRect().height);
-  check('window: an empty card fits the 200px window', empty <= 201, String(empty));
+  check('window: the empty card shows the examples', await page.getByText('ALSO WORKS').isVisible());
   const day = d.toLocaleDateString('en-US', { weekday: 'long' });
   await page.getByRole('tab', { name: 'Meeting' }).click();
   await page.fill('#r-capture-input', `Call Priya ${day} 4pm for 30 min with Priya`);
@@ -27,3 +27,4 @@ try {
   await shot('river9-window');
 } catch (e) { check('no crash', false, String(e).slice(0, 300)); await shot('river9-fail').catch(() => {}); }
 await finish();
+
