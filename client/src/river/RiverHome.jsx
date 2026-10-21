@@ -322,7 +322,14 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const aiReady = !!(models?.local?.enabled && models.local.ok) || (models?.cloud || []).some((c) => c.configured);
 
   // ---------- header ----------
-  const sub = (nextUp ? clock(now) + ' · next up ' + fromNow(nextUp.at) : clock(now) + ' · nothing else planned') + (freeToday >= 30 ? ' · ' + dur(freeToday) + ' free' : '');
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const weekFree = zoom === 'week' ? weekDays.reduce((s, d, i) => s + freeGaps(meetings, d, 1, i === 0 ? now : d).reduce((a, g) => a + Math.max(0, (Math.min(g.e.getTime(), new Date(d).setHours(18, 0, 0, 0)) - Math.max(g.s.getTime(), new Date(d).setHours(9, 0, 0, 0))) / 60000), 0), 0) : 0; // working hours, 9 am to 6 pm
+  const weekEnd = addDays(today, 7);
+  const weekMeet = zoom === 'week' ? meetings.filter((t) => !t.completed && momentOf(t) >= today && momentOf(t) < weekEnd).length : 0;
+  const weekTasks = zoom === 'week' ? tasks.filter((t) => !t.completed && dueMomentOf(t) >= today && dueMomentOf(t) < weekEnd).length : 0;
+  const sub = zoom === 'week'
+    ? `Next 7 days · ${weekMeet} meeting${weekMeet === 1 ? '' : 's'} · ${weekTasks} task${weekTasks === 1 ? '' : 's'} · ${dur(weekFree)} free`
+    : (nextUp ? clock(now) + ' · ' + (nextUp.at <= now ? 'in a meeting now' : 'next up ' + fromNow(nextUp.at)) : clock(now) + ' · nothing else planned') + (freeToday >= 30 ? ' · ' + dur(freeToday) + ' free' : '');
 
   // ---------- jump ----------
   const [q, setQ] = useState('');
@@ -699,7 +706,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
             </div>
 
             <div className="r-now-line" style={{ left: nowX }} />
-            <span className="r-now-pill" style={{ left: nowX - 30 }}>NOW {clock(now).replace(/ (am|pm)$/, '')}</span>
+            {zoom !== 'week' && <span className="r-now-pill" style={{ left: nowX - 30 }}>NOW {clock(now).replace(/ (am|pm)$/, '')}</span>}
           </div>
         </div>
       </section>

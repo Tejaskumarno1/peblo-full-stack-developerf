@@ -705,3 +705,8 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 .r-try button b { font-size: 13px; }
 .r-try button span { font-size: 12px; color: var(--r-fg2); }
 .r-try button:hover { background: var(--r-meet); }
+
+/* Note page, right column: cards keep their height and the column scrolls (a long Action items card was cut off) */
+.r-side { overflow-y: auto; }
+.r-side .r-card { flex-shrink: 0; }
+.r-side .r-card.fill { flex: 1 0 160px; overflow: visible; }

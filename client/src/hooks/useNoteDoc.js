@@ -37,7 +37,9 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
 
   // `forTask`: the draft belongs to a task (River's "Take notes"); the task is linked when the note is first saved.
   const startDraft = useCallback((tags, forTask, template) => {
-    setDoc({ id: '__draft__', isDraft: true, forTask: forTask || null, title: '', content: template || '', template: template || null, tags: tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    // a meeting note starts with the meeting's name as its title and a #meeting tag
+    const meetingTags = template ? [...new Set([...(tags || draftTags), 'meeting'])] : null;
+    setDoc({ id: '__draft__', isDraft: true, forTask: forTask || null, title: template && forTask?.text ? forTask.text : '', content: template || '', template: template || null, tags: meetingTags || tags || draftTags, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
   }, [draftTags]);
 
@@ -67,7 +69,8 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const saveData = useMemo(() => {
     if (!doc || doc.isDeleted) return null;
     // A draft that is still only the template is not worth saving yet
-    if (doc.isDraft && !doc.title.trim() && (!doc.content.trim() || (doc.template && bare(doc.content) === bare(doc.template)))) return null;
+    const untouched = doc.template && bare(doc.content) === bare(doc.template) && (!doc.title.trim() || doc.title === doc.forTask?.text);
+    if (doc.isDraft && (untouched || (!doc.title.trim() && !doc.content.trim()))) return null;
     return { title: doc.title, content: doc.content, tags: doc.tags };
   }, [doc?.title, doc?.content, doc?.tags, doc?.isDraft, doc?.isDeleted, doc?.template]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,7 +142,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const saved = saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'unsaved' ? 'Editing…'
       : saveStatus === 'error' ? "Couldn't save"
-        : 'Saved to your account';
+        : (doc?.isDraft && !saveData ? 'Not saved yet. It saves when you write' : 'Saved to your account');
 
   return {
     routeId, doc, setDoc, editorKey, allNotes, open, startDraft, patch, applyContent, forceSave,

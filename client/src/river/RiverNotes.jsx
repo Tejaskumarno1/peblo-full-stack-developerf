@@ -96,11 +96,14 @@ function RiverNote({ note }) {
 
   const stops = useMemo(() => {
     if (!doc) return [];
-    const list = dayTodos.map((t) => {
+    // a meeting note marks the meeting itself on the strip, not the moment it was written
+    const mid = meetingUsed?.id || doc.forTask?.id;
+    const own = mid ? dayTodos.find((t) => t.id === mid && isMeeting(t)) : null;
+    const list = dayTodos.filter((t) => !own || t.id !== own.id).map((t) => {
       const at = isMeeting(t) ? momentOf(t) : dueMomentOf(t);
       return { key: t.id, at, label: `${t.text} · ${clock(at)}`, kind: isMeeting(t) ? 'meet' : 'task', todo: t };
     });
-    list.push({ key: 'me', at: written, me: true, label: `This note · ${clock(written)}` });
+    list.push(own ? { key: 'me', at: momentOf(own), me: true, label: `This meeting · ${clock(momentOf(own))}` } : { key: 'me', at: written, me: true, label: `This note · ${clock(written)}` });
     if (sameDay(now, written)) list.push({ key: 'now', at: now, now: true, label: `Now · ${clock(now)}` });
     list.sort((a, b) => a.at - b.at);
     // Keep the six closest to this note
@@ -113,7 +116,7 @@ function RiverNote({ note }) {
       else list.pop();
     }
     return list;
-  }, [dayTodos, doc?.id, written.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dayTodos, doc?.id, written.getTime(), meetingUsed?.id, doc?.forTask?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!doc) {
     return (
@@ -216,7 +219,7 @@ function RiverNote({ note }) {
           <div className="r-eyebrow">
             <span>NOTE{doc.tags[0] ? ` · ${doc.tags[0]}` : ''}{doc.isDeleted ? ' · IN TRASH' : doc.isArchived ? ' · ARCHIVED' : ''}</span>
             <span className="grow" />
-            <span className={`r-saved${saveStatus === 'error' ? ' bad' : ''}`}>{saveStatus === 'saving' ? <Loader2 size={13} className="r-spin" /> : saveStatus === 'saved' ? <Check size={13} strokeWidth={2.6} /> : null}{saved}</span>
+            <span className={`r-saved${saveStatus === 'error' ? ' bad' : ''}`}>{saveStatus === 'saving' ? <Loader2 size={13} className="r-spin" /> : saveStatus === 'saved' && !(doc.isDraft && /^Not saved/.test(saved)) ? <Check size={13} strokeWidth={2.6} /> : null}{saved}</span>
             {!doc.isDraft && (
               <div className="r-menu-wrap" ref={menuRef}>
                 <button type="button" className="r-btn ghost small" aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
@@ -266,7 +269,7 @@ function RiverNote({ note }) {
               {acts.map((a) => (
                 <div key={a.key} className={`r-promise${a.onRiver ? ' added' : ''}`}>
                   <span className="t">{a.text}</span>
-                  <span className="m">Owner {a.owner || 'you'} · {a.due ? `by ${dayWord(a.due).toLowerCase()}${a.allDay ? '' : ', ' + clock(a.due)}` : 'no date said'}</span>
+                  <span className="m">Owner {a.owner || 'you'} · {a.due ? `by ${new Date(a.due).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}${a.allDay ? '' : ', ' + clock(a.due)}` : 'no date said'}</span>
                   {a.onRiver ? (
                     <span className="m" style={{ fontWeight: 700 }}>On the river</span>
                   ) : (
