@@ -75,7 +75,7 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
 const CANVAS = { width: 1440, height: 900 };
 const CAPTURE_CANVAS = {
   soft: { width: 800, height: 680 },
-  river: { width: 640, height: 200 },
+  river: { width: 640, height: 280 },
   orbit: { width: 640, height: 220 },
   other: { width: 620, height: 256 },
 };
@@ -346,6 +346,30 @@ async function toggleCapture() {
   else captureWindow.setPosition(Math.round(x + (width - w) / 2), Math.round(y + height * 0.28));
   captureWindow.show();
   captureWindow.focus();
+  if (style === 'river') startCaptureFit(canvas);
+}
+
+let captureFitTimer = null;
+/** The River card grows with what is typed (suggestions, meeting settings, clash list); keep the window as tall as the card. */
+function startCaptureFit(canvas) {
+  clearInterval(captureFitTimer);
+  captureFitTimer = setInterval(async () => {
+    if (!captureWindow || captureWindow.isDestroyed() || !captureWindow.isVisible()) { clearInterval(captureFitTimer); return; }
+    try {
+      const cssH = await captureWindow.webContents.executeJavaScript("(document.querySelector('.r-capture')||{}).offsetHeight || 0", true);
+      if (!cssH) return;
+      const area = screen.getDisplayMatching(captureWindow.getBounds()).workArea;
+      const want = Math.min(Math.max(Math.round(cssH * uiScale), Math.round(canvas.height * uiScale)), area.height - 40);
+      const [cw, ch] = captureWindow.getContentSize();
+      if (Math.abs(ch - want) > 3) {
+        captureWindow.setResizable(true);
+        captureWindow.setContentSize(cw, want);
+        captureWindow.setResizable(false);
+        const b = captureWindow.getBounds();
+        if (b.y + b.height > area.y + area.height) captureWindow.setPosition(b.x, Math.max(area.y, area.y + area.height - b.height - 10));
+      }
+    } catch { /* page busy */ }
+  }, 150);
 }
 
 function createTray() {

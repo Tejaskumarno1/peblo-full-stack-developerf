@@ -56,6 +56,8 @@ export default function RiverHome({ initialZoom = 'day' }) {
   });
   const [selId, setSelId] = useState(null);
   const [quick, setQuick] = useState(null); // { lane, x, at }
+  // A new meeting opens the full capture card (length, start, people, repeat, reminder) at the time that was clicked
+  const openMeeting = (when) => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'meeting', text: '', at: new Date(when).toISOString() } }));
   const [undatedOpen, setUndatedOpen] = useState(false); // false or { left, top } inside the frame
   const [toast, setToast] = useState('');
   const [dropDay, setDropDay] = useState(null); // a day (ms) an unscheduled task is being dragged over
@@ -243,7 +245,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const at = timeAt(x - PAD, z, start);
-    setQuick({ lane, x, at });
+    if (lane === 'meeting') openMeeting(at); else setQuick({ lane, x, at });
   };
 
   const addPromise = async (p) => {
@@ -435,6 +437,32 @@ export default function RiverHome({ initialZoom = 'day' }) {
     return list;
   }, [z, start, end, meetings, tasks, visibleNotes, today]);
 
+  // The longest free stretch in a day, inside working hours (9 am to 6 pm), shown as a gap block in the week lane
+  const dayGap = (b) => {
+    if (b.from < today) return null;
+    const open = new Date(b.from).setHours(9, 0, 0, 0);
+    const shut = new Date(b.from).setHours(18, 0, 0, 0);
+    let best = null;
+    for (const g of freeGaps(meetings, b.from, 1, b.today ? now : b.from)) {
+      const s = new Date(Math.max(g.s.getTime(), open, b.today ? now.getTime() : 0));
+      const e = new Date(Math.min(g.e.getTime(), shut));
+      const mins = Math.round((e - s) / 60000);
+      if (mins >= 60 && (!best || mins > best.mins)) best = { s, e, mins };
+    }
+    return best;
+  };
+  const clockShort = (d) => { const h = d.getHours() % 12 || 12; return h + (d.getMinutes() ? ':' + String(d.getMinutes()).padStart(2, '0') : '') + (d.getHours() < 12 ? ' am' : ' pm'); };
+  // A tip for the tray: the fullest day, and where the load is lightest
+  const fullTip = (() => {
+    if (zoom !== 'week' || !bins || z.bin !== 'day') return null;
+    const days = bins.filter((b) => b.from >= today && b.from < weekEnd).map((b) => ({ b, m: bookedMins(b) }));
+    const full = days.reduce((a, d) => (!a || d.m > a.m ? d : a), null);
+    if (!full || full.m < 300) return null;
+    const light = days.filter((d) => d.b.i !== full.b.i && d.m < 240).sort((a, b) => a.m - b.m)[0];
+    const nm = (d) => d.toLocaleDateString(undefined, { weekday: 'long' });
+    return nm(full.b.from) + ' is nearly full' + (light ? '. ' + nm(light.b.from) + ' has room.' : '.');
+  })();
+
   const nowX = X(now);
   const hotDue = (t, due) => !t.completed && due - now < 3 * 3600000;
   const dueText = (t, due) => {
@@ -569,7 +597,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                 const gx = X(g.s);
                 const gw = X(g.e) - gx - 4;
                 return (
-                  <button key={g.s.getTime()} type="button" className="r-gap" style={{ left: gx, width: gw, top: 14, height: 84 }} title={'Free for ' + dur(g.mins) + '. Click to add a meeting.'} onClick={() => setQuick({ lane: 'meeting', x: gx + 8, at: g.s })}>
+                  <button key={g.s.getTime()} type="button" className="r-gap" style={{ left: gx, width: gw, top: 14, height: 84 }} title={'Free for ' + dur(g.mins) + '. Click to add a meeting.'} onClick={() => openMeeting(g.s)}>
                     {gw >= 80 ? <span>Free {dur(g.mins)}</span> : <span className="r-sr">Free {dur(g.mins)}</span>}
                   </button>
                 );
@@ -616,6 +644,15 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   onMore={() => { const hid = b.meet[z.bin === 'day' ? 3 : 2]; pendingScroll.current = hid ? momentOf(hid) : new Date(b.from.getTime() + 10 * 3600000); setZoomSaved('day'); }}
                 />
               ))}
+              {bins && z.bin === 'day' && bins.map((b) => {
+                const g = dayGap(b);
+                if (!g) return null;
+                return (
+                  <button key={`fg${b.i}`} type="button" className="r-wgap" style={{ left: b.x + 6, width: z.binW - 12 }} title={'Free for ' + dur(g.mins) + '. Click to add a meeting.'} onClick={() => openMeeting(g.s)}>
+                    Free {clockShort(g.s)} – {clockShort(g.e)}
+                  </button>
+                );
+              })}
               {quick && quick.lane === 'meeting' && (
                 <QuickAdd refEl={quickRef} quick={quick} mode="meeting" onDone={() => setQuick(null)} />
               )}
@@ -715,6 +752,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
         <section className="r-tray" aria-label="Tasks without a date">
           <span className="r-tray-h">Unscheduled · {undated.length}</span>
           <span className="r-tray-hint">Drag one onto a day in the Tasks lane</span>
+          {fullTip && <span className="r-tray-tip">Tip: {fullTip}</span>}
           <button type="button" className="r-btn small" style={{ marginLeft: 'auto' }} onClick={suggestAll}>Suggest times for all {undated.length}</button>
           <div className="r-tray-row">
             {undated.slice(0, 8).map((t) => (
