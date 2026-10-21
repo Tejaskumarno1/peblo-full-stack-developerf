@@ -53,5 +53,12 @@ try {
   check('mcp test ran', false, String(e));
 } finally {
   try { await client?.close(); } catch { /* ignore */ }
+  // an address pasted with a full stop on the end still works
+  const init = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } } });
+  const dotted = await fetch(base + '/mcp.', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: init });
+  check('/mcp. (trailing full stop) is treated as /mcp', dotted.status === 401, String(dotted.status));
+  const dotWk = await fetch(base + '/.well-known/oauth-protected-resource.');
+  check('well-known with a trailing full stop works', dotWk.status === 200, String(dotWk.status));
   await finish();
 }
+

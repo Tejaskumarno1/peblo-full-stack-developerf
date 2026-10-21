@@ -49,6 +49,13 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.disable('x-powered-by');
   app.use(securityHeaders(staticDir));
 
+  // People paste the address with a full stop, space or slash on the end ("https://host/mcp."). Treat those as the same address.
+  app.use((req, _res, next) => {
+    const m = /^(\/(?:mcp|oauth\/[\w-]+|\.well-known\/[\w./-]*?))(?:\.|%2E|%20|\s)+(\?.*)?$/i.exec(req.url);
+    if (m) req.url = m[1] + (m[2] || '');
+    next();
+  });
+
   // MCP sign-in (OAuth) and the hosted MCP endpoint: public by design, so any MCP client may call them from anywhere.
   const open = [cors({ origin: '*', exposedHeaders: ['WWW-Authenticate'], allowedHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'] }), apiLimiter(), express.json({ limit: '1mb' })];
   app.use(wellKnown);
