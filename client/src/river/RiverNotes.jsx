@@ -11,6 +11,7 @@ import ShareDialog from '../soft/ShareDialog';
 import '../soft/dialogs.css';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
+import { parseTask } from '../utils/parseTask';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -33,6 +34,22 @@ function RiverNote({ note }) {
   const [tagDraft, setTagDraft] = useState(null);
   const [toast, setToast] = useState('');
   const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 2400); };
+  const [ignoredActs, setIgnoredActs] = useState([]);
+  const actionItems = useMemo(() => {
+    const out = [];
+    for (const line of String(doc?.content || '').split('\n')) {
+      const m = line.match(/^\s*[-*]\s+\[ \]\s+(.+)$/);
+      if (!m) continue;
+      let raw = m[1].trim();
+      let owner = null;
+      const o = raw.match(/^([A-Z][\w'’-]*)\s*:\s+(.*)$/);
+      if (o) { owner = o[1]; raw = o[2]; }
+      const t = parseTask(raw);
+      if (!t.text) continue;
+      out.push({ key: t.text + '|' + out.length, text: t.text, owner, due: t.deadline, allDay: t.allDay, priority: t.priority });
+    }
+    return out;
+  }, [doc?.content]);
 
   const written = doc ? new Date(doc.createdAt) : new Date();
   const day = startOfDay(written);
@@ -111,6 +128,25 @@ function RiverNote({ note }) {
   const items = (gen?.items || []).map((p, index) => ({ ...p, index })).filter((p) => p.status !== 'ignored');
   const meetingsUsed = linked.filter(isMeeting);
   const tasksUsed = linked.filter((t) => !isMeeting(t));
+  const actTitle = (a) => (a.owner && a.owner.toLowerCase() !== 'you' ? `${a.text} (${a.owner})` : a.text);
+  const acts = actionItems.filter((a) => !ignoredActs.includes(a.text)).map((a) => ({ ...a, onRiver: linked.some((t) => t.text === actTitle(a)) }));
+  const actDue = (a) => {
+    if (a.due) return new Date(a.due);
+    const d = addDays(startOfDay(), 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  };
+  const putAct = async (a, quiet) => {
+    const due = actDue(a);
+    await todosAPI.create({ text: actTitle(a), deadline: due.toISOString(), noteId, priority: a.priority || 'medium' });
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+    if (!quiet) flash(`On the river · ${dayWord(due)}, ${clock(due)}`);
+  };
+  const putAllActs = async () => {
+    const todo = acts.filter((a) => !a.onRiver);
+    for (const a of todo) await putAct(a, true);
+    flash(`${todo.length} on the river`);
+  };
 
   const find = async () => {
     if (!noteId) return;
@@ -143,6 +179,8 @@ function RiverNote({ note }) {
 
   const edited = new Date(doc.updatedAt || doc.createdAt);
   const meta = [fullDay(written), `written ${clock(written)}`];
+  const who = meetingUsed && meetingUsed.meta && meetingUsed.meta.attendees;
+  if (who && who.length) meta.push(`with ${who.join(', ')}`);
   if (edited - written > 10 * 60000) meta.push(`edited ${sameDay(edited, written) ? clock(edited) : dayWord(edited).toLowerCase()}`);
 
   const addTag = (raw) => { note.addTag(raw); setTagDraft(null); };
@@ -222,6 +260,28 @@ function RiverNote({ note }) {
         </article>
 
         <aside className="r-side" aria-label="What this note led to">
+          {acts.length > 0 && !doc.isDeleted && (
+            <section className="r-card" aria-labelledby="r-acts">
+              <h2 id="r-acts" className="r-h3">ACTION ITEMS · {acts.length} FOUND</h2>
+              {acts.map((a) => (
+                <div key={a.key} className={`r-promise${a.onRiver ? ' added' : ''}`}>
+                  <span className="t">{a.text}</span>
+                  <span className="m">Owner {a.owner || 'you'} · {a.due ? `by ${dayWord(a.due).toLowerCase()}${a.allDay ? '' : ', ' + clock(a.due)}` : 'no date said'}</span>
+                  {a.onRiver ? (
+                    <span className="m" style={{ fontWeight: 700 }}>On the river</span>
+                  ) : (
+                    <div className="r-btns">
+                      <button type="button" className="r-btn small" onClick={() => putAct(a)}>Put on river · {a.due ? dayWord(a.due) : 'tomorrow'}</button>
+                      <button type="button" className="r-btn ghost small" onClick={() => setIgnoredActs((l) => [...l, a.text])}>Ignore</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {acts.filter((a) => !a.onRiver).length > 1 && (
+                <button type="button" className="r-btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={putAllActs}>Put all {acts.filter((a) => !a.onRiver).length} on the river</button>
+              )}
+            </section>
+          )}
           <section className="r-card" aria-labelledby="r-promises">
             <h2 id="r-promises" className="r-h3">{gen ? `PEBLO FOUND ${items.length} PROMISE${items.length === 1 ? '' : 'S'}` : 'PROMISES IN THIS NOTE'}</h2>
             {!gen && !finding && <p className="r-quiet small">Peblo can read this note for things people said they would do, with who and by when, and put them on the river.</p>}
@@ -260,6 +320,7 @@ function RiverNote({ note }) {
               <div className="r-btns">
                 <button type="button" className="r-btn ghost small" onClick={() => { navigator.clipboard?.writeText(`# ${doc.title}\n\n${doc.content}`).then(() => flash('Notes copied'), () => flash('Could not copy')); }}>Copy notes</button>
                 <button type="button" className="r-btn ghost small" onClick={() => window.dispatchEvent(new CustomEvent('peblo:capture', { detail: { mode: 'meeting', text: `Follow-up: ${meetingUsed.text} ` } }))}>Schedule a follow-up</button>
+                {!doc.isDraft && <button type="button" className="r-btn ghost small" onClick={() => setShareOpen(true)}>Share notes as a link</button>}
               </div>
             </section>
           )}

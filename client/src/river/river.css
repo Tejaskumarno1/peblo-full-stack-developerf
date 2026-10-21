@@ -686,3 +686,11 @@
 .r-pebble { flex-shrink: 0; max-width: 240px; height: 34px; padding: 0 14px; border-radius: 99px; border: 1px dashed var(--r-fg3); background: var(--r-lane); font: inherit; font-size: 13px; font-weight: 600; cursor: grab; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--r-fg); }
 .r-pebble i { width: 9px; height: 9px; background: var(--r-now); transform: rotate(45deg); flex-shrink: 0; }
 .r-pebble:active { cursor: grabbing; }
+
+/* Quick add: what Peblo understood */
+.r-under { display: flex; flex-direction: column; gap: 8px; }
+.r-under-h { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--r-fg3); }
+.r-under-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.r-uc { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border-radius: 99px; background: var(--r-lane); border: 1px solid var(--r-line); font-size: 13px; font-weight: 600; color: var(--r-fg); }
+.r-uc.b { background: var(--r-meet); color: var(--r-meet-ink); border-color: transparent; font-weight: 700; }
+.r-uc button { border: none; background: none; cursor: pointer; font: inherit; font-size: 16px; line-height: 1; padding: 0 0 0 2px; color: inherit; }

@@ -40,6 +40,11 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     status: (v) => (v === 'doing' ? 'doing' : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
+    attendees: (v) => {
+      if (!Array.isArray(v)) return undefined;
+      const names = [...new Set(v.map((x) => str(x, 40)).filter(Boolean))].slice(0, 12);
+      return names.length ? names : undefined;
+    },
     snoozeUntil: (v) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : undefined),
     assignment: (v) => (v === true ? true : undefined),
     astatus: (v) => (ASTATUS.includes(v) ? v : undefined),

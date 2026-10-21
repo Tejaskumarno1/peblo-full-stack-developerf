@@ -196,6 +196,31 @@ export default function RiverHome({ initialZoom = 'day' }) {
   };
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2400); };
   const { toast: undoToast, say, dismiss } = useUndoToast();
+  // Gives every task without a date the first free stretch it fits in (9 am to 6 pm, this week), longest estimate first-come
+  const suggestAll = async () => {
+    const slots = [];
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(today, d);
+      for (const g of freeGaps(meetings, day, 1, d === 0 ? now : day)) {
+        const s = new Date(Math.max(g.s.getTime(), new Date(day).setHours(9, 0, 0, 0)));
+        const e = new Date(Math.min(g.e.getTime(), new Date(day).setHours(18, 0, 0, 0)));
+        if (e - s >= 30 * 60000) slots.push({ s, e });
+      }
+    }
+    let planned = 0;
+    for (const t of undated) {
+      const need = ((t.meta && t.meta.estimateMin) || 60) * 60000;
+      const slot = slots.find((x) => x.e - x.s >= need);
+      if (!slot) continue;
+      try {
+        await todosAPI.update(t.id, { deadline: slot.s.toISOString() });
+        slot.s = new Date(slot.s.getTime() + need);
+        planned += 1;
+      } catch { /* leave that one in the tray */ }
+    }
+    refresh();
+    flash(planned ? `Planned ${planned} of ${undated.length} into free time` : 'No free time left this week');
+  };
   const setDone = async (t, completed) => {
     queryClient.setQueriesData({ queryKey: ['todos', 'range', 'river'] }, (old) => (Array.isArray(old) ? old.map((x) => (x.id === t.id ? { ...x, completed, updatedAt: new Date().toISOString() } : x)) : old));
     let ok = true;
@@ -683,6 +708,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
         <section className="r-tray" aria-label="Tasks without a date">
           <span className="r-tray-h">Unscheduled · {undated.length}</span>
           <span className="r-tray-hint">Drag one onto a day in the Tasks lane</span>
+          <button type="button" className="r-btn small" style={{ marginLeft: 'auto' }} onClick={suggestAll}>Suggest times for all {undated.length}</button>
           <div className="r-tray-row">
             {undated.slice(0, 8).map((t) => (
               <button key={t.id} type="button" className="r-pebble" draggable title="Drag onto a day" onDragStart={(e) => { e.dataTransfer.setData('text/peblo-task', t.id); e.dataTransfer.effectAllowed = 'move'; }} onDragEnd={() => setDropDay(null)}>

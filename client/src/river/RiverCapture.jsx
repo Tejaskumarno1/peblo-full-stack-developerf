@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { parseTimes, dayWord, clock, clockRange, startOfDay, addDays, sameDay, isMeeting, momentOf, endOf } from './riverUtils';
 import { freeGaps, dur } from './planner';
+import { extras, noteForLine } from './captureParse';
 import './river.css';
 
 const HINTS = {
@@ -15,21 +16,37 @@ const HINTS = {
 
 /** Turns a line into the date and times it mentions (today if only a time is given). */
 function readLine(raw, mode) {
-  const times = parseTimes(raw);
+  const u = extras(raw, mode);
+  const times = parseTimes(u.line);
   const t = parseTask(times.text);
   let day = t.deadline ? new Date(t.deadline) : null;
-  if (!day && times.startTime) day = new Date();
+  if (!day && (times.startTime || u.recurrence)) day = new Date();
   let deadline = null;
   if (day) {
     deadline = new Date(day);
     if (times.startTime) {
       const [h, m] = times.startTime.split(':').map(Number);
       deadline.setHours(h, m, 0, 0);
-    } else if (mode === 'task' && !t.deadline) {
+    } else if (mode === 'task' && !t.deadline && !u.recurrence) {
       deadline = null;
     }
   }
-  return { ...t, deadline, startTime: mode === 'meeting' ? times.startTime : null, endTime: mode === 'meeting' ? times.endTime : null, dueTime: mode === 'task' ? times.startTime : null };
+  // "for 30 min" sets the length unless an explicit range ("3-4pm") was written
+  let endTime = times.endTime;
+  if (mode === 'meeting' && times.startTime && u.durMin && !/\d\s*(?:-|–|to)\s*\d/.test(u.line)) {
+    const [h, m] = times.startTime.split(':').map(Number);
+    const tot = Math.min(h * 60 + m + u.durMin, 23 * 60 + 59);
+    endTime = String(Math.floor(tot / 60)).padStart(2, '0') + ':' + String(tot % 60).padStart(2, '0');
+  }
+  // A repeat with no day said starts today, or the next day that fits
+  if (u.recurrence && deadline && !t.deadline) {
+    if (times.startTime && deadline < new Date()) deadline.setDate(deadline.getDate() + 1);
+    if (u.recurrence === 'weekdays') while ([0, 6].includes(deadline.getDay())) deadline.setDate(deadline.getDate() + 1);
+  }
+  return {
+    ...t, deadline, startTime: mode === 'meeting' ? times.startTime : null, endTime: mode === 'meeting' ? endTime : null, dueTime: mode === 'task' ? times.startTime : null,
+    recurrence: u.recurrence, attendees: u.attendees, remindMin: u.remindMin,
+  };
 }
 
 /**
@@ -44,7 +61,14 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [override, setOverride] = useState(null); // a free slot picked from the clash list
+  const [noLink, setNoLink] = useState(false); // the person removed the suggested note
   const inputRef = useRef(null);
+  const { data: allNotes = [] } = useQuery({
+    queryKey: ['notes', 'capture-link'],
+    queryFn: () => notesAPI.getAll({ sort: 'updated', snippet: '1' }).then((r) => r.data.notes || []),
+    enabled: !windowMode || true,
+    staleTime: 60000,
+  });
 
   useEffect(() => { inputRef.current?.focus(); }, [mode]);
   useEffect(() => {
@@ -109,6 +133,8 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
     return { pc, lo, hi };
   })();
 
+  const linkNote = useMemo(() => (mode === 'note' || noLink || !value.trim() ? null : noteForLine(value, allNotes)), [mode, noLink, value, allNotes]);
+
   const label = (() => {
     if (!when) return null;
     if (mode === 'meeting' && when.startTime) {
@@ -151,8 +177,11 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
           deadline: deadline ? deadline.toISOString() : null,
           startTime: mode === 'meeting' ? when.startTime : null,
           endTime: mode === 'meeting' ? when.endTime : null,
+          recurrence: parsed.recurrence || 'none',
+          noteId: linkNote ? linkNote.id : undefined,
+          meta: (parsed.attendees.length || parsed.remindMin) ? { attendees: parsed.attendees, remindMin: parsed.remindMin || undefined } : undefined,
         });
-        setStatus(mode === 'meeting' ? `On the river · ${label}` : deadline ? `On the river · due ${label}` : 'Added · no date yet');
+        setStatus(parsed.recurrence ? `On the river · ${label}, repeating` : mode === 'meeting' ? `On the river · ${label}` : deadline ? `On the river · due ${label}` : 'Added · no date yet');
       }
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
@@ -194,6 +223,21 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         placeholder={HINTS[mode]}
         autoComplete="off"
       />
+      {(when || parsed?.attendees?.length || linkNote) && mode !== 'note' && (
+        <div className="r-under" aria-label="What Peblo understood">
+          <span className="r-under-h">PEBLO UNDERSTOOD</span>
+          <div className="r-under-row">
+            <span className="r-uc b">{mode === 'meeting' ? 'Meeting' : 'Task'}</span>
+            {when && <span className="r-uc b">{when.deadline.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</span>}
+            {mode === 'meeting' && when?.startTime && when.endTime && <span className="r-uc b">{label.split(', ').slice(1).join(', ')}</span>}
+            {mode === 'task' && when && (parsed?.dueTime || at) && <span className="r-uc b">{clock(when.deadline)}</span>}
+            {parsed?.recurrence && <span className="r-uc b">{{ daily: 'Every day', weekdays: 'Every weekday', weekly: 'Every week', monthly: 'Every month', yearly: 'Every year' }[parsed.recurrence]}</span>}
+            {parsed?.attendees?.length > 0 && <span className="r-uc">With {parsed.attendees.join(', ')}</span>}
+            {parsed?.remindMin ? <span className="r-uc">Remind {parsed.remindMin} min before</span> : null}
+            {linkNote && <span className="r-uc">Link note: {linkNote.title}<button type="button" aria-label="Do not link that note" onClick={() => setNoLink(true)}>×</button></span>}
+          </div>
+        </div>
+      )}
       {mini && (
         <div className="r-clash" role="alert">
           <b>Clash: you already have {clashing.map((t) => '“' + t.text + '”').join(' and ')} at {clockRange(momentOf(clashing[0]), endIn(clashing[0]))}</b>
