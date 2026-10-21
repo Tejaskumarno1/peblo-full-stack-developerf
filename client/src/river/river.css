@@ -807,3 +807,12 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 /* night hours are real time now: a cool tint, a small label, no folded block */
 .r-band-night { background: linear-gradient(180deg, color-mix(in srgb, #3B4A8C 11%, transparent), color-mix(in srgb, #3B4A8C 4%, transparent)); align-items: flex-start; justify-content: flex-start; padding: 6px 0 0; }
 .r-band-night span { writing-mode: horizontal-tb; position: sticky; left: 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: color-mix(in srgb, #3B4A8C 70%, var(--r-fg3)); padding-left: 10px; }
+
+/* ---- meeting reminders ---- */
+.r-remind { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: flex; flex-direction: column; gap: 10px; max-width: 340px; }
+.r-remind-card { position: relative; padding: 14px 40px 14px 16px; border-radius: 16px; background: var(--r-surface); border: 1px solid var(--r-line); box-shadow: var(--r-shadow); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--r-fg); }
+.r-remind-card b { font-size: 15px; }
+.r-remind-card span { color: var(--r-fg2); }
+.r-remind-card .r-x { position: absolute; top: 10px; right: 10px; }
+.r-remind-card .r-btn { text-decoration: none; }
+.r-remind-card .r-btns { display: flex; gap: 8px; margin-top: 4px; }

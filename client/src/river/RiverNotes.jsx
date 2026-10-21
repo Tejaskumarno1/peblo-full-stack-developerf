@@ -14,6 +14,8 @@ import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, 
 import { parseTask } from '../utils/parseTask';
 import RSelect from './RSelect';
 import FolderDialog from '../soft/FolderDialog';
+import TagManager from '../soft/TagManager';
+import Gallery from '../soft/Gallery';
 import { exportMarkdown, exportManyMarkdown, exportWord, exportPdf } from '../utils/exportNote';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
@@ -458,6 +460,9 @@ function RiverNoteList({ onNew }) {
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState([]);
   const [folderOpen, setFolderOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const goNote = useNavigate();
   const [msg, setMsg] = useState('');
   const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 3000); };
@@ -732,6 +737,10 @@ function RiverNoteList({ onNew }) {
               <button type="button" aria-pressed={filter === 'archive'} onClick={() => setFilter('archive')}>Archive</button>
               <button type="button" aria-pressed={filter === 'trash'} onClick={() => setFilter('trash')}>Trash</button>
             </div>
+            <div className="r-filters">
+              <button type="button" onClick={() => setTagsOpen(true)}>Manage tags</button>
+              <button type="button" onClick={() => setGalleryOpen(true)}>Pictures</button>
+            </div>
           </section>
           <section className="r-card">
             <h2 className="r-h3">HOW TO LOOK</h2>
@@ -739,6 +748,8 @@ function RiverNoteList({ onNew }) {
           </section>
         </aside>
       </div>
+      {tagsOpen && <div className="pb-dlg-host"><TagManager onClose={() => setTagsOpen(false)} onChanged={refresh} /></div>}
+      {galleryOpen && <div className="pb-dlg-host"><Gallery notes={all} onClose={() => setGalleryOpen(false)} onOpen={(id) => { setGalleryOpen(false); goNote('/notes/' + id); }} /></div>}
       {folderOpen && <div className="pb-dlg-host"><FolderDialog folders={folders} current="" count={picked.length} onPick={moveTo} onClose={() => setFolderOpen(false)} /></div>}
     </>
   );

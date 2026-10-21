@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import RiverCapture from './RiverCapture';
+import MeetingReminders from './MeetingReminders';
+import { exportCalendar, importCalendar } from './calendarIO';
 import { initialsOf } from './riverUtils';
 import './river.css';
 
@@ -34,7 +37,11 @@ export function RiverHeader({ children, tools }) {
   const { user, theme, setTheme } = useAuth();
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
+  const qc = useQueryClient();
+  const [calMsg, setCalMsg] = useState('');
+  const fileRef = useRef(null);
   const ref = useDismiss(menu, () => setMenu(false));
+  const say = (t) => { setCalMsg(t); setTimeout(() => setCalMsg(''), 4000); };
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light';
 
   return (
@@ -58,6 +65,11 @@ export function RiverHeader({ children, tools }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
+            <span className="r-pop-h">Calendar</span>
+            <button type="button" role="menuitem" onClick={() => exportCalendar().then((n) => say('Downloaded ' + n + ' items (.ics)')).catch(() => say('Could not export'))}>Export calendar (.ics)</button>
+            <button type="button" role="menuitem" onClick={() => fileRef.current?.click()}>Import calendar (.ics)</button>
+            {calMsg && <span className="empty" role="status">{calMsg}</span>}
+            <input ref={fileRef} type="file" accept=".ics,text/calendar" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importCalendar(f).then((r) => { say('Added ' + r.added + ' meeting' + (r.added === 1 ? '' : 's') + (r.skipped ? ', skipped ' + r.skipped : '')); qc.invalidateQueries({ queryKey: ['todos'] }); }).catch(() => say('Could not read that file')); }} />
         <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
           </div>
         )}
@@ -79,6 +91,7 @@ export default function RiverShell({ children }) {
   return (
     <div className="river">
       {children}
+      <MeetingReminders />
       {capture && (
         <div className="r-capture-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setCapture(null); }}>
           <RiverCapture preset={capture} onClose={() => setCapture(null)} />
