@@ -653,3 +653,13 @@
   .r-ai { display: flex; flex-direction: column; }
   .r-choices, .r-conn-cards { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Planner: free gaps, clashes, overdue ---------- */
+.r-gap { position: absolute; z-index: 0; border: 1.5px dashed #2E8B63; background: color-mix(in srgb, #2E8B63 9%, var(--r-surface)); border-radius: 12px; color: var(--r-focus-ink); font: inherit; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0 6px; overflow: hidden; white-space: nowrap; }
+.r-gap:hover { background: var(--r-focus); }
+.r-meet.clash { box-shadow: 0 0 0 2px var(--r-now); }
+.r-clash-tag { position: absolute; z-index: 2; font-size: 11px; font-weight: 800; color: var(--r-now-ink); white-space: nowrap; }
+.r-undated.late { color: var(--r-now-ink); border-color: var(--r-now); }
+.r-pop-h { padding: 8px 12px 2px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--r-fg3); }
+.r-pop-h.late { color: var(--r-now-ink); }
+.r-late-when { color: var(--r-now-ink); font-weight: 700; }

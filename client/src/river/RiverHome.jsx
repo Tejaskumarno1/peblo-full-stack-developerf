@@ -7,6 +7,7 @@ import { RiverHeader, useDismiss } from './RiverShell';
 import RiverDrawer from './RiverDrawer';
 import { quickMeetingTimes, timeOfDay } from './quickAdd';
 import { hiddenClusters, nextHidden } from './hidden';
+import { freeGaps, clashes, dur } from './planner';
 import { useUndoToast } from '../utils/useUndoToast';
 import UndoToast from '../components/UndoToast';
 import {
@@ -97,6 +98,10 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const undated = openTodos.filter((t) => !t.deadline);
   const meetings = useMemo(() => todos.filter(isMeeting), [todos]);
   const tasks = useMemo(() => todos.filter((t) => t.deadline && !t.startTime), [todos]);
+  const overdue = useMemo(() => openTodos.filter((t) => t.deadline && !t.startTime && !t.completed && dueMomentOf(t) < now).sort((a, b) => dueMomentOf(a) - dueMomentOf(b)), [openTodos, now]);
+  const gaps = useMemo(() => (z.mode === 'time' ? freeGaps(meetings, today, z.ahead + 1, now) : []), [z, meetings, todayKey, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const freeToday = useMemo(() => freeGaps(meetings, today, 1, now).reduce((s, g) => s + g.mins, 0), [meetings, todayKey, now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clash = useMemo(() => clashes(meetings), [meetings]);
   const visibleNotes = useMemo(() => notes.filter((n) => {
     const c = new Date(n.createdAt);
     return c >= start && c <= end;
@@ -264,9 +269,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const aiReady = !!(models?.local?.enabled && models.local.ok) || (models?.cloud || []).some((c) => c.configured);
 
   // ---------- header ----------
-  const sub = nextUp
-    ? `${clock(now)} · next up ${fromNow(nextUp.at)}`
-    : `${clock(now)} · nothing else planned`;
+  const sub = (nextUp ? clock(now) + ' · next up ' + fromNow(nextUp.at) : clock(now) + ' · nothing else planned') + (freeToday >= 30 ? ' · ' + dur(freeToday) + ' free' : '');
 
   // ---------- jump ----------
   const [q, setQ] = useState('');
@@ -456,10 +459,10 @@ export default function RiverHome({ initialZoom = 'day' }) {
           <span className="meet">MEETINGS</span>
           <div className="tasks">
             <span>TASKS</span>
-            {undated.length > 0 && (
+            {(undated.length > 0 || overdue.length > 0) && (
               <button
                 type="button"
-                className="r-undated"
+                className={'r-undated' + (overdue.length ? ' late' : '')}
                 aria-expanded={!!undatedOpen}
                 onClick={(e) => {
                   const frame = e.currentTarget.closest('.river').getBoundingClientRect();
@@ -467,7 +470,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   setUndatedOpen(undatedOpen ? false : { left: r.left - frame.left, top: r.bottom - frame.top + 6 });
                 }}
               >
-                No date · {undated.length}
+                {overdue.length ? 'Overdue · ' + overdue.length : 'No date · ' + undated.length}
               </button>
             )}
           </div>
@@ -515,6 +518,18 @@ export default function RiverHome({ initialZoom = 'day' }) {
 
             {/* meetings */}
             <div className="r-lane meet" onDoubleClick={onLaneDoubleClick('meeting')}>
+              {lay && gaps.map((g) => {
+                const gx = X(g.s);
+                const gw = X(g.e) - gx - 4;
+                return (
+                  <button key={g.s.getTime()} type="button" className="r-gap" style={{ left: gx, width: gw, top: 14, height: 84 }} title={'Free for ' + dur(g.mins) + '. Click to add a meeting.'} onClick={() => setQuick({ lane: 'meeting', x: gx + 8, at: g.s })}>
+                    {gw >= 80 ? <span>Free {dur(g.mins)}</span> : <span className="r-sr">Free {dur(g.mins)}</span>}
+                  </button>
+                );
+              })}
+              {lay && clash.list.filter((c) => c.e > now).map((c) => (
+                <span key={c.a + c.b} className="r-clash-tag" style={{ left: X(c.s), bottom: 1 }}>⚠ Clash · {dur(c.mins)}</span>
+              ))}
               {lay && lay.mItems.filter((m) => m.row < 3).map((m) => {
                 const kind = kindOf(m.t);
                 const slim = lay.mH < 40;
@@ -522,7 +537,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   <button
                     key={m.t.id}
                     type="button"
-                    className={`r-meet ${kind}${m.e < now ? ' past' : ''}${selId === m.t.id ? ' sel' : ''}${slim ? ' slim' : ''}${m.w < 90 ? ' narrow' : ''}`}
+                    className={`r-meet ${kind}${m.e < now ? ' past' : ''}${selId === m.t.id ? ' sel' : ''}${slim ? ' slim' : ''}${m.w < 90 ? ' narrow' : ''}${clash.ids.has(m.t.id) && m.e > now ? ' clash' : ''}`}
                     style={{ left: m.x, width: m.w, top: 14 + m.row * (lay.mH + 4), height: lay.mH }}
                     onClick={() => setSelId(m.t.id)}
                     title={`${m.t.text} · ${clockRange(m.s, m.e)}`}
@@ -714,6 +729,16 @@ export default function RiverHome({ initialZoom = 'day' }) {
       />
       {undatedOpen && (
         <div className="r-pop" ref={undatedRef} style={{ left: undatedOpen.left, top: undatedOpen.top, width: 380 }}>
+          {overdue.length > 0 && <span className="r-pop-h late">Overdue</span>}
+          {overdue.slice(0, 8).map((t) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
+              <span className="t">{t.text}<small className="r-late-when"> {dayWord(dueMomentOf(t))}</small></span>
+              <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 0)}>Today</button>
+              <button type="button" className="r-btn ghost small" onClick={() => scheduleUndated(t, 1)}>Tomorrow</button>
+              <button type="button" className="r-btn ghost small" onClick={() => toggle(t)}>Done</button>
+            </div>
+          ))}
+          {overdue.length > 0 && undated.length > 0 && <span className="r-pop-h">No date</span>}
           {undated.slice(0, 8).map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
               <span className="t">{t.text}</span>
