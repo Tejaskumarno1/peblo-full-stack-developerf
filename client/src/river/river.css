@@ -663,3 +663,12 @@
 .r-pop-h { padding: 8px 12px 2px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--r-fg3); }
 .r-pop-h.late { color: var(--r-now-ink); }
 .r-late-when { color: var(--r-now-ink); font-weight: 700; }
+
+/* ---------- Capture: clash check ---------- */
+.r-clash { padding: 12px 14px; border-radius: 14px; background: var(--r-personal); color: var(--r-personal-ink); display: flex; flex-direction: column; gap: 10px; }
+.r-clash b { font-size: 13px; }
+.r-mini { position: relative; height: 66px; border-radius: 10px; background: color-mix(in srgb, var(--r-surface) 70%, transparent); overflow: hidden; }
+.r-mini span { position: absolute; height: 26px; display: flex; align-items: center; padding: 0 8px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; }
+.r-mini .m { top: 6px; background: var(--r-meet); color: var(--r-meet-ink); }
+.r-mini .n { top: 34px; background: var(--r-surface); color: var(--r-fg); border: 2px solid var(--r-now); }
+.r-clash .slots { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; }

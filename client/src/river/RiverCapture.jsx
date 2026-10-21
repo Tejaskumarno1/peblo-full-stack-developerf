@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
-import { parseTimes, dayWord, clock, clockRange } from './riverUtils';
+import { parseTimes, dayWord, clock, clockRange, startOfDay, addDays, sameDay, isMeeting, momentOf, endOf } from './riverUtils';
+import { freeGaps, dur } from './planner';
 import './river.css';
 
 const HINTS = {
@@ -42,6 +43,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   const [value, setValue] = useState(preset.text || '');
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [override, setOverride] = useState(null); // a free slot picked from the clash list
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, [mode]);
@@ -70,6 +72,42 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
       when = { deadline: parsed.deadline, startTime: parsed.startTime, endTime: parsed.endTime };
     }
   }
+
+  const hhmm = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (override && when && mode === 'meeting') when = { ...when, deadline: override.s, startTime: hhmm(override.s), endTime: hhmm(override.e) };
+
+  // Does it clash with something already that day?
+  const span = (() => {
+    if (mode !== 'meeting' || !when?.startTime || !when.endTime) return null;
+    const s = new Date(when.deadline);
+    const [sh, sm] = when.startTime.split(':').map(Number);
+    s.setHours(sh, sm, 0, 0);
+    const e = new Date(s);
+    const [eh, em] = when.endTime.split(':').map(Number);
+    e.setHours(eh, em, 0, 0);
+    return e > s ? { s, e } : null;
+  })();
+  const dayStart = span ? startOfDay(span.s) : null;
+  const { data: dayTodos = [] } = useQuery({
+    queryKey: ['todos', 'range', 'capture', dayStart ? dayStart.toISOString() : null],
+    queryFn: () => todosAPI.getRange(dayStart.toISOString(), addDays(dayStart, 1).toISOString()).then((r) => r.data.todos || []),
+    enabled: !!dayStart,
+  });
+  const dayMeetings = dayTodos.filter(isMeeting);
+  const endIn = (t) => endOf(t) || new Date(momentOf(t).getTime() + 3600000);
+  const clashing = span ? dayMeetings.filter((t) => momentOf(t) < span.e && endIn(t) > span.s) : [];
+  const slots = span && clashing.length
+    ? freeGaps(dayMeetings, dayStart, 1, sameDay(dayStart, new Date()) ? new Date() : dayStart, Math.round((span.e - span.s) / 60000))
+      .filter((g) => g.s.getTime() !== span.s.getTime()).slice(0, 3)
+    : [];
+  const pickSlot = (g) => setOverride({ s: g.s, e: new Date(g.s.getTime() + (span.e - span.s)) });
+  const mini = (() => {
+    if (!span || !clashing.length) return null;
+    const lo = Math.min(span.s.getTime(), ...clashing.map((t) => momentOf(t).getTime())) - 30 * 60000;
+    const hi = Math.max(span.e.getTime(), ...clashing.map((t) => endIn(t).getTime())) + 60 * 60000;
+    const pc = (d) => ((d.getTime() - lo) / (hi - lo)) * 100;
+    return { pc, lo, hi };
+  })();
 
   const label = (() => {
     if (!when) return null;
@@ -152,10 +190,26 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
         ref={inputRef}
         className="r-capture-input"
         value={value}
-        onChange={(e) => { setValue(e.target.value); setStatus(null); }}
+        onChange={(e) => { setValue(e.target.value); setStatus(null); setOverride(null); }}
         placeholder={HINTS[mode]}
         autoComplete="off"
       />
+      {mini && (
+        <div className="r-clash" role="alert">
+          <b>Clash: you already have {clashing.map((t) => '“' + t.text + '”').join(' and ')} at {clockRange(momentOf(clashing[0]), endIn(clashing[0]))}</b>
+          <div className="r-mini" aria-hidden="true">
+            {clashing.map((t) => (
+              <span key={t.id} className="m" style={{ left: mini.pc(momentOf(t)) + '%', width: (mini.pc(endIn(t)) - mini.pc(momentOf(t))) + '%' }}>{t.text}</span>
+            ))}
+            <span className="n" style={{ left: mini.pc(span.s) + '%', width: (mini.pc(span.e) - mini.pc(span.s)) + '%' }}>New · {clock(span.s)}</span>
+          </div>
+          <div className="slots">
+            {slots.map((g) => <button key={g.s.getTime()} type="button" className="r-btn ghost small" onClick={() => pickSlot(g)}>Use {clock(g.s)} · free for {dur(g.mins)}</button>)}
+            {slots.length === 0 && <span>No other free stretch that long today. Try another day in the line.</span>}
+          </div>
+        </div>
+      )}
+      {override && !clashing.length && <p className="r-capture-status">Moved to {clock(override.s)}, which is free.</p>}
       <div className="r-capture-foot">
         <span className="r-capture-status" role="status">
           {status || (label ? `${mode === 'meeting' ? 'Meeting' : 'Due'} ${label}${parsed?.tags?.length ? ` · #${parsed.tags.join(' #')}` : ''}` : mode === 'note' ? 'Lands on the river at the time you write it' : 'Enter adds · Esc closes · try "friday 4pm", "!high" or "#tag"')}
