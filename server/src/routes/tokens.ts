@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 import prisma from '../db.js';
 import { authenticate, TOKEN_PREFIX, hashToken } from '../middleware/auth.js';
 
@@ -21,7 +20,23 @@ router.get('/', async (req, res, next) => {
       select: { id: true, name: true, prefix: true, scope: true, createdAt: true, lastUsedAt: true },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ tokens, mcpPath: fileURLToPath(new URL('../mcp/index.js', import.meta.url)) });
+    res.json({ tokens });
+  } catch (error) { next(error); }
+});
+
+// GET /api/tokens/activity -> the last things connected apps did (newest first)
+router.get('/activity', async (req, res, next) => {
+  try {
+    const rows = await prisma.$queryRaw<any[]>`SELECT id, app, tool, summary, ok, at FROM mcp_activity WHERE user_id = ${req.user!.id} ORDER BY at DESC LIMIT 100`;
+    res.json({ activity: rows });
+  } catch (error) { next(error); }
+});
+
+// DELETE /api/tokens/activity -> clear the log
+router.delete('/activity', async (req, res, next) => {
+  try {
+    await prisma.$executeRaw`DELETE FROM mcp_activity WHERE user_id = ${req.user!.id}`;
+    res.json({ ok: true });
   } catch (error) { next(error); }
 });
 

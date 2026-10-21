@@ -58,6 +58,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
 
   // MCP sign-in (OAuth) and the hosted MCP endpoint: public by design, so any MCP client may call them from anywhere.
   const open = [cors({ origin: '*', exposedHeaders: ['WWW-Authenticate'], allowedHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'] }), apiLimiter(), express.json({ limit: '1mb' })];
+  app.use('/.well-known', cors({ origin: '*' })); // so Settings can test the address from the page
   app.use(wellKnown);
   app.use('/oauth', ...open, oauthRoutes);
   app.use('/mcp', ...open, mcpRoutes);

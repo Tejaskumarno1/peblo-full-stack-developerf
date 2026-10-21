@@ -41,6 +41,30 @@ try {
   const list = await call('list_tasks', {});
   check('list_tasks works', !list.err, list.text);
 
+  // new tools
+  const upd = await call('update_note', { id, title: 'Renamed by MCP', tags: ['mcp', 'edited'] });
+  check('update_note renames and retags', !upd.err && upd.json?.title === 'Renamed by MCP' && upd.json.tags.includes('edited'), upd.text);
+  const tk = await call('create_task', { text: 'MCP task', deadline: '2026-11-03T10:00:00.000Z', priority: 'low' });
+  const tid = tk.json?.id;
+  const ut = await call('update_task', { id: tid, text: 'MCP task edited', priority: 'high', noteId: id });
+  check('update_task edits and links to the note', !ut.err && ut.json?.priority === 'high' && ut.json?.noteId === id, ut.text);
+  const cal = await call('get_calendar', { from: '2026-11-01', to: '2026-11-07' });
+  check('get_calendar lists the task in range', !cal.err && Array.isArray(cal.json) && cal.json.some((x) => x.id === tid), cal.text);
+  const sh = await call('create_share_link', { kind: 'note', id });
+  check('create_share_link returns a public link', !sh.err && /\/s\/note\/[\w-]{20,}$/.test(sh.json?.url || ''), sh.text);
+  const off = await call('stop_sharing', { kind: 'note', id });
+  check('stop_sharing turns it off', !off.err && (await api('GET', '/api/share/note/' + id)).token === null, off.text);
+  check('still no delete tool', !(await client.listTools()).tools.some((x) => /delete|remove/.test(x.name)));
+
+  // the hosted /mcp endpoint records what an app did
+  const rpc = await fetch(base + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer ' + t.token }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_tags', arguments: {} } }) });
+  check('hosted /mcp answers a tool call', rpc.status === 200, String(rpc.status));
+  await new Promise((r) => setTimeout(r, 400));
+  const act = (await api('GET', '/api/tokens/activity')).activity || [];
+  check('activity log shows the call', act.some((a) => a.tool === 'list_tags' && a.app === 'e2e' && a.ok), JSON.stringify(act).slice(0, 200));
+  await api('DELETE', '/api/tokens/activity');
+  check('activity can be cleared', ((await api('GET', '/api/tokens/activity')).activity || []).length === 0);
+
   // a read-only token cannot write
   const ro = await api('POST', '/api/tokens', { name: 'ro', scope: 'read' });
   const t2 = new StdioClientTransport({ command: 'node', args: [path.join(REPO, 'dist', 'server', 'mcp', 'index.js')], env: { ...process.env, PEBLO_URL: base, PEBLO_TOKEN: ro.token } });

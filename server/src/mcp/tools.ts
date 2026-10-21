@@ -6,7 +6,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-export function createPebloMcp(BASE: string, TOKEN: string): McpServer {
+export type ToolLog = (tool: string, summary: string, ok: boolean) => void;
+
+export function createPebloMcp(BASE: string, TOKEN: string, log?: ToolLog): McpServer {
 async function api(method: string, path: string, body?: unknown): Promise<any> {
   const res = await fetch(BASE + '/api' + path, {
     method,
@@ -29,7 +31,15 @@ const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const toHtml = (s: string) => s.trim(); // notes are stored as Markdown now, so plain text and Markdown go in as they are
 const strip = (md: string) => String(md || '').replace(/<figure>[\s\S]*?<\/figure>/g, ' [attachment] ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' [picture] ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-const server = new McpServer({ name: 'peblo', version: '1.0.0' });
+const server = new McpServer({ name: 'peblo', version: '1.1.0' });
+// every tool call is noted (what, and whether it worked) so the person can see it in Settings > Connect apps
+const summaryOf = (a: any) => String(a?.title ?? a?.text ?? a?.query ?? a?.tag ?? a?.date ?? a?.from ?? a?.id ?? '').replace(/\s+/g, ' ').trim();
+const register = server.registerTool.bind(server) as any;
+(server as any).registerTool = (name: string, cfg: any, handler: any) => register(name, cfg, async (args: any, extra: any) => {
+  const r = await handler(args, extra);
+  try { log?.(name, summaryOf(args), !r?.isError); } catch { /* logging never breaks a tool */ }
+  return r;
+});
 const readOnly = { readOnlyHint: true, openWorldHint: false };
 const writes = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
@@ -105,6 +115,58 @@ server.registerTool('complete_task', {
   const { todo } = await api('PATCH', '/todos/' + encodeURIComponent(id), { completed: completed ?? true });
   return { id: todo.id, text: todo.text, completed: todo.completed };
 }));
+
+server.registerTool('update_note', {
+  description: 'Change a note: rename it, replace its text (Markdown) or set its tags. Only the fields you give are changed. To add text without replacing, use append_to_note.',
+  inputSchema: { id: z.string(), title: z.string().min(1).optional(), content: z.string().optional().describe('The whole new text. Replaces what is there.'), tags: z.array(z.string()).optional().describe('The full list of tags the note should have') },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id, title, content, tags }) => run(async () => {
+  const patch: Record<string, unknown> = {};
+  if (title !== undefined) patch.title = title;
+  if (content !== undefined) patch.content = toHtml(content);
+  if (tags !== undefined) patch.tags = tags;
+  if (!Object.keys(patch).length) throw new Error('Give a title, content or tags to change.');
+  await api('PATCH', '/notes/' + encodeURIComponent(id), patch);
+  const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
+  return { id: note.id, title: note.title, tags: note.tags };
+}));
+
+server.registerTool('update_task', {
+  description: 'Change a task: its text, deadline (ISO date or date-time), priority, or the note it is linked to (noteId, or null to unlink).',
+  inputSchema: { id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ id, ...patch }) => run(async () => {
+  const body = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  if (!Object.keys(body).length) throw new Error('Give something to change.');
+  const { todo } = await api('PATCH', '/todos/' + encodeURIComponent(id), body);
+  return { id: todo.id, text: todo.text, deadline: todo.deadline, priority: todo.priority, noteId: todo.noteId };
+}));
+
+server.registerTool('get_calendar', {
+  description: 'Tasks and events with a deadline between two dates (YYYY-MM-DD, inclusive), for planning a week or a month.',
+  inputSchema: { from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), includeDone: z.boolean().optional() },
+  annotations: readOnly,
+}, ({ from, to, includeDone }) => run(async () => {
+  const { todos } = await api('GET', `/todos?from=${from}T00:00:00.000Z&to=${to}T23:59:59.999Z`);
+  return (todos || []).filter((t: any) => includeDone || !t.completed).map((t: any) => ({ id: t.id, text: t.text, deadline: t.deadline, startTime: t.startTime, endTime: t.endTime, priority: t.priority, completed: t.completed }));
+}));
+
+server.registerTool('create_share_link', {
+  description: 'Make a public link to one note or task, so anyone with the link can open it. edit=true lets them edit too. The link is returned.',
+  inputSchema: { kind: z.enum(['note', 'todo']), id: z.string(), edit: z.boolean().optional() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ kind, id, edit }) => run(async () => {
+  const { token, edit: canEdit } = await api('POST', `/share/${kind}/${encodeURIComponent(id)}`, { edit: !!edit });
+  const cfg = await api('GET', '/config').catch(() => ({}));
+  const base = (cfg as any)?.publicUrl || BASE;
+  return { url: `${base}/s/${kind}/${token}`, canEdit: !!canEdit };
+}));
+
+server.registerTool('stop_sharing', {
+  description: 'Turn off the public link of a note or task. The old link stops working straight away.',
+  inputSchema: { kind: z.enum(['note', 'todo']), id: z.string() },
+  annotations: { ...writes, idempotentHint: true },
+}, ({ kind, id }) => run(async () => { await api('DELETE', `/share/${kind}/${encodeURIComponent(id)}`); return 'The link is off.'; }));
 
 server.registerTool('list_tags', {
   description: 'List the tags (topics) the user has, with how many notes use each.',

@@ -330,3 +330,20 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-set-themegrid .theme-card { border: 2px solid var(--s-line); background: var(--s-surface); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; font: inherit; color: var(--s-fg); text-align: left; }
 .soft .s-set-themegrid .theme-card.active { border-color: var(--s-fg); }
 .soft .s-set-themename { font-size: 13.5px; font-weight: 700; display: inline-flex; gap: 5px; align-items: center; }
+
+/* ---- Settings > Connect apps: test + activity ---- */
+.soft .s-set-test { display: flex; flex-direction: column; gap: 10px; }
+.soft .s-set-checks, .soft .s-set-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-set-checks li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.soft .s-set-checks li > svg { flex-shrink: 0; margin-top: 2px; }
+.soft .s-set-checks li.ok > svg { color: var(--s-local); }
+.soft .s-set-checks li.bad > svg { color: #b3261e; }
+.soft .s-set-checks b { display: block; }
+.soft .s-set-checks small { color: var(--s-fg3); font-size: 12.5px; }
+.soft .s-set-note { margin: 0; font-size: 13px; color: var(--s-fg3); line-height: 1.5; }
+.soft .s-set-log li { display: flex; gap: 12px; padding: 8px 0; border-top: 1.5px solid var(--s-chip-solid); font-size: 14px; }
+.soft .s-set-log li:first-child { border-top: 0; }
+.soft .s-set-log .when { flex: 0 0 76px; color: var(--s-fg3); font-size: 12.5px; font-weight: 700; padding-top: 2px; }
+.soft .s-set-log .what { min-width: 0; overflow-wrap: anywhere; }
+.soft .s-set-log .what i { color: var(--s-fg3); font-style: normal; }
+.soft .s-set-log li.bad .what { color: #b3261e; }

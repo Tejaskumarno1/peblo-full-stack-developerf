@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plug, Download, Upload, Trash2, Link2 } from 'lucide-react';
+import { Plug, Download, Upload, Trash2, Link2, Check, X as XIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { transferAPI, tokensAPI } from '../../api';
 import api from '../../api/client';
@@ -54,6 +54,89 @@ export function AISection() {
 
 const hostOf = (u) => String(u || '').replace(/^https?:\/\//, '');
 
+const TOOL_LABELS = {
+  search_notes: 'Searched notes', get_note: 'Read a note', create_note: 'Added a note', append_to_note: 'Added to a note', update_note: 'Changed a note',
+  list_tasks: 'Looked at tasks', create_task: 'Added a task', complete_task: 'Ticked a task', update_task: 'Changed a task', get_calendar: 'Looked at the calendar',
+  list_tags: 'Listed tags', create_share_link: 'Made a share link', stop_sharing: 'Stopped sharing',
+};
+const ago = (d) => {
+  const s = Math.max(0, (Date.now() - new Date(d).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(d).toLocaleDateString();
+};
+
+/** Checks the three things a connecting app checks, and says plainly which one fails. */
+function TestConnection({ base, address }) {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true); setRows([]);
+    const out = [];
+    const add = (name, ok, detail) => { out.push({ name, ok, detail }); setRows([...out]); };
+    const get = async (url, init) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), 70000); try { return await fetch(url, { ...init, signal: c.signal }); } finally { clearTimeout(t); } };
+    try {
+      const r = await get(address, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'peblo-settings', version: '1' } } }) });
+      add('The server answers at this address', r.status === 401, r.status === 401 ? 'It asks apps to sign in, which is right.' : `It answered ${r.status}. Expected 401 (sign in needed).`);
+    } catch (e) { add('The server answers at this address', false, 'Could not reach it. If the app was asleep, wait a minute and try again.'); }
+    try {
+      const r = await get(`${base}/.well-known/oauth-protected-resource`);
+      const j = r.ok ? await r.json() : null;
+      add('It tells apps where to sign in', !!j && j.resource === address, j ? (j.resource === address ? 'Sign-in details found.' : `Points at ${j.resource}, not this address.`) : `Answered ${r.status}.`);
+    } catch { add('It tells apps where to sign in', false, 'Could not read the sign-in details.'); }
+    try {
+      const r = await get(`${base}/.well-known/oauth-authorization-server`);
+      const j = r.ok ? await r.json() : null;
+      add('Apps can register themselves', !!j?.registration_endpoint && !!j?.token_endpoint, j ? 'Registration and token endpoints are available.' : `Answered ${r.status}.`);
+    } catch { add('Apps can register themselves', false, 'Could not read the registration details.'); }
+    setBusy(false);
+  };
+  const allOk = rows && rows.length === 3 && rows.every((r) => r.ok);
+  return (
+    <div className="s-set-test">
+      <div className="s-set-actions">
+        <button type="button" className="s-outline s-set-btn" onClick={run} disabled={busy || !base}>{busy ? 'Checking…' : 'Test the connection'}</button>
+        {allOk && <small className="ok">All good. Add this address in your app.</small>}
+      </div>
+      {rows && rows.length > 0 && (
+        <ul className="s-set-checks" aria-label="Connection test results">
+          {rows.map((r) => (
+            <li key={r.name} className={r.ok ? 'ok' : 'bad'}>
+              {r.ok ? <Check size={15} strokeWidth={3} /> : <XIcon size={15} strokeWidth={3} />}
+              <span><b>{r.name}</b><small>{r.detail}</small></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ActivityLog() {
+  const [rows, setRows] = useState(null);
+  const load = useCallback(async () => {
+    try { const { data } = await api.get('/tokens/activity'); setRows(data.activity || []); } catch { setRows([]); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const clear = async () => { try { await api.delete('/tokens/activity'); } catch { /* the reload shows what is left */ } load(); };
+  return (
+    <Card title="Activity" hint="What connected apps have done in your Peblo, newest first. Kept for 60 days."
+      aside={rows?.length ? <Confirm label="Clear" ask="Clear the log?" onYes={clear} /> : null}>
+      {rows === null && <p className="s-empty small">Checking…</p>}
+      {rows && rows.length === 0 && <p className="s-empty small">Nothing yet. When an app searches, reads or adds something, it shows up here.</p>}
+      <ul className="s-set-log">
+        {rows?.slice(0, 40).map((r) => (
+          <li key={r.id} className={r.ok ? '' : 'bad'}>
+            <span className="when">{ago(r.at)}</span>
+            <span className="what"><b>{r.app}</b> {TOOL_LABELS[r.tool] || r.tool}{r.summary ? <i> · {r.summary}</i> : null}{r.ok ? '' : ' (it did not work)'}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function ConnectSection() {
   const base = usePublicUrl();
   const address = base ? `${base}/mcp` : '';
@@ -73,6 +156,8 @@ export function ConnectSection() {
           <code aria-label="Peblo MCP address">{address || 'Loading…'}</code>
           <CopyButton text={address} />
         </div>
+        <TestConnection base={base} address={address} />
+        <p className="s-set-note">Copy the address exactly, with no full stop at the end. On Render's free plan the app sleeps when nobody uses it, so the first connection after a quiet spell can take about a minute.</p>
         <ol className="s-set-steps">
           <li><b>1.</b> In Claude, open Settings, then Connectors, then <i>Add custom connector</i>, and paste the address above.</li>
           <li><b>2.</b> Press <i>Connect</i>. Peblo opens, you sign in and press <i>Allow</i>.</li>
@@ -94,7 +179,7 @@ export function ConnectSection() {
         </ul>
       </Card>
 
-      <Card title="Activity log" tone="lilac" hint="A list of everything connected apps read or changed is coming next." />
+      <ActivityLog />
 
       <details className="s-set-adv">
         <summary>Advanced: access tokens for scripts and the local MCP server</summary>

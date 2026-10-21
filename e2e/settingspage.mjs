@@ -58,6 +58,9 @@ try {
   await page.goto(base + '/settings/connect');
   await page.locator('.s-set-addr code').filter({ hasText: '/mcp' }).waitFor({ timeout: 8000 });
   check('MCP address uses the public address', (await page.locator('.s-set-addr code').innerText()) === `${base}/mcp`);
+  await page.getByRole('button', { name: 'Test the connection' }).click();
+  await page.locator('.s-set-checks li.ok').nth(2).waitFor({ timeout: 15000 });
+  check('Test the connection passes all three checks', (await page.locator('.s-set-checks li.bad').count()) === 0);
   const oauthTok = await api('POST', '/api/tokens', { name: 'Connected: Claude', scope: 'full' });
   await page.reload();
   await page.getByText('Claude', { exact: true }).first().waitFor({ timeout: 8000 });
@@ -66,6 +69,15 @@ try {
   await page.waitForTimeout(600);
   const left = (await api('GET', '/api/tokens')).tokens.filter((t) => /^Connected:/.test(t.name));
   check('Remove access revokes the connected app', left.length === 0);
+
+  // activity log shows what an app did
+  await fetch(base + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer ' + token }, body: '{}' }).catch(() => {});
+  const full = await api('POST', '/api/tokens', { name: 'Connected: ActivityApp', scope: 'full' });
+  await fetch(base + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer ' + full.token }, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list_tags', arguments: {} } }) });
+  await page.goto(base + '/settings/connect');
+  await page.getByText('Looked at the calendar', { exact: false }).first().waitFor({ timeout: 1 }).catch(() => {});
+  await page.locator('.s-set-log li', { hasText: 'ActivityApp' }).first().waitFor({ timeout: 8000 });
+  check('Activity lists the app and what it did', (await page.locator('.s-set-log li', { hasText: 'Listed tags' }).count()) >= 1);
 
   // shared links list: switch to view, then stop
   await page.goto(base + '/settings/shared');

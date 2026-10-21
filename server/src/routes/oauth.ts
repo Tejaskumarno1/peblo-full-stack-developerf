@@ -186,7 +186,13 @@ mcpRoutes.all('/', async (req, res) => {
     return res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Use POST.' }, id: null });
   }
   // stateless: a fresh server per request. Tools call this same server over the loopback with the caller's own token.
-  const server = createPebloMcp(`http://127.0.0.1:${req.socket.localPort}`, token);
+  const row = await prisma.apiToken.findFirst({ where: { tokenHash: hashToken(token) }, select: { name: true } }).catch(() => null);
+  const app = (row?.name || 'An app').replace(/^Connected:\s*/i, '');
+  const log = (tool: string, summary: string, ok: boolean) => {
+    prisma.$executeRaw`INSERT INTO mcp_activity (user_id, app, tool, summary, ok) VALUES (${user.id}, ${app}, ${tool}, ${summary.slice(0, 160)}, ${ok})`
+      .then(() => prisma.$executeRaw`DELETE FROM mcp_activity WHERE user_id = ${user.id} AND at < now() - interval '60 days'`).catch(() => {});
+  };
+  const server = createPebloMcp(`http://127.0.0.1:${req.socket.localPort}`, token, log);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => { transport.close().catch(() => {}); server.close().catch(() => {}); });
   try {
