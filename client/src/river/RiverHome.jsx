@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
 import { todosAPI, notesAPI, riverAPI, hubAPI } from '../api';
 import { RiverHeader, useDismiss } from './RiverShell';
 import RiverDrawer from './RiverDrawer';
@@ -116,8 +115,8 @@ export default function RiverHome({ initialZoom = 'day' }) {
         out.push({ ...p, genId: g.id, index, noteId: g.noteId, noteTitle: g.noteTitle, at: p.due ? new Date(p.due) : note ? new Date(note.createdAt) : null });
       });
     }
-    return out.filter((p) => p.at && p.at >= start && p.at <= end);
-  }, [promiseData, notes, start, end]);
+    return out;
+  }, [promiseData, notes]);
 
   // The next thing coming up, for the header and the default selection
   const nextMeeting = useMemo(() => meetings
@@ -295,10 +294,6 @@ export default function RiverHome({ initialZoom = 'day' }) {
   };
   const bookedMins = (b) => Math.round(b.meet.reduce((s, t) => s + Math.max(0, ((endOf(t) || momentOf(t)) - momentOf(t)) / 60000), 0));
 
-  // ---------- brief for the next meeting (Peblo lane) ----------
-  const briefFor = nextMeeting && (momentOf(nextMeeting) - now < 36 * 3600000) ? nextMeeting : null;
-  const briefKey = ['river', 'brief', briefFor?.id];
-  const brief = useQuery({ queryKey: briefKey, queryFn: () => riverAPI.brief(briefFor.id).then((r) => r.data), enabled: false, staleTime: Infinity, retry: false });
   const aiReady = !!(models?.local?.enabled && models.local.ok) || (models?.cloud || []).some((c) => c.configured);
 
   // ---------- header ----------
@@ -403,26 +398,10 @@ export default function RiverHome({ initialZoom = 'day' }) {
         meet: meetings.filter((t) => inBin(momentOf(t))).sort((a, b) => momentOf(a) - momentOf(b)),
         tasks: tasks.filter((t) => inBin(dueMomentOf(t))).sort((a, b) => dueMomentOf(a) - dueMomentOf(b)),
         notes: visibleNotes.filter((n) => inBin(new Date(n.createdAt))),
-        promises: promises.filter((p) => inBin(p.at)),
       });
     }
     return list;
-  }, [z, start, end, meetings, tasks, visibleNotes, promises, today]);
-
-  // Peblo lane cards (time zooms): a brief before the next meeting, then promises
-  const pebloCards = useMemo(() => {
-    if (z.mode !== 'time') return [];
-    const cards = [];
-    if (briefFor) {
-      const x = Math.max(PAD, X(momentOf(briefFor)) - 262);
-      cards.push({ key: 'brief', kind: 'brief', x, w: 250 });
-    }
-    for (const p of promises) cards.push({ key: `${p.genId}-${p.index}`, kind: 'promise', p, x: Math.max(PAD, X(p.at) - 150), w: 300 });
-    cards.sort((a, b) => a.x - b.x);
-    let edge = -Infinity;
-    for (const c of cards) { c.x = Math.max(c.x, edge + 10); edge = c.x + c.w; }
-    return cards;
-  }, [z, briefFor, promises, X]);
+  }, [z, start, end, meetings, tasks, visibleNotes, today]);
 
   const nowX = X(now);
   const hotDue = (t, due) => !t.completed && due - now < 3 * 3600000;
@@ -492,7 +471,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
           <span className="meet">MEETINGS</span>
           <div className="tasks">
             <span>TASKS</span>
-            {(undated.length > 0 || overdue.length > 0) && (
+            {(undated.length > 0 || overdue.length > 0 || promises.length > 0) && (
               <button
                 type="button"
                 className={'r-undated' + (overdue.length ? ' late' : '')}
@@ -503,12 +482,11 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   setUndatedOpen(undatedOpen ? false : { left: r.left - frame.left, top: r.bottom - frame.top + 6 });
                 }}
               >
-                {overdue.length ? 'Overdue · ' + overdue.length : 'No date · ' + undated.length}
+                {overdue.length ? 'Overdue · ' + overdue.length : undated.length ? 'No date · ' + undated.length : 'Promises · ' + promises.length}
               </button>
             )}
           </div>
           <span className="notes">NOTES</span>
-          <span className="peblo">PEBLO</span>
         </div>
 
         <div
@@ -695,59 +673,6 @@ export default function RiverHome({ initialZoom = 'day' }) {
               ))}
             </div>
 
-            {/* Peblo */}
-            <div className="r-lane peblo">
-              {pebloCards.map((c) => (c.kind === 'brief' ? (
-                <div key={c.key} className="r-peblo ink" style={{ left: c.x, width: c.w }}>
-                  {brief.data ? (
-                    <>
-                      <span className="t">{brief.data.points.length ? `Your brief for ${briefFor.text} is ready: ${brief.data.points.length} points from ${brief.data.sources.length} note${brief.data.sources.length === 1 ? '' : 's'}.` : `Your notes don't mention ${briefFor.text} yet.`}</span>
-                      <span className="acts"><button type="button" onClick={() => setSelId(briefFor.id)}>Read it</button></span>
-                    </>
-                  ) : brief.isFetching ? (
-                    <span className="t" style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Loader2 size={14} className="r-spin" /> Reading your notes for {briefFor.text}…</span>
-                  ) : (
-                    <>
-                      <span className="t">{brief.error ? (brief.error.response?.data?.error || 'The brief could not be written.') : `${briefFor.text} is ${fromNow(momentOf(briefFor))}. Want a brief from your notes?`}</span>
-                      <span className="acts">
-                        {aiReady
-                          ? <button type="button" onClick={() => { brief.refetch(); setSelId(briefFor.id); }}>{brief.error ? 'Try again' : 'Brief me'}</button>
-                          : <Link to="/ai/connections" style={{ color: 'inherit' }}>Set up AI first</Link>}
-                      </span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div key={c.key} className="r-peblo dash" style={{ left: c.x, width: c.w }}>
-                  <span className="t">
-                    {c.p.owner && c.p.owner.toLowerCase() !== 'you' ? `${c.p.owner} promised: ` : 'You promised: '}
-                    {c.p.text.charAt(0).toLowerCase() + c.p.text.slice(1)}{c.p.due ? `, by ${dayWord(c.p.due)} ${clock(c.p.due)}` : ''}. From {c.p.noteTitle}.
-                  </span>
-                  <span className="acts">
-                    <button type="button" onClick={() => addPromise(c.p)}>Add to river</button>
-                    <button type="button" className="quiet" onClick={() => dismissPromise(c.p)}>Dismiss</button>
-                  </span>
-                </div>
-              )))}
-              {lay && pebloCards.length === 0 && (
-                <span className="r-peblo-empty" style={{ left: Math.max(PAD, nowX + 16) }}>Open a note and press "Find promises": Peblo puts what people promised here.</span>
-              )}
-              {bins && bins.map((b) => (
-                <BinChips
-                  key={b.i}
-                  x={b.x}
-                  w={z.binW}
-                  items={b.promises}
-                  max={2}
-                  render={(p, top) => (
-                    <button key={`${p.genId}-${p.index}`} type="button" className="r-chip promise" style={{ left: b.x + 6, width: z.binW - 12, top }} onClick={() => addPromise(p)} title={`Add to river: ${p.text}`}>
-                      <span>+ {p.text}</span>
-                    </button>
-                  )}
-                />
-              ))}
-            </div>
-
             <div className="r-now-line" style={{ left: nowX }} />
             <span className="r-now-pill" style={{ left: nowX - 30 }}>NOW {clock(now).replace(/ (am|pm)$/, '')}</span>
           </div>
@@ -798,6 +723,14 @@ export default function RiverHome({ initialZoom = 'day' }) {
             </div>
           ))}
           {undated.length > 8 && <span className="empty">and {undated.length - 8} more</span>}
+          {promises.length > 0 && <span className="r-pop-h">Promises from your notes</span>}
+          {promises.slice(0, 6).map((pr) => (
+            <div key={pr.genId + '-' + pr.index} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px' }}>
+              <span className="t" title={pr.noteTitle}>{pr.owner && pr.owner.toLowerCase() !== 'you' ? pr.owner + ': ' : ''}{pr.text}<small className="r-late-when" style={{ color: 'var(--r-fg3)' }}> {pr.due ? 'by ' + dayWord(pr.due) : 'no date'}</small></span>
+              <button type="button" className="r-btn ghost small" onClick={() => addPromise(pr)}>Add to river</button>
+              <button type="button" className="r-btn ghost small" onClick={() => dismissPromise(pr)}>Dismiss</button>
+            </div>
+          ))}
         </div>
       )}
       {toast && <div className="r-toast" role="status">{toast}</div>}
