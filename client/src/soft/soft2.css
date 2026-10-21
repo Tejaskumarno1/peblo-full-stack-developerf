@@ -374,3 +374,17 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-share-exp label { font-weight: 700; font-size: 13px; }
 .s-share-exp select { border: 1.5px solid #eadfce; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; background: #f4ede2; color: #2a1f17; }
 .s-share-exp small { flex-basis: 100%; color: #6b5b4e; font-size: 12.5px; font-weight: 600; }
+
+/* ---- note length, text size, page width, saved searches, outline card ---- */
+.soft .s-note-stats { font-size: 12px; font-weight: 600; color: var(--s-fg3); margin: 2px 0 8px; }
+.soft .s-note-body[data-font="s"] { font-size: 14px; }
+.soft .s-note-body[data-font="l"] { font-size: 18px; }
+.soft .s-note-body[data-font="xl"] { font-size: 21px; }
+.soft .s-notes:not(.focus)[data-width="narrow"] .s-note-body .block-editor-container { max-width: 680px; }
+.soft .s-nsearch button.save { color: var(--s-fg2); }
+.soft .s-saved-searches { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 8px; }
+.soft .s-saved-searches span { display: inline-flex; align-items: center; border-radius: 999px; background: var(--s-butter); font-size: 12.5px; font-weight: 700; }
+.soft .s-saved-searches span.on { background: var(--s-fg); color: var(--s-surface); }
+.soft .s-saved-searches button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 4px 4px 4px 10px; }
+.soft .s-saved-searches button.x { padding: 4px 9px 4px 2px; opacity: .6; }
+.soft .s-outl-item { display: block; width: 100%; text-align: left; background: transparent; border: 0; font: inherit; cursor: pointer; }

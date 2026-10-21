@@ -17,9 +17,69 @@ import './blockEditor.css';
 
 // A picture, video, audio clip or file picked from the computer becomes a data address inside the note
 // (pictures are shrunk first). Bigger than 4 MB is refused with a message instead of silently bloating the note.
+// The editor shows a small notice while a picture is being converted and stored, and says plainly when it could not be.
+const tell = (state, message) => window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state, message } }));
 async function uploadFile(file) {
-  const a = await fileToAttachment(file);
-  return a.url;
+  tell('working', /^image\//.test(file.type) ? 'Converting the picture to WebP…' : 'Adding the file…');
+  try {
+    const a = await fileToAttachment(file);
+    tell('done', a.isImage ? `Picture added (${Math.max(1, Math.round(a.size / 1024))} KB)` : 'File added');
+    return a.url;
+  } catch (e) {
+    tell('error', e?.message || 'That file could not be added.');
+    throw e;
+  }
+}
+
+// Find in the open note (Ctrl+F). Matches are painted with the browser's highlight feature, so the note itself is never changed.
+function FindBar({ root, onClose }) {
+  const [q, setQ] = useState('');
+  const [idx, setIdx] = useState(0);
+  const [count, setCount] = useState(0);
+  const ranges = useRef([]);
+  const input = useRef(null);
+  useEffect(() => {
+    input.current?.focus(); input.current?.select();
+    return () => { try { CSS.highlights.delete('pb-find'); CSS.highlights.delete('pb-find-cur'); } catch { /* not supported */ } };
+  }, []);
+  useEffect(() => {
+    const el = root.current?.querySelector('.bn-editor');
+    ranges.current = [];
+    if (el && q) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const ql = q.toLowerCase();
+      let n;
+      while ((n = walker.nextNode())) {
+        const t = n.nodeValue.toLowerCase();
+        let i = t.indexOf(ql);
+        while (i >= 0 && ranges.current.length < 500) {
+          const r = new Range(); r.setStart(n, i); r.setEnd(n, i + q.length); ranges.current.push(r);
+          i = t.indexOf(ql, i + q.length);
+        }
+      }
+    }
+    try { CSS.highlights.set('pb-find', new Highlight(...ranges.current)); } catch { /* not supported */ }
+    setCount(ranges.current.length); setIdx(0);
+  }, [q, root]);
+  useEffect(() => {
+    const r = ranges.current[idx];
+    try {
+      if (!r) { CSS.highlights.delete('pb-find-cur'); return; }
+      CSS.highlights.set('pb-find-cur', new Highlight(r));
+      r.startContainer.parentElement?.scrollIntoView({ block: 'center' });
+    } catch { /* not supported */ }
+  }, [idx, count]);
+  const step = (d) => { if (count) setIdx((i) => (i + d + count) % count); };
+  return (
+    <div className="pb-find" role="search">
+      <input ref={input} aria-label="Find in this note" placeholder="Find in this note" value={q} onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') { e.preventDefault(); onClose(); } }} />
+      <span className="n">{q ? (count ? `${idx + 1} of ${count}` : 'No matches') : ''}</span>
+      <button type="button" aria-label="Previous match" onClick={() => step(-1)}>↑</button>
+      <button type="button" aria-label="Next match" onClick={() => step(1)}>↓</button>
+      <button type="button" aria-label="Close find" onClick={onClose}>✕</button>
+    </div>
+  );
 }
 
 /* ---------------------------------------------------------------------------
@@ -107,7 +167,7 @@ const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <Imag
 
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
-export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false }) {
+export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
@@ -116,6 +176,50 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const loadingRef = useRef(false);
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
+  const rootRef = useRef(null);
+  const [notice, setNotice] = useState(null); // {state, message} about a picture being added
+  const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
+  const [findOpen, setFindOpen] = useState(false);
+
+  useEffect(() => {
+    let timer;
+    const on = (e) => {
+      clearTimeout(timer);
+      setNotice(e.detail);
+      if (e.detail.state !== 'working') timer = setTimeout(() => setNotice(null), e.detail.state === 'error' ? 6000 : 2200);
+    };
+    window.addEventListener('pb-upload', on);
+    return () => { window.removeEventListener('pb-upload', on); clearTimeout(timer); };
+  }, []);
+
+  useEffect(() => {
+    const key = (e) => {
+      if (e.key === 'Escape' && lightbox) { setLightbox(null); return; }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && rootRef.current?.contains(document.activeElement)) {
+        e.preventDefault(); setFindOpen(true);
+      }
+    };
+    const open = () => setFindOpen(true);
+    document.addEventListener('keydown', key, true);
+    window.addEventListener('pb-find-open', open);
+    return () => { document.removeEventListener('keydown', key, true); window.removeEventListener('pb-find-open', open); };
+  }, [lightbox]);
+
+  // Typewriter focus: the block you are writing in stays bright and centred, the rest fades.
+  const [curId, setCurId] = useState(null);
+  useEffect(() => {
+    if (!focusMode) { setCurId(null); return undefined; }
+    const mark = () => {
+      try {
+        const id = editor.getTextCursorPosition().block.id;
+        setCurId(id);
+        rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch { /* no cursor yet */ }
+    };
+    mark();
+    const off = editor.onSelectionChange(mark);
+    return () => { if (typeof off === 'function') off(); };
+  }, [focusMode, editor]);
 
   useEffect(() => {
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloEditor = editor; } catch { /* ignore */ }
@@ -264,6 +368,8 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   };
 
   const onLinkClick = (e) => {
+    const pic = e.target?.closest?.('img.bn-visual-media');
+    if (pic && !editable) { e.preventDefault(); setLightbox(pic.currentSrc || pic.src); return; }
     const a = e.target?.closest?.('a');
     const m = a && /^\/notes\/([\w-]+)$/.exec(a.getAttribute('href') || '');
     if (m) { e.preventDefault(); e.stopPropagation(); navigate(`/notes/${m[1]}`); }
@@ -273,7 +379,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const dark = theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
-    <div className="block-editor-container" onClickCapture={onLinkClick} style={{ padding: '0 24px', flex: 1, height: '100%', overflowY: 'auto', cursor: editable ? 'text' : 'default' }}>
+    <div ref={rootRef} className={`block-editor-container${focusMode ? ' pb-focus' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: 1, height: '100%', overflowY: 'auto', cursor: editable ? 'text' : 'default' }}>
       <BlockNoteView
         editor={editor}
         editable={editable}
@@ -287,6 +393,16 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
       </BlockNoteView>
       {!guest && <Backlinks noteId={noteId} />}
+
+      {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
+      {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
+      {findOpen && <FindBar root={rootRef} onClose={() => setFindOpen(false)} />}
+      {lightbox && (
+        <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="" />
+          <button type="button" aria-label="Close picture" onClick={() => setLightbox(null)}>✕</button>
+        </div>
+      )}
 
       {card && (
         <div className={`pb-aicard ${card.kind}`} role="dialog" aria-label={title}>

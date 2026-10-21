@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search } from 'lucide-react';
+import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -54,6 +54,14 @@ export default function SoftNotes() {
   const [q, setQ] = useState(''); // the search box
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
+  const [typewriter, setTypewriter] = useState(() => store('peblo-typewriter', 'off'));
+  const [font, setFont] = useState(() => store('peblo-note-font', 'm')); // s, m, l, xl
+  const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
+  const keep = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
+  const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
+  const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
+  const FONTS = ['s', 'm', 'l', 'xl'];
+  const FONT_NAME = { s: 'Small', m: 'Medium', l: 'Large', xl: 'Extra large' };
   const bodyRef = useRef(null);
 
   // ---------- data ----------
@@ -285,6 +293,17 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['notes', 'backups', doc.id] });
   };
 
+  const duplicate = async () => {
+    setMenuOpen(false);
+    forceSave();
+    try {
+      const { data } = await notesAPI.create({ title: `Copy of ${doc.title || 'Untitled'}`, content: doc.content || '', tags: doc.tags || [] });
+      refreshLists();
+      navigate(`/notes/${data.note.id}`);
+      flash('Duplicated');
+    } catch { flash('Could not duplicate the note'); }
+  };
+
   const addTag = (raw) => {
     const t = raw.trim().replace(/^#/, '').toLowerCase();
     if (t && !doc.tags.includes(t)) patch({ tags: [...doc.tags, t] });
@@ -317,7 +336,9 @@ export default function SoftNotes() {
     const el = [...document.querySelectorAll('.s-note-body [data-content-type="heading"]')].find((h) => h.textContent.trim() === text);
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  const words = useMemo(() => (doc?.content || '').trim().split(/\s+/).filter(Boolean).length, [doc?.content]);
+  const plainText = useMemo(() => (doc?.content || '').replace(/<figure>[\s\S]*?<\/figure>/g, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/[#*_>`|]/g, ' '), [doc?.content]);
+  const words = useMemo(() => plainText.trim().split(/\s+/).filter(Boolean).length, [plainText]);
+  const chars = useMemo(() => plainText.replace(/\s+/g, ' ').trim().length, [plainText]);
 
   // ---------- selection toolbar ----------
   useEffect(() => {
@@ -372,7 +393,8 @@ export default function SoftNotes() {
           <h1 className="s-notes-h1">{listTitle}</h1>
           <button type="button" className="s-new" aria-label="New note" title="New note" onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>
         </div>
-        <label className="s-nsearch"><Search size={14} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
+        <label className="s-nsearch"><Search size={14} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
+        {savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
         <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : 'No notes here yet.'}</p>}
@@ -431,6 +453,11 @@ export default function SoftNotes() {
                   <div className="s-menu" role="menu">
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}>Find in note  (Ctrl+F)</button>
+                    <button type="button" role="menuitem" onClick={duplicate}>Duplicate note</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}>Text size: {FONT_NAME[font]}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}>Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}>Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}>Share link…</button>
                     <button type="button" role="menuitem" onClick={exportPdf}>Export as PDF</button>
                     <button type="button" role="menuitem" onClick={exportWord}>Export as Word</button>
@@ -486,13 +513,15 @@ export default function SoftNotes() {
               )}
             </div>
 
-            <div className="s-note-body" ref={bodyRef}>
+            {!doc.isDraft && <div className="s-note-stats" aria-label="Length of this note">{words} word{words === 1 ? '' : 's'} · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</div>}
+            <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
                 noteId={doc.id}
                 key={editorKey}
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}
                 editable={!preview && !doc.isDeleted}
+                focusMode={typewriter === 'on'}
                 formattingToolbar
               />
               {pill && !preview && (
@@ -558,6 +587,13 @@ export default function SoftNotes() {
           )}
           {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
+
+        {outline.length >= 2 && (
+          <section className="s-side-card s-outline-card" style={{ background: 'var(--s-butter)' }} aria-labelledby="s-outl">
+            <h3 id="s-outl" className="s-h3">Outline <span className="s-cnt">{outline.length}</span></h3>
+            {outline.slice(0, 20).map((h, i) => <button key={i} type="button" className="s-side-link s-outl-item" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}</button>)}
+          </section>
+        )}
 
         <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
           <h3 id="s-mentions" className="s-h3">Mentioned in</h3>
