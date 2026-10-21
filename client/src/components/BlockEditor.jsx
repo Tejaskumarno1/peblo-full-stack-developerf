@@ -191,6 +191,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
+  const taskCache = useRef({ at: 0, tasks: [] });
   const editor = useCreateBlockNote({ uploadFile });
   const { theme } = useAuth();
   const loadingRef = useRef(false);
@@ -374,6 +375,13 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         if (!heads.length) { editor.insertBlocks([{ type: 'paragraph', content: 'Add some headings first, then insert the table of contents.' }], cur, 'after'); return; }
         editor.insertBlocks(heads.map((h) => ({ type: 'bulletListItem', content: h })), cur, 'after');
       }, aliases: ['toc', 'contents', 'outline'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📑</span>, subtext: 'A list of this note\'s headings.' },
+      ...(guest || !noteId ? [] : [{ title: 'Task from this line', onItemClick: async () => {
+        const cur = editor.getTextCursorPosition().block;
+        const prev = editor.getTextCursorPosition().prevBlock;
+        const text = (textOf(cur.content).trim() || textOf(prev?.content).trim()).slice(0, 200);
+        if (!text) return;
+        try { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
+      }, aliases: ['task', 'todo', 'to-do'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>✅</span>, subtext: 'Turn this line (or the one above) into a task linked to this note.' }]),
       { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🕒</span>, subtext: 'Type the time as text.' },
       { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📅</span>, subtext: 'Type today as text.' },
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
@@ -413,6 +421,29 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
           } catch { /* nothing is inserted if the note could not be made */ }
         },
       });
+    }
+    // open tasks that match (only when a note is open, so the task can be tied to it)
+    if (noteId) {
+      try {
+        if (Date.now() - taskCache.current.at > 5000) {
+          const { data } = await todosAPI.getAll({});
+          taskCache.current = { at: Date.now(), tasks: (data.todos || []).filter((t) => !t.completed) };
+        }
+        const tasks = taskCache.current.tasks.filter((t) => String(t.text || '').toLowerCase().includes(q)).slice(0, 5);
+        for (const t of tasks) {
+          items.push({
+            title: String(t.text).slice(0, 80),
+            group: 'Link a task',
+            subtext: t.noteId === noteId ? 'Already linked to this note' : 'Ties the task to this note',
+            onItemClick: async () => {
+              editor.insertInlineContent([`☐ ${String(t.text).slice(0, 120)} `]);
+              if (t.noteId !== noteId) {
+                try { await todosAPI.update(t.id, { noteId }); taskCache.current.at = 0; queryClient.invalidateQueries({ queryKey: ['todos'] }); } catch { /* the text is still there */ }
+              }
+            },
+          });
+        }
+      } catch { /* notes still work without tasks */ }
     }
     return items;
   };
