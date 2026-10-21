@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Check, Loader2, X } from 'lucide-react';
 import { notesAPI, todosAPI, riverAPI } from '../api';
@@ -167,7 +167,7 @@ function RiverNote({ note }) {
                     {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
+                    <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
                     <button type="button" role="menuitem" style={{ color: 'var(--r-now-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
@@ -178,7 +178,7 @@ function RiverNote({ note }) {
           <input id="r-note-title" className="r-title-input" value={doc.title} placeholder="Untitled note" onChange={(e) => patch({ title: e.target.value })} disabled={doc.isDeleted} />
           <div className="r-note-tags">
             {doc.tags.map((t) => (
-              <span key={t} className="r-tag">#{t}{!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => note.removeTag(t)}><X size={12} strokeWidth={2.6} /></button>}</span>
+              <span key={t} className="r-tag"><button type="button" className="r-tag-go" aria-label={`Show notes tagged #${t}`} onClick={() => { note.forceSave(); navigate('/notes', { state: { filter: t } }); }}>#{t}</button>{!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => note.removeTag(t)}><X size={12} strokeWidth={2.6} /></button>}</span>
             ))}
             {!doc.isDeleted && (tagDraft === null ? (
               <button type="button" className="r-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
@@ -197,7 +197,7 @@ function RiverNote({ note }) {
           </div>
           <div className="r-body">
             {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
-      <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
           </div>
         </article>
 
@@ -284,8 +284,8 @@ function Marked({ text, words }) {
   return text.split(re).map((part, i) => (i % 2 ? <mark key={i}>{part}</mark> : part));
 }
 
-function NoteRow({ n, words = [] }) {
-  return (
+function NoteRow({ n, words = [], acts }) {
+  const row = (
     <Link to={`/notes/${n.id}`} className="r-row flat">
       <span className="tm">{whenLabel(n.updatedAt)}<small>edited</small></span>
       <span style={{ minWidth: 0 }}>
@@ -299,10 +299,22 @@ function NoteRow({ n, words = [] }) {
       </span>
     </Link>
   );
+  if (!acts) return row;
+  return (
+    <div className="r-rowx">
+      {row}
+      <div className="r-row-acts">
+        {acts.map((a) => <button key={a.label} type="button" className={`r-btn ghost small${a.danger ? ' danger' : ''}`} onClick={() => a.run(n)}>{a.label}</button>)}
+      </div>
+    </div>
+  );
 }
 
 function RiverNoteList({ onNew }) {
-  const [filter, setFilter] = useState('all');
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState(() => location.state?.filter || 'all');
+  const [moreTags, setMoreTags] = useState(false);
   const [view, setView] = useState(readView);
   const [q, setQ] = useState('');
   const params = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
@@ -376,6 +388,24 @@ function RiverNoteList({ onNew }) {
   }, [listed]);
 
   const pickView = (v) => { setView(v); saveView(v); };
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['notes'] });
+  const actions = filter === 'archive'
+    ? [
+        { label: 'Unarchive', run: async (n) => { await notesAPI.archive(n.id); refresh(); } },
+        { label: 'Move to Trash', danger: true, run: async (n) => { await notesAPI.delete(n.id); refresh(); } },
+      ]
+    : filter === 'trash'
+      ? [
+          { label: 'Restore', run: async (n) => { await notesAPI.restore(n.id); refresh(); } },
+          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await notesAPI.delete(n.id); refresh(); } },
+        ]
+      : null;
+  const emptyTrash = async () => {
+    if (!window.confirm(`Delete ${listed.length} note${listed.length === 1 ? '' : 's'} in the Trash forever? This cannot be undone.`)) return;
+    for (const n of listed) await notesAPI.delete(n.id);
+    refresh();
+  };
+  const shownTags = moreTags || tags.findIndex(([t]) => t === filter) >= 10 ? tags : tags.slice(0, 10);
   const title = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : filter === 'all' ? 'Every note' : `#${filter}`;
   const empty = filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : 'No notes yet. Write one and it lands on the river at the time you wrote it.';
 
@@ -404,6 +434,7 @@ function RiverNoteList({ onNew }) {
               onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }}
               placeholder="Search titles, tags and text…"
             />
+            {filter === 'trash' && listed.length > 0 && <button type="button" className="r-btn ghost danger" onClick={emptyTrash}>Empty Trash</button>}
             <button type="button" className="r-btn" onClick={onNew}>New note</button>
           </div>
 
@@ -413,7 +444,7 @@ function RiverNoteList({ onNew }) {
                 {results.length === 0 ? 'No notes match' : `${results.length} note${results.length === 1 ? '' : 's'} match`} “{q.trim()}”
                 {inBin ? ` in ${title}` : ' in every note'} · best match first · <button type="button" className="r-link" onClick={() => setQ('')}>Clear</button>
               </p>
-              <div className="r-flat">{results.map((n) => <NoteRow key={n.id} n={n} words={words} />)}</div>
+              <div className="r-flat">{results.map((n) => <NoteRow key={n.id} n={n} words={words} acts={actions} />)}</div>
             </>
           ) : listed.length === 0 ? (
             <p className="r-quiet">{empty}</p>
@@ -436,7 +467,7 @@ function RiverNoteList({ onNew }) {
               {months.map((g) => (
                 <div key={g.label}>
                   <h2 className="r-h3" style={{ margin: '4px 0 8px' }}>{g.label.toUpperCase()}</h2>
-                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} />)}</div>
+                  <div className="r-flat">{g.notes.map((n) => <NoteRow key={n.id} n={n} acts={actions} />)}</div>
                 </div>
               ))}
             </>
@@ -464,9 +495,10 @@ function RiverNoteList({ onNew }) {
             <h2 className="r-h3">SHOW</h2>
             <div className="r-filters">
               <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
-              {tags.slice(0, 10).map(([t, n]) => (
+              {shownTags.map(([t, n]) => (
                 <button key={t} type="button" aria-pressed={filter === t} onClick={() => setFilter(t)}>#{t} · {n}</button>
               ))}
+              {tags.length > 10 && <button type="button" className="r-more-tags" onClick={() => setMoreTags((v) => !v)}>{moreTags ? 'Fewer tags' : `More tags (${tags.length - 10})`}</button>}
             </div>
             <div className="r-filters">
               <button type="button" aria-pressed={filter === 'archive'} onClick={() => setFilter('archive')}>Archive</button>
