@@ -59,6 +59,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
   const [quick, setQuick] = useState(null); // { lane, x, at }
   const [undatedOpen, setUndatedOpen] = useState(false); // false or { left, top } inside the frame
   const [toast, setToast] = useState('');
+  const [dropDay, setDropDay] = useState(null); // a day (ms) an unscheduled task is being dragged over
   const scrollRef = useRef(null);
   const drag = useRef(null);
 
@@ -261,6 +262,38 @@ export default function RiverHome({ initialZoom = 'day' }) {
     refresh();
     flash(`Moved to ${dayWord(d).toLowerCase()}`);
   };
+
+  // Unscheduled tasks can be dragged onto a day of the Tasks lane (Week zoom)
+  const dayFromEvent = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.floor((e.clientX - rect.left - PAD) / z.binW);
+    return i >= 0 ? addDays(start, i) : null;
+  };
+  const isTaskDrag = (e) => z.mode === 'bins' && z.bin === 'day' && Array.from(e.dataTransfer?.types || []).includes('text/peblo-task');
+  const onTaskDragOver = (e) => {
+    if (!isTaskDrag(e)) return;
+    e.preventDefault();
+    const d = dayFromEvent(e);
+    setDropDay(d ? d.getTime() : null);
+  };
+  const onTaskDrop = async (e) => {
+    if (!isTaskDrag(e)) return;
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/peblo-task');
+    const d = dayFromEvent(e);
+    setDropDay(null);
+    if (!id || !d) return;
+    d.setHours(23, 59, 0, 0);
+    try {
+      await todosAPI.update(id, { deadline: d.toISOString() });
+    } catch {
+      flash('Could not move that task. Try again.');
+      return;
+    }
+    refresh();
+    flash('Planned for ' + dayWord(d).toLowerCase());
+  };
+  const bookedMins = (b) => Math.round(b.meet.reduce((s, t) => s + Math.max(0, ((endOf(t) || momentOf(t)) - momentOf(t)) / 60000), 0));
 
   // ---------- brief for the next meeting (Peblo lane) ----------
   const briefFor = nextMeeting && (momentOf(nextMeeting) - now < 36 * 3600000) ? nextMeeting : null;
@@ -512,7 +545,11 @@ export default function RiverHome({ initialZoom = 'day' }) {
                   {z.bin === 'day'
                     ? `${DOW[b.from.getDay()]} ${b.from.getDate()}${b.today ? ' · today' : ''}`
                     : `Week of ${b.from.getDate()} ${b.from.toLocaleDateString('en-GB', { month: 'short' })}`}
+                  {z.bin === 'day' && b.meet.length > 0 && <small className="r-booked">{dur(bookedMins(b))}</small>}
                 </button>
+              ))}
+              {bins && z.bin === 'day' && bins.filter((b) => b.meet.length > 0).map((b) => (
+                <span key={`ld${b.i}`} className={'r-load' + (bookedMins(b) >= 360 ? ' full' : '')} style={{ left: b.x + 10, width: z.binW - 20 }} title={dur(bookedMins(b)) + ' of meetings'}><i style={{ width: Math.min(100, (bookedMins(b) / 480) * 100) + '%' }} /></span>
               ))}
             </div>
 
@@ -575,7 +612,8 @@ export default function RiverHome({ initialZoom = 'day' }) {
             </div>
 
             {/* tasks */}
-            <div className="r-lane tasks" onDoubleClick={onLaneDoubleClick('task')}>
+            <div className="r-lane tasks" onDoubleClick={onLaneDoubleClick('task')} onDragOver={onTaskDragOver} onDragLeave={() => setDropDay(null)} onDrop={onTaskDrop}>
+              {bins && dropDay !== null && <div className="r-drop-day" style={{ left: PAD + Math.round((dropDay - start) / 86400000) * z.binW, width: z.binW }}><span>Drop to plan it here</span></div>}
               {lay && lay.tItems.filter((k) => k.row < 3).map((k) => {
                 const slim = lay.tRows > 1;
                 const top = lay.tRows === 1 ? 18 : lay.tRows === 2 ? 12 + k.row * 42 : 10 + k.row * 28;
@@ -716,6 +754,19 @@ export default function RiverHome({ initialZoom = 'day' }) {
         </div>
       </section>
 
+      {zoom === 'week' && undated.length > 0 && (
+        <section className="r-tray" aria-label="Tasks without a date">
+          <span className="r-tray-h">Unscheduled · {undated.length}</span>
+          <span className="r-tray-hint">Drag one onto a day in the Tasks lane</span>
+          <div className="r-tray-row">
+            {undated.slice(0, 8).map((t) => (
+              <button key={t.id} type="button" className="r-pebble" draggable title="Drag onto a day" onDragStart={(e) => { e.dataTransfer.setData('text/peblo-task', t.id); e.dataTransfer.effectAllowed = 'move'; }} onDragEnd={() => setDropDay(null)}>
+                <i aria-hidden="true" />{t.text}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <RiverDrawer
         selected={selected}
         meetings={meetings}

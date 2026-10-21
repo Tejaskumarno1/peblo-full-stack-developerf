@@ -672,3 +672,17 @@
 .r-mini .m { top: 6px; background: var(--r-meet); color: var(--r-meet-ink); }
 .r-mini .n { top: 34px; background: var(--r-surface); color: var(--r-fg); border: 2px solid var(--r-now); }
 .r-clash .slots { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; }
+
+/* ---------- Week: load per day, unscheduled tray ---------- */
+.r-booked { margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--r-fg3); }
+.r-load { position: absolute; top: 34px; height: 5px; border-radius: 99px; background: var(--r-line); overflow: hidden; pointer-events: none; }
+.r-load i { display: block; height: 100%; background: var(--r-meet-ink); }
+.r-load.full i { background: var(--r-now); }
+.r-drop-day { position: absolute; top: 4px; bottom: 4px; z-index: 3; border: 2px dashed var(--r-ink); border-radius: 12px; background: color-mix(in srgb, var(--r-ink) 5%, transparent); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; pointer-events: none; }
+.r-tray { flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-radius: 16px; background: var(--r-surface); border: 1px solid var(--r-line); min-width: 0; }
+.r-tray-h { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--r-fg3); white-space: nowrap; }
+.r-tray-hint { font-size: 12.5px; color: var(--r-fg2); white-space: nowrap; }
+.r-tray-row { display: flex; gap: 8px; min-width: 0; overflow-x: auto; padding: 2px; }
+.r-pebble { flex-shrink: 0; max-width: 240px; height: 34px; padding: 0 14px; border-radius: 99px; border: 1px dashed var(--r-fg3); background: var(--r-lane); font: inherit; font-size: 13px; font-weight: 600; cursor: grab; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--r-fg); }
+.r-pebble i { width: 9px; height: 9px; background: var(--r-now); transform: rotate(45deg); flex-shrink: 0; }
+.r-pebble:active { cursor: grabbing; }
