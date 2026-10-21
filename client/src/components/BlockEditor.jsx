@@ -96,6 +96,8 @@ const withLayout = (p) => {
   const q = [];
   if (p.previewWidth) q.push(`pw=${Math.round(p.previewWidth)}`);
   if (p.textAlignment && p.textAlignment !== 'left') q.push(`ta=${p.textAlignment}`);
+  const ar = /^crop=([\d.]+)$/.exec(p.name || '');
+  if (ar) q.push(`ar=${ar[1]}`);
   const base = String(p.url).split('#')[0];
   return q.length ? `${base}#${q.join('&')}` : base;
 };
@@ -108,7 +110,7 @@ function toStorage(blocks) {
       if (!url) return { ...b, type: 'paragraph', props: {}, content: [], children };
       return { id: b.id, type: 'image', props: { url, caption: b.props.name || b.props.caption || b.type }, children };
     }
-    if (b.type === 'image' && b.props?.url) return { ...b, props: { ...b.props, url: withLayout(b.props) }, children };
+    if (b.type === 'image' && b.props?.url) return { ...b, props: { ...b.props, name: /^crop=/.test(b.props.name || '') ? (b.props.caption || '') : b.props.name, url: withLayout(b.props) }, children };
     if (b.type === 'toggleListItem') {
       return { id: b.id, type: 'bulletListItem', props: {}, content: [{ type: 'text', text: '▸ ', styles: {} }, ...(Array.isArray(b.content) ? b.content : [])], children };
     }
@@ -126,12 +128,13 @@ function fromStorage(blocks) {
       if (m) return { type: m[1], props: { url, name, showPreview: true }, children };
       return { type: 'file', props: { url, name }, children };
     }
-    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta)=/.test(b.props.url)) {
+    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar)=/.test(b.props.url)) {
       const [u, ...h] = b.props.url.split('#');
       const q = new URLSearchParams(h.join('#'));
       const pw = Number(q.get('pw'));
       const ta = q.get('ta');
-      return { ...b, props: { ...b.props, url: u, ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
+      const ar = Number(q.get('ar'));
+      return { ...b, props: { ...b.props, url: u, ...(ar > 0 ? { name: `crop=${ar}`, caption: b.props.caption || b.props.name || '' } : {}), ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
     }
     if (b.type === 'bulletListItem' && Array.isArray(b.content) && b.content[0]?.type === 'text' && /^▸\s/.test(b.content[0].text || '')) {
       const first = { ...b.content[0], text: b.content[0].text.replace(/^▸\s+/, '') };
@@ -161,6 +164,9 @@ function ImageTools() {
       <Btn key="s" mainTooltip="Small picture. Smaller than the page, it sits to one side (use the align buttons) and text wraps beside it" icon={tag('S')} isSelected={near(0.25)} onClick={() => set({ previewWidth: pct(0.25) })} />
       <Btn key="m" mainTooltip="Medium picture" icon={tag('M')} isSelected={near(0.45)} onClick={() => set({ previewWidth: pct(0.45) })} />
       <Btn key="l" mainTooltip="Large picture" icon={tag('L')} isSelected={near(0.7)} onClick={() => set({ previewWidth: pct(0.7) })} />
+      {[['orig', 'Original shape', ''], ['sq', 'Crop to a square', 'crop=1'], ['43', 'Crop to 4:3', 'crop=1.333'], ['169', 'Crop to 16:9', 'crop=1.778']].map(([k, tip, v]) => (
+        <Btn key={'c' + k} mainTooltip={tip} icon={tag({ orig: '◻', sq: '1:1', 43: '4:3', 169: '16:9' }[k])} isSelected={(b.props.name || '') === v || (!v && !/^crop=/.test(b.props.name || ''))} onClick={() => set({ name: v })} />
+      ))}
       <Btn key="f" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />
     </>
   );
@@ -434,6 +440,11 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
         decorations(state) {
           const out = [];
           state.doc.descendants((node, pos) => {
+            if (node.type.name === 'image') {
+              const m = /^crop=([\d.]+)$/.exec(node.attrs?.name || '');
+              if (m) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-crop': m[1], style: `--pb-ar:${m[1]}` }));
+              return false;
+            }
             if (node.type.name !== 'quote') return true;
             const t = node.textContent.trim();
             const k = CALLOUTS.find(([emoji]) => t.startsWith(emoji) || t.startsWith(emoji.replace('\uFE0F', '')));

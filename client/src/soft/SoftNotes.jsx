@@ -8,6 +8,7 @@ import ShareDialog from './ShareDialog';
 import VersionDiff from './VersionDiff';
 import FolderDialog from './FolderDialog';
 import TagManager from './TagManager';
+import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
 import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
@@ -64,6 +65,7 @@ export default function SoftNotes() {
   const [folderSel, setFolderSel] = useState('');
   const [folderOpen, setFolderOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState([]);
   const [onlyTasks, setOnlyTasks] = useState(false);
@@ -473,9 +475,12 @@ export default function SoftNotes() {
           <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}>Trash</button>
           <span aria-hidden="true">·</span>
           <button type="button" onClick={() => setTagsOpen(true)}>Manage tags</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" onClick={() => setGalleryOpen(true)}>Pictures</button>
           {filter === 'trash' && shownList.length > 0 && <><span aria-hidden="true">·</span><button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}>Empty Trash</button></>}
         </div>
         {folderOpen && <FolderDialog folders={folders} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} onPick={moveTo} onClose={() => setFolderOpen(false)} />}
+        {galleryOpen && <Gallery notes={allNotes} onClose={() => setGalleryOpen(false)} onOpen={(id) => { setGalleryOpen(false); navigate(`/notes/${id}`); }} />}
         {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} onChanged={() => refreshLists()} />}
       </aside>
 

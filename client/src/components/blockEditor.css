@@ -66,3 +66,6 @@
 .block-editor-container .bn-block-content[data-content-type="codeBlock"]::after { content: 'Copy'; position: absolute; top: 8px; right: 10px; font: 700 11px system-ui, sans-serif; padding: 3px 10px; border-radius: 999px; background: rgba(128,128,128,.3); color: inherit; cursor: pointer; opacity: 0; transition: opacity .15s; }
 .block-editor-container .bn-block-content[data-content-type="codeBlock"]:hover::after { opacity: 1; }
 .block-editor-container .bn-block-content[data-content-type="codeBlock"][data-copied]::after { content: 'Copied ✓'; opacity: 1; }
+
+/* ---- cropped pictures ---- */
+.block-editor-container .bn-block-content[data-crop] img.bn-visual-media { aspect-ratio: var(--pb-ar); object-fit: cover; }

@@ -413,3 +413,10 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-tm-tones { display: flex; gap: 4px; }
 .s-tm-tones button { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
 .s-tm-tones button.on { border-color: currentColor; }
+
+/* ---- pictures gallery ---- */
+.s-gal { width: min(760px, 94vw); max-height: min(82vh, 720px); overflow: auto; }
+.s-gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.s-gal-item { border: 0; padding: 0; background: rgba(128,128,128,.1); border-radius: 12px; overflow: hidden; cursor: pointer; text-align: left; color: inherit; font: inherit; display: flex; flex-direction: column; }
+.s-gal-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.s-gal-item span { font-size: 12px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
