@@ -7,6 +7,7 @@ import RiverCapture from './RiverCapture';
 import MeetingReminders from './MeetingReminders';
 import { exportCalendar, importCalendar } from './calendarIO';
 import { initialsOf } from './riverUtils';
+import Avatar from '../components/Avatar';
 import './river.css';
 
 const NAV = [
@@ -59,7 +60,7 @@ export function RiverHeader({ children, tools }) {
         <Plus size={20} strokeWidth={2.4} />
       </button>
       <div className="r-menu-wrap" ref={ref}>
-        <button type="button" className="r-avatar" aria-label="Your menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>{initialsOf(user?.name)}</button>
+        <button type="button" className="r-avatar" aria-label="Your menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}><Avatar src={user?.avatar} fallback={initialsOf(user?.name)} /></button>
         {menu && (
           <div className="r-pop right" role="menu" style={{ width: 220 }}>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>

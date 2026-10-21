@@ -23,7 +23,7 @@ export function rememberAccount(u) {
   const token = getToken();
   if (!u?.email || !token) return;
   const id = u.id || u.email;
-  putAccounts([{ id, email: u.email, name: u.name || '', token }, ...getSavedAccounts().filter((a) => a.id !== id)]);
+  putAccounts([{ id, email: u.email, name: u.name || '', avatar: u.avatar || '', token }, ...getSavedAccounts().filter((a) => a.id !== id)]);
 }
 export function forgetAccount(id) { putAccounts(getSavedAccounts().filter((a) => a.id !== id)); }
 
@@ -208,6 +208,7 @@ export function AuthProvider({ children }) {
     setUser((prev) => { previous = prev; return { ...prev, ...updatedUser }; });
     try {
       await profileAPI.updateProfile(updatedUser);
+      if ('avatar' in updatedUser) rememberAccount({ ...(previous || {}), ...updatedUser });
       return true;
     } catch (err) {
       console.error('Failed to update profile to DB:', err);

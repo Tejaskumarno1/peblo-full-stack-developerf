@@ -1,24 +1,42 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Plus, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth, getSavedAccounts, forgetAccount, clearAccountData } from '../../context/AuthContext';
 import { authAPI } from '../../api';
 import { getToken, setToken, clearToken } from '../../api/token';
 import { Card, Row, Switch, Seg, TextField, Confirm, useSave } from './ui';
+import Avatar from '../../components/Avatar';
+import { avatarToWebp } from '../../utils/avatar';
 
 const initialOf = (u) => (String(u?.name || u?.email || 'You').trim().charAt(0) || 'Y').toUpperCase();
 
 export function ProfileSection() {
   const { user, updateProfile, settings } = useAuth();
   const save = useSave();
+  const fileRef = useRef(null);
+  const [pickErr, setPickErr] = useState('');
+  const pick = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setPickErr('');
+    try { const data = await avatarToWebp(f); save(() => updateProfile({ avatar: data })); }
+    catch (err) { setPickErr(err.message || 'Could not use that picture.'); }
+  };
   return (
     <>
       <Card title="Your profile" hint="This is how you appear in shared notes and in Peblo.">
         <div className="s-set-who">
-          <span className="s-set-avatar" aria-hidden="true">{initialOf(user)}</span>
+          <span className="s-set-avatar big" aria-hidden="true"><Avatar src={user?.avatar} fallback={initialOf(user)} /></span>
           <div>
             <b>{user?.name || 'Your name'}</b>
             <small>{user?.email}</small>
+            <div className="s-set-who-actions">
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} />
+              <button type="button" className="s-outline s-set-btn" onClick={() => fileRef.current?.click()}>{user?.avatar ? 'Change picture' : 'Add picture'}</button>
+              {user?.avatar && <button type="button" className="s-link-btn" onClick={() => save(() => updateProfile({ avatar: '' }))}>Remove</button>}
+            </div>
+            {pickErr && <small role="alert" style={{ color: 'crimson' }}>{pickErr}</small>}
           </div>
         </div>
         <Row label="Name" htmlFor="set-name"><TextField id="set-name" value={user?.name} maxLength={80} onSave={(v) => v && save(() => updateProfile({ name: v }))} /></Row>
@@ -93,13 +111,13 @@ export function AccountsSection() {
       <Card id="set-accounts" title="Accounts on this device" hint="Switch between accounts without typing a password. Up to three are kept on this computer.">
         <ul className="s-set-accts">
           <li className="on">
-            <span className="s-set-avatar sm" aria-hidden="true">{initialOf(user)}</span>
+            <span className="s-set-avatar sm" aria-hidden="true"><Avatar src={user?.avatar} fallback={initialOf(user)} /></span>
             <span className="grow"><b>{user?.name || user?.email}</b><small>{user?.email}</small></span>
             <span className="s-set-pill"><Check size={13} strokeWidth={3} /> Using now</span>
           </li>
           {others.map((a) => (
             <li key={a.id}>
-              <span className="s-set-avatar sm" aria-hidden="true">{initialOf(a)}</span>
+              <span className="s-set-avatar sm" aria-hidden="true"><Avatar src={a.avatar} fallback={initialOf(a)} /></span>
               <span className="grow"><b>{a.name || a.email}</b><small>{a.email}</small></span>
               <button type="button" className="s-outline s-set-btn" onClick={() => switchTo(a)}>Switch</button>
               <button type="button" className="s-link-btn" aria-label={`Remove ${a.email} from this device`} onClick={() => remove(a)}>Remove</button>

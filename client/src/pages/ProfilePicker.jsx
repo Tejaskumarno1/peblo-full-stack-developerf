@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, X } from 'lucide-react';
+import Avatar from '../components/Avatar';
 import { useAuth, getSavedAccounts, forgetAccount, clearAccountData } from '../context/AuthContext';
 import { setToken, clearToken } from '../api/token';
 import '../styles/profiles.css';
@@ -53,7 +54,7 @@ export default function ProfilePicker() {
         {accounts.map((a) => (
           <li key={a.id}>
             <button type="button" className={'pp-card' + (a.id === me ? ' current' : '')} onClick={() => (manage && a.id !== me ? null : pick(a))} aria-label={'Open ' + (a.name || a.email)}>
-              <span className="pp-av" style={{ background: 'hsl(' + hueOf(a.id) + ' 70% 86%)', color: 'hsl(' + hueOf(a.id) + ' 55% 26%)' }}>{initial(a)}</span>
+              <span className="pp-av" style={{ background: 'hsl(' + hueOf(a.id) + ' 70% 86%)', color: 'hsl(' + hueOf(a.id) + ' 55% 26%)' }}><Avatar src={a.avatar} fallback={initial(a)} /></span>
               <b>{a.name || a.email}</b>
               <small>{a.name ? a.email : ''}{a.id === me ? (a.name ? ' · ' : '') + 'Signed in now' : ''}</small>
             </button>

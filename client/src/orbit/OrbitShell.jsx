@@ -11,6 +11,7 @@ import OrbitTopics from './OrbitTopics';
 import OrbitBackup from './OrbitBackup';
 import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject, setDateFormat } from './orbitUtils';
 import { initialsOf } from '../river/riverUtils';
+import Avatar from '../components/Avatar';
 import './orbit.css';
 
 const OrbitContext = createContext(null);
@@ -172,7 +173,7 @@ function OrbitTop({ data }) {
         <Plus size={20} strokeWidth={2.4} />
       </button>
       <div className="o-menu-wrap" ref={menuRef}>
-        <button type="button" className="o-avatar" aria-label="Your menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>{initialsOf(user?.name)}</button>
+        <button type="button" className="o-avatar" aria-label="Your menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}><Avatar src={user?.avatar} fallback={initialsOf(user?.name)} /></button>
         {menu && (
           <div className="o-pop right" role="menu" style={{ width: 230 }}>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>

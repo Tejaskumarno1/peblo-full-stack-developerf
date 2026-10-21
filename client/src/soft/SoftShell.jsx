@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Avatar from '../components/Avatar';
 import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
 import { firstNameOf } from './softUtils';
@@ -50,7 +51,7 @@ export default function SoftShell({ children, onOpenSettings }) {
         <button type="button" className="soft-round" aria-label={`Switch to ${nextTheme} theme`} title="Theme" onClick={() => setTheme(nextTheme)}>
           <ThemeIcon size={19} />
         </button>
-        <button type="button" className="soft-avatar" aria-label="Settings" title="Settings" onClick={onOpenSettings}>{initial}</button>
+        <button type="button" className="soft-avatar" aria-label="Settings" title="Settings" onClick={onOpenSettings}><Avatar src={user?.avatar} fallback={initial} /></button>
       </header>
 
       {children}

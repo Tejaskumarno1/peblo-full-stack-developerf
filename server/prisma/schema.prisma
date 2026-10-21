@@ -24,6 +24,7 @@ model User {
   // Profile & Settings
   jobTitle     String?  @map("job_title")
   bio          String?  @db.Text
+  avatar       String?  @db.Text
   timezone     String   @default("UTC")
   settings     Json
 

@@ -32,3 +32,14 @@ html .soft.s-skin-orbit .s-set-card { border-radius: 10px; border: 1px solid var
 html .soft.s-skin-orbit .s-set-link { color: var(--o-fg2); border-radius: 8px; }
 html .soft.s-skin-orbit .s-set-link.on { background: var(--o-ink); color: var(--o-on-ink); }
 html .soft.s-skin-orbit .s-set-status { background: var(--o-path-soft); color: var(--o-path-ink); }
+
+/* Segmented controls stay one row in every style; rows wrap instead of squeezing them. */
+html .soft.s-skin .s-set-row { flex-wrap: wrap; }
+html .soft.s-skin .s-set-row-ctl { flex-shrink: 0; max-width: 100%; }
+html .soft.s-skin .s-sg { display: inline-flex; flex-direction: row; flex-wrap: nowrap; align-items: center; width: auto; height: auto; flex: 0 0 auto; overflow: hidden; border-radius: 999px; padding: 3px; gap: 2px; }
+html .soft.s-skin .s-sg button { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; min-width: 0; flex: 0 0 auto; white-space: nowrap; margin: 0; border-radius: 999px; line-height: 1.2; }
+html .soft.s-skin-orbit .s-sg, html .soft.s-skin-orbit .s-sg button { border-radius: 8px; }
+
+/* Orbit: settings cover the map completely. */
+.o-page:has(.s-skin-orbit) { left: 0; right: 0; top: 0; bottom: 0; padding: 92px 24px 20px; background: var(--o-bg); overflow: hidden; }
+html .soft.s-skin-orbit { background: var(--o-bg); }

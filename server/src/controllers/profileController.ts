@@ -17,7 +17,7 @@ export async function getProfile(req: Request, res: Response, next: NextFunction
 
 export async function updateProfile(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, email, jobTitle, bio, timezone, settings, currentPassword } = req.body;
+    const { name, email, jobTitle, bio, avatar, timezone, settings, currentPassword } = req.body;
     const userId = req.user!.id;
 
     // Sizes and types (PEB-66): nothing unbounded is stored.
@@ -25,6 +25,8 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     if (name !== undefined && typeof name !== 'string') return bad('Name must be text.');
     if (jobTitle !== undefined && (typeof jobTitle !== 'string' || jobTitle.length > 100)) return bad('Job title must be text of at most 100 characters.');
     if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) return bad('Bio must be text of at most 500 characters.');
+    // Profile picture: a small WebP data address, or empty to remove it.
+    if (avatar !== undefined && avatar !== null && avatar !== '' && (typeof avatar !== 'string' || !/^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(avatar) || avatar.length > 200_000)) return bad('The profile picture must be a WebP image under 150 KB.');
     if (timezone !== undefined && timezone !== '' && !validZone(timezone)) return bad('Unknown time zone.');
     if (settings !== undefined && (typeof settings !== 'object' || settings === null || Array.isArray(settings) || JSON.stringify(settings).length > 20_000)) return bad('Settings must be an object of at most 20 KB.');
 
@@ -64,6 +66,7 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
         ...(newEmail !== undefined && { email: newEmail }),
         ...(jobTitle !== undefined && { jobTitle }),
         ...(bio !== undefined && { bio }),
+        ...(avatar !== undefined && { avatar: avatar || null }),
         ...(timezone !== undefined && { timezone }),
         ...(mergedSettings && { settings: mergedSettings }),
       },
