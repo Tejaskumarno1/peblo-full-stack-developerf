@@ -63,6 +63,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   const [override, setOverride] = useState(null); // a free slot picked from the clash list
   const [noLink, setNoLink] = useState(false); // the person removed the suggested note
   const inputRef = useRef(null);
+  const formRef = useRef(null);
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes', 'capture-link'],
     queryFn: () => notesAPI.getAll({ sort: 'updated', snippet: '1' }).then((r) => r.data.notes || []),
@@ -77,6 +78,25 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
     window.addEventListener('focus', reset);
     document.addEventListener('visibilitychange', reset);
     return () => { window.removeEventListener('focus', reset); document.removeEventListener('visibilitychange', reset); };
+  }, [windowMode]);
+
+  // In the Ctrl+Shift+Space window the card grows the window with it, so the chips and the clash list are never cut off.
+  useEffect(() => {
+    if (!windowMode || !formRef.current || typeof ResizeObserver === 'undefined') return undefined;
+    const el = formRef.current;
+    const fit = () => {
+      const want = Math.max(200, Math.ceil(el.getBoundingClientRect().height));
+      const have = document.documentElement.clientHeight;
+      const cw = document.documentElement.clientWidth;
+      const z = window.outerWidth && cw ? window.outerWidth / cw : 1; // the window's zoom
+      if (Math.abs(want - have) > 1) {
+        try { window.resizeTo(window.outerWidth, Math.round(window.outerHeight + (want - have) * z)); } catch { /* not a resizable window */ }
+      }
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    fit();
+    return () => ro.disconnect();
   }, [windowMode]);
 
   // A time picked on the river wins over what the line says.
@@ -202,7 +222,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
   };
 
   return (
-    <form className={`r-capture${windowMode ? ' window' : ''}`} onSubmit={save} onKeyDown={onKeyDown}>
+    <form ref={formRef} className={`r-capture${windowMode ? ' window' : ''}`} onSubmit={save} onKeyDown={onKeyDown}>
       <div className="r-capture-top">
         <div className="r-seg" role="tablist" aria-label="What to capture">
           {modes.map((m) => (
