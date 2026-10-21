@@ -57,10 +57,15 @@ function Styled({ other: Other, ...byStyle }) {
   return <Screen />;
 }
 
-/** Soft Studio has a full Settings page; River and Orbit keep the Settings window. */
+const RiverSettings = lazy(() => import('./river/RiverSettings'));
+const OrbitSettings = lazy(() => import('./orbit/OrbitSettings'));
+/** Soft Studio, River and Orbit share one Settings page (same data, each in its own look); the older style keeps the window. */
 function SettingsRoute() {
   const { uiStyle } = useAuth();
-  useEffect(() => { if (uiStyle !== 'soft') window.dispatchEvent(new Event('peblo:open-settings')); }, [uiStyle]);
+  const other = !['soft', 'river', 'orbit'].includes(uiStyle);
+  useEffect(() => { if (other) window.dispatchEvent(new Event('peblo:open-settings')); }, [other]);
+  if (uiStyle === 'river') return <RiverSettings />;
+  if (uiStyle === 'orbit') return <OrbitSettings />;
   return uiStyle === 'soft' ? <SoftSettings /> : <Navigate to="/" replace />;
 }
 

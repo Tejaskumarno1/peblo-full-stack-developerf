@@ -5,6 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import { SaveCtx } from './settings/ui';
 import { ProfileSection, AccountsSection, AppearanceSection, NotesSection } from './settings/sections1';
 import { AISection, ConnectSection, SharedSection, DataSection, ShortcutsSection, AboutSection } from './settings/sections2';
+import './soft.css';
+import './soft2.css';
+import './settingsSkins.css';
 
 const GROUPS = [
   { label: 'You', items: [
@@ -46,7 +49,8 @@ const SUBS = {
 GROUPS.forEach((g) => { g.tone = TONES[g.label]; g.items.forEach((i) => { i.sub = SUBS[i.id]; }); });
 const ALL = GROUPS.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })));
 
-export default function SoftSettings() {
+/** Settings for every style: Soft Studio draws it as itself, River and Orbit wear their own colours and fonts (skin). */
+export default function SoftSettings({ skin = 'soft' }) {
   const { section } = useParams();
   const navigate = useNavigate();
   const { updateSettings } = useAuth();
@@ -76,7 +80,7 @@ export default function SoftSettings() {
   const View = current.view;
 
   return (
-    <div className="soft-page s-set">
+    <div className={skin === 'soft' ? 'soft-page s-set' : `soft s-skin s-skin-${skin} s-set`}>
       <div className="s-set-body">
         <nav className="s-set-nav" aria-label="Settings sections">
           <h1 className="s-set-h1">Settings</h1>

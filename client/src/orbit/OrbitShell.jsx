@@ -185,7 +185,7 @@ function OrbitTop({ data }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:backup')); }}>Back up everything</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:restore')); }}>Restore from a backup</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/settings/profile'); }}>Settings</button>
           </div>
         )}
       </div>

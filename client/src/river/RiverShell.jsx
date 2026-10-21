@@ -70,7 +70,7 @@ export function RiverHeader({ children, tools }) {
             <button type="button" role="menuitem" onClick={() => fileRef.current?.click()}>Import calendar (.ics)</button>
             {calMsg && <span className="empty" role="status">{calMsg}</span>}
             <input ref={fileRef} type="file" accept=".ics,text/calendar" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importCalendar(f).then((r) => { say('Added ' + r.added + ' meeting' + (r.added === 1 ? '' : 's') + (r.skipped ? ', skipped ' + r.skipped : '')); qc.invalidateQueries({ queryKey: ['todos'] }); }).catch(() => say('Could not read that file')); }} />
-        <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:open-settings')); }}>Settings</button>
+        <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/settings/profile'); }}>Settings</button>
           </div>
         )}
       </div>
