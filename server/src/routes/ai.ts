@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateSummary, extractActions, suggestTitle, suggestTagForNote, processBlockAI, processVoiceCommand, getLinkPreview } from '../controllers/aiController.js';
+import { generateSummary, extractActions, suggestTitle, suggestTagForNote, processBlockAI, transcribe, getLinkPreview } from '../controllers/aiController.js';
 import { authenticate } from '../middleware/auth.js';
 import { checkOllama } from '../services/aiService.js';
 import { aiLimit } from '../middleware/rateLimit.js';
@@ -78,7 +78,7 @@ router.post('/local/cancel', (req, res) => {
   if (hosted()) return res.status(403).json({ error: 'Local AI is only available in the desktop app.' });
   res.json({ ok: cancelPull(String(req.body?.model || '')) });
 });
-router.post('/voice-command', ...aiLimit, processVoiceCommand);
+router.post('/transcribe', ...aiLimit, transcribe);
 
 // Mounted at /api/notes: AI actions on one note or one block of text
 export const noteAiRoutes = Router();

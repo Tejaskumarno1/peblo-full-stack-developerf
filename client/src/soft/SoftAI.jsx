@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer } from '../hooks/useHubChat';
+import { MicButton, SpeakButton } from '../components/VoiceButtons';
 
 const TILTS = [-1.5, 1.2, -0.6, 0.9, -1];
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make flashcards from this'];
@@ -115,6 +116,7 @@ export default function SoftAI() {
                     <>
                       <button type="button" className="s-act" onClick={() => saveAsNote(m)}>Save as note</button>
                       <button type="button" className="s-act" onClick={() => copy(m)}>{copied === m.id ? 'Copied' : 'Copy'}</button>
+              <SpeakButton className="s-act" text={m.content} />
                       <button type="button" className="s-act" onClick={() => regenerate(m)}>Try again</button>
                     </>
                   )}
@@ -140,6 +142,7 @@ export default function SoftAI() {
               placeholder={active?.messages.length ? 'Ask a follow-up…' : 'Ask about your notes, tasks and calendar…'}
               autoComplete="off"
             />
+            <MicButton className="s-send big" onText={(t) => setInput((v) => (v ? v + ' ' : '') + t)} />
             {streaming ? (
               <button type="button" className="s-send big" aria-label="Stop" onClick={stop}><Square size={15} fill="currentColor" /></button>
             ) : (

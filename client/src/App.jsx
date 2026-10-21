@@ -46,7 +46,6 @@ const GoHome = () => <Navigate to="/" replace />;
 
 // Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
-const AiVoiceCallManager = lazy(() => import('./components/AiVoiceCallManager'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
@@ -83,7 +82,6 @@ function ShellLayout() {
     <AppShell>
       <Suspense fallback={<Loader />}><Outlet /></Suspense>
       <Suspense fallback={null}>
-        <AiVoiceCallManager />
         <SeriesScopeDialog />
         <CommandPalette />
         <HelpDialog />

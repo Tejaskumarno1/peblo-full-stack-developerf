@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer, groupLabel } from '../../hooks/useHubChat';
+import { MicButton, SpeakButton } from '../VoiceButtons';
 
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make a checklist from this'];
 
@@ -118,6 +119,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
                   <>
                     <button type="button" onClick={() => saveAsNote(m)}>Save as note</button>
                     <button type="button" onClick={() => copy(m)}>{copied === m.id ? 'Copied' : 'Copy'}</button>
+              <SpeakButton text={m.content} />
                     <button type="button" onClick={() => regenerate(m)}>Try again</button>
                   </>
                 )}
@@ -142,6 +144,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
               placeholder={active?.messages.length ? 'Ask a follow-up…' : 'Ask about your notes, tasks and calendar…'}
               autoComplete="off"
             />
+            <MicButton className={c('icon-btn')} onText={(t) => setInput((v) => (v ? v + ' ' : '') + t)} />
             {streaming ? (
               <button type="button" className={c('icon-btn')} aria-label="Stop" onClick={stop}><Square size={15} fill="currentColor" /></button>
             ) : (

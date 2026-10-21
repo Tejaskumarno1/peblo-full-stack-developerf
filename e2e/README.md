@@ -20,7 +20,6 @@ focus.mjs = keyboard focus shows a solid 2px outline at every Tab stop in all 5 
 parity.mjs = week start (Monday/Sunday) in Tasks, Calendar and Soft; the style follows the account onto a new device and is saved when picked (PEB-90).
 series.mjs = repeating task is one series: delete asks this / following / all, Cancel changes nothing, "Every weekday" in the Calendar (PEB-76).
 themeflash.mjs = the saved theme is applied before the app script runs: dark/midnight/system in all 5 styles (PEB-102).
-calls.mjs = AI voice call: Call me now, snooze brings back the same agenda, all-day tasks read as today, setting turns calls off (PEB-81).
 riverfix.mjs = River: a failed tick shows a message and rolls back; "+ N more" on a deep stack reaches the hidden meeting (PEB-85).
 security.mjs = Content-Security-Policy: no violation in any style or page, injected inline script / onerror do not run (PEB-65).
 aioff.mjs = Settings > AI Providers > "Turn off all AI": saved on the account, status line says AI is off, server refuses AI, calls disabled, unticking restores it (PEB-106).

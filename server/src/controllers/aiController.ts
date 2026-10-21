@@ -112,122 +112,14 @@ export async function processBlockAI(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function processVoiceCommand(req: Request, res: Response, next: NextFunction) {
+/** Speech to text for the AI assistant's microphone: a short WAV recording in, the words out. */
+export async function transcribe(req: Request, res: Response, next: NextFunction) {
   try {
-    const { transcript, timezone, localTime } = req.body;
-    if (!transcript) {
-      return res.status(400).json({ error: "Transcript is required" });
-    }
-
-    // Fetch user's current incomplete tasks and active notes to provide context to the AI
-    const [tasks, notes] = await Promise.all([
-      prisma.todo.findMany({
-        where: { userId: req.user!.id, completed: false },
-        select: { id: true, text: true, deadline: true }
-      }),
-      prisma.note.findMany({
-        where: { ...aiReadableWhere(req.user!.id), isArchived: false }, // no Trash, no #private
-        select: { id: true, title: true }
-      })
-    ]);
-
-    // Send to Gemini
-    const result = await aiService.processVoiceCallCommand(req.user!.id, transcript, tasks, notes, localTime, timezone);
-
-    // Execute the actions returned by AI if clarification is not needed
-    let isSnooze = false;
-    let snoozeMinutes = 10;
-
-    if (!result.needClarification && result.actions && Array.isArray(result.actions)) {
-      const applied: any[] = [];
-      for (const action of result.actions) {
-        try {
-        if (action.type === 'RESCHEDULE' && action.taskId) {
-          const when = new Date(action.newDate);
-          if (Number.isNaN(when.getTime())) continue; // a date the assistant garbled: skip it, keep the rest
-          const r = await prisma.todo.updateMany({
-            where: { id: action.taskId, userId: req.user!.id },
-            data: { deadline: when }
-          });
-          if (r.count === 0) continue; // not this person's task (or gone)
-        } else if (action.type === 'COMPLETE' && action.taskId) {
-          const r = await prisma.todo.updateMany({
-            where: { id: action.taskId, userId: req.user!.id },
-            data: { completed: true }
-          });
-          if (r.count === 0) continue;
-        } else if (action.type === 'CREATE' && action.text) {
-          await prisma.todo.create({
-            data: {
-              userId: req.user!.id,
-              text: action.text,
-              completed: false,
-              deadline: action.newDate ? new Date(action.newDate) : null,
-              priority: 'medium',
-              todoTags: []
-            }
-          });
-        } else if (action.type === 'CREATE_NOTE' && action.content) {
-          const newNote = await prisma.note.create({
-            data: {
-              userId: req.user!.id,
-              title: action.title || 'Untitled Voice Note',
-              content: action.content || '',
-              category: 'Voice Notes'
-            }
-          });
-          if (action.tags && action.tags.length > 0) {
-            await syncTags(req.user!.id, newNote.id, action.tags);
-          }
-          saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
-        } else if (action.type === 'READ_NOTE' && action.noteId) {
-          const note = await prisma.note.findFirst({
-            where: { ...aiReadableWhere(req.user!.id), id: action.noteId }
-          });
-          if (note) {
-            const summaryText = await aiService.generateVerbalNoteSummary(req.user!.id, note.title, note.content);
-            result.responseSpeech = `Here is a summary of your note "${note.title}": ${summaryText}`;
-          } else {
-            result.responseSpeech = "Sorry, I couldn't find that note in your database.";
-          }
-        } else if (action.type === 'SNOOZE') {
-          isSnooze = true;
-          snoozeMinutes = action.minutes || 10;
-        }
-        applied.push(action);
-        } catch (err) {
-          // One bad action must not undo or hide the ones that already went through
-          console.error('Voice action failed:', action?.type, err instanceof Error ? err.message : err);
-        }
-      }
-      result.actions = applied;
-
-      // Broadcast changes if any actions were taken (and it's not just a snooze)
-      const nonSnoozeActions = result.actions.filter((a: any) => a.type !== 'SNOOZE');
-      if (nonSnoozeActions.length > 0) {
-        const io = req.app.get('io');
-        if (io) {
-          const hasTodo = nonSnoozeActions.some((a: any) => ['COMPLETE', 'RESCHEDULE', 'CREATE'].includes(a.type));
-          const hasNote = nonSnoozeActions.some((a: any) => a.type === 'CREATE_NOTE');
-          if (hasTodo) io.to(req.user!.id).emit('todos_changed');
-          if (hasNote) io.to(req.user!.id).emit('notes_changed');
-        }
-      }
-    } else if (result.needClarification && result.actions) {
-      const snoozeAction = result.actions.find((a: any) => a.type === 'SNOOZE');
-      if (snoozeAction) {
-        isSnooze = true;
-        snoozeMinutes = snoozeAction.minutes || 10;
-      }
-    }
-
-    res.json({ 
-      responseSpeech: result.responseSpeech || "Done!",
-      needClarification: !!result.needClarification,
-      snooze: isSnooze,
-      snoozeMinutes,
-      actions: result.actions
-    });
+    const { audio, mime } = req.body || {};
+    if (typeof audio !== 'string' || audio.length < 8) return res.status(400).json({ error: 'No recording was sent.' });
+    if (audio.length > 6_000_000) return res.status(413).json({ error: 'That recording is too long. Keep it under a minute.' });
+    const text = await aiService.transcribeAudio(req.user!.id, audio, typeof mime === 'string' ? mime : 'audio/wav');
+    res.json({ text });
   } catch (error) {
     next(error);
   }

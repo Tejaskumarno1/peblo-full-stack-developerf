@@ -473,8 +473,8 @@ try {
     // 5 + 6. AI routes exist once; unknown API paths answer JSON
     r = await call('POST', '/api/notes/voice-command', { transcript: 'hi' });
     check('the AI router is no longer also mounted under /api/notes', r.status === 404, r.status);
-    r = await call('POST', '/api/ai/voice-command', { transcript: 'hi' });
-    check('voice commands are served under /api/ai (where the app calls them)', r.status !== 404, r.status);
+    r = await call('POST', '/api/ai/transcribe', { audio: 'x' });
+    check('speech to text is served under /api/ai (where the app calls it)', r.status !== 404, r.status);
     const nf = await rawFetch(base + '/api/this-does-not-exist');
     check('an unknown API path answers JSON 404 even without signing in', nf.status === 404 && /json/.test(nf.headers.get('content-type') || ''), nf.status);
     token = savedToken;
@@ -930,7 +930,7 @@ check('a limit of 0 switches it off', off.every((s) => s === 200));
 await new Promise((r) => miniServer.close(r));
 
 // the real server: AI routes are behind sign-in, so the limiter never sees anonymous callers
-const anon = await rawFetch(base + '/api/ai/voice-command', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+const anon = await rawFetch(base + '/api/ai/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
 check('AI routes still need sign-in (401 before any limit)', anon.status === 401);
 const sawAi = []; for (let i = 0; i < 3; i++) sawAi.push((await call('POST', '/api/notes/block/ai', { text: 'x', action: 'improve' })).status);
 check('the real AI route is reachable inside the limits', sawAi.every((s) => s !== 429), sawAi.join());
@@ -1045,13 +1045,6 @@ r64 = await call('POST', '/api/ai/chat', { message: 'add this', mode: 'append', 
 check('chat on a #private note is refused', r64.status === 400 && /#private/.test(r64.json.error), r64);
 r64 = await call('POST', '/api/ai/chat', { message: 'add this', mode: 'append', noteId: trashN.id });
 check('chat on a note in the Trash is refused', r64.status === 404, r64);
-
-// voice: the assistant is not told about, or asked to read out, a #private note
-asked.length = 0;
-fakeAnswer = JSON.stringify({ responseSpeech: 'Reading it', needClarification: false, actions: [{ type: 'READ_NOTE', noteId: secretN.id }] });
-r64 = await call('POST', '/api/ai/voice-command', { transcript: 'read my secret diary' });
-check('voice: the model is not told the titles of #private or Trash notes', !/Secret diary/.test(asked.map((a) => a.text).join(' ')) && !/Old trashed thing/.test(asked.map((a) => a.text).join(' ')));
-check('voice: reading a #private note aloud is refused', r64.status === 200 && /couldn't find/i.test(r64.json.responseSpeech) && asked.length === 1, r64.json);
 
 // "Local only" cannot be overridden by a named cloud model plus a yes
 process.env.OPENAI_BASE_URL = `${url2}/v1`;
@@ -1170,7 +1163,7 @@ const routes3 = [
   ['POST', `/api/notes/${n3.id}/ai/actions`, { content: 'x' }],
   ['POST', `/api/notes/${n3.id}/ai/tags`, { content: 'x' }],
   ['POST', '/api/notes/block/ai', { text: 'x', command: 'improve' }],
-  ['POST', '/api/ai/voice-command', { transcript: 'what is due today' }],
+  ['POST', '/api/ai/transcribe', { audio: 'AAAAAAAA' }],
   ['POST', '/api/ai/chat', { message: 'hello' }],
   ['POST', '/api/ai/chat-stream', { message: 'hello' }],
   ['POST', '/api/ai/smart-intake', { rawData: 'meeting notes about the launch' }],

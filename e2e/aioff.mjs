@@ -30,7 +30,6 @@ try {
   check('the server refuses AI whatever the page does (403)', hub.status === 403, hub.status);
 
   await openSettings('Preferences');
-  check('"Call me now" is disabled while AI is off', await page.locator('#call-me-now').isDisabled());
   await closeSettings();
 
   await openSettings('AI Providers');

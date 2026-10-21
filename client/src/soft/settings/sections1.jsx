@@ -6,7 +6,7 @@ import { authAPI } from '../../api';
 import { getToken, setToken, clearToken } from '../../api/token';
 import { Card, Row, Switch, Seg, TextField, Confirm, useSave } from './ui';
 import Avatar from '../../components/Avatar';
-import { avatarToWebp } from '../../utils/avatar';
+import AvatarCropper from '../../components/AvatarCropper';
 
 const initialOf = (u) => (String(u?.name || u?.email || 'You').trim().charAt(0) || 'Y').toUpperCase();
 
@@ -15,13 +15,14 @@ export function ProfileSection() {
   const save = useSave();
   const fileRef = useRef(null);
   const [pickErr, setPickErr] = useState('');
-  const pick = async (e) => {
+  const [cropFile, setCropFile] = useState(null);
+  const pick = (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    if (!/^image\//.test(f.type)) { setPickErr('Choose a picture file.'); return; }
     setPickErr('');
-    try { const data = await avatarToWebp(f); save(() => updateProfile({ avatar: data })); }
-    catch (err) { setPickErr(err.message || 'Could not use that picture.'); }
+    setCropFile(f);
   };
   return (
     <>
@@ -37,6 +38,7 @@ export function ProfileSection() {
               {user?.avatar && <button type="button" className="s-link-btn" onClick={() => save(() => updateProfile({ avatar: '' }))}>Remove</button>}
             </div>
             {pickErr && <small role="alert" style={{ color: 'crimson' }}>{pickErr}</small>}
+            {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onSave={async (data) => { const ok = await updateProfile({ avatar: data }); if (ok) setCropFile(null); else throw new Error('Could not save the picture. Try again.'); }} />}
           </div>
         </div>
         <Row label="Name" htmlFor="set-name"><TextField id="set-name" value={user?.name} maxLength={80} onSave={(v) => v && save(() => updateProfile({ name: v }))} /></Row>
@@ -220,11 +222,6 @@ export function NotesSection() {
       <Card title="Calendar">
         <Row label="Week starts on">
           <Seg label="Week starts on" value={settings?.weekStart === 'sun' ? 'sun' : 'mon'} onChange={(v) => save({ weekStart: v })} options={[{ id: 'mon', label: 'Monday' }, { id: 'sun', label: 'Sunday' }]} />
-        </Row>
-      </Card>
-      <Card title="Voice">
-        <Row label="Voice calls with Peblo" hint="Talk to your notes. Needs a microphone.">
-          <Switch label="Voice calls" checked={settings?.voiceCalls !== false} onChange={(v) => save({ voiceCalls: v })} />
         </Row>
       </Card>
     </>

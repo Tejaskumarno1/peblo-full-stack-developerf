@@ -240,7 +240,7 @@ function createWindow() {
   mainWindow.loadURL(appUrl('/'));
   secureWebContents(mainWindow);
 
-  // Microphone for voice notes / AI voice calls; nothing else is granted.
+  // Microphone for dictating to the AI assistant; nothing else is granted.
   const allowedPermission = (permission) => ['media', 'clipboard-sanitized-write', 'notifications'].includes(permission);
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(allowedPermission(permission));

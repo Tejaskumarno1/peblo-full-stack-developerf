@@ -21,3 +21,25 @@
 .r-avatar, .o-avatar, .soft-avatar, .pp-av, .s-set-avatar { overflow: hidden; }
 .s-set-who-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .s-set-avatar.big { width: 76px; height: 76px; font-size: 30px; }
+
+/* Picture cropper */
+.pb-crop-back { position: fixed; inset: 0; z-index: 3000; background: rgba(20, 16, 14, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pb-crop { width: min(380px, 100%); max-height: 100%; overflow: auto; background: #fff; color: #1d1917; border-radius: 18px; padding: 16px 18px 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); font: 14px/1.4 system-ui, sans-serif; }
+.pb-crop-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.pb-crop-head button { border: 0; background: transparent; cursor: pointer; color: inherit; display: inline-flex; padding: 4px; border-radius: 8px; }
+.pb-crop-stage { display: flex; justify-content: center; background: #efe9e4; border-radius: 12px; padding: 14px 0; }
+.pb-crop-win { position: relative; overflow: hidden; background: #cfc7c0; touch-action: none; cursor: grab; border-radius: 6px; outline: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); user-select: none; }
+.pb-crop-win.round { border-radius: 50%; }
+.pb-crop-win:active { cursor: grabbing; }
+.pb-crop-win img { position: absolute; left: 50%; top: 50%; max-width: none; pointer-events: none; }
+.pb-crop-tools { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.pb-crop-aspects { display: flex; gap: 6px; flex-wrap: wrap; }
+.pb-crop-aspects button, .pb-crop-rot, .pb-crop-btn { border: 1px solid #d8d0c9; background: #fff; color: inherit; border-radius: 999px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pb-crop-aspects button.on, .pb-crop-btn.main { background: #1d1917; border-color: #1d1917; color: #fff; }
+.pb-crop-btn.main:disabled { opacity: .5; cursor: default; }
+.pb-crop-rot { align-self: flex-start; }
+.pb-crop-zoom { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.pb-crop-zoom input { flex: 1; }
+.pb-crop-hint { margin: 10px 0 0; color: #6f655e; font-size: 12.5px; }
+.pb-crop-err { margin: 8px 0 0; color: #c0392b; }
+.pb-crop-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

@@ -897,78 +897,21 @@ ${text}`;
   }
 }
 
-export async function processVoiceCallCommand(
-  userId: string,
-  transcript: string, 
-  currentTasks: any[], 
-  currentNotes: any[], 
-  localTime?: string, 
-  timezone?: string
-): Promise<any> {
-  const tasksContext = JSON.stringify(currentTasks.map(t => ({ id: t.id, text: t.text, deadline: t.deadline })));
-  const notesContext = JSON.stringify(currentNotes.map(n => ({ id: n.id, title: n.title })));
-  
-  const userLocalTime = localTime || new Date().toString();
-  const userTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  const prompt = `You are a helpful AI voice assistant for a productivity app.
-The user has spoken this command over a voice call: "${transcript}"
-
-Here are the user's current tasks for today:
-${tasksContext}
-
-Here are the user's existing workspace notes:
-${notesContext}
-
-User's Local Time is: ${userLocalTime}
-User's Timezone is: ${userTimezone}
-
-Determine the user's intent. They can request any of the following:
-1. COMPLETE: Mark a task as done.
-2. RESCHEDULE: Move a task to a new time.
-3. CREATE: Create a new task.
-4. SNOOZE: Postpone the call.
-5. CREATE_NOTE: Create a new workspace note (e.g. "Create a note about setup" or "Write a note detailing project guidelines"). 
-6. READ_NOTE: Read/summarize an existing note. If the user asks to read/summarize a note (e.g. "What did I write in my workout note?" or "Read note about shopping list"), find the best matching note in the list of existing notes.
-7. CLARIFY: If user request is ambiguous.
-
-Return ONLY a valid JSON object matching this structure:
-{
-  "actions": [
-    { "type": "COMPLETE", "taskId": "the-uuid" },
-    { "type": "RESCHEDULE", "taskId": "the-uuid", "newDate": "ISO-date-string" },
-    { "type": "CREATE", "text": "task text content", "newDate": "ISO-date-string (if specified, otherwise null)" },
-    { "type": "SNOOZE", "minutes": 10 },
-    { "type": "CREATE_NOTE", "title": "Note Title", "content": "Clean, structured Markdown content of the note based on the user's speech", "tags": ["tag1", "tag2"] },
-    { "type": "READ_NOTE", "noteId": "the-note-uuid" }
-  ],
-  "needClarification": false,
-  "responseSpeech": "What you should say back to the user out loud. If CREATE_NOTE: 'Done! I created a note titled styling setup for your workspace.' If READ_NOTE: 'Let me fetch that note details for you.'"
-}`;
-
-  try {
-    return await completeJSON('Voice Command', userId, 'You are a helpful AI voice assistant for a productivity app.', prompt);
-  } catch (err: any) {
-    if (err?.code === 'NO_AI_KEY') return { responseSpeech: 'AI is not set up yet. Add a key or turn on Local AI in Settings.', actions: [], needClarification: false };
-    console.error('Voice Call Error:', err);
-    return { responseSpeech: "Sorry, I couldn't process that command.", actions: [], needClarification: false };
+/** Speech to text for the AI assistant's microphone. Uses the person's Gemini key (or the server's) and sends the recording nowhere else. */
+export async function transcribeAudio(userId: string, base64: string, mime: string): Promise<string> {
+  const user: any = await prisma.user.findUnique({ where: { id: userId }, include: { apiKeys: true } });
+  const g = getGeminiInstance(user);
+  if (!g) {
+    const e: any = new Error('Speech to text needs a Gemini key. Add one in Settings, AI and models, or turn the AI off.');
+    e.status = 400;
+    throw e;
   }
-}
-
-export async function generateVerbalNoteSummary(userId: string, title: string, content: string): Promise<string> {
-  const prompt = `You are a voice assistant summarizing a note for a user over a voice call.
-The note title is: "${title}"
-The note content is:
-${content}
-
-Please provide a highly concise, 1-2 sentence speech-friendly summary of this note to read back to the user. Do not include markdown formatting, bullet points, or special characters (like asterisks). Keep it clear and natural.`;
-
-  try {
-    return await completeText('Verbal Summary', userId, 'You are a concise voice assistant.', prompt);
-  } catch (err) {
-    console.error('Note Summary Error:', err);
-    return "The note content could not be read.";
-  }
+  const model = g.getGenerativeModel({ model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL });
+  const out = await model.generateContent([
+    { inlineData: { mimeType: mime === 'audio/wav' || mime === 'audio/mpeg' || mime === 'audio/ogg' ? mime : 'audio/wav', data: base64 } },
+    { text: 'Transcribe this recording exactly as spoken. Reply with only the words, no quotes or commentary. If there is no speech, reply with nothing.' },
+  ]);
+  return out.response.text().trim();
 }
 
 export async function suggestTag(userId: string, title: string, content: string): Promise<{ suggested_tag: string }> {
