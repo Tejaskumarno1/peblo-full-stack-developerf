@@ -781,3 +781,6 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 
 .o-keep { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--o-fg2); cursor: pointer; white-space: nowrap; }
 .o-keep input { accent-color: var(--o-ink); }
+
+.o-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.o-attach .o-btn { height: 32px; }

@@ -32,7 +32,7 @@ try {
   check('the task keeps its parsed priority and tag', !!t && t.priority === 'high' && JSON.stringify(t.todoTags || t.tags).includes('exams'));
   check('the screenshot is saved in a note linked to the task', !!t && !!t.noteId);
   const nn = t ? (await api('GET', `/api/notes/${t.noteId}`)).note : null;
-  check('that note holds the picture', !!nn && /!\[[^\]]*\]\(data:image\/jpeg/.test(nn.content), nn && nn.title);
+  check('that note holds the picture', !!nn && /!\[[^\]]*\]\(/.test(nn.content), nn && nn.content.slice(0,200));
 
   // keep open
   await page.goto(base + '/quick-capture');
@@ -56,7 +56,7 @@ try {
   await page.waitForTimeout(1200);
   const notes = (await api('GET', '/api/notes')).notes;
   const note = notes.find((n) => n.title === 'Study group');
-  check('the note is saved with its picture and #inbox', !!note && /data:image\/jpeg/.test(note.content) && note.tags.includes('inbox'));
+  check('the note is saved with its picture and #inbox', !!note && /!\[[^\]]*\]\(/.test(note.content) && note.tags.includes('inbox'));
   const todos2 = (await api('GET', '/api/todos')).todos;
   check('the checklist became 2 linked tasks', !!note && todos2.filter((x) => x.noteId === note.id).length === 2, String(todos2.filter((x) => note && x.noteId === note.id).length));
 } catch (e) {

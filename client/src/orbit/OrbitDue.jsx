@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Network, Trash2, ChevronLeft, ChevronRight, CalendarClock, Pencil, ListChecks } from 'lucide-react';
 import { todosAPI } from '../api';
+import NewMeeting from '../components/NewMeeting';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
 import { useOrbit } from './OrbitShell';
@@ -386,6 +387,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             <button type="button" role="tab" aria-selected={view === 'time'} onClick={() => setView('time')}>Time</button>
           </div>
           <span className="grow" />
+          <NewMeeting className="o-btn ghost small" />
           <button type="button" className="o-btn ghost small" style={{ height: 44 }} onClick={back}><Network size={16} strokeWidth={2.2} /> Back to map</button>
         </header>
 

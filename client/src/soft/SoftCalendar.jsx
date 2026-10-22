@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { todosAPI } from '../api';
+import NewMeeting from '../components/NewMeeting';
 import { startOfWeek, weekdayNames } from '../utils/weekStart';
 import { startOfDay, addDays, sameDay, daysFromToday, spanOf, timeOf, toneOf, tagsOf, weekdayLong } from './softUtils';
 
@@ -91,6 +92,7 @@ export default function SoftCalendar() {
         <button type="button" className="s-round46" aria-label="Previous" onClick={() => move(-1)}>‹</button>
         <button type="button" className="s-pill46" onClick={() => setCursor(startOfDay())}>Today</button>
         <button type="button" className="s-round46" aria-label="Next" onClick={() => move(1)}>›</button>
+        <NewMeeting className="s-pill46" day={cursor} />
         <div className="s-seg small" role="tablist" aria-label="View">
           {['day', 'week', 'month'].map((v) => (
             <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{v[0].toUpperCase() + v.slice(1)}</button>
