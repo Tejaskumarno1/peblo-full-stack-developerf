@@ -1,0 +1,1 @@
+{"name":"peblo-mobile","private":true,"version":"1.0.0","scripts":{"sync":"cap sync android","open":"cap open android","apk":"cap sync android && cd android && gradlew.bat assembleDebug"},"dependencies":{"@capacitor/android":"^6.2.2","@capacitor/cli":"^6.2.2","@capacitor/core":"^6.2.2"}}
