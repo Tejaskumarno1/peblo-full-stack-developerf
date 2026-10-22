@@ -3,6 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
+import MeetingReminders from '../river/MeetingReminders';
 import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
 import { firstNameOf } from './softUtils';
@@ -55,6 +56,7 @@ export default function SoftShell({ children, onOpenSettings }) {
       </header>
 
       {children}
+      <div className="river" style={{ display: 'contents' }}><MeetingReminders /></div>
 
       <nav aria-label="Main" className="soft-dock">
         {DOCK.map(({ to, end, label, icon: Icon }) => (

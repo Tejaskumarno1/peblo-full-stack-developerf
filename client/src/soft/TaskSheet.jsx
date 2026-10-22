@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, FileText, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
+import TaskSteps from '../components/TaskSteps';
 import ShareDialog from './ShareDialog';
 import { tagsOf, addDays, startOfDay, snippetOf } from './softUtils';
 
@@ -59,6 +60,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [picking, setPicking] = useState(false);
   const [q, setQ] = useState('');
   const [saving, setSaving] = useState(false);
+  const [link, setLink] = useState(task.meta?.link || '');
+  const [steps, setSteps] = useState(task.meta?.subtasks || []);
   const [error, setError] = useState('');
 
   const { data: notes = [] } = useQuery({
@@ -103,7 +106,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
     try {
       const deadline = date ? new Date(`${date}T${time || '09:00'}`).toISOString() : null;
       const t = tagDraft.trim().replace(/^#/, '').toLowerCase();
-      await todosAPI.update(task.id, { text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null });
+      await todosAPI.update(task.id, { text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, meta: { link: link.trim() || null, subtasks: steps } });
       refresh();
       onChanged?.();
       onClose();
@@ -155,6 +158,16 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           {[['high', 'High', 'var(--s-accent)'], ['medium', 'Normal', 'var(--s-sky)'], ['low', 'Low', 'var(--s-mint)']].map(([p, name, dot]) => (
             <button key={p} type="button" role="radio" aria-checked={priority === p} className={priority === p ? 'on' : ''} onClick={() => setPriority(p)}><i style={{ background: dot }} />{name}</button>
           ))}
+        </div>
+      </section>
+
+      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} /></section>
+
+      <section className="s-sheet-sec" aria-label="Link">
+        <span className="s-sheet-lab">Link</span>
+        <div className="s-sheet-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Meeting or page link (https://…)" aria-label="Meeting or page link" maxLength={500} style={{ flex: 1, minWidth: 0 }} />
+          {/^https:\/\//i.test(link.trim()) && <a className="s-outline s-set-btn" href={link.trim()} target="_blank" rel="noopener noreferrer">Open</a>}
         </div>
       </section>
 

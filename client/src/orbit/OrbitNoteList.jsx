@@ -77,6 +77,10 @@ export default function OrbitNoteList({ onNew }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+  // Saved searches are shared with the other styles (same storage key).
+  const [savedQ, setSavedQ] = useState(() => read('peblo-saved-searches', []));
+  const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); write('peblo-saved-searches', n); };
+  const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); write('peblo-saved-searches', n); };
 
   const remember = (patch) => write(VIEW_KEY, { sort, groupBy, view, ...patch });
   const setSort = (v) => { setSortState(v); remember({ sort: v }); };
@@ -243,6 +247,7 @@ export default function OrbitNoteList({ onNew }) {
           <span className="grow" />
           <label htmlFor="o-note-search" className="o-sr">Search notes</label>
           <input id="o-note-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" />
+          {q.trim() && <button type="button" className="o-chip" onClick={saveSearch} disabled={savedQ.includes(q.trim())}>{savedQ.includes(q.trim()) ? 'Saved' : 'Save search'}</button>}
           <button type="button" className="o-btn small" style={{ height: 42 }} onClick={() => onNew(topic ? [topic] : space ? [space] : [])}>New note</button>
         </div>
 
@@ -280,6 +285,18 @@ export default function OrbitNoteList({ onNew }) {
           {groups.length > 1 && <button type="button" className="o-chip" onClick={() => setAll(!allOpen)}>{allOpen ? 'Collapse all' : 'Expand all'}</button>}
           {!archived && <button type="button" className={`o-chip${picking ? ' on' : ''}`} aria-pressed={picking} onClick={() => (picking ? stopPicking() : setPicking(true))}>{picking ? 'Cancel' : 'Select'}</button>}
         </div>
+
+        {savedQ.length > 0 && !archived && (
+          <div className="o-saved" role="group" aria-label="Saved searches">
+            <span>Saved searches</span>
+            {savedQ.map((t) => (
+              <span key={t} className={`o-saved-item${t === q.trim() ? ' on' : ''}`}>
+                <button type="button" onClick={() => setQ(t)}>{t}</button>
+                <button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="o-count" aria-live="polite">
           <span>{total} note{total === 1 ? '' : 's'}{filtering ? ' match' : ''}</span>

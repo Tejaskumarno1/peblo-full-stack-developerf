@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Check, Loader2, X } from 'lucide-react';
@@ -8,6 +8,8 @@ import useNoteDoc from '../hooks/useNoteDoc';
 import { RiverHeader, useDismiss } from './RiverShell';
 import { snippetOf } from '../soft/softUtils';
 import ShareDialog from '../soft/ShareDialog';
+import VersionDiff from '../soft/VersionDiff';
+import { relTime } from '../soft/softUtils';
 import '../soft/dialogs.css';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { startOfDay, addDays, sameDay, momentOf, dueMomentOf, isMeeting, clock, dayWord, fromNow } from './riverUtils';
@@ -37,6 +39,29 @@ function RiverNote({ note }) {
   const navigate2 = useNavigate();
   const qc2 = useQueryClient();
   const [shareOpen, setShareOpen] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
+  const [diffV, setDiffV] = useState(null);
+  const { data: versions = [] } = useQuery({
+    queryKey: ['notes', 'backups', doc?.id],
+    queryFn: () => notesAPI.getBackups(doc.id).then((r) => r.data.backups || r.data || []),
+    enabled: !!doc?.id && !doc?.isDraft && histOpen,
+  });
+  useEffect(() => {
+    if (!histOpen || diffV) return undefined;
+    const k = (e) => { if (e.key === 'Escape') setHistOpen(false); };
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  }, [histOpen, diffV]);
+  const askAbout = (text) => {
+    note.forceSave?.();
+    navigate2(`/ai?${new URLSearchParams({ q: text, note: doc.id, noteTitle: doc.title || 'This note' }).toString()}`);
+  };
+  const restoreVersion = async (v) => {
+    await notesAPI.revertBackup(doc.id, v.id);
+    const { data } = await notesAPI.get(doc.id);
+    note.open(data.note);
+    qc2.invalidateQueries({ queryKey: ['notes'] });
+  };
   const menuRef = useDismiss(menu, () => setMenu(false));
   const [tagDraft, setTagDraft] = useState(null);
   const [toast, setToast] = useState('');
@@ -246,6 +271,15 @@ function RiverNote({ note }) {
               setMenu(false);
               try { note.forceSave?.(); const { data } = await notesAPI.create({ title: 'Copy of ' + (doc.title || 'Untitled'), content: doc.content || '', tags: doc.tags || [] }); qc2.invalidateQueries({ queryKey: ['notes'] }); navigate2('/notes/' + data.note.id); } catch { setToast('Could not duplicate the note'); }
             }}>Duplicate</button>}
+            {!doc.isDraft && !doc.isDeleted && (
+              <>
+                <span className="r-pop-h">History and AI</span>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave?.(); setHistOpen(true); }}>Version history</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Summarise this note in a few short bullet points.'); }}>Summarise with AI</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Make 8 flashcards (question and answer) from this note.'); }}>Flashcards from this note</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('List the tasks and to-dos hidden in this note.'); }}>Find tasks in this note</button>
+              </>
+            )}
             <span className="r-pop-h">Download</span>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); exportMarkdown(doc).then(() => setToast('Downloaded as Markdown')); }}>Markdown (.md)</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); exportWord(doc).then(() => setToast('Downloaded as Word')); }}>Word (.doc)</button>
@@ -278,7 +312,21 @@ function RiverNote({ note }) {
             ))}
           </div>
           <div className="r-body">
-            {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
+            {histOpen && doc?.id && !diffV && (
+        <div className="pb-dlg-host">
+          <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setHistOpen(false); }} onKeyDown={(e) => { if (e.key === 'Escape') setHistOpen(false); }}>
+            <div className="s-share" role="dialog" aria-label="Version history">
+              <div className="s-share-head"><b>Version history</b><button type="button" aria-label="Close" onClick={() => setHistOpen(false)}>×</button></div>
+              {versions.length === 0 && <p className="s-share-msg">No earlier versions yet. They are kept as you edit.</p>}
+              {versions.slice(0, 12).map((v) => (
+                <button key={v.id} type="button" className="s-share-go" style={{ marginTop: 6, width: '100%' }} onClick={() => setDiffV(v)}>Compare with {relTime(v.createdAt)}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {diffV && doc?.id && <div className="pb-dlg-host"><VersionDiff doc={doc} version={diffV} onClose={() => { setDiffV(null); setHistOpen(false); }} onRestore={async (v) => { setDiffV(null); setHistOpen(false); await restoreVersion(v); }} /></div>}
+      {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
             <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
           </div>
         </article>

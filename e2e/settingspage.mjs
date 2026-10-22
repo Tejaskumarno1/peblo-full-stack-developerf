@@ -46,7 +46,9 @@ try {
   const r2 = await (await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `second-${Date.now()}@peblo.test`, password: 'correct horse battery', name: 'Second' }) })).json();
   await page.evaluate((a) => { const l = JSON.parse(localStorage.getItem('peblo-accounts')); l.push(a); localStorage.setItem('peblo-accounts', JSON.stringify(l)); }, { id: r2.user.id, email: r2.user.email, name: 'Second', token: r2.token });
   await page.reload();
-  await page.getByRole('button', { name: 'Switch', exact: true }).click();
+  // with two accounts saved, a reload lands on the "Who is using Peblo?" chooser
+  await page.getByText('Who is using Peblo?').waitFor({ timeout: 8000 });
+  await page.getByText('second-', { exact: false }).first().click();
   await page.waitForTimeout(2500);
 
   await page.getByText('Second', { exact: false }).first().waitFor({ timeout: 10000 }).catch(() => {});

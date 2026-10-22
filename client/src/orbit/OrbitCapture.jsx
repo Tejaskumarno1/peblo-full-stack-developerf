@@ -19,6 +19,8 @@ export default function OrbitCapture({ onClose, preset = {}, windowMode = false 
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
+  const [keepOpen, setKeepOpen] = useState(() => { try { return localStorage.getItem('peblo-capture-keep') === '1'; } catch { return false; } });
+  const toggleKeep = () => { const next = !keepOpen; setKeepOpen(next); try { localStorage.setItem('peblo-capture-keep', next ? '1' : '0'); } catch { /* no storage */ } };
 
   useEffect(() => { inputRef.current?.focus(); }, [mode]);
   useEffect(() => {
@@ -56,7 +58,8 @@ export default function OrbitCapture({ onClose, preset = {}, windowMode = false 
       queryClient.invalidateQueries({ queryKey: ['todos'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       setValue('');
-      setTimeout(close, 700);
+      if (keepOpen) setTimeout(() => inputRef.current?.focus(), 30);
+      else setTimeout(close, 700);
     } catch (err) {
       setStatus(err.response?.data?.error || 'Could not save. Is Peblo still running?');
     } finally {
@@ -97,9 +100,10 @@ export default function OrbitCapture({ onClose, preset = {}, windowMode = false 
       />
       <div className="o-capture-foot">
         <span className="o-capture-status" role="status">
-          {status || (tags.length ? `Goes on ${tags.map(topicName).join(', ')}` : 'Add #topic to put it on the map · Tab switches · Esc closes')}
+          {status || (mode === 'task' && parsed && (parsed.deadline || parsed.priority !== 'medium') ? `Task${parsed.deadline ? ` · due ${dayWord(parsed.deadline).toLowerCase()}` : ''}${parsed.priority !== 'medium' ? ` · ${parsed.priority} priority` : ''}${tags.length ? ` · on ${tags.map(topicName).join(', ')}` : ''}` : tags.length ? `Goes on ${tags.map(topicName).join(', ')}` : 'Add #topic to put it on the map · Tab switches · Esc closes')}
         </span>
         <span className="grow" />
+        <label className="o-keep"><input type="checkbox" checked={keepOpen} onChange={toggleKeep} /> Keep open after adding</label>
         <button type="submit" className="o-btn small" disabled={!value.trim() || saving}>{saving ? 'Saving…' : mode === 'task' ? 'Add task' : 'Save note'}</button>
       </div>
     </form>

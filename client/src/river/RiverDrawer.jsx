@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
+import TaskSteps from '../components/TaskSteps';
 import { todosAPI, notesAPI, riverAPI, hubAPI } from '../api';
 import { useDismiss } from './RiverShell';
 import { askScope } from '../utils/askScope';
@@ -129,6 +130,7 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
               : `No date yet · ${selected.priority} priority`}
         </span>
         {meeting && selected.meta?.link && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Join {/meet\.google/i.test(selected.meta.link) ? 'Google Meet' : /teams\./i.test(selected.meta.link) ? 'Teams' : /zoom\./i.test(selected.meta.link) ? 'Zoom' : 'meeting'}</a>}
+        {!meeting && /^https:\/\//i.test(selected.meta?.link || '') && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Open link</a>}
         {meeting && selected.meta?.linkedTasks?.length > 0 && <div className="r-chips" aria-label="Tasks for this meeting">{selected.meta.linkedTasks.map((t) => <span key={t.id} className="r-tag">Task: {t.text}</span>)}</div>}
         {tags.length > 0 && <div className="r-chips">{tags.map((t) => <span key={t} className="r-tag">#{t}</span>)}</div>}
         <span className="grow" />
@@ -159,6 +161,9 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
       </div>
 
       <div className="r-col scroll">
+        {!meeting && (
+          <TaskSteps steps={selected.meta?.subtasks || []} onChange={async (next) => { try { await todosAPI.update(selected.id, { meta: { subtasks: next } }); } finally { refresh(); } }} />
+        )}
         {meeting ? (
           <>
             <h3 className="r-h3">PEBLO'S BRIEF · FROM YOUR NOTES</h3>

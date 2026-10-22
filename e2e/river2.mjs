@@ -35,8 +35,8 @@ try {
   check('overdue: moving it clears the count', (await page.getByRole('button', { name: /Overdue/ }).count()) === 0);
 
   await page.locator('.r-gap').first().click();
-  const q = page.locator('.r-quick');
-  check('gap: clicking opens a new meeting at that time', await q.waitFor({ timeout: 4000 }).then(() => true).catch(() => false) && /New meeting/.test(await q.innerText()));
+  const q = page.locator('.r-capture');
+  check('gap: clicking opens a new meeting at that time', await q.waitFor({ timeout: 4000 }).then(() => true).catch(() => false) && (await page.getByRole('tab', { name: 'Meeting' }).getAttribute('aria-selected')) === 'true');
   await shot('river2-quick');
 } catch (e) { check('no crash', false, String(e).slice(0, 300)); await shot('river2-fail').catch(() => {}); }
 await finish();

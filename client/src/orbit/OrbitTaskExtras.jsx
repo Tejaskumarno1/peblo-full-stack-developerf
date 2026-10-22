@@ -48,6 +48,13 @@ export function TaskDetail({ t, todos, onMeta, onOpenNote, onFocus }) {
         {m.spentMin > 0 && <span className="o-quiet">{minutesLabel(m.spentMin)} spent</span>}
         <label className="o-toggle"><input type="checkbox" checked={!!m.assignment} onChange={(e) => onMeta(t, { assignment: e.target.checked ? true : null })} /> This is an assignment</label>
       </div>
+      <label>Meeting or page link
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="url" defaultValue={m.link || ''} key={m.link || 'none'} maxLength={500} placeholder="https://meet.google.com/…" aria-label="Meeting or page link" style={{ flex: 1, minWidth: 0 }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v !== (m.link || '')) onMeta(t, { link: v || null }); }} />
+          {m.link && /^https:\/\//i.test(m.link) && <a className="o-btn small" href={m.link} target="_blank" rel="noopener noreferrer">Open</a>}
+        </span>
+      </label>
       <div className="o-labels" role="group" aria-label="Colour label">
         <span className="o-eyebrow">Label</span>
         <button type="button" className={`o-chip${!m.label ? ' on' : ''}`} onClick={() => onMeta(t, { label: null })}>None</button>

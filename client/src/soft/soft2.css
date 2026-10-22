@@ -423,3 +423,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-gal-item { border: 0; padding: 0; background: rgba(128,128,128,.1); border-radius: 12px; overflow: hidden; cursor: pointer; text-align: left; color: inherit; font: inherit; display: flex; flex-direction: column; }
 .s-gal-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
 .s-gal-item span { font-size: 12px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tasks: search and filters */
+.soft .s-tasktools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 14px; }
+.soft .s-tasktools input[type=search] { flex: 1 1 200px; min-width: 160px; max-width: 320px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: inherit; }
+.soft .s-tt-sel { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--s-fg2); }
+.soft .s-tt-sel select { height: 34px; border-radius: 999px; border: 1.5px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: inherit; font-weight: 600; padding: 0 10px; }

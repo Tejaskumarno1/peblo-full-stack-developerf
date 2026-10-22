@@ -19,7 +19,7 @@ try {
   check('clash: the warning names the existing meeting', await clash.waitFor({ timeout: 6000 }).then(() => true).catch(() => false) && /Design review/.test(await clash.innerText()));
   check('clash: the mini river shows both', (await page.locator('.r-mini span').count()) === 2);
   await shot('river3-clash');
-  const use = page.getByRole('button', { name: /^Use / }).first();
+  const use = page.locator('.r-clash .slots button').first();
   check('clash: free slots are offered', await use.isVisible());
   await use.click();
   await page.waitForTimeout(500);

@@ -8,9 +8,12 @@ import { askScope } from '../utils/askScope';
 import { useUndoToast, useDeferredDelete } from '../utils/useUndoToast';
 import UndoToast from '../components/UndoToast';
 import TaskSheet from './TaskSheet';
+import { filterTasks, sortTasks, groupTasks, isOverdue, PRIORITY_LABEL, GROUP_OPTIONS, SORT_OPTIONS } from '../utils/taskView';
 import { timeOf, dayChip, daysFromToday, weekdayLong, startOfDay, addDays, tagsOf } from './softUtils';
 
 /** Soft Studio · Tasks (mockup: SoftTasks). A board of Today, Tomorrow, This week and Done. */
+const SOFT_H = { whenOf: (t) => (t.deadline ? new Date(t.deadline) : null), tagsOf: (t) => tagsOf(t).map(String), isMeeting: () => false };
+
 export default function SoftTasks() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -24,8 +27,16 @@ export default function SoftTasks() {
 
   const { toast, say, dismiss } = useUndoToast();
   const { gone, schedule } = useDeferredDelete(async (id) => { await todosAPI.delete(id, 'this'); refresh(); });
+  const [q, setQ] = useState('');
+  const [pill, setPill] = useState('all');
+  const [lg, setLg] = useState('when');
+  const [ls, setLs] = useState('due');
+  const base = useMemo(() => {
+    const found = filterTasks(todos, { show: 'all', q }, SOFT_H);
+    return found.filter((t) => (pill === 'high' ? t.priority === 'high' : pill === 'overdue' ? isOverdue(t, SOFT_H) : pill === 'nodate' ? !t.deadline : true));
+  }, [todos, q, pill]);
   const groups = useMemo(() => {
-  const open = todos.filter((t) => !t.completed && !gone.includes(t.id));
+  const open = base.filter((t) => !t.completed && !gone.includes(t.id));
     const rank = { high: 0, medium: 1, low: 2 };
     // Important first, then by time (the mockup lists the !high task before earlier ones)
     const byDue = (a, b) => (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1) || new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15);
@@ -35,9 +46,10 @@ export default function SoftTasks() {
     const week = open.filter((t) => t.deadline && daysFromToday(t.deadline) >= 2 && daysFromToday(t.deadline) <= 6).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
     const later = open.filter((t) => !t.deadline || daysFromToday(t.deadline) > 6).sort((a, b) => new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15));
     const weekAgo = addDays(startOfDay(), -6);
-    const done = todos.filter((t) => t.completed && !gone.includes(t.id) && new Date(t.updatedAt) >= weekAgo).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const done = base.filter((t) => t.completed && !gone.includes(t.id) && new Date(t.updatedAt) >= weekAgo).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     return { overdue, today, tomorrow, week, later, done, open };
-  }, [todos, gone]);
+  }, [base, gone]);
+  const otherGroups = useMemo(() => (lg === 'when' ? [] : groupTasks(sortTasks(groups.open, ls, SOFT_H), lg, SOFT_H)), [groups.open, lg, ls]);
 
   const subtitle = [
     `${groups.open.length} to do`,
@@ -146,6 +158,22 @@ export default function SoftTasks() {
         <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
       </form>
 
+      <div className="s-tasktools">
+        <label htmlFor="s-task-search" className="s-sr">Search tasks</label>
+        <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks and tags…" />
+        <div className="s-filter" role="tablist" aria-label="Filter tasks">
+          {[['all', 'All'], ['overdue', 'Overdue'], ['high', 'High priority'], ['nodate', 'No date']].map(([k, name]) => (
+            <button key={k} type="button" role="tab" aria-selected={pill === k} className={pill === k ? 'on' : ''} onClick={() => setPill(k)}>{name}</button>
+          ))}
+        </div>
+        {view === 'list' && (
+          <>
+            <label className="s-tt-sel">Group <select value={lg} onChange={(e) => setLg(e.target.value)} aria-label="Group tasks by">{GROUP_OPTIONS.map(([k, n]) => <option key={k} value={k === 'due' ? 'when' : k}>{n}</option>)}</select></label>
+            {lg !== 'when' && <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>}
+          </>
+        )}
+      </div>
+
       {view === 'board' ? (
         <div className="s-board">
           {columns.map((c) => (
@@ -169,7 +197,13 @@ export default function SoftTasks() {
         </div>
       ) : (
         <div className="s-list">
-          {columns.filter((c) => c.items.length || c.extra?.length).map((c) => (
+          {lg !== 'when' && otherGroups.map((g) => (
+            <section key={g.key} className="s-list-group">
+              <h2 className="s-col-title">{g.label} <span className="s-col-count">{g.items.length}</span></h2>
+              {g.items.map((t) => card(t, g.key))}
+            </section>
+          ))}
+          {lg === 'when' && columns.filter((c) => c.items.length || c.extra?.length).map((c) => (
             <section key={c.key} className="s-list-group">
               <h2 className="s-col-title"><span className="blob" style={{ background: `var(--s-${c.tone})` }} aria-hidden="true" />{c.title}</h2>
               {c.items.map((t) => card(t, c.key))}

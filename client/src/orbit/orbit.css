@@ -771,3 +771,13 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-jump-drop { position: absolute; left: 0; right: 0; top: calc(100% + 6px); display: flex; flex-direction: column; gap: 6px; }
 .o-jump-drop .o-jump-list, .o-jump-drop .o-jump-help { position: static; }
 .o-jump:focus-within { z-index: 40; }
+
+/* Saved searches in the notes list */
+.o-saved { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 12.5px; color: var(--o-fg2); }
+.o-saved-item { display: inline-flex; align-items: center; border-radius: 999px; background: var(--o-soft); overflow: hidden; }
+.o-saved-item.on { background: var(--o-ink); color: var(--o-on-ink); }
+.o-saved-item button { border: 0; background: transparent; color: inherit; font: inherit; padding: 4px 8px; cursor: pointer; }
+.o-saved-item .x { padding-left: 2px; opacity: .7; }
+
+.o-keep { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--o-fg2); cursor: pointer; white-space: nowrap; }
+.o-keep input { accent-color: var(--o-ink); }

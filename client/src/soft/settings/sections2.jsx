@@ -9,6 +9,7 @@ import { authHeaders, signOutIfRejected } from '../../api/token';
 import { usePublicUrl } from '../../api/publicUrl';
 import AccessTokens from '../../components/AccessTokens';
 import DataTools from '../../components/DataTools';
+import { exportCalendar, importCalendar } from '../../river/calendarIO';
 import SoftConnections from '../SoftConnections';
 import { Card, Row, Switch, Seg, CopyButton, Confirm, useSave } from './ui';
 
@@ -221,6 +222,42 @@ export function SharedSection() {
   );
 }
 
+/** Take meetings and tasks with dates out as an .ics file (Google Calendar, Outlook, Apple), or bring an .ics in. Same in every style. */
+function CalendarTransfer() {
+  const qc = useQueryClient();
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const out = async () => {
+    setBusy(true); setMsg(null);
+    try { const n = await exportCalendar(); setMsg({ ok: true, text: `Downloaded ${n} item${n === 1 ? '' : 's'} (.ics).` }); }
+    catch { setMsg({ ok: false, text: 'Could not export the calendar.' }); }
+    finally { setBusy(false); }
+  };
+  const inn = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await importCalendar(f);
+      setMsg({ ok: true, text: `Added ${r.added} meeting${r.added === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped} that were already here or had no time` : ''}.` });
+      qc.invalidateQueries({ queryKey: ['todos'] });
+    } catch { setMsg({ ok: false, text: 'Could not read that file. Choose an .ics calendar file.' }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Card id="set-calendar-file" title="Calendar file (.ics)" hint="Move your meetings and dated tasks to or from Google Calendar, Outlook and Apple Calendar.">
+      <div className="s-set-actions">
+        <button type="button" className="s-outline s-set-btn" onClick={out} disabled={busy}><Download size={15} /> Export calendar</button>
+        <label className="s-outline s-set-btn as-label"><Upload size={15} /> Import calendar
+          <input type="file" accept=".ics,text/calendar" hidden onChange={inn} disabled={busy} />
+        </label>
+      </div>
+      {msg && <p role={msg.ok ? 'status' : 'alert'} className={msg.ok ? 's-set-ok' : 's-set-bad'}>{msg.text}</p>}
+    </Card>
+  );
+}
+
 export function DataSection() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -267,6 +304,7 @@ export function DataSection() {
         </div>
         {msg && <p role={msg.ok ? 'status' : 'alert'} className={msg.ok ? 's-set-ok' : 's-set-bad'}>{msg.text}</p>}
       </Card>
+      <CalendarTransfer />
       <Card title="Everything, including tasks" hint="One zip with all notes, tasks and settings. Also imports tasks from a CSV.">
         <DataTools />
       </Card>

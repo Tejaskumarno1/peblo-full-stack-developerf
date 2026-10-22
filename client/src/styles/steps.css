@@ -1,0 +1,12 @@
+.pb-steps { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.pb-steps-head { display: flex; justify-content: space-between; align-items: baseline; }
+.pb-steps-head span { opacity: .65; font-size: 12.5px; }
+.pb-step { display: flex; align-items: center; gap: 8px; }
+.pb-step span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pb-step span.done { text-decoration: line-through; opacity: .55; }
+.pb-step button { border: 0; background: transparent; color: inherit; opacity: .55; cursor: pointer; display: inline-flex; padding: 3px; border-radius: 6px; }
+.pb-step button:hover { opacity: 1; }
+.pb-step-add { display: flex; gap: 8px; }
+.pb-step-add input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; font: inherit; }
+.pb-step-add button { height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.pb-step-add button:disabled { opacity: .45; cursor: default; }

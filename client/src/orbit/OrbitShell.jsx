@@ -12,6 +12,7 @@ import OrbitBackup from './OrbitBackup';
 import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject, setDateFormat } from './orbitUtils';
 import { initialsOf } from '../river/riverUtils';
 import Avatar from '../components/Avatar';
+import MeetingReminders from '../river/MeetingReminders';
 import './orbit.css';
 
 const OrbitContext = createContext(null);
@@ -256,6 +257,7 @@ export default function OrbitShell({ children }) {
         {!covered && <OrbitMap interactive={home} />}
         <OrbitTop data={data} />
         {children}
+      <div className="river" style={{ display: 'contents' }}><MeetingReminders /></div>
         {topicsOpen && <OrbitTopics onClose={() => setTopicsOpen(false)} />}
         <OrbitBackup />
         {capture && (

@@ -36,7 +36,7 @@ try {
   const drawn = async () => {
     const out = [];
     for (const n of names) {
-      const b = await page.getByRole('button', { name: new RegExp('^' + n) }).first().boundingBox().catch(() => null);
+      const b = await page.locator('.r-meet', { hasText: n }).first().boundingBox().catch(() => null);
       if (b && b.x >= 0 && b.x + b.width <= 1440) out.push(n);
     }
     return out;

@@ -836,3 +836,12 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 .r-tl-when { flex: 0 0 auto; min-width: 92px; text-align: right; color: var(--r-fg2); font-size: 13px; }
 .r-tl-when.late { color: #b3261e; font-weight: 700; }
 .r-tl-empty { padding: 40px; text-align: center; color: var(--r-fg3); }
+
+.r-tl-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.r-tl-add input { flex: 1 1 260px; height: 42px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--r-line); background: var(--r-bg); color: var(--r-fg); font: inherit; }
+.r-tl-pre { font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--r-lane); color: var(--r-fg2); }
+.r-tl-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--r-lane); }
+.r-tl-x { border: 0; background: transparent; color: var(--r-fg3); cursor: pointer; display: inline-flex; padding: 4px; border-radius: 8px; opacity: 0; }
+.r-tl-row:hover .r-tl-x, .r-tl-x:focus-visible { opacity: 1; }
+.r-tl-x:hover { color: #b3261e; background: var(--r-surface); }
+.r-btn.on { background: var(--r-ink); color: var(--r-on-ink); }
