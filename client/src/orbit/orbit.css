@@ -784,3 +784,18 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 
 .o-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .o-attach .o-btn { height: 32px; }
+
+/* The page fills the window (the canvas size is the window size). Without this the frame stayed at its design size of 1440 by 900. */
+:root[data-style='orbit'] { --pb-canvas-w: 100vw; --pb-canvas-h: 100vh; }
+
+/* Short windows (laptops, a second monitor): nothing may sit on top of anything else. */
+.orbit .o-checklist { left: 96px; }
+@media (max-height: 820px) {
+  .orbit .o-tools { top: 204px; }
+  .orbit .o-checklist { bottom: 100px; }
+  .orbit .o-whole { display: none; }
+  .orbit .o-zoom > button:last-child { display: none; }
+}
+@media (max-height: 640px) {
+  .orbit .o-checklist { display: none; }
+}
