@@ -31,7 +31,7 @@ const RiverHome = lazy(() => import('./river/RiverHome'));
 const RiverNotes = lazy(() => import('./river/RiverNotes'));
 const RiverAI = lazy(() => import('./river/RiverAI').then((m) => ({ default: m.RiverAI })));
 const RiverConnections = lazy(() => import('./river/RiverAI').then((m) => ({ default: m.RiverConnections })));
-const RiverTasks = lazy(() => import('./river/RiverHome').then((m) => ({ default: () => <m.default initialZoom="day" /> })));
+const RiverTasks = lazy(() => import('./river/RiverTaskList'));
 const RiverCalendar = lazy(() => import('./river/RiverHome').then((m) => ({ default: () => <m.default initialZoom="week" /> })));
 
 // Orbit: a map of what you know. Notes, quizzes and the due list open as sheets over the map.
