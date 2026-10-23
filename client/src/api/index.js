@@ -67,6 +67,11 @@ export const todosAPI = {
   delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined })
 };
 
+export const publicShareAPI = {
+  owner: (kind, token) => api.get(`/public/${kind}/${encodeURIComponent(token)}/owner`),
+  turnOff: (kind, token) => api.delete(`/public/${kind}/${encodeURIComponent(token)}`),
+};
+
 export const transferAPI = {
   importFiles: (formData) => api.post('/import', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10 * 60 * 1000 })
 };

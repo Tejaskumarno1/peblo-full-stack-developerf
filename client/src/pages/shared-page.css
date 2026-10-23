@@ -62,9 +62,17 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .pill { display: inline-flex; align-items: center; gap: 7px; flex: none; border-radius: 999px; padding: 7px 13px; background: var(--chip); color: var(--fg); font-size: 13px; font-weight: 700; }
 .pb-shared .pill.view { background: var(--sky); }
 .pb-shared .pill.edit { background: var(--mint); }
+.pb-shared .avatars { display: flex; align-items: center; flex: none; padding-left: 8px; }
+.pb-shared .viewer-avatar { position: relative; width: 30px; height: 30px; margin-left: -8px; border: 2px solid var(--bg); font-size: 11px; }
+.pb-shared .viewer-avatar:first-child { margin-left: 0; }
+.pb-shared .avatar-0 { background: var(--peach); }
+.pb-shared .avatar-1 { background: var(--mint); }
+.pb-shared .avatar-2 { background: var(--lilac); }
+.pb-shared .avatar-extra { margin-left: -8px; background: var(--chip); font-size: 10px; }
 .pb-shared .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 0; border-radius: 999px; padding: 9px 15px; background: var(--chip); color: var(--fg); text-decoration: none; font-size: 14px; font-weight: 700; transition: transform .15s, filter .15s, box-shadow .15s; }
 .pb-shared .btn:hover { filter: brightness(.96); transform: translateY(-1px); }
 .pb-shared .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+.pb-shared .preview-btn.active { background: var(--mint); }
 .pb-shared .btn.dark { background: var(--fg); color: var(--bg); }
 .pb-shared .btn.icon { width: 40px; height: 40px; padding: 9px; }
 .pb-shared .menu-wrap { position: relative; flex: none; }
@@ -74,6 +82,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
 .pb-shared .menu > button { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; border-radius: 14px; padding: 10px 12px; background: transparent; color: var(--fg); text-align: left; font-weight: 600; font-size: 14px; }
 .pb-shared .menu > button:hover { background: var(--chip); }
+.pb-shared .menu > button.danger { color: var(--danger); }
 .pb-shared .menu > button > span { display: block; }
 .pb-shared .menu small { display: block; color: var(--fg3); font-size: 12px; font-weight: 500; }
 .pb-shared .menu-note { padding: 8px 12px; color: var(--fg3); font-size: 12px; }
@@ -82,6 +91,16 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .linkbox .btn { min-height: 36px; padding: 7px 12px; }
 .pb-shared .progress { height: 3px; background: transparent; }
 .pb-shared .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), #F2A25C); border-radius: 0 3px 3px 0; transition: width .1s; }
+.pb-shared .spin { animation: pb-share-spin .9s linear infinite; }
+@keyframes pb-share-spin { to { transform: rotate(360deg); } }
+.pb-shared .block-editor-container.pb-editor-full-page { height: auto !important; max-height: none !important; overflow: visible !important; flex: none !important; }
+.pb-shared .pb-editor-full-page .bn-root { --bn-font-family: 'Figtree', system-ui, sans-serif; --bn-colors-editor-text: var(--fg2); --bn-colors-editor-background: var(--surface); --bn-colors-menu-text: var(--fg); --bn-colors-menu-background: var(--surface); --bn-colors-tooltip-text: var(--fg); --bn-colors-tooltip-background: var(--chip); --bn-colors-hovered-text: var(--fg); --bn-colors-hovered-background: var(--chip); --bn-colors-border: var(--line); --bn-colors-side-menu: var(--fg3); }
+.pb-shared .pb-editor-full-page .bn-block-content[data-content-type="checkListItem"] > div > input { accent-color: var(--accent); }
+.pb-shared .pb-editor-full-page .bn-editor { min-height: 0; border-radius: 18px; font-family: 'Figtree', system-ui, sans-serif; }
+.pb-shared .save-btn { white-space: nowrap; }
+.pb-shared .save-btn.is-saved { background: var(--mint); color: var(--fg); box-shadow: none; }
+.pb-shared .share-off-banner { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; width: min(900px, calc(100% - 32px)); margin: 18px auto 0; border-radius: 16px; padding: 13px 16px; background: var(--mint); color: var(--fg); font-size: 14px; }
+.pb-shared .share-off-banner svg { flex: none; }
 
 .pb-shared .stage { position: relative; z-index: 1; width: min(1180px, 100%); margin: 0 auto; padding: 38px 24px 40px; display: grid; grid-template-columns: 230px minmax(0, 740px); gap: 56px; justify-content: center; }
 .pb-shared .toc { position: sticky; top: 104px; align-self: start; max-height: calc(100vh - 124px); overflow-y: auto; font-size: 14px; }
@@ -159,6 +178,22 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .pb-shared .totop { position: fixed; right: 22px; bottom: 24px; z-index: 20; display: grid; width: 46px; height: 46px; place-items: center; border: 0; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); }
 .pb-shared .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; display: flex; align-items: center; gap: 8px; transform: translateX(-50%); border-radius: 999px; padding: 12px 20px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.pb-shared .share-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(36,31,26,.42); backdrop-filter: blur(5px); }
+.pb-shared .share-modal { position: relative; width: min(440px, 100%); border: 1px solid var(--line); border-radius: 26px; padding: 30px; background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+.pb-shared .share-modal-close { position: absolute; top: 14px; right: 14px; display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 50%; background: var(--chip); }
+.pb-shared .modal-kicker { display: inline-flex; margin-bottom: 10px; border-radius: 999px; padding: 6px 11px; background: var(--peach); color: var(--fg); font-size: 12px; font-weight: 700; }
+.pb-shared .share-modal h2 { margin: 0 40px 8px 0; font: 800 28px/1.12 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.025em; }
+.pb-shared .share-modal > p { margin: 0 0 22px; color: var(--fg3); font-size: 14px; line-height: 1.55; }
+.pb-shared .share-modal form { display: flex; flex-direction: column; gap: 13px; }
+.pb-shared .share-modal label { display: flex; flex-direction: column; gap: 6px; color: var(--fg2); font-size: 13px; font-weight: 700; }
+.pb-shared .share-modal label input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 13px; padding: 10px 12px; background: var(--bg); color: var(--fg); font-size: 15px; }
+.pb-shared .share-modal label input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 20%, transparent); }
+.pb-shared .auth-error { border-radius: 12px; padding: 10px 12px; background: var(--peach); color: var(--fg); font-size: 13px; }
+.pb-shared .modal-submit { width: 100%; min-height: 46px; margin-top: 4px; }
+.pb-shared .modal-submit:disabled { opacity: .6; cursor: wait; }
+.pb-shared .auth-switch { display: block; width: 100%; margin-top: 15px; border: 0; background: transparent; color: var(--accent-ink); font-size: 13px; font-weight: 700; }
+.pb-shared .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.pb-shared .danger-btn { background: var(--danger) !important; color: #fff !important; }
 
 @media (max-width: 960px) {
   .pb-shared .top-in { gap: 8px; padding-inline: 16px; }
@@ -170,6 +205,12 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
   .pb-shared .top-in { min-height: 56px; padding: 8px 12px; }
   .pb-shared .brand { gap: 7px; font-size: 20px; }
   .pb-shared .brand i { width: 28px; height: 26px; }
+  .pb-shared .top-in { gap: 6px; }
+  .pb-shared .viewer-avatar { width: 25px; height: 25px; margin-left: -7px; font-size: 9px; }
+  .pb-shared .save-btn { width: 40px; padding: 9px; }
+  .pb-shared .save-btn span { display: none; }
+  .pb-shared .preview-btn { width: 40px; padding: 9px; }
+  .pb-shared .preview-btn span { display: none; }
   .pb-shared .pill { gap: 5px; padding: 7px 9px; font-size: 0; }
   .pb-shared .pill svg { width: 17px; height: 17px; }
   .pb-shared .copy-btn { width: 40px; padding: 9px; }
@@ -180,6 +221,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
   .pb-shared .doc blockquote { font-size: 18px; }
   .pb-shared .taskcard { border-radius: 24px; padding: 22px; }
   .pb-shared .cta { border-radius: 24px; padding: 22px; }
+  .pb-shared .share-modal { padding: 26px 22px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pb-shared *, .pb-shared *::before, .pb-shared *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }

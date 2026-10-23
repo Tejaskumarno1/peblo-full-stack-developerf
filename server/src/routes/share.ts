@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, verifyToken } from '../middleware/auth.js';
 
 /*
  * Share links. The owner turns a link on for one note or one task; anyone who has the link can read it (never edit).
@@ -93,6 +93,94 @@ publicRoutes.use((_req, res, next) => {
 });
 
 const validToken = (t: string) => /^[A-Za-z0-9_-]{20,40}$/.test(t);
+const PRESENCE_TTL_MS = 35_000;
+type ViewerPresence = { sessionId: string; name: string; seenAt: number };
+const liveViewers = new Map<string, Map<string, ViewerPresence>>();
+const viewerNames = new Map<string, { name: string; expiresAt: number }>();
+const presenceKey = (kind: 'note' | 'todo', token: string) => `${kind}:${token}`;
+
+function prunePresence(key?: string) {
+  const now = Date.now();
+  const rooms = key ? [[key, liveViewers.get(key)] as const] : liveViewers.entries();
+  for (const [roomKey, room] of rooms) {
+    if (!room) continue;
+    for (const [sessionId, viewer] of room) if (now - viewer.seenAt > PRESENCE_TTL_MS) room.delete(sessionId);
+    if (!room.size) liveViewers.delete(roomKey);
+  }
+  for (const [userId, entry] of viewerNames) if (entry.expiresAt < now) viewerNames.delete(userId);
+}
+const presenceSweep = setInterval(() => prunePresence(), 15_000);
+presenceSweep.unref?.();
+
+async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
+  if (kind === 'note') return prisma.note.findFirst({ where: { shareToken: token, userId, isDeleted: false }, select: { id: true } });
+  return prisma.todo.findFirst({ where: { shareToken: token, userId }, select: { id: true } });
+}
+
+// The share link remains public, but only its owner can see management controls or revoke it.
+publicRoutes.get('/:kind/:token/owner', authenticate, async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    if (!kind || !validToken(req.params.token)) return res.status(404).json({ error: 'Not found.' });
+    const row = await shareOwner(kind, req.params.token, req.user!.id);
+    res.json({ isOwner: !!row });
+  } catch (e) { next(e); }
+});
+
+publicRoutes.delete('/:kind/:token', authenticate, async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    if (!kind || !validToken(req.params.token)) return res.status(404).json({ error: 'Not found.' });
+    const row = await shareOwner(kind, req.params.token, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'This link is not yours to turn off.' });
+    await setToken(kind, row.id, null);
+    liveViewers.delete(presenceKey(kind, req.params.token));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// Anonymous visitors are represented as Guests; signed-in visitors may appear by their Peblo display name.
+// No email, IP address, or other account detail is returned. Inactive sessions expire automatically.
+publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    const { token } = req.params;
+    const sessionId = req.body?.sessionId;
+    if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{16,80}$/.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
+    const record = kind === 'note'
+      ? await prisma.note.findFirst({ where: { shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true } })
+      : await prisma.todo.findFirst({ where: { shareToken: token, ...LIVE() }, select: { id: true } });
+    if (!record) return res.status(404).json({ error: 'This link is not shared any more.' });
+
+    const auth = req.headers.authorization || '';
+    const user = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : null);
+    let name = 'Guest';
+    if (user) {
+      const cached = viewerNames.get(user.id);
+      if (cached && cached.expiresAt > Date.now()) name = cached.name;
+      else {
+        const profile = await prisma.user.findUnique({ where: { id: user.id }, select: { name: true } });
+        name = profile?.name?.trim().slice(0, 80) || 'Peblo member';
+        viewerNames.set(user.id, { name, expiresAt: Date.now() + 5 * 60_000 });
+      }
+    }
+
+    const key = presenceKey(kind, token);
+    prunePresence(key);
+    let room = liveViewers.get(key);
+    if (!room) { room = new Map(); liveViewers.set(key, room); }
+    if (req.body?.active === false) room.delete(sessionId);
+    else room.set(sessionId, { sessionId, name, seenAt: Date.now() });
+    if (!room.size) liveViewers.delete(key);
+
+    res.json({ viewers: [...(liveViewers.get(key)?.values() || [])].map((viewer) => ({
+      id: crypto.createHash('sha256').update(viewer.sessionId).digest('hex').slice(0, 12),
+      name: viewer.name,
+      self: viewer.sessionId === sessionId,
+    })) });
+  } catch (e) { next(e); }
+});
 
 publicRoutes.get('/note/:token', async (req, res, next) => {
   try {

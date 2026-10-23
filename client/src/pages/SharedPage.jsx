@@ -1,8 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, Link2, Moon, MoreHorizontal, Pencil, Printer, Sun, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, Link2, LoaderCircle, Moon, MoreHorizontal, Pencil, Printer, Sun, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { notesAPI, publicShareAPI, todosAPI } from '../api';
+import { authHeaders } from '../api/token';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -28,6 +31,8 @@ const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0
 
 export default function SharedPage() {
   const { kind, token } = useParams();
+  const navigate = useNavigate();
+  const { user, signIn } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('saved');
@@ -38,6 +43,20 @@ export default function SharedPage() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [activeHeading, setActiveHeading] = useState('');
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
+  const [previewMode, setPreviewMode] = useState(false);
+  const [viewers, setViewers] = useState([]);
+  const [isOwner, setIsOwner] = useState(false);
+  const [shareOff, setShareOff] = useState(false);
+  const [revokeConfirm, setRevokeConfirm] = useState(false);
+  const [savedCopy, setSavedCopy] = useState(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -100,6 +119,49 @@ export default function SharedPage() {
   const pageTitle = data?.kind === 'todo' ? data.text : data?.title || 'Untitled';
   const statusText = status === 'saving' ? 'Saving…' : status === 'conflict' ? 'Not saved: someone else changed it' : status === 'error' ? 'Could not save' : 'Saved';
 
+  useEffect(() => {
+    let live = true;
+    setIsOwner(false);
+    if (!user || !data) return () => { live = false; };
+    publicShareAPI.owner(kindPath, token)
+      .then((response) => { if (live) setIsOwner(!!response.data?.isOwner); })
+      .catch(() => { if (live) setIsOwner(false); });
+    return () => { live = false; };
+  }, [user?.id, data?.kind, kindPath, token]);
+
+  useEffect(() => {
+    if (!data || shareOff) { setViewers([]); return undefined; }
+    const sessionKey = `peblo-share-viewer:${kindPath}:${token}`;
+    let sessionId;
+    try {
+      sessionId = sessionStorage.getItem(sessionKey);
+      if (!sessionId) {
+        sessionId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        sessionStorage.setItem(sessionKey, sessionId);
+      }
+    } catch { sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+    const presenceUrl = `/api/public/${kindPath}/${encodeURIComponent(token)}/presence`;
+    let live = true;
+    const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ sessionId, active }),
+      keepalive,
+    }).then((response) => response.ok ? response.json() : null)
+      .then((json) => { if (live && json?.viewers) setViewers(json.viewers); })
+      .catch(() => {});
+    void beat();
+    const interval = window.setInterval(() => { void beat(); }, 12_000);
+    const leave = () => { void beat(false, true); };
+    window.addEventListener('pagehide', leave);
+    return () => {
+      live = false;
+      window.clearInterval(interval);
+      window.removeEventListener('pagehide', leave);
+      void beat(false, true);
+    };
+  }, [data?.kind, kindPath, token, user?.id, shareOff]);
+
   const showToast = (message) => {
     setToast(message);
     clearTimeout(toastTimer.current);
@@ -124,6 +186,81 @@ export default function SharedPage() {
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     showToast('Markdown downloaded');
     setMenuOpen(false);
+  };
+
+  const saveSharedCopy = async (account = user) => {
+    if (!account) { setAuthError(''); setAuthOpen(true); return; }
+    if (!data || saveBusy || savedCopy) return;
+    setSaveBusy(true);
+    let copiedNoteId = null;
+    let copiedTaskId = null;
+    try {
+      if (data.kind === 'note') {
+        const response = await notesAPI.create({
+          title: draft.current.title || data.title || 'Untitled',
+          content: draft.current.content ?? data.content ?? '',
+        });
+        const id = response.data.note.id;
+        setSavedCopy({ kind: 'note', id });
+      } else {
+        let noteId = null;
+        if (data.note) {
+          const noteResponse = await notesAPI.create({ title: data.note.title || 'Untitled', content: data.note.content || '' });
+          copiedNoteId = noteResponse.data.note.id;
+          noteId = copiedNoteId;
+        }
+        const response = await todosAPI.create({
+          text: data.text,
+          priority: data.priority,
+          deadline: data.deadline || undefined,
+          tags: data.tags || [],
+          noteId,
+        });
+        copiedTaskId = response.data.todo.id;
+        if (data.completed) await todosAPI.update(copiedTaskId, { completed: true });
+        setSavedCopy({ kind: 'todo', id: copiedTaskId });
+      }
+      setAuthOpen(false);
+      setMenuOpen(false);
+      showToast('Saved a copy to your Peblo');
+    } catch (cause) {
+      if (copiedTaskId) await todosAPI.delete(copiedTaskId).catch(() => {});
+      if (copiedNoteId) await notesAPI.delete(copiedNoteId).catch(() => {});
+      setAuthError(cause.response?.data?.error || 'Could not save this copy. Please try again.');
+      showToast('Could not save this copy');
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const submitAuthAndSave = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    setAuthBusy(true);
+    try {
+      const details = authMode === 'signup'
+        ? { name: authName.trim(), email: authEmail.trim(), password: authPassword }
+        : { email: authEmail.trim(), password: authPassword };
+      const account = await signIn(authMode, details);
+      await saveSharedCopy(account);
+    } catch (cause) {
+      setAuthError(cause.response?.data?.error || (cause.response ? 'Could not sign in. Please try again.' : 'Could not reach the Peblo server.'));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const turnSharingOff = async () => {
+    try {
+      await publicShareAPI.turnOff(kindPath, token);
+      setShareOff(true);
+      setIsOwner(false);
+      setRevokeConfirm(false);
+      setMenuOpen(false);
+      showToast('Sharing is off. This link no longer works for other people.');
+    } catch (cause) {
+      showToast(cause.response?.data?.error || 'Could not turn sharing off');
+    }
   };
 
   useEffect(() => {
@@ -168,6 +305,17 @@ export default function SharedPage() {
           {data && <div className="crumb"><ChevronRight className="sep" size={14} /><span>Shared page</span><ChevronRight className="sep" size={14} /><b title={pageTitle}>{pageTitle}</b></div>}
           <span className="spacer" />
           {data && <span className={`pill ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={15} /> : <Eye size={15} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>}
+          {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
+            {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
+          </button>}
+          {data && viewers.length > 0 && <div className="avatars" aria-label={`${viewers.length} people viewing this page`} title={`${viewers.length} viewing now`}>
+            {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
+            {viewers.length > 3 && <span className="av avatar-extra">+{viewers.length - 3}</span>}
+          </div>}
+          {data && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
+            {saveBusy ? <LoaderCircle className="spin" size={16} /> : savedCopy ? <Check size={16} /> : <Clipboard size={16} />}
+            <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
+          </button>}
           {data && <button className="btn copy-btn" type="button" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={17} /><span>Copy link</span></button>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
@@ -179,6 +327,7 @@ export default function SharedPage() {
               <button type="button" role="menuitem" onClick={() => { window.print(); setMenuOpen(false); }}><Printer size={17} /><span>Print or save as PDF</span></button>
               <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy note text</span></button>
               <button type="button" role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setMenuOpen(false); }}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? 'Light mode' : 'Dark mode'}</span></button>
+              {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Disable this link for everyone</small></span></button></>}
               <hr />
               <div className="menu-note">Anyone with this link can {data?.canEdit ? 'edit' : 'read'} this {data?.kind === 'todo' ? 'task' : 'note'}.</div>
             </div>}
@@ -186,6 +335,8 @@ export default function SharedPage() {
         </div>
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
+
+      {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
       {error ? (
         <main className="stage"><section className="gone" role="alert"><div className="orb" aria-hidden="true"><span><X size={30} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
@@ -201,8 +352,8 @@ export default function SharedPage() {
 
           <article>
             {data.kind === 'note' && <>
-              {data.canEdit
-                ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title} onChange={(event) => { draft.current.title = event.target.value; queueSave(); }} />
+              {data.canEdit && !previewMode
+                ? <input className="title-in" aria-label="Title" key={`t${rev}`} value={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; setData((current) => ({ ...current, title: event.target.value })); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
@@ -211,8 +362,8 @@ export default function SharedPage() {
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
               </div>
               {conflict && <div className="conflict" role="alert">Someone else changed this note while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => setRev((n) => n + 1)}>Load their version</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
-              {data.canEdit
-                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; queueSave(); }} /></Suspense>
+              {data.canEdit && !previewMode
+                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; setData((current) => ({ ...current, content: markdown })); queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
             </>}
 
@@ -222,9 +373,9 @@ export default function SharedPage() {
                   <span className={`chip${data.priority === 'high' ? ' p' : ''}`}>{data.priority} priority</span>
                   {data.tags.map((tag) => <span key={tag} className="chip l">#{tag}</span>)}
                 </div>
-                {data.canEdit ? <input className="task-title-in" aria-label="Task" defaultValue={data.text} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== data.text) patchTask({ text: value }); }} /> : <h1>{data.text}</h1>}
+                {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" defaultValue={data.text} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== data.text) patchTask({ text: value }); }} /> : <h1>{data.text}</h1>}
                 <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span></div>
-                <button type="button" className={`check${data.completed ? ' done' : ''}`} aria-pressed={data.completed} disabled={!data.canEdit} onClick={() => patchTask({ completed: !data.completed })}><span className="box">{data.completed && <Check size={17} />}</span><span className="t">{data.completed ? (data.canEdit ? 'Done (tap to undo)' : 'Done') : data.canEdit ? 'Mark as done' : 'To do'}</span></button>
+                <button type="button" className={`check${data.completed ? ' done' : ''}`} aria-pressed={data.completed} disabled={!data.canEdit || previewMode} onClick={() => patchTask({ completed: !data.completed })}><span className="box">{data.completed && <Check size={17} />}</span><span className="t">{data.completed ? (data.canEdit && !previewMode ? 'Done (tap to undo)' : 'Done') : data.canEdit && !previewMode ? 'Mark as done' : 'To do'}</span></button>
                 <div className="tmeta"><div><small>Due</small><b>{data.deadline ? when(data.deadline) : 'No due date'}</b></div><div><small>Priority</small><b>{data.priority}</b></div><div><small>Status</small><b>{data.completed ? 'Done' : 'To do'}</b></div></div>
               </section>
               {data.note && <><h2 className="linked">Linked note · {data.note.title || 'Untitled'}</h2><div className="doc" dangerouslySetInnerHTML={{ __html: body }} /></>}
@@ -237,6 +388,31 @@ export default function SharedPage() {
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
+      {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
+        <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">
+          <button className="share-modal-close" type="button" aria-label="Close" disabled={authBusy} onClick={() => setAuthOpen(false)}><X size={18} /></button>
+          <span className="modal-kicker">Keep this in your workspace</span>
+          <h2 id="share-auth-title">{authMode === 'signup' ? 'Create your Peblo account' : 'Sign in to save this page'}</h2>
+          <p>Save your own copy so you can find and edit it later.</p>
+          <form onSubmit={submitAuthAndSave}>
+            {authMode === 'signup' && <label>Your name<input value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" maxLength={80} required /></label>}
+            <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
+            <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={authMode === 'signup' ? 8 : undefined} required /></label>
+            {authError && <div className="auth-error" role="alert">{authError}</div>}
+            <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</button>
+          </form>
+          <button className="auth-switch" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'signup' : 'login'); setAuthError(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Peblo? Create an account'}</button>
+        </section>
+      </div>}
+      {revokeConfirm && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRevokeConfirm(false); }}>
+        <section className="share-modal revoke-modal" role="dialog" aria-modal="true" aria-labelledby="revoke-title">
+          <button className="share-modal-close" type="button" aria-label="Close" onClick={() => setRevokeConfirm(false)}><X size={18} /></button>
+          <span className="modal-kicker">You own this link</span>
+          <h2 id="revoke-title">Turn sharing off?</h2>
+          <p>Anyone using this link will lose access. You can create a new link later from Peblo.</p>
+          <div className="modal-actions"><button className="btn" type="button" onClick={() => setRevokeConfirm(false)}>Keep link on</button><button className="btn danger-btn" type="button" onClick={turnSharingOff}>Turn sharing off</button></div>
+        </section>
+      </div>}
     </div>
   );
 }
