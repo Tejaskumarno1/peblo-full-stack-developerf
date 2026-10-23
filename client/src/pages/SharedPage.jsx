@@ -412,7 +412,7 @@ export default function SharedPage() {
             </div>}
           </div>}
         </div>
-        <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
+        <div className="progress" aria-hidden="true"><i style={{ '--scroll-progress': `${scrollProgress}%` }} /></div>
       </header>
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
