@@ -195,6 +195,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const editor = useCreateBlockNote({ uploadFile });
   const { theme } = useAuth();
   const loadingRef = useRef(false);
+  const changeSequenceRef = useRef(0);
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
   const rootRef = useRef(null);
@@ -278,7 +279,11 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const handleChange = async () => {
     checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
+    const sequence = ++changeSequenceRef.current;
     const markdown = await editor.blocksToMarkdownLossy(toStorage(editor.document));
+    // Markdown conversion is asynchronous. Ignore an older conversion that
+    // finishes after a newer edit, otherwise autosave can roll content back.
+    if (sequence !== changeSequenceRef.current) return;
     onChange(markdown);
   };
 

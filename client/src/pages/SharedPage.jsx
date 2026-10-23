@@ -206,7 +206,15 @@ export default function SharedPage() {
       }
     }
     if (!target || !article.contains(target)) return;
-    target.scrollIntoView({ behavior, block: 'start', inline: 'nearest' });
+    // Keep section navigation inside the shared-page article scroller. Calling
+    // scrollIntoView can also move the document/root, hiding the fixed toolbar.
+    const articleRect = article.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const topInset = 16;
+    article.scrollTo({
+      top: article.scrollTop + targetRect.top - articleRect.top - topInset,
+      behavior,
+    });
     setActiveHeading(id);
   }, []);
   const wordCount = useMemo(() => {
