@@ -22,6 +22,7 @@
   --glass: rgba(251, 246, 238, .82);
   width: var(--pb-canvas-w);
   height: var(--pb-canvas-h);
+  margin: 0 auto;
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
@@ -41,6 +42,7 @@ html.theme-midnight .pb-shared { --bg: #07050A; --surface: #141019; --line: #231
 .pb-shared[data-theme="light"] { --bg:#FBF6EE; --surface:#FFFFFF; --line:#EADFD0; --fg:#241F1A; --fg2:#564D43; --fg3:#6E6559; --peach:#FFD9C4; --mint:#CDEBD9; --butter:#FFE9A6; --lilac:#DDD8FF; --sky:#CFE5F8; --chip:#F4EEE5; --accent:#C4441C; --accent-ink:#A8380F; --on-accent:#fff; --ok:#1E7A46; --danger:#B3261E; --shadow:0 10px 24px rgba(70,45,20,.12); --soft-shadow:0 2px 6px rgba(70,45,20,.08); --card-shadow:0 6px 16px rgba(70,45,20,.10); --glass:rgba(251,246,238,.82); color-scheme:light; }
 .pb-shared[data-theme="dark"] { --bg:#120F17; --surface:#1F1A27; --line:#2F2839; --fg:#F5F0F7; --fg2:#CFC6D8; --fg3:#A59BB0; --peach:#3A261E; --mint:#18302A; --butter:#332B13; --lilac:#2A2545; --sky:#1B2B3B; --chip:#2A2333; --accent:#FF8F6B; --accent-ink:#FFB59C; --on-accent:#1A0F0B; --ok:#6FD39A; --danger:#FF8A80; --shadow:0 10px 28px rgba(0,0,0,.45); --soft-shadow:0 2px 6px rgba(0,0,0,.35); --card-shadow:0 6px 18px rgba(0,0,0,.4); --glass:rgba(18,15,23,.82); color-scheme:dark; }
 html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
+html.pb-public-share #root { width: 100vw !important; height: 100dvh !important; margin: 0 !important; }
 .pb-shared *, .pb-shared *::before, .pb-shared *::after { box-sizing: border-box; }
 .pb-shared button, .pb-shared input { font: inherit; }
 .pb-shared button { cursor: pointer; color: inherit; }
@@ -52,7 +54,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .blobs i:nth-child(2) { width: 360px; height: 360px; background: var(--lilac); bottom: -120px; left: -100px; }
 .pb-shared .blobs i:nth-child(3) { width: 260px; height: 260px; background: var(--mint); top: 45%; left: 55%; opacity: .35; }
 
-.pb-shared .top { position: relative; z-index: 30; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.pb-shared .top { position: sticky; top: 0; z-index: 30; flex: none; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .pb-shared .top-in { width: min(1180px, 100%); min-height: 62px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
 .pb-shared .brand { display: flex; align-items: center; gap: 9px; flex: none; color: var(--fg); text-decoration: none; font: 800 22px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.03em; }
 .pb-shared .brand i { width: 32px; height: 28px; border-radius: 52% 48% 46% 54% / 60% 58% 42% 40%; background: var(--accent); display: grid; place-items: center; }

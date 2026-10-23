@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -66,10 +66,14 @@ export default function SharedPage() {
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.add('pb-public-share');
     const root = document.getElementById('root');
+    const sharedPage = root?.querySelector('.pb-shared');
     const html = document.documentElement;
+    const previousRootZoom = root?.style.zoom || '';
+    const previousRootWidth = root?.style.width || '';
+    const previousRootHeight = root?.style.height || '';
     let baselineDpr = window.devicePixelRatio || 1;
     try {
       const saved = Number(localStorage.getItem('peblo-share-base-dpr'));
@@ -81,13 +85,23 @@ export default function SharedPage() {
       const viewportRatio = currentDpr / baselineDpr;
       html.style.setProperty('--pb-canvas-w', `clamp(1440px, calc(100vw * ${viewportRatio}), 2160px)`);
       html.style.setProperty('--pb-canvas-h', `max(900px, calc(100dvh * ${viewportRatio}))`);
-      if (root) root.style.zoom = String(1 / viewportRatio);
+      if (root) {
+        root.style.removeProperty('zoom');
+        root.style.width = '100vw';
+        root.style.height = '100dvh';
+      }
+      if (sharedPage) sharedPage.style.zoom = String(1 / viewportRatio);
     };
     syncCanvasScale();
     window.addEventListener('resize', syncCanvasScale);
     return () => {
       window.removeEventListener('resize', syncCanvasScale);
-      root?.style.removeProperty('zoom');
+      if (root) {
+        root.style.zoom = previousRootZoom;
+        root.style.width = previousRootWidth;
+        root.style.height = previousRootHeight;
+      }
+      sharedPage?.style.removeProperty('zoom');
       html.style.removeProperty('--pb-canvas-w');
       html.style.removeProperty('--pb-canvas-h');
       html.classList.remove('pb-public-share');
