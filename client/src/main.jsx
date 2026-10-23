@@ -49,6 +49,8 @@ import './styles/canvas.css';
 
 // The quick capture window uses its own, smaller design canvas (see styles/canvas.css).
 if (window.location.pathname === '/quick-capture') document.documentElement.classList.add('pb-canvas-capture');
+// Public share links are regular web pages and need the document to grow and scroll.
+if (window.location.pathname.startsWith('/s/')) document.documentElement.classList.add('pb-public-share');
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -42,6 +42,12 @@ html.pb-canvas-capture[data-style="soft"] { --pb-canvas-w: 800px; --pb-canvas-h:
 html.pb-canvas-capture[data-style="river"] { --pb-canvas-w: 640px; --pb-canvas-h: 280px; }
 html.pb-canvas-capture[data-style="orbit"] { --pb-canvas-w: 640px; --pb-canvas-h: 220px; }
 
+/* A shared page is a normal web document, outside the app's fixed design canvas. */
+html.pb-public-share,
+html.pb-public-share body { width: 100%; height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+html.pb-public-share body { position: static; }
+html.pb-public-share #root { position: relative; inset: auto; width: 100%; height: auto; min-height: 100vh; overflow: visible; }
+
 html,
 body {
   width: 100%;
