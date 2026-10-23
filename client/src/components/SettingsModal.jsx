@@ -8,6 +8,7 @@ import { authHeaders, signOutIfRejected } from '../api/token';
 import { useQueryClient } from '@tanstack/react-query';
 import DataTools from './DataTools';
 import { ConnectSection } from '../soft/settings/sections2';
+import CaptureShortcut from '../soft/settings/CaptureShortcut';
 import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Trash2 } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
@@ -386,6 +387,8 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           {activeTab === 'preferences' && (
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">Editor Preferences</h2>
+
+              <div className="soft s-embed"><CaptureShortcut /></div>
 
               <div className="settings-field-group">
                 <label className="settings-field-label" htmlFor="pref-font">Editor text size</label>

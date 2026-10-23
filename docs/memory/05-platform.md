@@ -109,7 +109,7 @@ Root runtime deps: `@google/generative-ai` (deprecated SDK), `@prisma/client` 6,
 - `files`: `electron/**`, `build/icon.png`, `dist/server/**`, `server/prisma/sql/**`, `server/generated/prisma/**`, `client/dist/**`, `node_modules/**`, `package.json`; excludes `**/*.map`, `node_modules/.cache`, `electron`, `prisma`, `@prisma/engines`. Note that `scripts/` and `server/.env` are not packaged.
 - `asarUnpack`: `server/generated/prisma/**` (native query engine) and `server/prisma/sql/**`.
 - No `extraResources`. **No `publish` block** and no `repository` field.
-- Windows: NSIS x64, non-one-click, choose install directory, desktop shortcut, artifact `Peblo-${version}-win-x64.exe`.
+- Windows: NSIS x64 wizard (`Peblo-Setup-${version}.exe`: choose folder, desktop + Start-menu shortcuts, uninstaller in Settings > Apps) and an MSI (`Peblo-${version}-win-x64.msi`, Windows Installer with Repair/Remove). The quick-capture key is stored in `<userData>/desktop-settings.json`, changed from Settings > Shortcuts via `electron/preload.cjs` (`window.pebloDesktop`) and IPC `peblo:capture-shortcut:*` (main window only).
 - macOS: dmg for **x64 and arm64**, category productivity.
 - Linux: AppImage + deb, category Office, maintainer "Boddu Tejas Kumar <…>".
 - No code signing (CI disables identity auto-discovery), no notarization, no auto-update.

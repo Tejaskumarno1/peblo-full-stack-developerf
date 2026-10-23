@@ -2,7 +2,7 @@
 //
 // Runs the Express API in-process on a random localhost port and shows the React UI in a window.
 // Everything is stored in the shared Postgres (Supabase) database named by DATABASE_URL (see loadEnvFile).
-const { app, BrowserWindow, shell, Menu, dialog, globalShortcut, Tray, nativeImage, Notification, screen } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog, globalShortcut, ipcMain, Tray, nativeImage, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -67,7 +67,56 @@ function readRemoteUrl() {
 let isQuitting = false;
 let trayHintShown = false;
 
-const CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
+const DEFAULT_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
+let captureShortcut = DEFAULT_CAPTURE_SHORTCUT;
+
+// Desktop-only preferences (not account settings): kept in a small file in the app-data folder.
+const DESKTOP_SETTINGS_FILE = () => path.join(app.getPath('userData'), 'desktop-settings.json');
+function readDesktopSettings() {
+  try { return JSON.parse(fs.readFileSync(DESKTOP_SETTINGS_FILE(), 'utf8')) || {}; } catch { return {}; }
+}
+function writeDesktopSettings(patch) {
+  try { fs.writeFileSync(DESKTOP_SETTINGS_FILE(), JSON.stringify({ ...readDesktopSettings(), ...patch }, null, 2)); } catch (err) { console.warn('Could not save desktop settings:', err.message); }
+}
+const ACCELERATOR_RE = /^(?:(?:CommandOrControl|Command|Control|Alt|Shift|Super)\+)+(?:[A-Z0-9]|F(?:[1-9]|1\d|2[0-4])|Space|Tab|Backspace|Enter|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete)$/;
+const shortcutLabel = (acc) => acc.replace('CommandOrControl', process.platform === 'darwin' ? '⌘' : 'Ctrl');
+
+/** Moves the global quick-capture key. Keeps the old one if the new one is invalid or taken by another app. */
+function applyCaptureShortcut(accelerator, { persist = true } = {}) {
+  if (!ACCELERATOR_RE.test(accelerator) || !/(CommandOrControl|Command|Control|Alt|Super)\+/.test(accelerator)) {
+    return { ok: false, shortcut: captureShortcut, error: 'Use at least Ctrl, Alt or ⌘ together with another key.' };
+  }
+  if (accelerator === captureShortcut && globalShortcut.isRegistered(accelerator)) return { ok: true, shortcut: accelerator };
+  const previous = captureShortcut;
+  try { globalShortcut.unregister(previous); } catch { /* not registered */ }
+  let ok = false;
+  try { ok = globalShortcut.register(accelerator, toggleCapture); } catch { ok = false; }
+  if (!ok) {
+    try { globalShortcut.register(previous, toggleCapture); } catch { /* nothing more to do */ }
+    return { ok: false, shortcut: previous, error: 'Windows or another app already uses that key combination. Try a different one.' };
+  }
+  captureShortcut = accelerator;
+  if (persist) writeDesktopSettings({ captureShortcut: accelerator });
+  refreshMenus();
+  return { ok: true, shortcut: accelerator };
+}
+
+// Only Peblo's own main window may ask to change desktop settings.
+function trustedSender(event) {
+  try { return !!mainWindow && event.sender === mainWindow.webContents && isInternal(event.senderFrame.url); } catch { return false; }
+}
+ipcMain.handle('peblo:capture-shortcut:get', (event) => {
+  if (!trustedSender(event)) return null;
+  return { shortcut: captureShortcut, defaultShortcut: DEFAULT_CAPTURE_SHORTCUT, registered: globalShortcut.isRegistered(captureShortcut) };
+});
+ipcMain.handle('peblo:capture-shortcut:set', (event, accelerator) => {
+  if (!trustedSender(event)) return { ok: false, error: 'Not allowed.' };
+  return applyCaptureShortcut(String(accelerator));
+});
+ipcMain.handle('peblo:capture-shortcut:reset', (event) => {
+  if (!trustedSender(event)) return { ok: false, error: 'Not allowed.' };
+  return applyCaptureShortcut(DEFAULT_CAPTURE_SHORTCUT);
+});
 
 // ── Design canvas ──
 // Every screen is designed at 1440 × 900 (client/src/styles/canvas.css). Here we pick one
@@ -233,6 +282,7 @@ function createWindow() {
       sandbox: true,
       devTools: isDev, // no DevTools in release builds
       spellcheck: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -261,7 +311,7 @@ function createWindow() {
       trayHintShown = true;
       new Notification({
         title: 'Peblo is still running',
-        body: `Press ${process.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+Space anywhere to capture a note or task. Quit from the tray icon.`,
+        body: `Press ${shortcutLabel(captureShortcut)} anywhere to capture a note or task. Quit from the tray icon.`,
         icon: ICON_PATH,
       }).show();
     }
@@ -301,6 +351,10 @@ function createCaptureWindow() {
   lockZoom(captureWindow);
   captureWindow.loadURL(appUrl('/quick-capture'));
   secureWebContents(captureWindow);
+  captureWindow.webContents.on('did-fail-load', (_e, code, _d, _u, isMainFrame) => {
+    if (!isMainFrame || code === -3) return; // -3 = aborted by a newer navigation
+    setTimeout(() => { if (captureWindow && !captureWindow.isDestroyed()) captureWindow.loadURL(appUrl('/quick-capture')); }, 3000);
+  });
 
   // The page calls window.close() when done; keep the window around (hidden) so it opens instantly next time.
   captureWindow.on('close', (event) => {
@@ -349,8 +403,12 @@ async function toggleCapture() {
   });
   if (saved) captureWindow.setPosition(captureMovedTo.x, captureMovedTo.y);
   else captureWindow.setPosition(Math.round(x + (width - w) / 2), Math.round(y + height * 0.28));
+  // Windows often refuses to give focus to a window opened from the background: lift it above everything first.
+  captureWindow.setAlwaysOnTop(true, 'screen-saver');
   captureWindow.show();
+  captureWindow.moveTop();
   captureWindow.focus();
+  captureWindow.webContents.focus();
   if (style === 'river') startCaptureFit(canvas);
 }
 
@@ -381,9 +439,14 @@ function createTray() {
   const image = nativeImage.createFromPath(ICON_PATH).resize({ width: process.platform === 'darwin' ? 18 : 16 });
   tray = new Tray(image);
   tray.setToolTip('Peblo');
-  const menu = Menu.buildFromTemplate([
+  tray.setContextMenu(buildTrayMenu());
+  tray.on('click', () => showMainWindow());
+}
+
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
     { label: 'Open Peblo', click: () => showMainWindow() },
-    { label: 'Quick capture', accelerator: CAPTURE_SHORTCUT, click: () => toggleCapture() },
+    { label: 'Quick capture', accelerator: captureShortcut, click: () => toggleCapture() },
     { type: 'separator' },
     { label: 'Notes', click: () => showMainWindow('/notes') },
     { label: 'To-dos', click: () => showMainWindow('/todolist') },
@@ -391,8 +454,12 @@ function createTray() {
     { type: 'separator' },
     { label: 'Quit Peblo', click: () => { isQuitting = true; app.quit(); } },
   ]);
-  tray.setContextMenu(menu);
-  tray.on('click', () => showMainWindow());
+}
+
+/** The shortcut shows in the Help menu and the tray menu, so rebuild both when it changes. */
+function refreshMenus() {
+  buildMenu();
+  if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
 function buildMenu() {
@@ -415,7 +482,7 @@ function buildMenu() {
       submenu: [
         {
           label: 'Quick Capture',
-          accelerator: CAPTURE_SHORTCUT,
+          accelerator: captureShortcut,
           click: () => toggleCapture(),
         },
         {
@@ -443,6 +510,8 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  captureShortcut = readDesktopSettings().captureShortcut || DEFAULT_CAPTURE_SHORTCUT;
+  if (!ACCELERATOR_RE.test(captureShortcut)) captureShortcut = DEFAULT_CAPTURE_SHORTCUT;
   buildMenu();
   createWindow();
   // Moving to another monitor or changing Windows/macOS display scaling can change the content size.
@@ -452,8 +521,17 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.warn('Tray not available:', err.message); // some Linux desktops have no tray
   }
-  if (!globalShortcut.register(CAPTURE_SHORTCUT, toggleCapture)) {
-    console.warn(`Could not register ${CAPTURE_SHORTCUT} (another app may be using it).`);
+  let registered = false;
+  try { registered = globalShortcut.register(captureShortcut, toggleCapture); } catch { registered = false; }
+  if (!registered) {
+    console.warn(`Could not register ${captureShortcut} (another app may be using it).`);
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Quick capture shortcut is not working',
+        body: `${shortcutLabel(captureShortcut)} is used by Windows or another app. Pick another in Settings → Shortcuts.`,
+        icon: ICON_PATH,
+      }).show();
+    }
   }
   // Pre-load the capture box in the background so the shortcut feels instant.
   setTimeout(() => { if (!captureWindow) createCaptureWindow(); }, 3000);

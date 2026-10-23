@@ -9,6 +9,7 @@ import { authHeaders, signOutIfRejected } from '../../api/token';
 import { usePublicUrl } from '../../api/publicUrl';
 import AccessTokens from '../../components/AccessTokens';
 import DataTools from '../../components/DataTools';
+import CaptureShortcut from './CaptureShortcut';
 import { exportCalendar, importCalendar } from '../../river/calendarIO';
 import SoftConnections from '../SoftConnections';
 import { Card, Row, Switch, Seg, CopyButton, Confirm, useSave } from './ui';
@@ -317,7 +318,7 @@ export function DataSection() {
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? 'Cmd' : 'Ctrl';
 const KEYS = [
-  { group: 'Everywhere', rows: [[`${MOD}+K`, 'Command palette: jump anywhere, find a note'], [`${MOD}+Shift+Space`, 'Quick capture, from any app (desktop)'], [`${MOD}+J`, 'Open the AI Hub'], ['?', 'Show help']] },
+  { group: 'Everywhere', rows: [[`${MOD}+K`, 'Command palette: jump anywhere, find a note'], [`${MOD}+Shift+Space`, 'Quick capture, from any app (desktop; change it above)'], [`${MOD}+J`, 'Open the AI Hub'], ['?', 'Show help']] },
   { group: 'Notes', rows: [[`${MOD}+N`, 'New note'], [`${MOD}+S`, 'Save now'], [`${MOD}+/`, 'Search notes']] },
   { group: 'Quick capture', rows: [['Tab', 'Switch between note and task'], ['Esc', 'Close']] },
 ];
@@ -325,6 +326,7 @@ const KEYS = [
 export function ShortcutsSection() {
   return (
     <>
+      <CaptureShortcut />
       {KEYS.map((g) => (
         <Card key={g.group} title={g.group}>
           <ul className="s-set-keys">

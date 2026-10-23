@@ -101,6 +101,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.png"
@@ -108,9 +114,21 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "Peblo",
-      "artifactName": "Peblo-${version}-win-x64.exe"
+      "uninstallDisplayName": "Peblo",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Peblo-Setup-${version}.exe"
+    },
+    "msi": {
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "Peblo-${version}-win-x64.msi"
     },
     "mac": {
       "target": [
