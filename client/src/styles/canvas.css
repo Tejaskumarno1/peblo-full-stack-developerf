@@ -42,9 +42,6 @@ html.pb-canvas-capture[data-style="soft"] { --pb-canvas-w: 800px; --pb-canvas-h:
 html.pb-canvas-capture[data-style="river"] { --pb-canvas-w: 640px; --pb-canvas-h: 280px; }
 html.pb-canvas-capture[data-style="orbit"] { --pb-canvas-w: 640px; --pb-canvas-h: 220px; }
 
-/* Public links keep Peblo's fixed section layout, sized to the recipient's actual browser viewport. */
-html.pb-public-share { --pb-canvas-w: 100vw; --pb-canvas-h: 100vh; --pb-canvas-h: 100dvh; }
-
 html,
 body {
   width: 100%;

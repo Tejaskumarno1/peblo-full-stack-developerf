@@ -68,7 +68,30 @@ export default function SharedPage() {
 
   useEffect(() => {
     document.documentElement.classList.add('pb-public-share');
-    return () => document.documentElement.classList.remove('pb-public-share');
+    const root = document.getElementById('root');
+    const html = document.documentElement;
+    let baselineDpr = window.devicePixelRatio || 1;
+    try {
+      const saved = Number(sessionStorage.getItem('peblo-share-base-dpr'));
+      if (saved > 0) baselineDpr = saved;
+      else sessionStorage.setItem('peblo-share-base-dpr', String(baselineDpr));
+    } catch { /* Keep the current zoom as the baseline when storage is unavailable. */ }
+    const syncCanvasScale = () => {
+      const currentDpr = window.devicePixelRatio || baselineDpr;
+      const viewportRatio = currentDpr / baselineDpr;
+      html.style.setProperty('--pb-canvas-w', `clamp(1440px, calc(100vw * ${viewportRatio}), 2160px)`);
+      html.style.setProperty('--pb-canvas-h', `max(900px, calc(100dvh * ${viewportRatio}))`);
+      if (root) root.style.zoom = String(1 / viewportRatio);
+    };
+    syncCanvasScale();
+    window.addEventListener('resize', syncCanvasScale);
+    return () => {
+      window.removeEventListener('resize', syncCanvasScale);
+      root?.style.removeProperty('zoom');
+      html.style.removeProperty('--pb-canvas-w');
+      html.style.removeProperty('--pb-canvas-h');
+      html.classList.remove('pb-public-share');
+    };
   }, []);
 
   useEffect(() => {
