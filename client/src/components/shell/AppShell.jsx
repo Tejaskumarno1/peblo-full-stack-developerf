@@ -4,6 +4,7 @@ import SoftShell from '../../soft/SoftShell';
 import RiverShell from '../../river/RiverShell';
 import OrbitShell from '../../orbit/OrbitShell';
 import { useAuth } from '../../context/AuthContext';
+import { CAPTURE_KEY_EVENT, getWebCaptureKey, toAccelerator } from '../../utils/captureKey';
 import '../../styles/shell.css';
 import '../../styles/shell-styles.css';
 
@@ -29,6 +30,23 @@ export default function AppShell({ children }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate, pathname]);
+
+  // Quick-capture key in a browser tab (the desktop app registers it system-wide instead, so it is skipped there).
+  // Soft, River and Orbit open their capture card; Studio and Console open the small capture window.
+  useEffect(() => {
+    if (window.pebloDesktop) return undefined;
+    let key = getWebCaptureKey();
+    const refresh = () => { key = getWebCaptureKey(); };
+    const onKey = (e) => {
+      if (e.repeat || toAccelerator(e) !== key) return;
+      e.preventDefault();
+      if (['soft', 'river', 'orbit'].includes(uiStyle)) window.dispatchEvent(new Event('peblo:capture'));
+      else window.open('/quick-capture', 'peblo-capture', 'popup,width=560,height=460');
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener(CAPTURE_KEY_EVENT, refresh);
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener(CAPTURE_KEY_EVENT, refresh); };
+  }, [uiStyle]);
 
   // Other parts of the app can open Settings with window.dispatchEvent(new Event('peblo:open-settings')).
   useEffect(() => {

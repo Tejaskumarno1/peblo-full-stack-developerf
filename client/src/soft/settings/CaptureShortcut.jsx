@@ -1,46 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Card, Row, useSave } from './ui';
+import { DEFAULT_CAPTURE_KEY, getWebCaptureKey, setWebCaptureKey, shortcutLabel, toAccelerator } from '../../utils/captureKey';
 
-const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
-
-/** "CommandOrControl+Shift+Space" -> "Ctrl + Shift + Space" for display. */
-export function shortcutLabel(accelerator) {
-  return (accelerator || '').split('+').map((p) => (p === 'CommandOrControl' ? (isMac ? '⌘' : 'Ctrl') : p)).join(' + ');
-}
-
-/** A key event -> an Electron accelerator, or null while only modifiers are held. */
-function toAccelerator(e) {
-  const code = e.code || '';
-  let key = null;
-  if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
-  else if (/^Digit\d$/.test(code)) key = code.slice(5);
-  else if (/^F([1-9]|1\d|2[0-4])$/.test(code)) key = code;
-  else if (['Space', 'Tab', 'Backspace', 'Enter', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 'Delete'].includes(code)) key = code;
-  else if (/^Arrow(Up|Down|Left|Right)$/.test(code)) key = code.slice(5);
-  if (!key) return null;
-  const mods = [];
-  if (e.ctrlKey || e.metaKey) mods.push('CommandOrControl');
-  if (e.altKey) mods.push('Alt');
-  if (e.shiftKey) mods.push('Shift');
-  return [...mods, key].join('+');
-}
-
-/**
- * Lets the person change the global quick-capture key. Only appears inside the desktop app
- * (window.pebloDesktop comes from electron/preload.cjs); in a browser the key does not exist.
- */
-export default function CaptureShortcut() {
+/** Where the key lives: the desktop shell (window.pebloDesktop, from electron/preload.cjs) or this browser tab. */
+function backend() {
   const desktop = typeof window !== 'undefined' ? window.pebloDesktop : null;
+  if (desktop) return { desktop: true, ...desktop };
+  return {
+    desktop: false,
+    getCaptureShortcut: async () => ({ shortcut: getWebCaptureKey(), defaultShortcut: DEFAULT_CAPTURE_KEY, registered: true }),
+    setCaptureShortcut: async (acc) => { setWebCaptureKey(acc); return { ok: true, shortcut: acc }; },
+    resetCaptureShortcut: async () => { setWebCaptureKey(DEFAULT_CAPTURE_KEY); return { ok: true, shortcut: DEFAULT_CAPTURE_KEY }; },
+  };
+}
+
+/** Lets the person change the quick-capture key: system-wide in the desktop app, while Peblo is open in a browser tab. */
+export default function CaptureShortcut() {
+  const [api] = useState(backend);
   const save = useSave();
   const [info, setInfo] = useState(null);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (desktop) desktop.getCaptureShortcut().then(setInfo).catch(() => {});
-  }, [desktop]);
+  useEffect(() => { api.getCaptureShortcut().then(setInfo).catch(() => {}); }, [api]);
 
-  if (!desktop || !info) return null;
+  if (!info) return null;
 
   // Outside the Settings page there is no header to report to (useSave then does nothing), so run the call here.
   const apply = async (promise) => {
@@ -57,12 +41,16 @@ export default function CaptureShortcut() {
     if (!acc) return; // only modifiers so far
     if (!/^(CommandOrControl|Alt)/.test(acc)) { setError('Hold Ctrl (or ⌘) or Alt together with the key.'); return; }
     setRecording(false);
-    apply(desktop.setCaptureShortcut(acc));
+    apply(api.setCaptureShortcut(acc));
   };
 
+  const where = api.desktop
+    ? 'Press this anywhere in Windows to jot down a note or task, even when Peblo is in the tray.'
+    : 'Press this anywhere in Peblo to jot down a note or task. A web page cannot listen outside its tab; the desktop app can.';
+
   return (
-    <Card title="Quick capture key" hint="Press this anywhere in Windows to jot down a note or task, even when Peblo is in the tray.">
-      <Row label="Shortcut" hint={info.registered ? 'Works anywhere on your computer.' : 'Not active right now: another app is probably using it. Pick another.'}>
+    <Card title="Quick capture key" hint={where}>
+      <Row label="Shortcut" hint={info.registered ? (api.desktop ? 'Works anywhere on your computer.' : 'Saved in this browser.') : 'Not active right now: another app is probably using it. Pick another.'}>
         <button
           type="button"
           className={`s-outline s-set-btn${recording ? ' on' : ''}`}
@@ -74,7 +62,7 @@ export default function CaptureShortcut() {
           {recording ? 'Press the new keys… (Esc to cancel)' : <kbd>{shortcutLabel(info.shortcut)}</kbd>}
         </button>
         {info.shortcut !== info.defaultShortcut && (
-          <button type="button" className="s-link-btn" onClick={() => apply(desktop.resetCaptureShortcut())}>Reset to {shortcutLabel(info.defaultShortcut)}</button>
+          <button type="button" className="s-link-btn" onClick={() => apply(api.resetCaptureShortcut())}>Reset to {shortcutLabel(info.defaultShortcut)}</button>
         )}
       </Row>
       {error && <p role="alert" className="s-set-bad">{error}</p>}
