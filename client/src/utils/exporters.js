@@ -40,11 +40,13 @@ export const wordPage = (title, html) =>
 async function toPdf(html, filename) {
   const { default: html2pdf } = await import('html2pdf.js');
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;left:-10000px;top:0;width:740px;background:#fff;color:#111;padding:8px';
+  // Keep the source inside the document's capture area. html2canvas can return a
+  // blank canvas when its source sits beyond the viewport at a large negative x.
+  el.style.cssText = 'position:fixed;left:0;top:0;z-index:-1;width:740px;background:#fff;color:#111;padding:8px;pointer-events:none';
   el.innerHTML = `<style>${PAGE_CSS}</style>${html}`;
   document.body.appendChild(el);
   try {
-    await html2pdf().set({ margin: 12, filename, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4' }, pagebreak: { mode: ['css', 'legacy'] } }).from(el).save();
+    await html2pdf().set({ margin: 12, filename, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#fff', scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4' }, pagebreak: { mode: ['css', 'legacy'] } }).from(el).save();
   } finally {
     el.remove();
   }
