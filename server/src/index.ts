@@ -8,7 +8,7 @@ import { AddressInfo } from 'net';
 import { Server as SocketIOServer } from 'socket.io';
 import { pathToFileURL } from 'url';
 
-import { initDatabase } from './db.js';
+import prisma, { initDatabase } from './db.js';
 import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
@@ -72,6 +72,16 @@ app.use('/api', apiLimiter());
   // Before the routers: hosting platforms probe this without signing in.
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Same as /api/health but also runs a query, so an uptime pinger keeps the hosted database awake too.
+  app.get('/api/health/db', async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: 'error', db: 'down' });
+    }
   });
 
   // Which address links should use. Share links and the MCP address must work for other people, so they always

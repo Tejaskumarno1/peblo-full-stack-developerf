@@ -21,7 +21,7 @@ File: `electron/main.cjs` (398 lines). `package.json:12` `"main": "electron/main
 ### 1.2 `app.whenReady()` (`:361-390`)
 1. **Mode selection** (`:364-365`):
    - Dev (`PEBLO_DEV_URL` set): no embedded server - the API is already running via `tsx watch` and the UI via Vite.
-   - Remote/hosted: `readRemoteUrl()` (`:29-36`) takes `PEBLO_API_URL`, else the first line of `<userData>/server-url.txt`; trailing slashes stripped; must match `^https?://`. If set, no local server is started.
+   - Remote/hosted: `readRemoteUrl()` (`:29-36`) takes `PEBLO_API_URL`, else the first line of `<userData>/server-url.txt`; in a packaged build with neither set it falls back to `PRODUCTION_URL` (the Render server, same as `mobile/capacitor.config.json`) unless `PEBLO_LOCAL=1`, so released apps never need a `.env`; trailing slashes stripped; must match `^https?://`. If set, no local server is started.
    - Default: `startBackend()`.
 2. **`startBackend()`** (`:165-180`):
    - `mkdir -p userData`.

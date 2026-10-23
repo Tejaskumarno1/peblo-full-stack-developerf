@@ -51,12 +51,16 @@ let tray = null;
 let serverPort = null;
 // Hosted mode: when set, the app is just a window onto a Peblo server running elsewhere.
 // Set PEBLO_API_URL (e.g. https://peblo.example.com), or put the address in server-url.txt in the app-data folder.
+const PRODUCTION_URL = 'https://peblo-stxo.onrender.com'; // same address as mobile/capacitor.config.json
 let REMOTE_URL = null;
 function readRemoteUrl() {
   let url = process.env.PEBLO_API_URL;
   if (!url) {
     try { url = fs.readFileSync(path.join(app.getPath('userData'), 'server-url.txt'), 'utf8'); } catch { /* none */ }
   }
+  // Released builds are a window onto the production server, which alone holds DATABASE_URL and the
+  // other secrets. PEBLO_LOCAL=1 runs the in-process server instead (needs a .env).
+  if (!url && app.isPackaged && !process.env.PEBLO_LOCAL) url = PRODUCTION_URL;
   url = (url || '').trim().replace(/\/+$/, '');
   return /^https?:\/\//i.test(url) ? url : null;
 }
@@ -163,13 +167,14 @@ function configurePrismaEngine() {
 /**
  * The database is a Postgres server shared by every account, so the app needs its address
  * (DATABASE_URL) and the secret that signs sign-ins (JWT_SECRET). They come from the environment,
- * or from the first .env file found: PEBLO_ENV_FILE, one in the app-data folder, or server/.env
+ * or from the first .env file found: PEBLO_ENV_FILE, one in the app-data folder, next to Peblo.exe, or server/.env
  * when running from the project folder.
  */
 function loadEnvFile() {
   const candidates = [
     process.env.PEBLO_ENV_FILE,
     path.join(app.getPath('userData'), '.env'),
+    path.join(path.dirname(app.getPath('exe')), '.env'),
     path.join(app.getAppPath(), 'server', '.env'),
   ].filter(Boolean);
   const file = candidates.find((f) => fs.existsSync(f));
@@ -186,7 +191,7 @@ function loadEnvFile() {
     process.env.JWT_SECRET = secret;
   }
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is not set. Put your Postgres connection string in server/.env (or set PEBLO_ENV_FILE), then start Peblo again.');
+    throw new Error('DATABASE_URL is not set. Copy server/.env to ' + path.join(app.getPath('userData'), '.env') + ' (or next to Peblo.exe, or set PEBLO_ENV_FILE), then start Peblo again.');
   }
 }
 
