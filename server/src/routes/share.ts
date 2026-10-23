@@ -93,23 +93,10 @@ publicRoutes.use((_req, res, next) => {
 });
 
 const validToken = (t: string) => /^[A-Za-z0-9_-]{20,40}$/.test(t);
-const PRESENCE_TTL_MS = 35_000;
-type ViewerPresence = { sessionId: string; name: string; seenAt: number };
-const liveViewers = new Map<string, Map<string, ViewerPresence>>();
 const viewerNames = new Map<string, { name: string; expiresAt: number }>();
-const presenceKey = (kind: 'note' | 'todo', token: string) => `${kind}:${token}`;
 
-function prunePresence(key?: string) {
-  const now = Date.now();
-  const rooms = key ? [[key, liveViewers.get(key)] as const] : liveViewers.entries();
-  for (const [roomKey, room] of rooms) {
-    if (!room) continue;
-    for (const [sessionId, viewer] of room) if (now - viewer.seenAt > PRESENCE_TTL_MS) room.delete(sessionId);
-    if (!room.size) liveViewers.delete(roomKey);
-  }
-  for (const [userId, entry] of viewerNames) if (entry.expiresAt < now) viewerNames.delete(userId);
-}
-const presenceSweep = setInterval(() => prunePresence(), 15_000);
+const prunePresence = () => prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\'').catch(() => {});
+const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
@@ -134,7 +121,7 @@ publicRoutes.delete('/:kind/:token', authenticate, async (req, res, next) => {
     const row = await shareOwner(kind, req.params.token, req.user!.id);
     if (!row) return res.status(404).json({ error: 'This link is not yours to turn off.' });
     await setToken(kind, row.id, null);
-    liveViewers.delete(presenceKey(kind, req.params.token));
+    await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2', kind, req.params.token);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -166,18 +153,22 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
       }
     }
 
-    const key = presenceKey(kind, token);
-    prunePresence(key);
-    let room = liveViewers.get(key);
-    if (!room) { room = new Map(); liveViewers.set(key, room); }
-    if (req.body?.active === false) room.delete(sessionId);
-    else room.set(sessionId, { sessionId, name, seenAt: Date.now() });
-    if (!room.size) liveViewers.delete(key);
-
-    res.json({ viewers: [...(liveViewers.get(key)?.values() || [])].map((viewer) => ({
-      id: crypto.createHash('sha256').update(viewer.sessionId).digest('hex').slice(0, 12),
-      name: viewer.name,
-      self: viewer.sessionId === sessionId,
+    if (req.body?.active === false) {
+      await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId);
+    } else {
+      await prisma.$executeRawUnsafe(
+        'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW()',
+        kind, token, sessionId, name,
+      );
+    }
+    const active = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string }[]>(
+      'SELECT session_id, display_name FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+      kind, token,
+    );
+    res.json({ viewers: active.map((viewer) => ({
+      id: crypto.createHash('sha256').update(viewer.session_id).digest('hex').slice(0, 12),
+      name: viewer.display_name,
+      self: viewer.session_id === sessionId,
     })) });
   } catch (e) { next(e); }
 });

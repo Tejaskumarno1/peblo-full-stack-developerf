@@ -58,9 +58,11 @@ export default function SharedPage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
+  const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
   const menuRef = useRef(null);
+  const articleRef = useRef(null);
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
 
@@ -76,11 +78,37 @@ export default function SharedPage() {
       .then((json) => {
         if (!live) return;
         draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt };
+        if (json.kind === 'todo') taskSavedText.current = json.text;
         setConflict(null); setStatus('saved'); setData(json);
       })
       .catch((cause) => { if (live) setError(cause.message); });
     return () => { live = false; };
   }, [url, rev]);
+
+  useEffect(() => {
+    if (!data || shareOff) return undefined;
+    let live = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!live) return;
+        if (response.status === 404) {
+          setData(null);
+          setShareOff(true);
+          setError('This share link expired or was turned off. Ask the owner for a new link.');
+          return;
+        }
+        if (!response.ok) return;
+        const latest = await response.json();
+        if (!live || latest.updatedAt === data.updatedAt || status !== 'saved') return;
+        draft.current = { title: latest.title || '', content: latest.content || '', base: latest.updatedAt };
+        setData(latest);
+        setRev((n) => n + 1);
+      } catch { /* Keep the current page visible during a brief connection loss. */ }
+    };
+    const interval = window.setInterval(() => { void refresh(); }, 5000);
+    return () => { live = false; window.clearInterval(interval); };
+  }, [data, shareOff, status, url]);
 
   const put = useCallback(async (payload) => {
     const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -100,9 +128,13 @@ export default function SharedPage() {
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const patchTask = async (patch) => {
-    const response = await put(patch);
-    if (response.status === 200) setData((current) => ({ ...current, ...patch }));
-    else setStatus('error');
+    setStatus('saving');
+    try {
+      const response = await put(patch);
+      if (response.status === 200) { if (patch.text !== undefined) taskSavedText.current = patch.text; setData((current) => ({ ...current, ...patch, updatedAt: response.body.updatedAt })); setStatus('saved'); }
+      else if (response.status === 404) { setData(null); setShareOff(true); setError(response.body.error || 'This share link is no longer available.'); }
+      else { setStatus(response.status === 409 ? 'conflict' : 'error'); }
+    } catch { setStatus('error'); }
   };
 
   const body = useMemo(() => (data?.kind === 'note' ? toHtml(data.content) : data?.note ? toHtml(data.note.content) : ''), [data]);
@@ -130,6 +162,15 @@ export default function SharedPage() {
   }, [user?.id, data?.kind, kindPath, token]);
 
   useEffect(() => {
+    setSavedCopy(null);
+    if (!user?.id || !data) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(`peblo-share-copy:${user.id}:${kindPath}:${token}`) || 'null');
+      if (stored?.kind === data.kind && typeof stored.id === 'string') setSavedCopy(stored);
+    } catch { /* Storage may be unavailable in private browsing. */ }
+  }, [user?.id, data?.kind, kindPath, token]);
+
+  useEffect(() => {
     if (!data || shareOff) { setViewers([]); return undefined; }
     const sessionKey = `peblo-share-viewer:${kindPath}:${token}`;
     let sessionId;
@@ -147,7 +188,16 @@ export default function SharedPage() {
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ sessionId, active }),
       keepalive,
-    }).then((response) => response.ok ? response.json() : null)
+    }).then((response) => {
+      if (response.status === 404 && live) {
+        setData(null);
+        setViewers([]);
+        setShareOff(true);
+        setError('This share link expired or was turned off. Ask the owner for a new link.');
+        return null;
+      }
+      return response.ok ? response.json() : null;
+    })
       .then((json) => { if (live && json?.viewers) setViewers(json.viewers); })
       .catch(() => {});
     void beat();
@@ -188,6 +238,11 @@ export default function SharedPage() {
     setMenuOpen(false);
   };
 
+  const rememberSavedCopy = (account, copy) => {
+    setSavedCopy(copy);
+    try { localStorage.setItem(`peblo-share-copy:${account.id}:${kindPath}:${token}`, JSON.stringify(copy)); } catch { /* Keep the current-session action available. */ }
+  };
+
   const saveSharedCopy = async (account = user) => {
     if (!account) { setAuthError(''); setAuthOpen(true); return; }
     if (!data || saveBusy || savedCopy) return;
@@ -201,7 +256,7 @@ export default function SharedPage() {
           content: draft.current.content ?? data.content ?? '',
         });
         const id = response.data.note.id;
-        setSavedCopy({ kind: 'note', id });
+        rememberSavedCopy(account, { kind: 'note', id });
       } else {
         let noteId = null;
         if (data.note) {
@@ -218,7 +273,7 @@ export default function SharedPage() {
         });
         copiedTaskId = response.data.todo.id;
         if (data.completed) await todosAPI.update(copiedTaskId, { completed: true });
-        setSavedCopy({ kind: 'todo', id: copiedTaskId });
+        rememberSavedCopy(account, { kind: 'todo', id: copiedTaskId });
       }
       setAuthOpen(false);
       setMenuOpen(false);
@@ -265,15 +320,16 @@ export default function SharedPage() {
 
   useEffect(() => {
     const updateProgress = () => {
-      const root = document.documentElement;
-      const range = root.scrollHeight - root.clientHeight;
-      setScrollProgress(range > 0 ? Math.min(100, (root.scrollTop / range) * 100) : 0);
+      const scroller = articleRef.current;
+      const range = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+      setScrollProgress(range > 0 ? Math.min(100, (scroller.scrollTop / range) * 100) : 0);
     };
-    window.addEventListener('scroll', updateProgress, { passive: true });
     window.addEventListener('resize', updateProgress);
+    const scroller = articleRef.current;
+    scroller?.addEventListener('scroll', updateProgress, { passive: true });
     updateProgress();
-    return () => { window.removeEventListener('scroll', updateProgress); window.removeEventListener('resize', updateProgress); };
-  }, []);
+    return () => { scroller?.removeEventListener('scroll', updateProgress); window.removeEventListener('resize', updateProgress); };
+  }, [data]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -291,7 +347,7 @@ export default function SharedPage() {
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
       if (visible[0]) setActiveHeading(visible[0].target.id);
-    }, { rootMargin: '-100px 0px -72% 0px' });
+    }, { root: articleRef.current, rootMargin: '-30px 0px -72% 0px' });
     headings.forEach(({ id }) => { const element = document.getElementById(id); if (element) observer.observe(element); });
     return () => observer.disconnect();
   }, [headings, data]);
@@ -350,7 +406,7 @@ export default function SharedPage() {
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
-          <article>
+          <article ref={articleRef}>
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
                 ? <input className="title-in" aria-label="Title" key={`t${rev}`} value={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; setData((current) => ({ ...current, title: event.target.value })); queueSave(); }} />
@@ -373,8 +429,8 @@ export default function SharedPage() {
                   <span className={`chip${data.priority === 'high' ? ' p' : ''}`}>{data.priority} priority</span>
                   {data.tags.map((tag) => <span key={tag} className="chip l">#{tag}</span>)}
                 </div>
-                {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" defaultValue={data.text} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== data.text) patchTask({ text: value }); }} /> : <h1>{data.text}</h1>}
-                <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span></div>
+                {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
+                <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span>{data.canEdit && <span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span>}</div>
                 <button type="button" className={`check${data.completed ? ' done' : ''}`} aria-pressed={data.completed} disabled={!data.canEdit || previewMode} onClick={() => patchTask({ completed: !data.completed })}><span className="box">{data.completed && <Check size={17} />}</span><span className="t">{data.completed ? (data.canEdit && !previewMode ? 'Done (tap to undo)' : 'Done') : data.canEdit && !previewMode ? 'Mark as done' : 'To do'}</span></button>
                 <div className="tmeta"><div><small>Due</small><b>{data.deadline ? when(data.deadline) : 'No due date'}</b></div><div><small>Priority</small><b>{data.priority}</b></div><div><small>Status</small><b>{data.completed ? 'Done' : 'To do'}</b></div></div>
               </section>
@@ -386,7 +442,7 @@ export default function SharedPage() {
           </article>
         </main>
       )}
-      {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
+      {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
       {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
         <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">

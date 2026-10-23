@@ -20,7 +20,9 @@
   --soft-shadow: 0 2px 6px rgba(70, 45, 20, .08);
   --card-shadow: 0 6px 16px rgba(70, 45, 20, .1);
   --glass: rgba(251, 246, 238, .82);
-  min-height: 100vh;
+  width: var(--pb-canvas-w);
+  height: var(--pb-canvas-h);
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
   font: 400 14px/1.45 'Figtree', system-ui, sans-serif;
@@ -50,7 +52,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .blobs i:nth-child(2) { width: 360px; height: 360px; background: var(--lilac); bottom: -120px; left: -100px; }
 .pb-shared .blobs i:nth-child(3) { width: 260px; height: 260px; background: var(--mint); top: 45%; left: 55%; opacity: .35; }
 
-.pb-shared .top { position: sticky; top: 0; z-index: 30; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+.pb-shared .top { position: relative; z-index: 30; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
 .pb-shared .top-in { width: min(1180px, 100%); min-height: 62px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
 .pb-shared .brand { display: flex; align-items: center; gap: 9px; flex: none; color: var(--fg); text-decoration: none; font: 800 22px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.03em; }
 .pb-shared .brand i { width: 32px; height: 28px; border-radius: 52% 48% 46% 54% / 60% 58% 42% 40%; background: var(--accent); display: grid; place-items: center; }
@@ -102,7 +104,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .share-off-banner { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; width: min(900px, calc(100% - 32px)); margin: 18px auto 0; border-radius: 16px; padding: 13px 16px; background: var(--mint); color: var(--fg); font-size: 14px; }
 .pb-shared .share-off-banner svg { flex: none; }
 
-.pb-shared .stage { position: relative; z-index: 1; width: min(1180px, 100%); margin: 0 auto; padding: 38px 24px 40px; display: grid; grid-template-columns: 230px minmax(0, 740px); gap: 56px; justify-content: center; }
+.pb-shared .stage { position: relative; z-index: 1; width: min(1180px, 100%); height: calc(var(--pb-canvas-h) - 65px); margin: 0 auto; padding: 38px 24px 40px; display: grid; grid-template-columns: 230px minmax(0, 740px); gap: 56px; justify-content: center; overflow: hidden; }
 .pb-shared .toc { position: sticky; top: 104px; align-self: start; max-height: calc(100vh - 124px); overflow-y: auto; font-size: 14px; }
 .pb-shared .toc h2 { margin: 0 0 12px; color: var(--fg3); font: 700 12px/1.4 'Figtree', system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; }
 .pb-shared .toc a { display: block; border-left: 2px solid var(--line); padding: 7px 0 7px 14px; color: var(--fg3); text-decoration: none; font-weight: 600; line-height: 1.35; transition: color .15s, border-color .15s; }
@@ -110,7 +112,7 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
 .pb-shared .toc a.sub { padding-left: 26px; font-size: 13px; }
 .pb-shared .toc .meta { margin-top: 22px; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--soft-shadow); color: var(--fg3); font-size: 13px; line-height: 1.7; }
 .pb-shared .toc .meta b { color: var(--fg); }
-.pb-shared article { min-width: 0; }
+.pb-shared article { min-width: 0; min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .pb-shared .title { margin: 0 0 18px; color: var(--fg); font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .pb-shared .title-in { width: 100%; margin: 0 0 18px; border: 0; padding: 0; background: transparent; color: var(--fg); outline: none; font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; }
 .pb-shared .title-in:focus { box-shadow: 0 3px var(--accent); }
@@ -227,10 +229,11 @@ html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
   .pb-shared *, .pb-shared *::before, .pb-shared *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 @media print {
-  html.pb-public-share, html.pb-public-share body { overflow: visible; }
-  html.pb-public-share #root { position: static; height: auto; overflow: visible; }
+  html, body, html #root { position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
   .pb-shared .top, .pb-shared .blobs, .pb-shared .toc, .pb-shared .cta, .pb-shared .totop, .pb-shared .toast { display: none !important; }
-  .pb-shared .stage { display: block; width: 100%; padding: 0; }
+  .pb-shared { width: auto; height: auto; overflow: visible; }
+  .pb-shared .stage { display: block; width: 100%; height: auto; overflow: visible; padding: 0; }
+  .pb-shared article { height: auto; overflow: visible; }
   .pb-shared .taskcard { box-shadow: none; border: 1px solid var(--line); }
   .pb-shared { background: #fff; color: #000; }
 }
