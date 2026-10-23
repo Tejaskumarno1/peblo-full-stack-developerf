@@ -65,6 +65,8 @@ export default function SharedPage() {
   const toastTimer = useRef(null);
   const menuRef = useRef(null);
   const articleRef = useRef(null);
+  const shareStateRef = useRef({ data, status });
+  shareStateRef.current = { data, status };
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
 
@@ -139,7 +141,8 @@ export default function SharedPage() {
         }
         if (!response.ok) return;
         const latest = await response.json();
-        if (!live || latest.updatedAt === data.updatedAt || status !== 'saved') return;
+        const current = shareStateRef.current;
+        if (!live || latest.updatedAt === current.data?.updatedAt || current.status !== 'saved') return;
         draft.current = { title: latest.title || '', content: latest.content || '', base: latest.updatedAt };
         setData(latest);
         setRev((n) => n + 1);
@@ -147,7 +150,7 @@ export default function SharedPage() {
     };
     const interval = window.setInterval(() => { void refresh(); }, 5000);
     return () => { live = false; window.clearInterval(interval); };
-  }, [data, shareOff, status, url]);
+  }, [data?.kind, shareOff, url]);
 
   const put = useCallback(async (payload) => {
     const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -160,10 +163,12 @@ export default function SharedPage() {
       const response = await put({ title: draft.current.title, content: draft.current.content, baseUpdatedAt: draft.current.base, force });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
-      draft.current.base = response.body.updatedAt; setConflict(null); setStatus('saved');
+      draft.current.base = response.body.updatedAt;
+      setData((current) => current ? { ...current, title: draft.current.title, content: draft.current.content, updatedAt: response.body.updatedAt } : current);
+      setConflict(null); setStatus('saved');
     } catch { setStatus('error'); }
   }, [put]);
-  const queueSave = () => { setStatus('saving'); clearTimeout(timer.current); timer.current = setTimeout(() => saveNote(false), 1200); };
+  const queueSave = () => { setStatus((current) => current === 'saving' ? current : 'saving'); clearTimeout(timer.current); timer.current = setTimeout(() => saveNote(false), 1200); };
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const patchTask = async (patch) => {
@@ -498,7 +503,7 @@ export default function SharedPage() {
           <article ref={articleRef}>
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
-                ? <input className="title-in" aria-label="Title" key={`t${rev}`} value={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; setData((current) => ({ ...current, title: event.target.value })); queueSave(); }} />
+                ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
@@ -508,7 +513,7 @@ export default function SharedPage() {
               </div>
               {conflict && <div className="conflict" role="alert">Someone else changed this note while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => setRev((n) => n + 1)}>Load their version</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
-                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; setData((current) => ({ ...current, content: markdown })); queueSave(); }} /></Suspense>
+                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
             </>}
 
