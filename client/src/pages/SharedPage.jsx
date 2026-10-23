@@ -72,9 +72,9 @@ export default function SharedPage() {
     const html = document.documentElement;
     let baselineDpr = window.devicePixelRatio || 1;
     try {
-      const saved = Number(sessionStorage.getItem('peblo-share-base-dpr'));
+      const saved = Number(localStorage.getItem('peblo-share-base-dpr'));
       if (saved > 0) baselineDpr = saved;
-      else sessionStorage.setItem('peblo-share-base-dpr', String(baselineDpr));
+      else localStorage.setItem('peblo-share-base-dpr', String(baselineDpr));
     } catch { /* Keep the current zoom as the baseline when storage is unavailable. */ }
     const syncCanvasScale = () => {
       const currentDpr = window.devicePixelRatio || baselineDpr;
