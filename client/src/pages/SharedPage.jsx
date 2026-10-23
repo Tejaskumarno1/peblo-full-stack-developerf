@@ -199,8 +199,7 @@ export default function SharedPage() {
       }
     }
     if (!target || !article.contains(target)) return;
-    const top = target.getBoundingClientRect().top - article.getBoundingClientRect().top + article.scrollTop;
-    article.scrollTo({ top: Math.max(0, top - 16), behavior });
+    target.scrollIntoView({ behavior, block: 'start', inline: 'nearest' });
     setActiveHeading(id);
   }, []);
   const wordCount = useMemo(() => {
