@@ -1,16 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
+import { safeFetchHtml } from '../utils/safeFetch.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { syncTags, saveEmbeddingForNote } from './notesController.js';
+import { aiReadableWhere, noteAiAccess, PRIVATE_MESSAGE } from '../utils/aiAccess.js';
+
+/** The note a per-note AI action works on: it must exist, not be in the Trash and not be #private. Answers the request itself when it cannot be used. */
+async function noteForAi(req: Request, res: Response) {
+  const access = await noteAiAccess(req.user!.id, req.params.id as string);
+  if (access === 'private') { res.status(400).json({ error: PRIVATE_MESSAGE }); return null; }
+  if (access === 'missing') { res.status(404).json({ error: 'Note not found' }); return null; }
+  const note = await prisma.note.findFirst({ where: { id: req.params.id as string, userId: req.user!.id } });
+  if (!note) { res.status(404).json({ error: 'Note not found' }); return null; }
+  return note;
+}
 
 export async function generateSummary(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 
@@ -38,12 +46,8 @@ export async function generateSummary(req: Request, res: Response, next: NextFun
 
 export async function extractActions(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 
@@ -70,12 +74,8 @@ export async function extractActions(req: Request, res: Response, next: NextFunc
 
 export async function suggestTitle(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const content = req.body?.content ?? note.content;
 
     if (!content || content.trim().length === 0) {
@@ -112,109 +112,14 @@ export async function processBlockAI(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function processVoiceCommand(req: Request, res: Response, next: NextFunction) {
+/** Speech to text for the AI assistant's microphone: a short WAV recording in, the words out. */
+export async function transcribe(req: Request, res: Response, next: NextFunction) {
   try {
-    const { transcript, timezone, localTime } = req.body;
-    if (!transcript) {
-      return res.status(400).json({ error: "Transcript is required" });
-    }
-
-    // Fetch user's current incomplete tasks and active notes to provide context to the AI
-    const [tasks, notes] = await Promise.all([
-      prisma.todo.findMany({
-        where: { userId: req.user!.id, completed: false },
-        select: { id: true, text: true, deadline: true }
-      }),
-      prisma.note.findMany({
-        where: { userId: req.user!.id, isArchived: false },
-        select: { id: true, title: true }
-      })
-    ]);
-
-    // Send to Gemini
-    const result = await aiService.processVoiceCallCommand(req.user!.id, transcript, tasks, notes, localTime, timezone);
-
-    // Execute the actions returned by AI if clarification is not needed
-    let isSnooze = false;
-    let snoozeMinutes = 10;
-
-    if (!result.needClarification && result.actions && Array.isArray(result.actions)) {
-      for (const action of result.actions) {
-        if (action.type === 'RESCHEDULE' && action.taskId) {
-          await prisma.todo.update({
-            where: { id: action.taskId, userId: req.user!.id },
-            data: { deadline: new Date(action.newDate) }
-          });
-        } else if (action.type === 'COMPLETE' && action.taskId) {
-          await prisma.todo.update({
-            where: { id: action.taskId, userId: req.user!.id },
-            data: { completed: true }
-          });
-        } else if (action.type === 'CREATE' && action.text) {
-          await prisma.todo.create({
-            data: {
-              userId: req.user!.id,
-              text: action.text,
-              completed: false,
-              deadline: action.newDate ? new Date(action.newDate) : null,
-              priority: 'medium'
-            }
-          });
-        } else if (action.type === 'CREATE_NOTE' && action.content) {
-          const newNote = await prisma.note.create({
-            data: {
-              userId: req.user!.id,
-              title: action.title || 'Untitled Voice Note',
-              content: action.content || '',
-              category: 'Voice Notes'
-            }
-          });
-          if (action.tags && action.tags.length > 0) {
-            await syncTags(newNote.id, action.tags);
-          }
-          saveEmbeddingForNote(req.user!.id, newNote.id, newNote.title, newNote.content);
-        } else if (action.type === 'READ_NOTE' && action.noteId) {
-          const note = await prisma.note.findUnique({
-            where: { id: action.noteId }
-          });
-          if (note) {
-            const summaryText = await aiService.generateVerbalNoteSummary(req.user!.id, note.title, note.content);
-            result.responseSpeech = `Here is a summary of your note "${note.title}": ${summaryText}`;
-          } else {
-            result.responseSpeech = "Sorry, I couldn't find that note in your database.";
-          }
-        } else if (action.type === 'SNOOZE') {
-          isSnooze = true;
-          snoozeMinutes = action.minutes || 10;
-        }
-      }
-
-      // Broadcast changes if any actions were taken (and it's not just a snooze)
-      const nonSnoozeActions = result.actions.filter((a: any) => a.type !== 'SNOOZE');
-      if (nonSnoozeActions.length > 0) {
-        const io = req.app.get('io');
-        if (io) {
-          const hasTodo = nonSnoozeActions.some((a: any) => ['COMPLETE', 'RESCHEDULE', 'CREATE'].includes(a.type));
-          const hasNote = nonSnoozeActions.some((a: any) => a.type === 'CREATE_NOTE');
-          if (hasTodo) io.to(req.user!.id).emit('todos_changed');
-          if (hasNote) io.to(req.user!.id).emit('notes_changed');
-        }
-      }
-    } else if (result.needClarification && result.actions) {
-      const snoozeAction = result.actions.find((a: any) => a.type === 'SNOOZE');
-      if (snoozeAction) {
-        isSnooze = true;
-        snoozeMinutes = snoozeAction.minutes || 10;
-      }
-    }
-
-    res.json({ 
-      responseSpeech: result.responseSpeech || "Done!",
-      needClarification: !!result.needClarification,
-      snooze: isSnooze,
-      snoozeMinutes,
-      actions: result.actions
-    });
+    const { audio, mime } = req.body || {};
+    if (typeof audio !== 'string' || audio.length < 8) return res.status(400).json({ error: 'No recording was sent.' });
+    if (audio.length > 6_000_000) return res.status(413).json({ error: 'That recording is too long. Keep it under a minute.' });
+    const text = await aiService.transcribeAudio(req.user!.id, audio, typeof mime === 'string' ? mime : 'audio/wav');
+    res.json({ text });
   } catch (error) {
     next(error);
   }
@@ -222,12 +127,8 @@ export async function processVoiceCommand(req: Request, res: Response, next: Nex
 
 export async function suggestTagForNote(req: Request, res: Response, next: NextFunction) {
   try {
-    const note = await prisma.note.findFirst({
-      where: { id: req.params.id as string, userId: req.user!.id }
-    });
-    if (!note) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
+    const note = await noteForAi(req, res);
+    if (!note) return;
     const title = req.body?.title ?? note.title;
     const content = req.body?.content ?? note.content;
 
@@ -254,13 +155,14 @@ export async function getLinkPreview(req: Request, res: Response, next: NextFunc
       targetUrl = 'https://' + targetUrl;
     }
 
-    const response = await fetch(targetUrl, {
+    // Only public web pages (PEB-24): no internal addresses, bounded time and size, redirects re-checked.
+    const fetched = await safeFetchHtml(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
       }
     });
-
-    const html = await response.text();
+    targetUrl = fetched.url;
+    const html = fetched.html;
 
     const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? titleMatch[1].trim() : '';

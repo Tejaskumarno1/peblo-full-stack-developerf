@@ -1,48 +1,33 @@
 import axios from 'axios';
+import { getToken, clearToken } from './token';
 
+// The desktop app serves the UI and the API from the same local server,
+// so relative /api URLs always work. VITE_API_URL is only for unusual dev setups.
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: { 'Content-Type': 'application/json' }
 });
 
-// Request interceptor — attach JWT
+// Every request says who it is with the sign-in token.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // The server works out "today" for us, so it needs our zone (e.g. Asia/Kolkata)
+  try { config.headers['X-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* leave it to the server */ }
   return config;
 });
 
-// Response interceptor — handle token refresh
+// An expired or rejected token signs the person out (the sign-in screen takes over).
+// Wrong passwords at the sign-in form also answer 401; those are shown there instead.
 api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 &&
-        error.response?.data?.code === 'TOKEN_EXPIRED' &&
-        !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken });
-        localStorage.setItem('accessToken', data.accessToken);
-
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
+  (res) => res,
+  (err) => {
+    const isAuthForm = /\/auth\/(login|signup)/.test(err.config?.url || '');
+    if (err.response?.status === 401 && !isAuthForm) {
+      clearToken();
+      window.dispatchEvent(new Event('peblo:signed-out'));
     }
-
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 

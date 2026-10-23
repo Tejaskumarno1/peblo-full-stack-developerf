@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen } from 'lucide-react';
+import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { notesAPI } from '../api/index';
+import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
 
 export default function CommandPalette() {
@@ -11,6 +13,7 @@ export default function CommandPalette() {
   const [notes, setNotes] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const navigate = useNavigate();
+  const { uiStyle, setUiStyle } = useAuth();
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -42,30 +45,51 @@ export default function CommandPalette() {
     }
   }, [isOpen]);
 
+  // Typing asks the server, which ranks by title, tags and text and forgives a typo; until it answers, titles are matched here.
+  const [hits, setHits] = useState(null);
+  useEffect(() => {
+    const t = query.trim();
+    if (t.length < 2) { setHits(null); return undefined; }
+    const timer = setTimeout(() => {
+      notesAPI.getAll({ search: t, snippet: '1', limit: 6 }).then((r) => setHits({ q: t, notes: r.data.notes || [] })).catch(() => {});
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [query]);
   const filteredNotes = query.trim()
-    ? notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5)
+    ? (hits && hits.q === query.trim() ? hits.notes.slice(0, 6) : notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5))
     : [];
 
+  const openNew = async (data) => {
+    try { const r = await notesAPI.create(data); navigate(`/notes/${r.data.note.id}`); } catch { /* the palette just closes */ }
+  };
+  const openToday = async () => {
+    const d = new Date();
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    try { const r = await notesAPI.daily(date); navigate(`/notes/${r.data.note.id}`); } catch { /* the palette just closes */ }
+  };
+
   const navigationCommands = [
-    { id: 'nav-dashboard', title: 'Go to Dashboard', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
-    { id: 'nav-notes', title: 'Go to Workspace', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
-    { id: 'nav-tasks', title: 'Go to To-Do List', icon: <CheckSquare size={16} />, action: () => navigate('/todolist') },
+    { id: 'daily-note', title: "Open today's daily note", icon: <Calendar size={16} />, action: openToday },
+    ...TEMPLATES.map((t) => ({ id: `tpl-${t.id}`, title: `New note from template: ${t.name}`, icon: <FileText size={16} />, action: () => openNew({ title: t.title.trim() || t.name, content: t.content, tags: [] }) })),
+    { id: 'nav-dashboard', title: 'Go to Home', icon: <LayoutDashboard size={16} />, action: () => navigate('/') },
+    { id: 'nav-notes', title: 'Go to Notes', icon: <FolderOpen size={16} />, action: () => navigate('/notes') },
+    { id: 'nav-tasks', title: 'Go to Tasks', icon: <CheckSquare size={16} />, action: () => navigate('/tasks') },
     { id: 'nav-cal', title: 'Go to Calendar', icon: <Calendar size={16} />, action: () => navigate('/calendar') },
-    { 
-      id: 'nav-ai', 
-      title: 'Open AI Assistant', 
-      icon: <Sparkles size={16} className="text-ai" />, 
-      action: () => {
-        // We trigger the global shortcut for AI Panel
-        const event = new KeyboardEvent('keydown', { key: 'A', shiftKey: true, metaKey: true });
-        window.dispatchEvent(event);
-      }
-    }
+    { id: 'nav-ai', title: 'Open AI Hub', icon: <Sparkles size={16} />, action: () => navigate('/ai') },
+    { id: 'help', title: 'Help and shortcuts', icon: <Search size={16} />, action: () => window.dispatchEvent(new Event('peblo:help')) },
+    { id: 'nav-connections', title: 'AI models and privacy', icon: <Sparkles size={16} />, action: () => navigate('/ai/connections') },
+    ...[['soft', 'Soft Studio'], ['river', 'River'], ['orbit', 'Orbit']]
+      .filter(([id]) => id !== uiStyle)
+      .map(([id, name]) => ({ id: `style-${id}`, title: `Change style to ${name}`, icon: <Palette size={16} />, action: () => setUiStyle(id) }))
   ];
 
-  const filteredCommands = query.trim()
+  const matchingCommands = query.trim()
     ? navigationCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
     : navigationCommands;
+  // Anything typed can also be asked in the AI Hub, answered from your notes.
+  const filteredCommands = query.trim().length > 2
+    ? [{ id: 'ask-ai', title: `Ask AI: "${query.trim()}"`, icon: <Sparkles size={16} />, action: () => navigate(`/ai?q=${encodeURIComponent(query.trim())}`) }, ...matchingCommands]
+    : matchingCommands;
 
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),

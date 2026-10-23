@@ -3,7 +3,7 @@
    ============================ */
 
 .shared-page {
-  min-height: 100vh;
+  min-height: var(--pb-canvas-h);
   background: var(--bg-base);
   color: var(--text-primary);
   display: flex;
@@ -91,7 +91,7 @@
 
 .shared-error {
   max-width: 400px;
-  margin: 10vh auto;
+  margin: calc(var(--pb-canvas-h) * 10 / 100) auto;
   text-align: center;
   padding: 3rem;
   background: var(--bg-surface);

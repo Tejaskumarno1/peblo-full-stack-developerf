@@ -1,0 +1,23 @@
+name: Dependency audit
+
+on:
+  push:
+    branches: [app, main]
+  pull_request:
+  schedule:
+    - cron: '0 5 * * 1'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Shipped dependencies must have no high or critical advisories.
+      - name: Audit server and desktop shell
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit client
+        working-directory: client
+        run: npm audit --omit=dev --audit-level=high

@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
+import { notify } from '../utils/notify.js';
+import { tzOf } from '../utils/userTime.js';
 import prisma from '../db.js';
+import { saveVersion } from '../services/noteVersions.js';
 import * as aiService from '../services/aiService.js';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
+import { aiReadableWhere, noteAiAccess, decideChatUpdate, PRIVATE_MESSAGE } from '../utils/aiAccess.js';
 
 // prisma imported from db.js
 
@@ -18,15 +22,16 @@ function formatNote(note: any) {
   };
 }
 
-async function syncTags(noteId: string, tagNames: string[] | undefined) {
+// Tags are scoped per user, so two users can each have their own tag of the same name.
+async function syncTags(userId: string, noteId: string, tagNames: string[] | undefined) {
   await prisma.noteTag.deleteMany({ where: { noteId } });
   if (!tagNames?.length) return;
 
   for (const name of tagNames) {
     const trimmed = name.trim().toLowerCase();
     if (!trimmed) continue;
-    let tag = await prisma.tag.findUnique({ where: { name: trimmed } });
-    if (!tag) tag = await prisma.tag.create({ data: { name: trimmed } });
+    let tag = await prisma.tag.findUnique({ where: { userId_name: { userId, name: trimmed } } });
+    if (!tag) tag = await prisma.tag.create({ data: { userId, name: trimmed } });
     await prisma.noteTag.create({ data: { noteId, tagId: tag.id } });
   }
 }
@@ -42,7 +47,7 @@ async function createNoteForUser(userId: string, { title, content, category, tag
     include: noteInclude,
   });
 
-  if (tags?.length) await syncTags(note.id, tags);
+  if (tags?.length) await syncTags(userId, note.id, tags);
 
   const updated = await prisma.note.findUnique({
     where: { id: note.id },
@@ -50,6 +55,50 @@ async function createNoteForUser(userId: string, { title, content, category, tag
   });
 
   return formatNote(updated);
+}
+
+/**
+ * Adds to, or rewrites, one of this person's notes. The text before the change is kept as a version (the last 5),
+ * so it can be undone from the note's history. Notes in the Trash are left alone.
+ */
+export async function applyNoteUpdate(userId: string, id: string, appendContent: string | null, replaceContent: string | null) {
+  const existing = await prisma.note.findFirst({ where: { id, userId, isDeleted: false, deletedAt: null } });
+  if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+
+  let newContent = existing.content || '';
+  if (replaceContent?.trim()) {
+    newContent = replaceContent.trim();
+  } else if (appendContent?.trim()) {
+    const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
+    newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
+  }
+
+  await saveVersion(existing.id, existing.content || '', { force: true });
+
+  await prisma.note.update({ where: { id: existing.id }, data: { content: newContent } });
+  await prisma.aiGeneration.create({
+    data: { noteId: existing.id, userId, type: 'chat', result: JSON.stringify({ source: 'dashboard_chat_update' }) },
+  });
+  const refetched = await prisma.note.findUnique({ where: { id: existing.id }, include: noteInclude });
+  return formatNote(refetched);
+}
+
+/** The person said yes to a suggested change to one of their notes. */
+export async function applyChatUpdate(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { noteId, appendContent, replaceContent } = req.body || {};
+    if (typeof noteId !== 'string' || !noteId) return res.status(400).json({ error: 'Which note?' });
+    const add = typeof appendContent === 'string' ? appendContent : null;
+    const rewrite = typeof replaceContent === 'string' ? replaceContent : null;
+    if (!add?.trim() && !rewrite?.trim()) return res.status(400).json({ error: 'There is nothing to add.' });
+    if (Math.max(add?.length || 0, rewrite?.length || 0) > 200_000) return res.status(413).json({ error: 'That is too long for one note.' });
+    const note = await applyNoteUpdate(req.user!.id, noteId, add, rewrite);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    notify(req, 'notes_changed');
+    res.json({ note });
+  } catch (error) {
+    next(error);
+  }
 }
 
 export async function chatAndCreateNotes(req: Request, res: Response, next: NextFunction) {
@@ -63,7 +112,7 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
     const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
-      where: { userId, isArchived: false },
+      where: { ...aiReadableWhere(userId), isArchived: false },
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 25,
@@ -71,10 +120,12 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
 
     let targetNote: any = null;
     if (mode === 'append' && noteId) {
-      targetNote = await prisma.note.findFirst({
+      const access = await noteAiAccess(userId, noteId as string);
+      if (access === 'private') return res.status(400).json({ error: PRIVATE_MESSAGE });
+      targetNote = access === 'ok' ? await prisma.note.findFirst({
         where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
-      });
+      }) : null;
       if (!targetNote) {
         return res.status(404).json({ error: 'Note not found' });
       }
@@ -90,58 +141,14 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
     const createdNotes: any[] = [];
     let updatedNote: any = null;
 
-    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
-      const existing = await prisma.note.findFirst({
-        where: { id, userId },
-      });
-      if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+    const updateExistingNote = (id: string, appendContent: string | null, replaceContent: string | null) => applyNoteUpdate(userId, id, appendContent, replaceContent);
 
-      let newContent = existing.content || '';
-      if (replaceContent?.trim()) {
-        newContent = replaceContent.trim();
-      } else if (appendContent?.trim()) {
-        const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
-        newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
-      }
-
-      await prisma.noteBackup.create({
-        data: { noteId: existing.id, content: existing.content || '' }
-      });
-
-      const oldBackups = await prisma.noteBackup.findMany({
-        where: { noteId: existing.id },
-        orderBy: { createdAt: 'desc' },
-        skip: 5
-      });
-      if (oldBackups.length > 0) {
-        await prisma.noteBackup.deleteMany({
-          where: { id: { in: oldBackups.map(b => b.id) } }
-        });
-      }
-
-      await prisma.note.update({
-        where: { id: existing.id },
-        data: { content: newContent },
-      });
-
-      await prisma.aiGeneration.create({
-        data: {
-          noteId: existing.id,
-          userId,
-          type: 'chat',
-          result: JSON.stringify({ source: 'dashboard_chat_update' }),
-        },
-      });
-
-      const refetched = await prisma.note.findUnique({
-        where: { id: existing.id },
-        include: noteInclude,
-      });
-      return formatNote(refetched);
-    };
-
-    if (plan.updateNote?.noteId && (plan.updateNote.appendContent || plan.updateNote.replaceContent)) {
-      updatedNote = await updateExistingNote(plan.updateNote.noteId, plan.updateNote.appendContent, plan.updateNote.replaceContent);
+    // A change to the note the person picked is applied (and can be undone from its history); a change to any
+    // other note is only suggested, and the person decides.
+    const decision = decideChatUpdate({ targetNoteId: mode === 'append' ? targetNote?.id : null, plan: plan.updateNote, offered: recentNotes });
+    const suggestedUpdate = decision.suggest;
+    if (decision.apply) {
+      updatedNote = await updateExistingNote(decision.apply.noteId, decision.apply.appendContent, decision.apply.replaceContent);
     } else if (mode === 'append' && targetNote) {
       const appendContent = plan.notes[0]?.content || `## AI addition\n\n${message.trim()}`;
       updatedNote = await updateExistingNote(targetNote.id, appendContent, null);
@@ -163,10 +170,12 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
       });
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: plan.reply,
       notes: createdNotes,
       updatedNote,
+      suggestedUpdate,
     });
   } catch (error) {
     next(error);
@@ -184,7 +193,7 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
     const userId = req.user!.id;
 
     const recentNotes = await prisma.note.findMany({
-      where: { userId, isArchived: false },
+      where: { ...aiReadableWhere(userId), isArchived: false },
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 25,
@@ -192,10 +201,12 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
 
     let targetNote: any = null;
     if (mode === 'append' && noteId) {
-      targetNote = await prisma.note.findFirst({
+      const access = await noteAiAccess(userId, noteId as string);
+      if (access === 'private') return res.status(400).json({ error: PRIVATE_MESSAGE });
+      targetNote = access === 'ok' ? await prisma.note.findFirst({
         where: { id: noteId as string, userId },
         select: { id: true, title: true, content: true },
-      });
+      }) : null;
       if (!targetNote) {
         return res.status(404).json({ error: 'Note not found' });
       }
@@ -212,47 +223,14 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
     const createdNotes: any[] = [];
     let updatedNote: any = null;
 
-    const updateExistingNote = async (id: string, appendContent: string | null, replaceContent: string | null) => {
-      const existing = await prisma.note.findFirst({
-        where: { id, userId },
-      });
-      if (!existing || (!appendContent?.trim() && !replaceContent?.trim())) return null;
+    const updateExistingNote = (id: string, appendContent: string | null, replaceContent: string | null) => applyNoteUpdate(userId, id, appendContent, replaceContent);
 
-      let newContent = existing.content || '';
-      if (replaceContent?.trim()) {
-        newContent = replaceContent.trim();
-      } else if (appendContent?.trim()) {
-        const separator = existing.content?.trim() ? '\n\n---\n\n' : '';
-        newContent = `${existing.content || ''}${separator}${appendContent.trim()}`;
-      }
-
-      await prisma.noteBackup.create({
-        data: { noteId: existing.id, content: existing.content || '' }
-      });
-
-      await prisma.note.update({
-        where: { id: existing.id },
-        data: { content: newContent },
-      });
-
-      await prisma.aiGeneration.create({
-        data: {
-          noteId: existing.id,
-          userId,
-          type: 'chat',
-          result: JSON.stringify({ source: 'dashboard_chat_update' }),
-        },
-      });
-
-      const refetched = await prisma.note.findUnique({
-        where: { id: existing.id },
-        include: noteInclude,
-      });
-      return formatNote(refetched);
-    };
-
-    if (plan.updateNote?.noteId && (plan.updateNote.appendContent || plan.updateNote.replaceContent)) {
-      updatedNote = await updateExistingNote(plan.updateNote.noteId, plan.updateNote.appendContent, plan.updateNote.replaceContent);
+    // A change to the note the person picked is applied (and can be undone from its history); a change to any
+    // other note is only suggested, and the person decides.
+    const decision = decideChatUpdate({ targetNoteId: mode === 'append' ? targetNote?.id : null, plan: plan.updateNote, offered: recentNotes });
+    const suggestedUpdate = decision.suggest;
+    if (decision.apply) {
+      updatedNote = await updateExistingNote(decision.apply.noteId, decision.apply.appendContent, decision.apply.replaceContent);
     } else if (mode === 'append' && targetNote) {
       const appendContent = plan.notes[0]?.content || `## AI addition\n\n${message.trim()}`;
       updatedNote = await updateExistingNote(targetNote.id, appendContent, null);
@@ -274,12 +252,17 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
       });
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     // Send final completion event with the DB records
-    res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, reply: plan.reply, notes: createdNotes, updatedNote, suggestedUpdate })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    res.write(`data: ${JSON.stringify({ error: 'AI processing failed' })}\n\n`);
+    if (!res.headersSent) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+    }
+    const message = (error as any)?.code === 'NO_AI_KEY' ? (error as any).message : 'AI processing failed';
+    res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
     res.end();
   }
 }
@@ -295,7 +278,7 @@ export async function smartIntake(req: Request, res: Response, next: NextFunctio
     const userId = req.user!.id;
 
     // Step 1: AI analyzes and organizes the raw data
-    const result = await aiService.analyzeAndOrganize(userId, rawData.trim(), template || 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData.trim(), template || 'auto', tzOf(req));
 
     // Step 2: Create the note
     const note = await createNoteForUser(userId, result.note);
@@ -335,13 +318,15 @@ export async function smartIntake(req: Request, res: Response, next: NextFunctio
 
     let createdTodos: any[] = [];
     if (todosData.length > 0) {
-      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
-      createdTodos = inserted.map(t => ({
+      // MySQL has no createManyAndReturn, so create them in one transaction and keep the rows.
+      const inserted = await prisma.$transaction(todosData.map((data: any) => prisma.todo.create({ data })));
+      createdTodos = inserted.map((t) => ({
         ...t,
         note: { id: note.id, title: note.title }
       }));
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: result.reply,
       note,
@@ -376,7 +361,7 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
     }
 
     // Call the same AI service logic
-    const result = await aiService.analyzeAndOrganize(userId, rawData, 'auto');
+    const result = await aiService.analyzeAndOrganize(userId, rawData, 'auto', tzOf(req));
 
     // Step 1: Create Note
     const note = await prisma.note.create({
@@ -388,7 +373,7 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
     });
 
     if (result.note.tags && result.note.tags.length > 0) {
-      await syncTags(note.id, result.note.tags);
+      await syncTags(userId, note.id, result.note.tags);
     }
 
     await prisma.aiGeneration.create({
@@ -425,13 +410,15 @@ export async function smartIntakeUpload(req: Request, res: Response, next: NextF
 
     let createdTodos: any[] = [];
     if (todosData.length > 0) {
-      const inserted = await prisma.todo.createManyAndReturn({ data: todosData });
-      createdTodos = inserted.map(t => ({
+      // MySQL has no createManyAndReturn, so create them in one transaction and keep the rows.
+      const inserted = await prisma.$transaction(todosData.map((data: any) => prisma.todo.create({ data })));
+      createdTodos = inserted.map((t) => ({
         ...t,
         note: { id: note.id, title: note.title }
       }));
     }
 
+    notify(req, 'notes_changed', 'todos_changed');
     res.json({
       reply: `I successfully processed your file! ${result.reply}`,
       note,

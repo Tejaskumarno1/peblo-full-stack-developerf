@@ -27,7 +27,7 @@
   --dash-cell-empty: #e2e8f0;
   --dash-radius: 14px;
 
-  min-height: 100vh;
+  min-height: var(--pb-canvas-h);
   background: var(--dash-bg);
   color: var(--dash-text);
 }
@@ -135,7 +135,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.375rem;
-  font-size: clamp(1.75rem, 3.5vw, 2.25rem);
+  font-size: clamp(1.75rem, calc(var(--pb-canvas-w) * 3.5 / 100), 2.25rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--dash-text);
@@ -1057,7 +1057,7 @@
   }
 
   .dash-mockup-grid > section {
-    flex: 0 0 88vw;
+    flex: 0 0 calc(var(--pb-canvas-w) * 88 / 100);
     scroll-snap-align: center;
     margin-bottom: 0;
   }

@@ -97,11 +97,6 @@ function MobileEditorControls({
           {moreActionsOpen && (
             <div className="export-dropdown-menu mobile-more-actions-menu" style={{ bottom: '100%', top: 'auto', right: '0', marginBottom: '10px' }}>
               {!isDraft && (
-                <button type="button" onClick={() => { setIsShareModalOpen(true); setMoreActionsOpen(false); }}>
-                  <Link2 size={14} /> {selectedNote?.isPublic ? 'Sharing Settings' : 'Share Note'}
-                </button>
-              )}
-              {!isDraft && (
                 <button type="button" onClick={() => { showBackups ? setShowBackups(false) : loadBackups(); setMoreActionsOpen(false); }}>
                   <History size={14} /> Backups
                 </button>

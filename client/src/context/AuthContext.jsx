@@ -1,65 +1,180 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io } from 'socket.io-client';
-import { authAPI } from '../api/index';
+import { profileAPI, authAPI } from '../api/index';
+import { VALID_STYLES } from '../utils/weekStart';
+import { getToken, setToken, clearToken } from '../api/token';
 
 const AuthContext = createContext(null);
+
+// Things kept on this computer that are about the *device*, not the account that just left (PEB-60).
+const DEVICE_KEYS = new Set([
+  'peblo-theme', 'peblo-style', 'peblo-sidebar-collapsed', 'peblo-river-zoom', 'peblo-river-notes-view',
+  'peblo_call_gender', 'peblo_call_rate', 'peblo_call_ringtone', 'peblo-accounts',
+]);
+
+// Accounts signed in on this device (up to 3), so you can switch without typing a password each time.
+const ACCOUNTS_KEY = 'peblo-accounts';
+export function getSavedAccounts() {
+  try { const a = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function putAccounts(list) { try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list.slice(0, 3))); } catch { /* storage blocked */ } }
+export function rememberAccount(u) {
+  const token = getToken();
+  if (!u?.email || !token) return;
+  const id = u.id || u.email;
+  putAccounts([{ id, email: u.email, name: u.name || '', avatar: u.avatar || '', token }, ...getSavedAccounts().filter((a) => a.id !== id)]);
+}
+export function forgetAccount(id) { putAccounts(getSavedAccounts().filter((a) => a.id !== id)); }
+
+// Remove everything else Peblo stored for the previous account: cached notes, settings (which held API keys),
+// AI Hub chats, notifications, reminder state. Covers both the `peblo-` and `peblo_` key styles.
+export function clearAccountData() {
+  try {
+    Object.keys(localStorage)
+      .filter(k => /^peblo[-_]/.test(k) && !DEVICE_KEYS.has(k))
+      .forEach(k => localStorage.removeItem(k));
+  } catch { /* storage unavailable */ }
+  try { sessionStorage.clear(); } catch { /* ignore */ }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 'offline' when the Peblo server can't be reached (so we don't mistake it for being signed out)
+  const [connectError, setConnectError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const queryClient = useQueryClient();
 
-  const [theme, setThemeState] = useState(() => localStorage.getItem('peblo-theme') || 'light');
+  const [theme, setThemeState] = useState(() => {
+    try { return localStorage.getItem('peblo-theme') || 'light'; } catch { return 'light'; }
+  });
+  // Style: 'soft' (friendly, with a dock; the default), 'river' or 'orbit'.
+  const [uiStyle, setUiStyleState] = useState(() => {
+    try { const s = localStorage.getItem('peblo-style'); return VALID_STYLES.includes(s) ? s : 'soft'; } catch { return 'soft'; }
+  });
   
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('peblo-settings');
-      return saved ? JSON.parse(saved) : { fontSize: 'medium', wordWrap: true, autoTitle: true };
+      return saved ? JSON.parse(saved) : { fontSize: 'medium' };
     } catch {
-      return { fontSize: 'medium', wordWrap: true, autoTitle: true };
+      return { fontSize: 'medium' };
     }
   });
 
   const [notifications, setNotifications] = useState(() => {
     try {
       const saved = localStorage.getItem('peblo-notifications');
-      return saved ? JSON.parse(saved) : [
-        { id: '1', text: 'Welcome to Peblo Notes! 🎉 Capture ideas, extract AI insights, and organize with tags.', read: false, time: new Date().toISOString() },
-        { id: '2', text: 'Need a summary? Try the AI Assistant by clicking the Sparkles button in the editor.', read: false, time: new Date().toISOString() },
-        { id: '3', text: 'Tip: Use Ctrl + K to quickly focus the search bar.', read: true, time: new Date().toISOString() }
-      ];
+      // older versions seeded three welcome tips that no screen showed (the voice call read them out): drop them
+      const TIPS = ['Welcome to Peblo Notes', 'Need a summary?', 'Tip: Use Ctrl + K'];
+      return saved ? JSON.parse(saved).filter((n) => !TIPS.some((p) => String(n.text || '').startsWith(p))) : [];
     } catch {
       return [];
     }
   });
 
-  // Apply theme class to document
+  // Apply the theme: light (Paper), dark (Graphite), midnight (pure black) or follow the system.
   useEffect(() => {
-    if (theme === 'dark') {
-      document.body.classList.add('theme-dark');
-      document.documentElement.classList.add('theme-dark');
-    } else {
-      document.body.classList.remove('theme-dark');
-      document.documentElement.classList.remove('theme-dark');
-    }
+    const apply = () => {
+      const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const resolved = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
+      for (const el of [document.body, document.documentElement]) {
+        el.classList.toggle('theme-dark', resolved === 'dark' || resolved === 'midnight');
+        el.classList.toggle('theme-midnight', resolved === 'midnight');
+      }
+    };
+    apply();
+    if (theme !== 'system' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, [theme]);
 
-  // Restore session on mount
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      authAPI.me()
-        .then(res => setUser(res.data.user))
-        .catch(() => {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
+    for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
+  }, [uiStyle]);
+
+  // Compact mode (Settings -> Appearance): tighter lists and cards.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-compact', settings?.compact ? '1' : '0');
+  }, [settings?.compact]);
+
+  // Editor text size (Settings -> Preferences): small / medium (the style's own size) / large
+  useEffect(() => {
+    document.documentElement.setAttribute('data-editor-font', settings?.fontSize || 'medium');
+  }, [settings?.fontSize]);
+
+  // Merge the settings saved on the account into this device's settings.
+  const adoptProfile = useCallback((u) => {
+    setUser(u);
+    rememberAccount(u);
+    // The account decides the style on every device
+    const acctStyle = u?.settings?.uiStyle;
+    if (VALID_STYLES.includes(acctStyle)) {
+      setUiStyleState(acctStyle);
+      try { localStorage.setItem('peblo-style', acctStyle); } catch { /* ignore */ }
+    }
+    if (u?.settings && typeof u.settings === 'object') {
+      setSettings(prev => {
+        const merged = { ...u.settings, ...prev };
+        if (u.settings.weekStart) merged.weekStart = u.settings.weekStart; // account wins
+        try { localStorage.setItem('peblo-settings', JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
     }
   }, []);
+
+  // On start: if this device has a sign-in token, load that account. Otherwise show the sign-in screen.
+  useEffect(() => {
+    if (!getToken()) { setUser(null); setLoading(false); return undefined; }
+    let cancelled = false;
+    setLoading(true);
+    setConnectError(null);
+    profileAPI.me()
+      .then(res => { if (!cancelled) adoptProfile(res.data.user); })
+      .catch(err => {
+        if (cancelled) return;
+        // A 401 already cleared the token (the interceptor); anything else is a connection problem.
+        if (!err.response) setConnectError('offline');
+        else if (err.response.status !== 401) setConnectError('error');
+        console.error('Failed to load profile:', err);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [adoptProfile, reloadKey]);
+
+  // Signed out from anywhere (an expired token, or another window): back to the sign-in screen.
+  useEffect(() => {
+    const out = () => { clearAccountData(); setUser(null); queryClient.clear(); };
+    window.addEventListener('peblo:signed-out', out);
+    // Signing in or out in another window (e.g. quick capture) changes the shared token.
+    const onStorage = (e) => { if (e.key === 'peblo-token') setReloadKey(k => k + 1); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.removeEventListener('peblo:signed-out', out); window.removeEventListener('storage', onStorage); };
+  }, [queryClient]);
+
+  const signIn = useCallback(async (mode, form) => {
+    const call = mode === 'signup' ? authAPI.signup : authAPI.login;
+    const res = await call(form);
+    queryClient.clear();
+    setToken(res.data.token);
+    setConnectError(null);
+    adoptProfile(res.data.user);
+    return res.data.user;
+  }, [adoptProfile, queryClient]);
+
+  const logout = useCallback(() => {
+    forgetAccount(user?.id || user?.email);
+    clearToken();
+    clearAccountData();
+    setSettings({ fontSize: 'medium' });
+    setNotifications([]);
+    queryClient.clear();
+    setUser(null);
+  }, [queryClient, user]);
+
+  const retryConnect = useCallback(() => setReloadKey(k => k + 1), []);
 
   // WebSockets for Real-Time Device Syncing
   useEffect(() => {
@@ -70,18 +185,16 @@ export function AuthProvider({ children }) {
       ? import.meta.env.VITE_API_URL.replace('/api', '') 
       : window.location.origin;
       
-    const socket = io(socketURL);
-    
-    socket.on('connect', () => {
-      socket.emit('join', user.id);
-    });
+    // The server reads who we are from the token and puts us in our own room.
+    const socket = io(socketURL, { auth: (cb) => cb({ token: getToken() }) });
 
     socket.on('todos_changed', () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
+      window.dispatchEvent(new Event('todo-updated'));
     });
 
     socket.on('notes_changed', () => {
-      queryClient.invalidateQueries(['notes']);
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
     });
 
     return () => {
@@ -89,68 +202,41 @@ export function AuthProvider({ children }) {
     };
   }, [user, queryClient]);
 
-  // Silent background token refresh
-  useEffect(() => {
-    if (!user) return;
-    
-    const interval = setInterval(async () => {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        try {
-          const res = await authAPI.refresh(refreshToken);
-          localStorage.setItem('accessToken', res.data.accessToken);
-        } catch (err) {
-          console.error('Silent token refresh failed:', err);
-        }
-      }
-    }, 5 * 60 * 1000); // refresh every 5 minutes
-    
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const login = useCallback(async (email, password) => {
-    const { data } = await authAPI.login({ email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const googleLogin = useCallback(async (payload) => {
-    const { data } = await authAPI.googleLogin(payload);
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const signup = useCallback(async (name, email, password) => {
-    const { data } = await authAPI.signup({ name, email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
-  }, []);
+  // Resolves true when the server saved it, false when it did not (the old values come back).
   const updateProfile = useCallback(async (updatedUser) => {
-    // Optimistic UI update
-    setUser((prev) => ({ ...prev, ...updatedUser }));
-    
+    let previous = null;
+    setUser((prev) => { previous = prev; return { ...prev, ...updatedUser }; });
     try {
-      await authAPI.updateProfile(updatedUser);
+      await profileAPI.updateProfile(updatedUser);
+      if ('avatar' in updatedUser) rememberAccount({ ...(previous || {}), ...updatedUser });
+      return true;
     } catch (err) {
       console.error('Failed to update profile to DB:', err);
+      if (previous) setUser(previous);
+      return false;
     }
+  }, []);
+
+  const setUiStyle = useCallback((style) => {
+    setUiStyleState(style);
+    try { localStorage.setItem('peblo-style', style); } catch { /* ignore */ }
+    // Remember it on the account so every device opens in the same style
+    if (getToken()) profileAPI.updateProfile({ settings: { uiStyle: style } }).catch((e) => console.error('Failed to save style to the account:', e));
   }, []);
 
   const setTheme = useCallback((newTheme) => {
     setThemeState(newTheme);
-    localStorage.setItem('peblo-theme', newTheme);
+    try { localStorage.setItem('peblo-theme', newTheme); } catch { /* storage blocked: theme still applies for this session */ }
+  }, []);
+
+  // Other windows (the quick-capture window) share localStorage: follow style / theme changes made there.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'peblo-style' && VALID_STYLES.includes(e.newValue)) setUiStyleState(e.newValue);
+      if (e.key === 'peblo-theme' && e.newValue) setThemeState(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const updateSettings = useCallback(async (newSettings) => {
@@ -177,13 +263,12 @@ export function AuthProvider({ children }) {
       }
       
       if (Object.keys(payload).length > 0) {
-        // Fire and forget, no await to prevent UI blocking if network is slow
-        authAPI.updateProfile(payload).catch(err => {
-          console.error('Failed to sync settings to DB:', err);
-        });
+        await profileAPI.updateProfile(payload);
       }
+      return true;
     } catch (err) {
-      console.error('Error in settings sync payload construction:', err);
+      console.error('Failed to sync settings to DB:', err);
+      return false; // the change still applies on this device; the caller can tell the person it did not reach the account
     }
   }, []);
 
@@ -223,13 +308,15 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ 
       user, 
       loading, 
-      login, 
-      googleLogin,
-      signup, 
-      logout, 
+      connectError,
+      signIn,
+      logout,
+      retryConnect,
       updateProfile,
       theme,
       setTheme,
+      uiStyle,
+      setUiStyle,
       settings,
       updateSettings,
       notifications,

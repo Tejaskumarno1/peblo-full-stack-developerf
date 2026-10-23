@@ -1,0 +1,25 @@
+.pb-help-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pb-help { width: min(560px, 100%); max-height: min(640px, 90vh); display: flex; flex-direction: column; background: #fff; color: #1d1d1f; border-radius: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); font: 14px/1.45 system-ui, sans-serif; overflow: hidden; }
+@media (prefers-color-scheme: dark) { .pb-help { background: #1b1d22; color: #f0f0f2; } }
+:root[data-theme="dark"] .pb-help, [data-theme="dark"] .pb-help { background: #1b1d22; color: #f0f0f2; }
+:root[data-theme="light"] .pb-help, [data-theme="light"] .pb-help { background: #fff; color: #1d1d1f; }
+.pb-help-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 4px; }
+.pb-help-head h2 { margin: 0; font-size: 20px; }
+.pb-help-x { border: none; background: transparent; color: inherit; cursor: pointer; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.pb-help-x:hover { background: rgba(128, 128, 128, 0.18); }
+.pb-help-tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.3); }
+.pb-help-tabs button { border: none; background: transparent; color: inherit; font: inherit; font-weight: 600; padding: 8px 12px; cursor: pointer; border-bottom: 2px solid transparent; opacity: 0.7; }
+.pb-help-tabs button.on { opacity: 1; border-bottom-color: currentColor; }
+.pb-help-body { padding: 14px 20px; overflow-y: auto; }
+.pb-help-body h3 { margin: 12px 0 6px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.pb-help-body h3:first-child { margin-top: 0; }
+.pb-help-body dl { margin: 0; }
+.pb-help-body dl > div { display: flex; align-items: center; gap: 12px; padding: 5px 0; }
+.pb-help-body dt { flex: 0 0 120px; display: flex; gap: 4px; }
+.pb-help-body dd { margin: 0; }
+.pb-help-body kbd { font: 600 12px ui-monospace, monospace; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, 0.5); background: rgba(128, 128, 128, 0.12); }
+.pb-help-news { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+.pb-help-feedback p { margin: 0 0 12px; }
+.pb-help-foot { padding: 10px 20px 16px; border-top: 1px solid rgba(128, 128, 128, 0.3); }
+.pb-help-btn { display: inline-block; border: none; border-radius: 10px; padding: 9px 16px; background: #1d1d1f; color: #fff; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+@media (prefers-color-scheme: dark) { .pb-help-btn { background: #f0f0f2; color: #1b1d22; } }

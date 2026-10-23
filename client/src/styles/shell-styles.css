@@ -1,0 +1,245 @@
+/* ==========================================================
+   Console and Soft Studio shells, plus per-style touches.
+   Colours, type and corner shapes come from tokens.css.
+   ========================================================== */
+
+/* ================= Console ================= */
+.pb-shell--console { font-size: 13.5px; }
+
+.cs-rail {
+  width: 64px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--pb-surface);
+  border-right: 1px solid var(--pb-line);
+}
+.cs-rail .grow { flex: 1; }
+.cs-logo {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+  background: #C6EF3A;
+  color: #0D1014;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pb-font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cs-rail-btn {
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pb-fg-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+.cs-rail-btn:hover { background: var(--pb-surface-3); color: var(--pb-fg); }
+.cs-rail-btn.active { background: var(--pb-surface-3); color: var(--pb-fg); }
+.cs-capture { margin-top: 8px; border: 1px dashed var(--pb-line-2); color: var(--pb-fg-2); }
+
+.cs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cs-bar {
+  height: 64px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--pb-line);
+  background: var(--pb-bg);
+}
+.cs-cmd {
+  flex: 1;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 8px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--pb-line-2);
+  border-radius: 6px;
+  background: var(--pb-surface);
+}
+.cs-cmd:focus-within { border-color: var(--pb-accent); }
+.cs-prompt { font-family: var(--pb-font-mono); font-weight: 600; font-size: 15px; color: var(--pb-accent); }
+.cs-cmd input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--pb-fg);
+  font-family: var(--pb-font-mono);
+  font-size: 13.5px;
+}
+.cs-cmd input:focus-visible { box-shadow: none; outline: none; }
+.cs-cmd input::placeholder { color: var(--pb-fg-3); }
+.cs-kbd {
+  font-family: var(--pb-font-mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  border: 1px solid var(--pb-line-2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pb-fg-3);
+  cursor: pointer;
+}
+.cs-pill {
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--pb-line);
+  border-radius: 6px;
+  font-family: var(--pb-font-mono);
+  font-size: 12px;
+  color: var(--pb-fg-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cs-sq { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; background: var(--pb-line-2); }
+.cs-sq.local { background: #C6EF3A; box-shadow: inset 0 0 0 1px rgba(13, 16, 20, 0.15); }
+.cs-sq.cloud { background: var(--pb-cloud); }
+.cs-sq.warn { background: var(--pb-warn); }
+.cs-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--pb-line);
+  background: var(--pb-surface);
+  color: var(--pb-fg);
+  font-family: var(--pb-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pb-shell--console .pb-sheet { margin: 0; border: none; border-radius: 0; box-shadow: none; }
+.cs-status {
+  height: 30px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--pb-line);
+  background: var(--pb-surface);
+  font-family: var(--pb-font-mono);
+  font-size: 11.5px;
+  color: var(--pb-fg-3);
+  white-space: pre;
+}
+.cs-status-left { display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; }
+.cs-status-keys { display: flex; gap: 18px; }
+
+/* Console look inside pages: mono labels, square chips, lime primary buttons */
+[data-style="console"] .pb-card-head h2,
+[data-style="console"] .home-eyebrow,
+[data-style="console"] .nl-group-label,
+[data-style="console"] .nc-section h3,
+[data-style="console"] .tasks-group-head {
+  font-family: var(--pb-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pb-fg-3);
+}
+[data-style="console"] .pb-chip,
+[data-style="console"] .pb-badge,
+[data-style="console"] .pb-kbd,
+[data-style="console"] .nl-meta,
+[data-style="console"] .pb-topbar .crumb { font-family: var(--pb-font-mono); }
+[data-style="console"] .pb-chip.on { background: var(--pb-fg); border-color: var(--pb-fg); color: var(--pb-surface); }
+[data-style="console"] .pb-card { box-shadow: none; }
+[data-style="console"] .home-ask { background: var(--pb-surface); border-color: var(--pb-line-2); }
+
+/* ================= Settings: style picker ================= */
+.style-hint { margin: -2px 0 12px; font-size: 13px; line-height: 1.5; color: var(--pb-fg-3); }
+.style-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 10px 12px;
+  border: 1.5px solid var(--pb-line);
+  border-radius: 14px;
+  background: var(--pb-surface);
+  color: var(--pb-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.style-card:hover { border-color: var(--pb-line-2); }
+.style-card.active { border-color: var(--pb-solid); box-shadow: 0 0 0 3px var(--pb-soft); }
+.style-name { margin-top: 6px; font-size: 14px; font-weight: 600; }
+.style-desc { font-size: 12px; line-height: 1.4; color: var(--pb-fg-3); }
+.style-card { position: relative; }
+.style-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.style-tags span { padding: 2px 8px; border-radius: 999px; background: var(--pb-soft); color: var(--pb-fg-2); font-size: 11px; font-weight: 600; }
+/* Hover or keyboard focus: the preview picture is replaced by who the style is for and why. */
+.style-tip {
+  position: absolute; left: 10px; right: 10px; top: 10px; min-height: 92px; box-sizing: border-box;
+  padding: 10px 11px; border-radius: 9px; background: var(--pb-fg); color: var(--pb-surface);
+  font-size: 11.5px; line-height: 1.4; opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.style-card:hover .style-tip, .style-card:focus-visible .style-tip { opacity: 1; }
+
+/* Tiny drawings of each layout (fixed colours so they look the same in any style) */
+.style-preview { position: relative; display: block; height: 92px; border-radius: 9px; overflow: hidden; }
+.style-preview i { position: absolute; display: block; }
+.style-preview.studio { background: #F6F5F2; }
+.style-preview.studio .a { left: 6px; top: 6px; bottom: 6px; width: 26%; border-radius: 5px; background: #ECE9E2; }
+.style-preview.studio .b { left: 31%; right: 6px; top: 6px; bottom: 6px; border-radius: 6px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.style-preview.studio .c { left: 36%; top: 16px; width: 34%; height: 8px; border-radius: 3px; background: #17171A; opacity: 0.8; }
+.style-preview.studio .d { left: 36%; top: 32px; width: 50%; height: 16px; border-radius: 5px; background: #F0EFFE; }
+.style-preview.studio .e { left: 36%; top: 56px; width: 55%; height: 22px; border-radius: 5px; border: 1px solid #E6E2DA; }
+.style-preview.console { background: #0F1114; }
+.style-preview.console .a { left: 0; top: 0; bottom: 0; width: 12%; background: #14171B; border-right: 1px solid #1F232A; }
+.style-preview.console .b { left: 16%; right: 6px; top: 6px; height: 12px; border-radius: 2px; border: 1px solid #2E343D; }
+.style-preview.console .c { left: 16%; top: 26px; width: 38%; bottom: 14px; border-radius: 2px; border: 1px solid #1F232A; background: repeating-linear-gradient(#0F1114 0 9px, #1F232A 9px 10px); }
+.style-preview.console .d { left: 58%; right: 6px; top: 26px; height: 24px; border-radius: 2px; background: #C6EF3A; }
+.style-preview.console .e { left: 12%; right: 0; bottom: 0; height: 8px; background: #14171B; border-top: 1px solid #1F232A; }
+.style-preview.soft { background: #FBF6EE; }
+.style-preview.soft .a { left: 8px; top: 8px; width: 30%; height: 10px; border-radius: 99px; background: #241F1A; opacity: 0.85; }
+.style-preview.soft .b { left: 8px; top: 26px; width: 30%; height: 38px; border-radius: 10px; background: #FFD9C4; }
+.style-preview.soft .c { left: 36%; top: 26px; width: 28%; height: 38px; border-radius: 10px; background: #CDEBD9; }
+.style-preview.soft .d { left: 67%; right: 8px; top: 26px; height: 38px; border-radius: 10px; background: #DDD8FF; }
+.style-preview.soft .e { left: 30%; right: 30%; bottom: 7px; height: 12px; border-radius: 99px; background: #241F1A; }
+.style-preview.river { background: #ECEEF1; }
+.style-preview.river .a { left: 6px; right: 6px; top: 8px; height: 44px; border-radius: 6px; background: #FFFFFF; }
+.style-preview.river .b { left: 14%; top: 14px; width: 22%; height: 12px; border-radius: 3px; background: #DCE4FF; }
+.style-preview.river .c { left: 44%; top: 30px; width: 26%; height: 12px; border-radius: 3px; background: #101418; }
+.style-preview.river .d { left: 40%; top: 6px; width: 2px; height: 48px; background: #E2501A; }
+.style-preview.river .e { left: 6px; right: 6px; top: 58px; bottom: 6px; border-radius: 6px; background: #FFFFFF; }
+.style-preview.orbit { background: #F7F7F4 radial-gradient(#D3D3CC 1px, transparent 1.2px) 0 0 / 8px 8px; }
+.style-preview.orbit .a { left: calc(50% - 16px); top: calc(50% - 16px); width: 32px; height: 32px; border-radius: 50%; background: #141414; }
+.style-preview.orbit .b { left: 16%; top: 12px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; border: 3px solid #FF6B4A; }
+.style-preview.orbit .c { right: 16%; top: 16px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; border: 3px solid #F2B33D; }
+.style-preview.orbit .d { right: 22%; bottom: 10px; width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; border: 3px solid #2FB67C; }
+.style-preview.orbit .e { left: 18%; bottom: 12px; width: 30%; height: 3px; border-radius: 2px; background: #2350FF; transform: rotate(-24deg); }
+
+/* Settings -> Preferences -> Editor text size. "medium" keeps each style's own size. */
+html[data-editor-font="small"] .bn-editor,
+html[data-editor-font="small"] .bn-editor .bn-inline-content { font-size: 13px !important; }
+html[data-editor-font="large"] .bn-editor,
+html[data-editor-font="large"] .bn-editor .bn-inline-content { font-size: 18px !important; }

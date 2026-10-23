@@ -1,0 +1,8 @@
+/* Print-friendly output (PEB-166): only the hidden #peblo-print-root is printed, with none of the app around it. */
+#peblo-print-root { display: none; }
+@media print {
+  body > *:not(#peblo-print-root) { display: none !important; }
+  html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
+  #peblo-print-root { display: block !important; position: static; color: #111; background: #fff; padding: 0; }
+  @page { margin: 16mm; }
+}

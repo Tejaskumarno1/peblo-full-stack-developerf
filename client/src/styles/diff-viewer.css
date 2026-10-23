@@ -48,7 +48,7 @@
 }
 
 .diff-pre {
-  margin: 0; padding: 0; font-family: 'JetBrains Mono', monospace;
+  margin: 0; padding: 0; font-family: var(--pb-font-mono);
   font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
 }
 

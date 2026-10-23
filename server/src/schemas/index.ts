@@ -1,21 +1,5 @@
 import { z } from 'zod';
 
-export const authSchemas = {
-  signup: {
-    body: z.object({
-      name: z.string().min(2, "Name must be at least 2 characters").max(50),
-      email: z.string().email("Invalid email address"),
-      password: z.string().min(6, "Password must be at least 6 characters")
-    })
-  },
-  login: {
-    body: z.object({
-      email: z.string().email("Invalid email address"),
-      password: z.string()
-    })
-  }
-};
-
 export const noteSchemas = {
   create: {
     body: z.object({
@@ -24,7 +8,7 @@ export const noteSchemas = {
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
       isArchived: z.boolean().optional(),
-      isPublic: z.boolean().optional()
+      meta: z.record(z.string(), z.any()).optional()
     })
   },
   update: {
@@ -34,7 +18,7 @@ export const noteSchemas = {
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
       isArchived: z.boolean().optional(),
-      isPublic: z.boolean().optional()
+      meta: z.record(z.string(), z.any()).optional()
     })
   }
 };
@@ -44,12 +28,13 @@ export const todoSchemas = {
     body: z.object({
       text: z.string().min(1, "Task text is required"),
       priority: z.enum(['low', 'medium', 'high']).optional(),
-      deadline: z.string().nullable().optional(),
+      deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
       tags: z.array(z.string()).optional(),
-      noteId: z.string().nullable().optional()
+      noteId: z.string().nullable().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   },
   update: {
@@ -57,12 +42,14 @@ export const todoSchemas = {
       text: z.string().optional(),
       priority: z.enum(['low', 'medium', 'high']).optional(),
       completed: z.boolean().optional(),
-      deadline: z.string().nullable().optional(),
+      deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+      scope: z.enum(['this', 'following', 'all']).optional(),
       tags: z.array(z.string()).optional(),
-      noteId: z.string().nullable().optional()
+      noteId: z.string().nullable().optional(),
+      meta: z.record(z.string(), z.any()).optional()
     })
   }
 };

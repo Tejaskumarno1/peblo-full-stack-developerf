@@ -1,0 +1,8 @@
+.pb-voice-wrap { position: relative; display: inline-flex; }
+.pb-mic { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.pb-mic.on { background: #d93a2b !important; color: #fff !important; animation: pb-pulse 1.2s ease-in-out infinite; }
+.pb-mic:disabled { opacity: .6; cursor: progress; }
+.pb-voice-err { position: absolute; bottom: calc(100% + 8px); right: 0; width: max-content; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: #2a2320; color: #fff; font-size: 12.5px; line-height: 1.35; z-index: 20; }
+.pb-spin { animation: pb-rot 0.9s linear infinite; }
+@keyframes pb-rot { to { transform: rotate(360deg); } }
+@keyframes pb-pulse { 50% { box-shadow: 0 0 0 6px rgba(217, 58, 43, .25); } }

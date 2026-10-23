@@ -1,0 +1,39 @@
+import { Router, raw } from 'express';
+import prisma from '../db.js';
+import { authenticate } from '../middleware/auth.js';
+
+// Pictures for notes. Reading is public (the address is a long random id, like a share link) so a picture shows in
+// shared pages, exports and the desktop app without any sign-in. Writing needs the person to be signed in.
+const router = Router();
+const OK = /^image\/(webp|png|jpeg|gif)$/;
+const MAX = 6 * 1024 * 1024;
+
+router.get('/:id', async (req, res, next) => {
+  try {
+    const id = String(req.params.id).replace(/\.\w+$/, '');
+    if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();
+    const rows: any[] = await prisma.$queryRaw`SELECT mime, data FROM media WHERE id = ${id}`;
+    if (!rows.length) return res.status(404).end();
+    res.set({
+      'Content-Type': rows[0].mime,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Access-Control-Allow-Origin': '*',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    });
+    res.send(Buffer.from(rows[0].data));
+  } catch (e) { next(e); }
+});
+
+router.post('/', authenticate, raw({ type: 'image/*', limit: MAX }), async (req: any, res, next) => {
+  try {
+    const mime = String(req.headers['content-type'] || '').split(';')[0].trim();
+    if (!OK.test(mime)) return res.status(415).json({ error: 'Only WebP, PNG, JPEG and GIF pictures can be stored.' });
+    const body: Buffer = req.body;
+    if (!Buffer.isBuffer(body) || !body.length) return res.status(400).json({ error: 'No picture came with the request.' });
+    if (body.length > MAX) return res.status(413).json({ error: 'That picture is over 6 MB.' });
+    const rows: any[] = await prisma.$queryRaw`INSERT INTO media (user_id, mime, size, data) VALUES (${req.user.id}, ${mime}, ${body.length}, ${body}) RETURNING id`;
+    res.status(201).json({ id: rows[0].id, url: `/api/media/${rows[0].id}`, size: body.length, mime });
+  } catch (e) { next(e); }
+});
+
+export default router;

@@ -189,7 +189,7 @@
   border: none;
   color: var(--text-primary);
   font-size: var(--text-sm);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--pb-font-mono);
   outline: none;
   min-width: 0;
 }

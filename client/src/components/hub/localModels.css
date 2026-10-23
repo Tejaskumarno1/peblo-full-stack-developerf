@@ -1,0 +1,49 @@
+/* PEB-281 model store. One layout, three looks: Soft (warm pastel, round), River (crisp lanes), Orbit (mono + blue path). */
+.lm { --lm-bg: var(--s-surface, #fff); --lm-card: #fff; --lm-line: #ddd; --lm-fg: #222; --lm-fg2: #555; --lm-accent: #2350ff; --lm-on: #fff; --lm-ok: #1e7a46; --lm-soft: #eee; --lm-radius: 12px; --lm-weight: 700;
+  grid-column: 1 / -1; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: calc(var(--lm-radius) + 4px); background: var(--lm-bg); color: var(--lm-fg); border: 1px solid var(--lm-line); text-align: left; }
+.lm-soft { --lm-bg: var(--s-surface); --lm-card: var(--s-col, #faf5ee); --lm-line: var(--s-line); --lm-fg: var(--s-fg); --lm-fg2: var(--s-fg2); --lm-accent: var(--s-accent); --lm-on: var(--s-on-accent); --lm-ok: var(--s-local); --lm-soft: var(--s-chip-solid); --lm-radius: 22px; --lm-weight: 800; box-shadow: var(--s-shadow); }
+.lm-river { --lm-bg: var(--r-surface); --lm-card: var(--r-lane); --lm-line: var(--r-line); --lm-fg: var(--r-fg); --lm-fg2: var(--r-fg2); --lm-accent: var(--r-now); --lm-on: #fff; --lm-ok: var(--r-focus-ink); --lm-soft: var(--r-meet); --lm-radius: 8px; --lm-weight: 700; }
+.lm-orbit { --lm-bg: var(--o-surface); --lm-card: var(--o-rail); --lm-line: var(--o-line); --lm-fg: var(--o-fg); --lm-fg2: var(--o-fg2); --lm-accent: var(--o-path); --lm-on: #fff; --lm-ok: var(--o-strong); --lm-soft: var(--o-path-soft); --lm-radius: 4px; --lm-weight: 600; font-family: ui-monospace, 'SF Mono', Consolas, monospace; }
+.lm-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.lm-title { margin: 0; font-size: 20px; font-weight: 800; }
+.lm-sub { margin: 4px 0 0; color: var(--lm-fg2); font-size: 14px; max-width: 56ch; }
+.lm-state { font-size: 12.5px; font-weight: var(--lm-weight); padding: 5px 12px; border-radius: 99px; background: var(--lm-soft); white-space: nowrap; }
+.lm-state.ok { color: var(--lm-ok); } .lm-state.off { color: var(--lm-fg2); }
+.lm-orbit .lm-state, .lm-orbit .lm-kind, .lm-orbit .lm-pick { border-radius: 2px; }
+.lm-hw { display: flex; flex-wrap: wrap; gap: 8px 18px; list-style: none; margin: 0; padding: 0; color: var(--lm-fg2); font-size: 14px; }
+.lm-hw li { display: inline-flex; align-items: center; gap: 6px; } .lm-hw b { color: var(--lm-fg); }
+.lm-install, .lm-rec { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: var(--lm-radius); background: var(--lm-soft); font-size: 14px; }
+.lm-install > div, .lm-rec > div { display: flex; flex-direction: column; gap: 2px; flex: 1 1 260px; }
+.lm-rec b { display: inline-flex; align-items: center; gap: 6px; } .lm-rec span, .lm-install span { color: var(--lm-fg2); }
+.lm-done { margin: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--lm-ok); font-weight: var(--lm-weight); }
+.lm-err { margin: 0; color: #c0392b; font-weight: 600; font-size: 14px; } .lm-err.small { font-size: 12.5px; }
+.lm-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.lm-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--lm-radius); background: var(--lm-card); border: 1px solid var(--lm-line); }
+.lm-card.on { border-color: var(--lm-ok); } .lm-card.dim { opacity: .6; }
+.lm-soft .lm-card:nth-child(5n+1) { background: var(--s-peach); } .lm-soft .lm-card:nth-child(5n+2) { background: var(--s-mint); } .lm-soft .lm-card:nth-child(5n+3) { background: var(--s-butter); }
+.lm-soft .lm-card:nth-child(5n+4) { background: var(--s-lilac); } .lm-soft .lm-card:nth-child(5n) { background: var(--s-sky); } .lm-soft .lm-card { border-color: transparent; }
+.lm-card-top { display: flex; gap: 6px; }
+.lm-kind, .lm-pick { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: rgba(255,255,255,.7); color: var(--lm-fg); border: 1px solid var(--lm-line); }
+.lm-pick { background: var(--lm-accent); color: var(--lm-on); border-color: transparent; }
+.lm-name { margin: 2px 0 0; font-size: 16px; font-weight: 800; } .lm-blurb { margin: 0; font-size: 13.5px; color: var(--lm-fg2); flex: 1; }
+.lm-meta { margin: 0; font-size: 12.5px; color: var(--lm-fg2); }
+.lm-act { display: flex; align-items: center; gap: 8px; min-height: 36px; margin-top: 4px; flex-wrap: wrap; }
+.lm-btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: var(--lm-radius); border: 1px solid var(--lm-line); background: var(--lm-bg); color: var(--lm-fg); font: inherit; font-weight: var(--lm-weight); font-size: 14px; cursor: pointer; text-decoration: none; }
+.lm-btn.primary { background: var(--lm-accent); color: var(--lm-on); border-color: transparent; } .lm-btn.small { height: 34px; padding: 0 12px; font-size: 13px; }
+.lm-btn:disabled { opacity: .5; cursor: not-allowed; } .lm-btn:focus-visible, .lm-link:focus-visible { outline: 3px solid var(--lm-accent); outline-offset: 2px; }
+.lm-chip { display: inline-flex; align-items: center; gap: 5px; font-weight: 800; font-size: 13px; color: var(--lm-ok); } .lm-chip.soft { color: var(--lm-fg2); }
+.lm-note { font-size: 12.5px; color: var(--lm-fg2); }
+.lm-bar { flex: 1; min-width: 80px; height: 10px; border-radius: 99px; background: rgba(0,0,0,.12); overflow: hidden; } .lm-orbit .lm-bar { border-radius: 1px; }
+.lm-bar i { display: block; height: 100%; background: var(--lm-accent); transition: width .4s ease; }
+.lm-pct { font-size: 13px; font-weight: 800; min-width: 3ch; } .lm-link { border: none; background: none; cursor: pointer; color: var(--lm-fg2); padding: 4px; display: inline-flex; }
+@media (prefers-reduced-motion: reduce) { .lm-bar i { transition: none; } }
+
+/* ---- cloud model picker (works in every style) ---- */
+.cm { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.cm-h { display: block; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; opacity: .7; margin-bottom: 6px; }
+.cm-h em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.cm-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.cm-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.cm-chip small { opacity: .65; font-size: 12px; }
+.cm-chip:hover { background: color-mix(in srgb, currentColor 6%, transparent); }
+.cm-chip.on { border-color: currentColor; background: color-mix(in srgb, currentColor 10%, transparent); }

@@ -4,19 +4,21 @@ import { CheckCircle2, Circle, Plus, Trash2, X, FileText } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import '../styles/dashboard.css'; 
 
-export default function TodoListPanel({ onClose }) {
+export default function TodoListPanel({ onClose, noteId = null }) {
   const queryClient = useQueryClient();
   const [newTaskText, setNewTaskText] = useState('');
 
-  const { data: tasks = [], isLoading: loading } = useQuery({
+  const { data: allTasks = [], isLoading: loading } = useQuery({
     queryKey: ['todos'],
     queryFn: () => todosAPI.getAll().then(res => res.data.todos)
   });
+  // Inside a note the panel shows that note's tasks; new tasks are linked to it.
+  const tasks = noteId ? allTasks.filter((t) => t.noteId === noteId) : allTasks;
 
   const createMutation = useMutation({
-    mutationFn: (text) => todosAPI.create({ text }),
+    mutationFn: (text) => todosAPI.create(noteId ? { text, noteId } : { text }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
       setNewTaskText('');
     }
   });
@@ -24,25 +26,25 @@ export default function TodoListPanel({ onClose }) {
   const toggleMutation = useMutation({
     mutationFn: ({ id, completed }) => todosAPI.update(id, { completed }),
     onMutate: async ({ id, completed }) => {
-      await queryClient.cancelQueries(['todos']);
+      await queryClient.cancelQueries({ queryKey: ['todos'] });
       const previousTodos = queryClient.getQueryData(['todos']);
       queryClient.setQueryData(['todos'], old => 
-        old.map(t => t.id === id ? { ...t, completed } : t)
+        (old || []).map(t => t.id === id ? { ...t, completed } : t)
       );
       return { previousTodos };
     },
     onError: (err, variables, context) => {
-      queryClient.setQueryData(['todos'], context.previousTodos);
+      if (context?.previousTodos !== undefined) queryClient.setQueryData(['todos'], context.previousTodos);
     },
     onSettled: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => todosAPI.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     }
   });
 
@@ -63,7 +65,7 @@ export default function TodoListPanel({ onClose }) {
   return (
     <div className="ai-panel" style={{ display: 'flex', flexDirection: 'column', width: '350px', borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-panel)' }}>
       <div className="ai-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
-        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Tasks</h3>
+        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{noteId ? 'Tasks for this note' : 'Tasks'}</h3>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <X size={18} />
         </button>

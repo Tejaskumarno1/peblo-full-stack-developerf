@@ -1,0 +1,54 @@
+name: CI
+
+# Every push to app and every pull request: type-check, build, client tests, smoke test (PEB-31).
+# Name branches PEB-123-short-title so Jira links the branch and pull request to the issue.
+# To block merging on failure, make "Type-check, build and test" a required check on the app branch
+# (GitHub: Settings -> Branches -> branch protection rule for app).
+
+on:
+  push:
+    branches: [app]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Type-check, build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-root
+          POSTGRES_DB: peblo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: postgresql://postgres:ci-root@127.0.0.1:5432/peblo_test
+      PEBLO_TEST_DATABASE_URL: postgresql://postgres:ci-root@127.0.0.1:5432/peblo_test
+      JWT_SECRET: ci-only-secret-ci-only-secret-ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm --prefix client ci
+      - name: Type-check the server
+        run: npm run typecheck
+      - name: Client unit tests
+        run: npm --prefix client test
+      - name: Build client
+        run: npm run build:client
+      - name: Build server and run the smoke test
+        run: npm test

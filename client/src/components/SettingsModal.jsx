@@ -1,103 +1,183 @@
 import React, { useState, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Settings, Shield, Bell, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Zap, Sparkles, Bot, Rocket, Box, ChevronDown } from 'lucide-react';
-import { authAPI } from '../api';
-import { useGoogleLogin } from '@react-oauth/google';
+import { aiAPI, transferAPI, authAPI } from '../api';
+import { setToken } from '../api/token';
+import { ROUTING_CHOICES, normalizeRouting } from '../utils/aiRouting';
+import { unreadableKeyMessage } from '../utils/keyStatus';
+import { authHeaders, signOutIfRejected } from '../api/token';
+import { useQueryClient } from '@tanstack/react-query';
+import DataTools from './DataTools';
+import { ConnectSection } from '../soft/settings/sections2';
+import CaptureShortcut from '../soft/settings/CaptureShortcut';
+import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Trash2 } from 'lucide-react';
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
-  const { user, updateProfile, theme, setTheme, settings, updateSettings, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const { user, updateProfile, logout, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
+  const [activeTab, setActiveTab] = useState(initialTab === 'security' ? 'data' : initialTab);
   
   // Profile specific states (saved to user obj in DB ideally, mocked here)
   const [profileName, setProfileName] = useState(user?.name || '');
   const [profileEmail] = useState(user?.email || '');
   const [profileJob, setProfileJob] = useState(settings?.jobTitle || '');
   const [profileBio, setProfileBio] = useState(settings?.bio || '');
-  const [profileTimezone, setProfileTimezone] = useState(settings?.timezone || 'UTC');
 
   const [openAiKey, setOpenAiKey] = useState(settings?.openAiKey || '');
   const [geminiKey, setGeminiKey] = useState(settings?.geminiKey || '');
-  const [groqKey, setGroqKey] = useState(settings?.groqKey || '');
-  const [huggingFaceKey, setHuggingFaceKey] = useState(settings?.huggingFaceKey || '');
-  const [defaultAiModel, setDefaultAiModel] = useState(settings?.defaultAiModel || 'auto');
-  const [forceCustomModels, setForceCustomModels] = useState(settings?.forceCustomModels || false);
-  const [isAiDropdownOpen, setIsAiDropdownOpen] = useState(false);
+  const initialRouting = normalizeRouting(settings?.defaultAiModel);
+  const [routing, setRouting] = useState(initialRouting);
+  const [ollamaEnabled, setOllamaEnabled] = useState(settings?.ollamaEnabled || false);
+  const [ollamaUrl, setOllamaUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
+  const [ollamaModel, setOllamaModel] = useState(settings?.ollamaModel || 'llama3.2');
+  const [ollamaEmbedModel, setOllamaEmbedModel] = useState(settings?.ollamaEmbedModel || 'nomic-embed-text');
+  const [ollamaStatus, setOllamaStatus] = useState(null); // { ok, models, error }
+  const [ollamaChecking, setOllamaChecking] = useState(false);
+  const queryClient = useQueryClient();
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { ok, text }
 
-  const handleSaveApiKeys = (e) => {
+  // The export is a signed-in download, so it can't be a plain link: fetch it with the token, then save it.
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = signOutIfRejected(await fetch(`${import.meta.env.VITE_API_URL || '/api'}/export`, { headers: authHeaders() }));
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'peblo-notes.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setImportResult({ ok: false, text: 'Could not export your notes. Try again.' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      files.forEach((f) => form.append('files', f));
+      const { data } = await transferAPI.importFiles(form);
+      const extras = [];
+      if (data.skippedImages) extras.push(`${data.skippedImages} image${data.skippedImages === 1 ? '' : 's'} skipped`);
+      if (data.skippedFiles?.length) extras.push(`${data.skippedFiles.length} unsupported file${data.skippedFiles.length === 1 ? '' : 's'} skipped`);
+      setImportResult({
+        ok: true,
+        text: `Imported ${data.imported} note${data.imported === 1 ? '' : 's'}${extras.length ? ` (${extras.join(', ')})` : ''}. They're tagged "imported".`,
+      });
+      queryClient.invalidateQueries();
+    } catch (err) {
+      setImportResult({ ok: false, text: err.response?.data?.error || 'Import failed. Make sure it is a Notion "Markdown & CSV" export or Markdown files.' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const checkOllama = async () => {
+    setOllamaChecking(true);
+    try {
+      const { data } = await aiAPI.ollamaCheck(ollamaUrl);
+      setOllamaStatus(data);
+    } catch {
+      setOllamaStatus({ ok: false, models: [], error: 'Could not check Ollama.' });
+    } finally {
+      setOllamaChecking(false);
+    }
+  };
+
+  const [saveError, setSaveError] = useState('');
+  const [settingError, setSettingError] = useState('');
+  // Single setting changed on the spot (a select or toggle): tell the person if it did not reach their account.
+  const saveSetting = async (patch) => {
+    setSettingError('');
+    const ok = await updateSettings(patch);
+    if (!ok) setSettingError('Saved on this computer only. Could not reach your account, so it will not follow you to other devices.');
+  };
+
+  const handleSaveApiKeys = async (e) => {
     e.preventDefault();
-    updateSettings({ openAiKey, geminiKey, groqKey, huggingFaceKey, defaultAiModel, forceCustomModels });
-    setSaveSuccess('AI Settings saved successfully!');
-    setTimeout(() => setSaveSuccess(''), 3000);
+    setSaveError('');
+    const next = { openAiKey, geminiKey, ollamaEnabled, ollamaUrl: ollamaUrl.trim(), ollamaModel: ollamaModel.trim(), ollamaEmbedModel: ollamaEmbedModel.trim() };
+    // Only touch the routing choice when it was changed here, so saving a key never overwrites a choice made on Your AI.
+    if (routing !== initialRouting) next.defaultAiModel = routing;
+    const ok = await updateSettings(next);
+    if (ok) {
+      setSaveSuccess('AI Settings saved successfully!');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } else {
+      setSaveSuccess('');
+      setSaveError('Could not save. Check your connection and try again.');
+    }
   };
 
   const [saveSuccess, setSaveSuccess] = useState('');
 
-  const handleSaveProfile = (e) => {
+  // ── Account security ──
+  const [pw, setPw] = useState({ current: '', next: '', again: '' });
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwBusy, setPwBusy] = useState(false);
+  const handleChangePassword = async (e) => {
     e.preventDefault();
-    updateProfile({ name: profileName, email: profileEmail });
-    updateSettings({ jobTitle: profileJob, bio: profileBio, timezone: profileTimezone });
-    setSaveSuccess('Profile saved successfully!');
-    setTimeout(() => setSaveSuccess(''), 3000);
-  };
-
-  const handleLogoutDevices = async () => {
-    if (window.confirm('Are you sure you want to sign out of all other devices?')) {
-      try {
-        await authAPI.logoutAll();
-        alert('All other active sessions have been terminated.');
-      } catch (err) {
-        alert('Failed to sign out of other devices.');
-      }
-    }
-  };
-
-  const handleChangePassword = async () => {
-    const newPassword = window.prompt('Enter your new password (min 6 characters):');
-    if (!newPassword) return;
-    if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters.');
-      return;
-    }
+    if (pw.next.length < 8) return setPwMsg({ ok: false, text: 'The new password must be at least 8 characters.' });
+    if (pw.next !== pw.again) return setPwMsg({ ok: false, text: 'The two new passwords do not match.' });
+    setPwBusy(true);
+    setPwMsg(null);
     try {
-      await authAPI.updatePassword({ newPassword });
-      alert('Password updated successfully.');
+      const { data } = await authAPI.changePassword({ currentPassword: pw.current, newPassword: pw.next });
+      setToken(data.token); // this device stays signed in; every other device is signed out
+      setPw({ current: '', next: '', again: '' });
+      setPwMsg({ ok: true, text: 'Password changed. Your other devices were signed out.' });
     } catch (err) {
-      alert('Failed to update password.');
+      setPwMsg({ ok: false, text: err.response?.data?.error || 'Could not change the password. Try again.' });
+    } finally {
+      setPwBusy(false);
+    }
+  };
+  const handleLogoutAll = async () => {
+    try { await authAPI.logoutAll(); } catch { /* signing out here still happens */ }
+    onClose();
+    logout();
+  };
+
+  // Delete the account and everything in it (PEB-25): needs the password and a tick, then signs this device out.
+  const [del, setDel] = useState({ password: '', sure: false, busy: false, error: '' });
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    if (!del.sure || !del.password) return;
+    setDel((d) => ({ ...d, busy: true, error: '' }));
+    try {
+      await authAPI.deleteAccount({ password: del.password });
+      onClose();
+      logout();
+    } catch (err) {
+      setDel((d) => ({ ...d, busy: false, error: err.response?.data?.error || 'Could not delete the account. Try again.' }));
+    }
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setSaveError('');
+    // The email is read-only, so only the name goes up with the profile fields.
+    const okName = await updateProfile({ name: profileName });
+    const okRest = await updateSettings({ jobTitle: profileJob, bio: profileBio });
+    if (okName && okRest) {
+      setSaveSuccess('Profile saved successfully!');
+      setTimeout(() => setSaveSuccess(''), 3000);
+    } else {
+      setSaveSuccess('');
+      setSaveError('Could not save your profile. Check your connection and try again.');
     }
   };
 
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
-
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
-
-  const googleLinkAction = useGoogleLogin({
-    flow: 'auth-code',
-    scope: 'openid email profile https://www.googleapis.com/auth/calendar.events',
-    onSuccess: async (tokenResponse) => {
-      setLoadingGoogle(true);
-      try {
-        await authAPI.linkGoogle({ code: tokenResponse.code });
-        updateSettings({ googleConnected: true });
-        alert('Google Account linked successfully!');
-      } catch (err) {
-        console.error('Failed to link Google account', err);
-        alert('Failed to link Google account');
-      } finally {
-        setLoadingGoogle(false);
-      }
-    },
-    onError: () => alert('Google login failed')
-  });
-
-  const handleToggleGoogle = () => {
-    if (settings.googleConnected) {
-      if (window.confirm('Are you sure you want to disconnect your Google Account?')) {
-        updateSettings({ googleConnected: false });
-      }
-    } else {
-      googleLinkAction();
-    }
-  };
 
   return (
     <div className="settings-hub-overlay" onClick={onClose}>
@@ -127,22 +207,24 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           
           <h3 style={{ marginTop: '1.5rem' }}>Workspace</h3>
           <button 
-            className={`settings-tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('notifications')}
-          >
-            <Bell size={18} /> Notifications
-          </button>
-          <button 
             className={`settings-tab-btn ${activeTab === 'ai-providers' ? 'active' : ''}`}
             onClick={() => setActiveTab('ai-providers')}
           >
             <Cpu size={18} /> AI Providers
           </button>
           <button 
-            className={`settings-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
+            className={`settings-tab-btn ${activeTab === 'data' ? 'active' : ''}`}
+            onClick={() => setActiveTab('data')}
           >
-            <Shield size={18} /> Security
+            <Shield size={18} /> Your Data
+          </button>
+
+          <h3 style={{ marginTop: '1.5rem' }}>Account</h3>
+          <button
+            className="settings-tab-btn"
+            onClick={() => { onClose(); logout(); }}
+          >
+            <LogOut size={18} /> Sign out
           </button>
         </div>
 
@@ -188,18 +270,9 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                     />
                   </div>
                   <div className="settings-field-group">
-                    <label className="settings-field-label">Timezone</label>
-                    <select 
-                      className="settings-field-input"
-                      value={profileTimezone}
-                      onChange={(e) => setProfileTimezone(e.target.value)}
-                    >
-                      <option value="UTC">UTC (Universal Time)</option>
-                      <option value="EST">EST (Eastern Standard Time)</option>
-                      <option value="PST">PST (Pacific Standard Time)</option>
-                      <option value="IST">IST (Indian Standard Time)</option>
-                      <option value="CET">CET (Central European Time)</option>
-                    </select>
+                    <label className="settings-field-label">Time zone</label>
+                    <p className="settings-field-input" style={{ margin: 0, opacity: 0.8 }}>{(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, ' '); } catch { return 'this computer'; } })()}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Peblo follows this computer's time zone for "today", deadlines and reminders.</p>
                   </div>
                 </div>
 
@@ -231,6 +304,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button type="submit" className="btn btn-primary">Save Profile Changes</button>
                   {saveSuccess && <span style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 500 }}>{saveSuccess}</span>}
+                  {saveError && <span role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 500 }}>{saveError}</span>}
                 </div>
               </form>
             </div>
@@ -239,9 +313,39 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           {activeTab === 'appearance' && (
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">Appearance</h2>
+
+              <div className="settings-field-group">
+                <label className="settings-field-label" id="style-label">Style</label>
+                <p className="style-hint">Changes the layout, type and colours of the whole app. Light, dark and midnight work with every style.</p>
+                <div className="style-grid" role="radiogroup" aria-labelledby="style-label">
+                  {[
+                    { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock', tags: ['Beginners', 'Visual'], tip: 'For people who like light, friendly screens. Big tiles show your day at a glance, with less to read.' },
+                    { id: 'river', name: 'River', desc: 'Your day as one timeline, past to future', tags: ['Meetings', 'Planners'], tip: 'For days run by meetings and deadlines. Notes, meetings and tasks sit on one timeline where they happened, and Peblo finds promises made in meetings.' },
+                    { id: 'orbit', name: 'Orbit', desc: 'A map of what you know, built for studying', tags: ['Students', 'Exams'], tip: 'For students preparing for exams. Topics become a map with mastery scores, and quizzes come from your own notes.' },
+                  ].map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={uiStyle === o.id}
+                      aria-describedby={`style-tip-${o.id}`}
+                      className={`style-card${uiStyle === o.id ? ' active' : ''}`}
+                      onClick={() => setUiStyle(o.id)}
+                    >
+                      <span className={`style-preview ${o.id}`} aria-hidden="true">
+                        <i className="a" /><i className="b" /><i className="c" /><i className="d" /><i className="e" />
+                      </span>
+                      <span id={`style-tip-${o.id}`} className="style-tip" role="tooltip">{o.tip}</span>
+                      <span className="style-name">{o.name}</span>
+                      <span className="style-desc">{o.desc}</span>
+                      <span className="style-tags">{o.tags.map((t) => <span key={t}>{t}</span>)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               
               <div className="settings-field-group">
-                <label className="settings-field-label">Theme Preference</label>
+                <label className="settings-field-label">Theme</label>
                 <div className="settings-theme-grid">
                   <div className={`theme-card ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')}>
                     <div className="theme-preview light"></div>
@@ -250,6 +354,10 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   <div className={`theme-card ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')}>
                     <div className="theme-preview dark"></div>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Dark</span>
+                  </div>
+                  <div className={`theme-card ${theme === 'midnight' ? 'active' : ''}`} onClick={() => setTheme('midnight')}>
+                    <div className="theme-preview dark" style={{ background: '#000' }}></div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Midnight</span>
                   </div>
                   <div className={`theme-card ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')}>
                     <div className="theme-preview system"></div>
@@ -268,7 +376,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   <input 
                     type="checkbox" 
                     checked={settings?.compactMode || false} 
-                    onChange={(e) => updateSettings({ compactMode: e.target.checked })}
+                    onChange={(e) => saveSetting({ compactMode: e.target.checked })}
                   />
                   <span className="toggle-slider"></span>
                 </label>
@@ -279,217 +387,186 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
           {activeTab === 'preferences' && (
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">Editor Preferences</h2>
-              
-              <div className="settings-grid-2" style={{ marginBottom: '1rem' }}>
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Editor Font Size</label>
-                  <select 
-                    className="settings-field-input"
-                    value={settings.fontSize || 'medium'} 
-                    onChange={(e) => updateSettings({ fontSize: e.target.value })}
-                  >
-                    <option value="small">Small (13px)</option>
-                    <option value="medium">Medium (15px)</option>
-                    <option value="large">Large (18px)</option>
-                  </select>
-                </div>
-                
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Note Language</label>
-                  <select 
-                    className="settings-field-input"
-                    value={settings.language || 'en'} 
-                    onChange={(e) => updateSettings({ language: e.target.value })}
-                  >
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                  </select>
-                </div>
+
+              <div className="soft s-embed"><CaptureShortcut /></div>
+
+              <div className="settings-field-group">
+                <label className="settings-field-label" htmlFor="pref-font">Editor text size</label>
+                <select
+                  id="pref-font"
+                  className="settings-field-input"
+                  value={settings?.fontSize || 'medium'}
+                  onChange={(e) => saveSetting({ fontSize: e.target.value })}
+                >
+                  <option value="small">Small (13px)</option>
+                  <option value="medium">Default (your style's size)</option>
+                  <option value="large">Large (18px)</option>
+                </select>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Changes the size of the text inside the note editor, in every style.
+                </p>
               </div>
 
               <div className="settings-field-group">
-                <label className="settings-field-label">Auto-save Interval</label>
-                <select 
+                <label className="settings-field-label" htmlFor="pref-week">Week starts on</label>
+                <select
+                  id="pref-week"
                   className="settings-field-input"
-                  value={settings.autoSaveInterval || '5'} 
-                  onChange={(e) => updateSettings({ autoSaveInterval: e.target.value })}
+                  value={settings?.weekStart === 'sun' ? 'sun' : 'mon'}
+                  onChange={(e) => saveSetting({ weekStart: e.target.value })}
                 >
-                  <option value="1">Every 1 minute</option>
-                  <option value="5">Every 5 minutes</option>
-                  <option value="15">Every 15 minutes</option>
-                  <option value="0">Never (Manual Save Only)</option>
+                  <option value="mon">Monday</option>
+                  <option value="sun">Sunday</option>
                 </select>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Behavior</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Enable Word Wrap</h4>
-                  <p>Wrap long lines of text to fit the editor width.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.wordWrap ?? true} 
-                    onChange={(e) => updateSettings({ wordWrap: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Auto-suggest Titles (AI)</h4>
-                  <p>Automatically generate titles for new drafts based on content.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.autoTitle ?? true} 
-                    onChange={(e) => updateSettings({ autoTitle: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <div className="settings-section fade-in">
-              <h2 className="settings-section-title">Notification Settings</h2>
-              
-              <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Email Notifications</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Product Updates & Marketing</h4>
-                  <p>Receive emails about new features, tips, and promotional offers.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.emailMarketing ?? false} 
-                    onChange={(e) => updateSettings({ emailMarketing: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Weekly Activity Digest</h4>
-                  <p>A summary of your notes, insights, and productivity stats every Monday.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.emailActivity ?? true} 
-                    onChange={(e) => updateSettings({ emailActivity: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Push Notifications</h3>
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4>Task Reminders</h4>
-                  <p>Get notified when a deadline from your To-Do list is approaching.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.pushReminders ?? true} 
-                    onChange={(e) => updateSettings({ pushReminders: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'security' && (
-            <div className="settings-section fade-in">
-              <h2 className="settings-section-title">Security & Access</h2>
-              
-              <div className="settings-toggle-row" style={{ borderColor: settings.twoFactor ? 'var(--success)' : '' }}>
-                <div className="settings-toggle-info">
-                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Shield size={16} style={{ color: settings.twoFactor ? 'var(--success)' : 'inherit' }} /> 
-                    Two-Factor Authentication (2FA)
-                  </h4>
-                  <p>Add an extra layer of security to your account using an authenticator app.</p>
-                </div>
-                <label className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    checked={settings.twoFactor ?? false} 
-                    onChange={(e) => updateSettings({ twoFactor: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Connected Accounts</h3>
-              
-              <div className="settings-toggle-row">
-                <div className="settings-toggle-info">
-                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                    Google Account
-                  </h4>
-                  <p>Sign in quickly and sync contacts using your Google Account.</p>
-                </div>
-                <button 
-                  type="button"
-                  className={`btn ${settings.googleConnected ? 'btn-outline' : 'btn-primary'}`}
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', opacity: loadingGoogle ? 0.7 : 1 }}
-                  onClick={handleToggleGoogle}
-                  disabled={loadingGoogle}
-                >
-                  {loadingGoogle ? 'Connecting...' : (settings.googleConnected ? 'Disconnect' : 'Connect Google')}
-                </button>
-              </div>
-
-              <h3 style={{ marginTop: '2.5rem', marginBottom: '1rem', fontSize: '1.1rem' }}>Account Actions</h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <button 
-                  className="settings-field-input" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontWeight: 500 }}
-                  onClick={handleChangePassword}
-                >
-                  <Key size={18} className="text-muted" /> Change Account Password
-                </button>
-                
-                <button 
-                  className="settings-field-input" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontWeight: 500 }}
-                  onClick={handleLogoutDevices}
-                >
-                  <Monitor size={18} className="text-muted" /> Sign out of all other devices
-                </button>
-              </div>
-
-              <div style={{ marginTop: '3rem', padding: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)' }}>
-                <h4 style={{ color: '#ef4444', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <AlertTriangle size={18} /> Danger Zone
-                </h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                  Permanently delete your account and all of your content. This action cannot be undone.
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Used by the Calendar, Tasks and the week views in every style. Saved to your account.
                 </p>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ borderColor: '#ef4444', color: '#ef4444' }}
-                  onClick={() => {
-                    if(window.confirm('Are you absolutely sure you want to delete your account? This cannot be undone.')){
-                      logout();
-                      onClose();
-                    }
-                  }}
-                >
-                  <LogOut size={16} /> Delete Account
-                </button>
+              </div>
+
+              {uiStyle === 'orbit' && (
+                <div className="settings-field-group" role="group" aria-label="Orbit look">
+                  <h3 className="settings-field-label">Orbit look</h3>
+                  {[
+                    ['scale', 'Text size', [['small', 'Small'], ['normal', 'Default'], ['large', 'Large'], ['xlarge', 'Extra large']], 'normal'],
+                    ['font', 'Font', [['default', 'Default'], ['serif', 'Serif'], ['mono', 'Monospace']], 'default'],
+                    ['width', 'Sheet width', [['normal', 'Normal'], ['wide', 'Wide']], 'normal'],
+                    ['accent', 'Accent colour', [['blue', 'Blue'], ['green', 'Green'], ['purple', 'Purple'], ['orange', 'Orange'], ['pink', 'Pink']], 'blue'],
+                    ['goal', 'Daily goal (tasks to finish)', [['0', 'Off'], ...[1, 2, 3, 4, 5, 6, 8, 10].map((n) => [String(n), `${n} a day`])], '0'],
+                    ['dateFormat', 'Date format', [['auto', 'Mon 21 Oct'], ['dmy', '21/10/2026'], ['mdy', '10/21/2026'], ['iso', '2026-10-21']], 'auto'],
+                    ['motion', 'Animations', [['system', 'Follow my device'], ['on', 'Always on'], ['off', 'Reduce motion']], 'system'],
+                  ].map(([key, label, opts, dflt]) => (
+                    <label key={key} className="settings-field-label" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>
+                      {label}
+                      <select className="settings-field-input" aria-label={`Orbit ${label}`} value={settings?.orbit?.[key] || dflt} onChange={(e) => saveSetting({ orbit: { ...(settings?.orbit || {}), [key]: e.target.value } })}>
+                        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                  <label className="settings-field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                    <input type="checkbox" checked={!!settings?.orbit?.contrast} onChange={(e) => saveSetting({ orbit: { ...(settings?.orbit || {}), contrast: e.target.checked } })} />
+                    High contrast
+                  </label>
+                </div>
+              )}
+
+              {settingError && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{settingError}</p>}
+
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '1.5rem' }}>
+                Notes save themselves a moment after you stop typing. Peblo does not send emails or push notifications, so there are no notification settings.
+              </p>
+            </div>
+          )}
+
+          {activeTab === 'data' && (
+            <div className="settings-section fade-in">
+              <h2 className="settings-section-title">Your Data</h2>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Monitor size={16} /> Saved to your account
+                  </h4>
+                  <p>
+                    Your notes, tasks and settings belong to your account{user?.email ? <> (<strong>{user.email}</strong>)</> : null} and
+                    are saved in Peblo's database, so they follow you to any device you sign in on. Other people's accounts
+                    can't see them. The export below gives you a copy any time.
+                  </p>
+                </div>
+              </div>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={16} /> Your AI keys are yours
+                  </h4>
+                  <p>
+                    API keys you add under AI Providers are saved with your account only. They are only sent to
+                    OpenAI or Google when you use an AI feature.
+                  </p>
+                </div>
+              </div>
+
+              <DataTools />
+
+              <div className="soft s-embed"><ConnectSection /></div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Password &amp; sessions</h3>
+              <form onSubmit={handleChangePassword} className="settings-toggle-row" style={{ display: 'block' }}>
+                <div className="settings-toggle-info" style={{ marginBottom: '0.75rem' }}>
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Shield size={16} /> Change password</h4>
+                  <p>Changing it signs out every other device. There is no email reset yet, so keep your password somewhere safe.</p>
+                </div>
+                <div className="settings-grid-2">
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-current">Current password</label>
+                    <input id="pw-current" type="password" autoComplete="current-password" className="settings-field-input" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required />
+                  </div>
+                  <div className="settings-field-group" />
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-new">New password</label>
+                    <input id="pw-new" type="password" autoComplete="new-password" minLength={8} className="settings-field-input" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} required />
+                  </div>
+                  <div className="settings-field-group">
+                    <label className="settings-field-label" htmlFor="pw-again">Repeat new password</label>
+                    <input id="pw-again" type="password" autoComplete="new-password" minLength={8} className="settings-field-input" value={pw.again} onChange={(e) => setPw({ ...pw, again: e.target.value })} required />
+                  </div>
+                </div>
+                {pwMsg && <p role="status" style={{ margin: '0.5rem 0', fontWeight: 500, color: pwMsg.ok ? 'var(--success)' : '#ef4444' }}>{pwMsg.text}</p>}
+                <button type="submit" className="btn btn-primary" disabled={pwBusy}>{pwBusy ? 'Changing…' : 'Change password'}</button>
+              </form>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><LogOut size={16} /> Sign out everywhere</h4>
+                  <p>Ends your session on every device, including this one. Use it if you lost a device or signed in on a shared computer.</p>
+                </div>
+                <button type="button" className="btn btn-outline" onClick={handleLogoutAll} style={{ whiteSpace: 'nowrap' }}>Sign out everywhere</button>
+              </div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Delete account</h3>
+              <form onSubmit={handleDeleteAccount} className="settings-toggle-row" style={{ display: 'block' }} aria-label="Delete account">
+                <div className="settings-toggle-info" style={{ marginBottom: '0.75rem' }}>
+                  <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Trash2 size={16} /> Delete my account</h4>
+                  <p>
+                    Deletes your account and everything in it: notes, tasks, tags, saved AI keys and quiz history. It is removed from the
+                    server for good, there is no copy and it cannot be undone. Export your notes first if you want to keep them.
+                  </p>
+                </div>
+                <div className="settings-field-group">
+                  <label className="settings-field-label" htmlFor="del-password">Your password</label>
+                  <input id="del-password" type="password" autoComplete="current-password" className="settings-field-input" value={del.password} onChange={(e) => setDel({ ...del, password: e.target.value })} />
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.75rem 0', fontSize: '0.9rem' }}>
+                  <input id="del-sure" type="checkbox" checked={del.sure} onChange={(e) => setDel({ ...del, sure: e.target.checked })} />
+                  I understand this deletes everything and cannot be undone
+                </label>
+                {del.error && <p role="alert" style={{ margin: '0.5rem 0', fontWeight: 500, color: '#ef4444' }}>{del.error}</p>}
+                <button type="submit" id="del-submit" className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#ef4444' }} disabled={!del.sure || !del.password || del.busy}>{del.busy ? 'Deleting...' : 'Delete my account'}</button>
+              </form>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Import</h3>
+              <div className="settings-toggle-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-toggle-info">
+                  <h4>From Notion, Obsidian or Markdown</h4>
+                  <p>
+                    In Notion: <strong>Settings → Export all workspace content</strong> (or <em>••• → Export</em> on a page), choose
+                    <strong> Markdown &amp; CSV</strong>, then pick the downloaded <code>.zip</code> here. Obsidian vaults (zipped) and
+                    loose <code>.md</code> files work too. Pages keep their titles and tags; databases become tables. Images aren't imported yet.
+                  </p>
+                  {importResult && (
+                    <p style={{ marginTop: '0.5rem', fontWeight: 500, color: importResult.ok ? 'var(--success)' : '#ef4444' }}>{importResult.text}</p>
+                  )}
+                </div>
+                <label className="btn btn-primary" style={{ whiteSpace: 'nowrap', cursor: importing ? 'wait' : 'pointer', opacity: importing ? 0.7 : 1 }}>
+                  {importing ? 'Importing…' : 'Choose files…'}
+                  <input type="file" multiple accept=".zip,.md,.markdown,.txt,.csv" style={{ display: 'none' }} onChange={handleImport} disabled={importing} />
+                </label>
+              </div>
+
+              <h3 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Export</h3>
+              <div className="settings-toggle-row">
+                <div className="settings-toggle-info">
+                  <h4>All notes as Markdown</h4>
+                  <p>Download every note as a <code>.md</code> file in one <code>.zip</code>. It opens in any editor, Obsidian or Notion, so you're never locked in.</p>
+                </div>
+                <button type="button" className="btn btn-outline" onClick={handleExport} disabled={exporting} style={{ whiteSpace: 'nowrap' }}>{exporting ? 'Preparing…' : 'Export .zip'}</button>
               </div>
             </div>
           )}
@@ -498,71 +575,42 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
             <div className="settings-section fade-in">
               <h2 className="settings-section-title">AI Providers & Models</h2>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Connect your own API keys to use custom models. Keys are stored securely in your browser and are never sent to our servers except when proxying requests.
+                Use your own OpenAI or Gemini key, or run AI completely on this computer with Ollama. Keys are stored encrypted in your Peblo account and only sent to the provider you use.
               </p>
+
+              <div className="settings-field-group" style={{ marginBottom: '1.5rem' }}>
+                <label className="settings-field-label" htmlFor="pref-ai-off" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    id="pref-ai-off"
+                    type="checkbox"
+                    checked={settings?.aiOff === true}
+                    onChange={(e) => saveSetting({ aiOff: e.target.checked })}
+                  />
+                  Turn off all AI
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  Nothing is sent to any model, local or cloud: no summaries, chat, voice calls, quizzes or briefings. Your notes and tasks work as before. Saved to your account, so it applies on every device.
+                </p>
+              </div>
 
               <form onSubmit={handleSaveApiKeys}>
                 <div className="settings-field-group" style={{ background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                  <label className="settings-field-label" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>Default AI Agent</label>
-                  <div style={{ position: 'relative' }}>
-                    <div 
-                      className="settings-field-input"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: 'var(--bg-surface)', border: '2px solid var(--border-subtle)', fontWeight: 500 }}
-                      onClick={() => setIsAiDropdownOpen(!isAiDropdownOpen)}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {defaultAiModel === 'auto' && <><Zap size={16} /> Auto-Detect (Uses best available key)</>}
-                        {defaultAiModel === 'openai' && <><Bot size={16} /> OpenAI (GPT-4 / GPT-3.5)</>}
-                        {defaultAiModel === 'gemini' && <><Sparkles size={16} /> Google Gemini</>}
-                        {defaultAiModel === 'groq' && <><Rocket size={16} /> Groq (Llama 3)</>}
-                        {defaultAiModel === 'huggingface' && <><Box size={16} /> Hugging Face</>}
-                      </div>
-                      <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
-                    </div>
-                    
-                    {isAiDropdownOpen && (
-                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '0.25rem', background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
-                        {[
-                          { id: 'auto', icon: Zap, label: 'Auto-Detect (Uses best available key)' },
-                          { id: 'openai', icon: Bot, label: 'OpenAI (GPT-4 / GPT-3.5)' },
-                          { id: 'gemini', icon: Sparkles, label: 'Google Gemini' },
-                          { id: 'groq', icon: Rocket, label: 'Groq (Llama 3)' },
-                          { id: 'huggingface', icon: Box, label: 'Hugging Face' }
-                        ].map((option) => (
-                          <div 
-                            key={option.id}
-                            style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', background: defaultAiModel === option.id ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.2s' }}
-                            onClick={() => { setDefaultAiModel(option.id); setIsAiDropdownOpen(false); }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = defaultAiModel === option.id ? 'var(--bg-hover)' : 'transparent'}
-                          >
-                            <option.icon size={16} style={{ color: 'var(--accent)' }} />
-                            <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>{option.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <label className="settings-field-label" id="routing-label" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>Where may your AI run?</label>
+                  <div role="radiogroup" aria-labelledby="routing-label" style={{ display: 'grid', gap: '0.5rem' }}>
+                    {ROUTING_CHOICES.map((o) => (
+                      <label key={o.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.6rem 0.75rem', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'pointer', background: routing === o.id ? 'var(--bg-hover)' : 'transparent' }}>
+                        <input type="radio" name="settings-routing" checked={routing === o.id} onChange={() => setRouting(o.id)} />
+                        <span><strong style={{ fontSize: '0.9rem' }}>{o.title}</strong><br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{o.desc}</span></span>
+                      </label>
+                    ))}
                   </div>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-                    Peblo will automatically route requests to the selected AI model when you provide the corresponding key.
+                    The same choice appears under Your AI, in every style.
                   </p>
                 </div>
 
-                <div className="settings-toggle-row" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
-                  <div className="settings-toggle-info">
-                    <h4>Force Custom Models Only</h4>
-                    <p>Disable Peblo's fallback models. We will exclusively use your API keys across all features (including Voice Calls).</p>
-                  </div>
-                  <label className="toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={forceCustomModels} 
-                      onChange={(e) => setForceCustomModels(e.target.checked)} 
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
 
+                {unreadableKeyMessage(settings) && <p role="alert" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
                 <div className="settings-field-group">
                   <label className="settings-field-label">OpenAI API Key {settings?.invalidKeys?.includes('openai') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
                   <input 
@@ -576,7 +624,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   {settings?.invalidKeys?.includes('openai') ? (
                     <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
                   ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for GPT-4, GPT-3.5, and DALL-E models.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Uses GPT-4o mini for chat and text-embedding-3-small for search.</p>
                   )}
                 </div>
 
@@ -593,47 +641,63 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
                   {settings?.invalidKeys?.includes('gemini') ? (
                     <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
                   ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for Gemini Pro and Ultra models.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Uses Gemini 2.5 Flash. Free keys are available at aistudio.google.com.</p>
                   )}
                 </div>
 
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Groq API Key {settings?.invalidKeys?.includes('groq') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
-                  <input 
-                    type="password" 
-                    className="settings-field-input"
-                    style={settings?.invalidKeys?.includes('groq') ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' } : {}}
-                    value={groqKey} 
-                    onChange={(e) => setGroqKey(e.target.value)} 
-                    placeholder="gsk_..."
-                  />
-                  {settings?.invalidKeys?.includes('groq') ? (
-                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
-                  ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for ultra-fast Llama 3 inferences.</p>
-                  )}
-                </div>
 
-                <div className="settings-field-group">
-                  <label className="settings-field-label">Hugging Face Access Token {settings?.invalidKeys?.includes('huggingface') && <span style={{color: '#ef4444', marginLeft: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '4px'}}><AlertTriangle size={14} /> Limit Reached</span>}</label>
-                  <input 
-                    type="password" 
-                    className="settings-field-input"
-                    style={settings?.invalidKeys?.includes('huggingface') ? { borderColor: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' } : {}}
-                    value={huggingFaceKey} 
-                    onChange={(e) => setHuggingFaceKey(e.target.value)} 
-                    placeholder="hf_..."
-                  />
-                  {settings?.invalidKeys?.includes('huggingface') ? (
-                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 500 }}>This API key has reached its usage limit or is invalid. Please replace or delete it.</p>
-                  ) : (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Used for open-source models.</p>
-                  )}
-                </div>
                 
+                <div className="settings-field-group" style={{ marginTop: '1.5rem', background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: '12px', border: 'var(--border-subtle)' }}>
+                  <div className="settings-toggle-row" style={{ border: 'none', padding: 0, margin: 0, background: 'transparent' }}>
+                    <div className="settings-toggle-info">
+                      <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Cpu size={16} /> Local AI (Ollama)</h4>
+                      <p>Run AI models on this computer. Nothing is sent to the internet and it works offline. Install Ollama from ollama.com, then run <code>ollama pull {ollamaModel || 'llama3.2'}</code> and <code>ollama pull {ollamaEmbedModel || 'nomic-embed-text'}</code>.</p>
+                    </div>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={ollamaEnabled} onChange={(e) => setOllamaEnabled(e.target.checked)} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+
+                  {ollamaEnabled && (
+                    <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+                      <div>
+                        <label className="settings-field-label">Ollama address</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input className="settings-field-input" value={ollamaUrl} onChange={(e) => { setOllamaUrl(e.target.value); setOllamaStatus(null); }} placeholder="http://127.0.0.1:11434" />
+                          <button type="button" className="btn btn-outline" style={{ whiteSpace: 'nowrap' }} onClick={checkOllama} disabled={ollamaChecking}>
+                            {ollamaChecking ? 'Checking…' : 'Test connection'}
+                          </button>
+                        </div>
+                        {ollamaStatus && (
+                          <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: ollamaStatus.ok ? 'var(--success)' : '#ef4444' }}>
+                            {ollamaStatus.ok
+                              ? (ollamaStatus.models.length ? `Connected. Installed models: ${ollamaStatus.models.join(', ')}` : 'Connected, but no models are installed yet. Run "ollama pull llama3.2".')
+                              : ollamaStatus.error}
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div>
+                          <label className="settings-field-label">Chat model</label>
+                          <input className="settings-field-input" list="ollama-models" value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)} placeholder="llama3.2" />
+                        </div>
+                        <div>
+                          <label className="settings-field-label">Search (embedding) model</label>
+                          <input className="settings-field-input" list="ollama-models" value={ollamaEmbedModel} onChange={(e) => setOllamaEmbedModel(e.target.value)} placeholder="nomic-embed-text" />
+                        </div>
+                        <datalist id="ollama-models">
+                          {(ollamaStatus?.models || []).map((m) => <option key={m} value={m} />)}
+                        </datalist>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button type="submit" className="btn btn-primary">Save AI Settings</button>
                   {saveSuccess && <span style={{ color: 'var(--success)', fontSize: '0.85rem', fontWeight: 500 }}>{saveSuccess}</span>}
+                  {saveError && <span role="alert" style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 500 }}>{saveError}</span>}
                 </div>
               </form>
             </div>

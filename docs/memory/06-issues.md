@@ -1,0 +1,155 @@
+# 06 · Issue register
+
+Every problem found by the code analysis on 8 Oct 2026 and the verification run on 9 Oct 2026, with its Jira key. **Verdicts (✅ confirmed by running, ⚠️ corrected, ⏸ not testable here) are in [08-verification.md](08-verification.md).** The Jira ticket holds the steps, the fix and the acceptance criteria. Detailed evidence (file:line) is in files 02–05.
+
+When you fix one, change its status here **and** move the Jira ticket. When you find a new one, add a row with the next free ID.
+
+IDs: **S** = security, **B** = bug, **P** = performance, **D** = debt or docs, **G** = missing feature (gap).
+Status: Open · In progress · Fixed (commit).
+
+## Security
+
+| ID | Problem | Severity | Jira | Status |
+|---|---|---|---|---|
+| S-01 | Every desktop install holds the shared MySQL password; anyone with the app's `.env` can read all users' data | Critical | PEB-56 | Open |
+| S-02 | **4 Gemini API keys** (`8ac6634` `.env `, `94b8e07`/`4e1c01c` `scratch.js` + `server/scratch.js`, `9ec68f9` `server/src/.env`) and the Supabase DB password in git history | Critical | PEB-55 | Open ✅, needs the owner to revoke all of them |
+| S-03 | SSRF through link preview (✅ reads internal pages) and `ollamaUrl`; the Ollama check is *not* a port scanner by message (⚠️) | High (hosted) | PEB-24 | Link preview fixed; `ollamaUrl` fixed for shared servers (`PEBLO_HOSTED=1`, allow-list `OLLAMA_ALLOWED_HOSTS`). Not done: DNS-rebinding on allow-listed names |
+| S-04 | API keys encrypted with a per-install secret vanish on other machines | High | PEB-58 | Partly fixed (this commit): a saved key that this install cannot read is reported ("can't be read on this computer, enter it again") in Settings, Your AI (all styles) and AI errors, and the models endpoint flags it; tested with a wrong secret. Still open: keys saved on one install still need the same KEY_ENCRYPTION_SECRET on every install (hosted-server decision, PEB-56) |
+| S-05 | Decrypted API keys returned to the app and cached in `localStorage` | High | PEB-59 | Fixed (this commit) |
+| S-06 | Previous account's notes, keys and chats visible after sign-out on the same computer | High | PEB-60 | Fixed (this commit) |
+| S-07 | Unsanitised `marked` HTML in AI replies and exports (script injection) | High | PEB-61 | Fixed (this commit) |
+| S-08 | Unbounded uploads and zip bombs held in memory | High | PEB-62 | Fixed (this commit) |
+| S-09 | Server AI keys usable by anyone; no AI rate limits | High (hosted) | PEB-26 | Fixed (this commit): every route that calls an AI provider (note actions, block AI, voice, chat, smart intake, AI Hub chat/search, quiz and study questions, River brief and promises) sits behind a per-account limit (20/min, 500 per rolling 24 h; `AI_BURST_MAX`, `AI_DAILY_LIMIT`, 0 = off) that answers 429 with a clear message and Retry-After; all /api calls are limited per address (1200/min, `API_RATE_MAX`); `SERVER_AI_KEYS=off` makes the server ignore its own OpenAI/Gemini keys; a production host that holds keys and has `ALLOWED_ORIGINS` set gets a startup warning. 14 smoke checks. Limits: counts are in memory (one server, reset on restart), the AI keys are still ON by default so the desktop app keeps working with keys from its own .env, and the daily number counts requests, not tokens or cost |
+| S-10 | Rate limits per IP in memory; account enumeration | Medium | PEB-63 | Partly fixed (this commit): sign-in is limited per address (40) and per account (10 failures / 15 min, so faking the address does not help), only failures count, unknown emails cost one bcrypt comparison (similar timing), TRUST_PROXY=true now means one hop. Still open: sign-up still answers 409 for a taken email (needs email verification, PEB-23); limits are in memory (one server); other endpoints are not limited (AI limits are PEB-26) |
+| S-11 | AI changes notes and tasks without asking; private and trashed notes sent to AI; "Local only" bypassable | Medium | PEB-64 | Partly fixed (this commit): `server/src/utils/aiAccess.ts` is the one place that says what an AI may read: no Trash, no #private. Per-note AI actions (title, summary, actions, tags), chat (list of notes offered to the model, and the picked note), and voice (list of notes, READ_NOTE) use it; the chat endpoints no longer let the model rewrite a note you did not pick: it comes back as `suggestedUpdate` and `POST /api/ai/chat/apply-update` applies it after a yes (earlier text is kept as one of the last 5 versions, `revert` brings it back); embeddings skip #private; "Local only" now refuses a cloud model even when the request says `allowCloud`. 24 smoke checks fail on the old code. Still open: nothing in the client shows the suggestion yet (the only chat panel that could, `AiChatPanel.jsx`, is not mounted anywhere: PEB-88); voice commands still act on tasks at once (spoken, so the person asked); a selected piece of text sent to block AI has no note id, so the server cannot tell it came from a #private note |
+| S-12 | No CSP, DevTools in release, any-localhost trust, debug hook | Medium | PEB-65 | Fixed (this commit): `server/src/middleware/security.ts` sends a Content-Security-Policy (scripts only from the app plus the one theme script by hash, no eval, no framing, no plugins), nosniff, frame deny, no-referrer, microphone limited to the app, COOP, HSTS on HTTPS and `no-store` on /api; CORS accepts only the server's own address, `ALLOWED_ORIGINS`, and other localhost ports only outside production. Electron: DevTools and its menu item only in a dev run, the internal-link rule compares the full origin (not just the host), permission checks as well as requests are filtered, and electron-builder flips fuses (no RunAsNode, no NODE_OPTIONS, no inspect flags, cookie encryption, asar integrity, load only from the asar). The debug hook went in PEB-81. Smoke tests cover headers and origins; `e2e/security.mjs` runs all five styles under the CSP with zero violations and checks that injected scripts do not run. The packaged Windows build starts and serves the CSP. Fuses and the internal-link rule are checked only by that packaged run, not by unit tests |
+| S-13 | Raw error text, sockets survive sign-out, unchecked profile fields, 72-byte bcrypt, duplicate route mount (includes S-14) | Low | PEB-66 | Fixed (this commit): unexpected errors answer "Something went wrong" + a reference id (detail only in the log), CORS refusal is 403, sockets are dropped on sign-out-everywhere and password change, profile fields are type/size checked and a new email needs the current password, passwords over 72 bytes are refused, the AI router is mounted once (note actions under /api/notes, the rest under /api/ai; the client voice-command path moved to /api/ai), unknown /api paths answer JSON 404. 12 smoke checks fail on the old code |
+| S-15 | Confidential challenge PDF and stray files committed; no LICENSE; MPL-2.0 (BlockNote) and OFL fonts shipped with no NOTICES | Medium | PEB-67 | Open |
+| S-16 | Known-vulnerable dependencies: root 14 (2 critical), client 29 (13 high) | High | PEB-99 | Open ✅ |
+| S-17 | No way to delete an account and its data | Medium | PEB-25 | Fixed (this commit): Settings > Data > Delete account (password + a tick) calls `POST /api/auth/delete-account`; one `prisma.user.delete` removes notes, tags, tasks, series, saved keys, quiz history (every table is tied to the user with ON DELETE CASCADE), open sockets are dropped, the old token stops working. Wrong or missing password: 403 and nothing changes; shares the password limiter. 10 smoke checks, `e2e/deleteaccount.mjs` (8). Limits: no email confirmation or cooling-off period (no email sending exists, PEB-22/23), no copy is kept, and rows in the in-memory rate limiter are not removed |
+
+## Bugs
+
+| ID | Problem | Severity | Jira | Status |
+|---|---|---|---|---|
+| B-01 | Validation errors return 500 (Zod 4 uses `.issues`, not `.errors`); bad dates give 500; tag array crash | Medium (UI never sends bad input) | PEB-68 | Open ✅ |
+| B-02 | `toggle-task` without an `id` marks all of the user's tasks done | High | PEB-69 | Fixed (this commit) |
+| B-03 | A fresh install can't start (looks for `server/.env` in the bundle) | Critical | PEB-57 | Open ? |
+| B-04 | Intel Mac build likely missing the Prisma engine; tag builds may publish twice | High | PEB-71 | Fixed in code ✅ (Windows package checked; Mac dmgs need a CI run + an Intel Mac) |
+| B-05 | Migrations: no lock, no recovery, `db:sql` overwrites 001 | High | PEB-72 | Fixed ✅ (lock + re-runnable; no pre-migration backup — PEB-30) |
+| B-06 | Streak and heatmap off by a day in IST; fake activity for today; overdue capped at 10 | Medium | PEB-73 | Fixed (this commit): day keys in the user's zone, no invented activity, Trash excluded, overdue counted, all AI types labelled. No edit log yet, so only each note's last edit shows |
+| B-07 | Server time zone used for "today" | Medium (hosted) | PEB-74 | Fixed (this commit): client sends X-Timezone, server day ranges/greeting/briefing/weekly/smart-intake/Hub use it. Still server-clock: streak/heatmap (PEB-73), recurrence, retrieval/river date labels |
+| B-08 | AI failures show fake results and create junk notes | Medium | PEB-75 | Fixed (this commit): no mock results, nothing saved on failure, typed errors (NO_AI_KEY, PROVIDER_ERROR 502, TIMEOUT), 60 s provider timeouts. Streaming chat and background helpers (embeddings, tags) not changed |
+| B-09 | Repeating tasks: now one series (`todo_series`, migration 003) that tops itself up as tasks are listed (60 days ahead, never runs out); monthly/yearly clamp to the last day of short months; edit/delete "this / this and following / all"; "every weekday" added. Older copied tasks stay plain tasks. Not done: RRULE weekdays/intervals, virtual occurrences, the dashboard does not top up | Medium | PEB-76 (story) | Mostly fixed ✅ (edit-scope prompt only in Calendar; no quick-add rule) |
+| B-10 | Missing socket events; React Query v5 invalidation misuse; Calendar not live | Medium | PEB-77 | Fixed (this commit): every write path emits events, query keys corrected, Calendar refreshes on 	odos_changed; socket regression in smoke test. Calendar still uses local state, not React Query |
+| B-11 | Notes can't be reopened after delete/archive/restore; draft double-create; placeholder autosaved (includes B-13) | High | PEB-70 | Fixed (this commit); e2e in `e2e/` |
+| B-12 | Ctrl+K broken on Notes; shortcuts ignore extra modifiers | Medium | PEB-78 | Fixed (this commit) |
+| B-14 | Calendar: Day view arrows, drag drops the time, double save | Medium | PEB-79 | Fixed (this commit); e2e/calendar.mjs. Month statistics still count only the loaded month |
+| B-15 | Task parser: "next friday", no clock times; Soft 17:00 vs all-day elsewhere (includes B-21) | Medium | PEB-80 | Fixed (this commit): shared parser with times, next-week weekdays, month/ISO dates, all-day = 23:59 in every style; 31 unit tests. Slash dates (12/10) deliberately unsupported (ambiguous) |
+| B-16 | Voice call: empty agenda on snooze, rings at 21:53 for all-day tasks, no refresh | Medium | PEB-81 | Fixed (f4f5370): snooze/decline read the latest list from refs, all-day tasks never ring and read as today, new tasks wait 30 min, briefing window 07:30-11:00, Call me now + AI voice calls setting (Settings > Preferences), debug hook removed, voice actions fire todo-updated, server skips bad voice actions and ignores Trash. e2e/calls.mjs. Real spoken exchange not testable here |
+| B-17 | Settings that do nothing; two routing lists | Medium | PEB-82 | Fixed (this commit): dead settings removed (note language, auto-save interval, word wrap, auto-suggest titles, notification tab, time zone picker, unused Groq/HuggingFace state, seeded tips), editor text size now works, one routing list (Only on this computer / Ask me first / Best available) shared by Settings, Your AI in every style, sidebar and console status, profile/settings saves report real errors and no longer send the email, saving keys no longer overwrites routing. Time zone: Peblo follows the computer's zone |
+| B-18 | Version history only for AI edits; unpruned; unsafe restore; trash never emptied | Medium | PEB-83 (story) | Open |
+| B-19 | Orbit: quiz counted twice, "was X%" wrong, unquizzed topics dropped | Medium | PEB-84 | Fixed (this commit): server claims the run atomically (409 on repeat), result carries `before`, unquizzed topics stay in the path, number keys bounded, error messages. Not done: quiz-size copy, space picker label, per-open quiz parsing, missed-concept history |
+| B-20 | River: all-day becomes 22:00, duplicate promises, hidden items, no delete | Medium | PEB-85 | Partly fixed (this commit): Move keeps all-day, drawer Delete, promises keep added/ignored state, atomic promise updates, todoId ownership, move/delete errors shown. Also fixed (e2e/riverfix.mjs, unit tests): lanes deeper than 3 rows get a "+ N more" button that steps through the hidden items, "+ N more" in Week/Quarter lands on the right day (stale scroll), late-night quick-add never ends before it starts, tick/promise/move/quick-add failures show a message, fetched range matches drawn range. Not changed: a promise chip in Week/Quarter still adds on one click; brief date; Jump only searches what is loaded |
+| B-22 | Small UI defects (link preview per keystroke, Hub hides errors, timeline, sidebar, breadcrumb squeezed to 2 px…) | Low | PEB-86 | Fixed (this commit): link preview waits 800 ms and skips half-typed URLs, Hub shows server errors and survives bad stream events, no double ?q= send, timeline starts at 06:00, delete asks first, task actions show errors, Home null-guard, sidebar Inbox highlight, "Create tasks" from action items, capture window follows style/theme changes, theme storage guarded. Not reproduced: Ctrl+J in other styles (works). Not changed: breadcrumb width, Home "next days" fetches 4 days on purpose. TodoListPanel has no button that opens it, so its fix is defensive |
+| B-23 | Probable light flash on start for dark themes (inferred) | Low | PEB-102 | Fixed ✅ (page tested in a browser; Electron window colour not run on a real install) |
+| B-24 | Focus ring faint, missing on active nav link and in high-contrast mode | Medium | PEB-120 | Open ✅ |
+
+## Performance
+
+All five are tracked in **PEB-28** (comment) and PEB-93.
+
+| ID | Problem |
+|---|---|
+| P-01 | Hub retrieval loads every note's full text on every question |
+| P-02 | Notes list without `limit` returns everything; `LIKE` search with no FULLTEXT index |
+| P-03 | Dashboard counts in JavaScript; voice prompts include every task and note |
+| P-04 | Extra auth DB query per request (doubled on duplicate routes); AI clients rebuilt per call; long provider timeouts |
+| P-05 | Import is one-by-one with no transaction; key scan of all users on every start; tag race |
+| P-06 | 1.2 MB editor chunk, 34 eager font weights, unbundled server shipping all `node_modules` (**PEB-103**) |
+
+## Debt and docs
+
+| ID | Problem | Jira | Status |
+|---|---|---|---|
+| D-01 | Dead components, CSS, packages and mobile paths | PEB-88 | Open |
+| D-02 | README and docs describe the old SQLite app; `.env.example` incomplete | PEB-87 | Open |
+| D-03 | No type-check; CI runs no tests; tests write to whatever DB `.env` names | PEB-31 (comment) | Open |
+| D-04 | Deprecated Gemini SDK, hard-coded models, unused key slots and embeddings | PEB-89 | Open |
+| D-05 | Five styles differ in core features; duplicated logic; style not saved to the account | PEB-90 | Open ✅ |
+| D-06 | GitHub default branch `main` is the old web app; stale `desktop-app` branch | PEB-100 | Open ✅ |
+| D-07 | CSS debt: 598 hard-coded colours, 186 `!important`, z-index clash, undefined token, ~312 unused classes | PEB-101 | Open |
+
+## Gaps (planned in the docs, not built)
+
+| ID | Feature | Jira |
+|---|---|---|
+| G-01 | Public share link (the one challenge requirement not met) | PEB-91 |
+| G-02 | Native desktop reminders | PEB-92 |
+| G-03 | Review before AI saves; action items → tasks; smart intake reachable | PEB-94 |
+| G-04 | Semantic + full-text search for the AI Hub | PEB-93 |
+| G-05 | MCP server for other AI tools | PEB-95 |
+| G-06 | Auto-update and code signing | PEB-96 |
+| G-07 | Full data export (tasks, .ics, settings) and task import | PEB-97 |
+| G-08 | `[[links]]` and backlinks (title-match backlinks already exist: Partial) | PEB-98 |
+| G-09 | Server out of Electron's main process (TRD D5) | PEB-104 |
+| G-10 | Lossless note storage (TRD D8) | PEB-105 |
+| G-11 | AI off switch (HUB-12, P0) | PEB-106: Done (this commit): Settings > AI Providers > "Turn off all AI" (`settings.aiOff`, saved on the account). Every route that calls a model goes through `aiLimit` = `aiOffGate` + the PEB-26 limits and answers 403 `AI_OFF`; aiService also builds no provider when it is on, so a route that forgets the gate still cannot reach a model. `/api/ai/hub/models` says `aiOff` and does not ask Ollama; the status line reads "AI is off"; voice calls stop. Not gated on purpose: hub search (keyword search of notes) and quiz history counts. 38 smoke checks (no request reaches any model), `e2e/aioff.mjs`. Limits: individual AI buttons are not hidden, they show the server's "AI is turned off" message when pressed; a client talking to an older server is not covered |
+| UX-01..03 | Orbit Due and notes list bugs | PEB-122, PEB-123, PEB-124: Done (this commit), Orbit only. A ticked task now stays in place (greyed, struck through) and can be un-ticked; overdue ones older than 14 days drop off; "Hide completed" (remembered) hides them; a "N to do, M done" line. Undo toast (6 s) after tick, un-tick and delete; a plain delete only reaches the server after the 6 s, and leaving the screen sends it at once. Repeating tasks still ask which ones. Notes list: topic groups with more than 12 notes start folded, show 8 then "Show 12 more", Collapse/Expand all; searching or a topic filter opens them. `e2e/orbit-due.mjs` (21 checks). Other styles (follow-up commit): Studio, Console, Soft and River already keep done tasks visible (Done section / struck through); they now also get the 6 s Undo after a tick, and Soft's delete is undoable (shared `useUndoToast` / `useDeferredDelete` in `client/src/utils`, `UndoToast` component). Not done there: Undo for delete in Studio/Console (already ask first) and River (drawer confirm), folding/paging of their note lists (different layouts, no grouped topic list). `e2e/undo-styles.mjs` |
+| UX-26/27/29 | Orbit map help | PEB-147, 148, 150: Done (5c00414), Orbit only. "?" on the map opens a 4-step guide (topics, notes and tasks, ring colours incl. Not quizzed, revision path); skip / replay; a non-blocking first-visit prompt. `OrbitHelp.jsx`, `e2e/orbit-help.mjs` |
+| UX-46/50 | Help dialog for every style | PEB-167, 171: Done (this commit). `HelpDialog.jsx` mounted once in the app shell: press ?, or "Help and shortcuts" in the Ctrl+K palette / Orbit and River account menus. Tabs: Shortcuts (only ones that exist), What's new (hand-written list in the component), Send feedback (opens a GitHub new-issue page, sends nothing). Orbit also has "Take the map tour". Ctrl+K palette already existed. Limits: Studio/Console/Soft have no menu entry (use ? or the palette); the What's new list is edited by hand. `e2e/help-dialog.mjs` |
+| UX-05..14 | Orbit notes list | PEB-126..135 Done (this commit), PEB-125 left open. `OrbitNoteList.jsx` (own file): sort (edited / newest / A-Z), group by topic / date / none, topic and date-range filters, grid/list, pin, result count + Clear filters, match highlight, empty states, Recently opened, Select mode with bulk Add topic / Export .md / Archive / Move to Trash. Limits: PEB-125 "most linked" sort not built (needs backlinks, PEB-98); pins, recent list and view choices are kept per device (localStorage), not synced; bulk "move" only adds a topic. Found and fixed a server bug: a PATCH that changed only tags answered 404 (smoke check added). `e2e/orbit-notelist.mjs`, `client/src/utils/download.js` |
+| UX-15..25 | Orbit Due screen | PEB-136, 137, 138, 139, 141, 142, 143, 146 Done (this commit); PEB-140, 144, 145 left open. Filters (topic, priority, overdue only), sort (time / priority / topic), Overdue folds + "Move all to today / tomorrow" (undoable), per-task reschedule menu (today, tomorrow, next week, pick a date; undoable), edit in place (title, date, time, priority, topic), date shown beside the time, counters (due today / overdue / done), today progress bar, keys (Space tick, E edit, Delete remove, arrows move), drag a task to another day in the Week view. Open: PEB-140 asks to edit "notes" but tasks have no notes field; PEB-144 subtasks need a database change; PEB-145 drag-reorder inside a day needs a saved order. `e2e/orbit-due2.mjs` |
+| UX-28, 30..33, 36, 37 | Orbit map | PEB-149, 151, 152, 153, 157, 158 Done (this commit); PEB-154 (fit + reset done, no mini-map yet), PEB-155 (undo/redo) and PEB-156 (right-click rename/recolour/delete) left open. Empty map: "Add your first subject" + Exams/Projects/Study templates that create starter notes (one per topic). Tooltips with shortcut keys on every toolbar/zoom button (V N T L C, + - 0 F, / jumps, ? help). Jump box centres and highlights a topic; Filter (weak / due soon) dims the rest with a clear chip; hover card (notes, tasks due soon, mastery, last quizzed); zoom and position remembered per space on this device, Reset view clears it. Open: topics are tags, so rename/recolour/delete and map-level undo need tag operations first. `e2e/orbit-map2.mjs` |
+| UX-38..45 | Orbit study + export | PEB-159, 160, 161, 162, 163, 164, 165, 166 Done (this commit). Mastery "i" popover (last quiz, count, age, how it blends); quiz length picker (5/10/20, remembered) and a "review what you missed" list with explanations (server allows up to 20 questions); "Study today" plan (due tasks first, then weak topics, minutes each) with streak and week summary (`GET /api/study/activity`); Download menu (Markdown, PDF, Word .doc, Print) on a note, a topic and the map; tasks to .ics / CSV (all or filtered); Settings > Your Data: "Download everything (.zip)" (notes, tasks, settings, no AI keys) and a tasks-CSV import with preview. Print uses a hidden copy of the content (`styles/print.css`). Word export is a Word-compatible .doc (HTML), not .docx. `e2e/orbit-study.mjs`, `e2e/orbit-export.mjs`, `client/src/utils/taskExport.test.mjs` |
+| UX-19, 23, 59, 101, 117..126 | Orbit tasks round | PEB-140, 144, 180, 222, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247 Done (this commit). New `meta` JSON column on todos and notes (migration `005_task_note_meta.sql`, validated by `server/src/utils/meta.ts`): details, steps, estimate, colour label, "waits for", Doing status, assignment status. Due screen: Details panel per task, steps with progress, estimate + daily planned total (flagged over 8 h), colour labels and filter, Blocked tasks cannot be ticked, Board (To do / Doing / Done), Assignments tracker, Done log with "show done for N days", "What next?" (overdue, due, priority, weak topic), bulk select (done, move, priority, label, delete) with Undo, quick dates (+1d, +2w, next mon) in the editor, live preview chip and date-word hints under the add box. Still open: PEB-145 (reorder inside a day), PEB-248 (a note listing its tasks). `e2e/orbit-tasks.mjs`, `client/src/orbit/taskMeta.test.mjs` |
+| UX-66, 67, 127, 130, 139 | Orbit notes round | PEB-187, 188, 248, 251, 260 Done (this commit). Note view: icon (also shown in the note list), favourite star, read-only lock, focus mode (Escape leaves), word/character count and reading time, Duplicate, Copy link, Retry when saving fails, checklist of tasks linked to the note. Stored in `notes.meta`. Still open: PEB-168 (offline warning), PEB-191 (move to another topic as one action), PEB-252 (favourites sidebar). `e2e/orbit-notes3.mjs` |
+| UX-48, 56, 137, 138 | Orbit look preferences | PEB-169, 177, 258, 259 Done (this commit). Settings > Preferences > "Orbit look" (Orbit style only), saved as `settings.orbit`: text size (zoom), font, sheet width, accent colour, high contrast, animations (follow device / on / reduce) and a daily task goal with a progress ring on the task list. Dark mode was already in the user menu. Still open: PEB-257 (page transitions not built; reduced-motion setting is done). `e2e/orbit-prefs.mjs` |
+| UX-51, 54 | Orbit planning | PEB-172, 175 Done (this commit). Due screen: Today tab (due today with ticking, notes edited today, quiz link for the weakest topic, exam countdowns kept in `settings.orbit.exams`), 25 min focus timer from a task's Details that stops itself and logs minutes in `meta.spentMin`, Time tab (logged time per topic, all-time). Partly done, left open: PEB-174 (no auto revision path), PEB-176 (no weekly breakdown). `e2e/orbit-plan.mjs` |
+| Round 15 | PEB-204, PEB-206 (date format only) | Orbit: map search shows recent searches (kept in this browser), All/Topics/Notes scopes and a hint explaining the `/` shortcut; Settings > Preferences > Orbit look has a Date format choice (auto, dd/mm/yyyy, mm/dd/yyyy, ISO) kept in `settings.orbit.dateFormat`. Week start already existed as `settings.weekStart`. Language and the profile page (PEB-212: sessions list, avatar) are not done. | `e2e/orbit-search2.mjs` |
+| Round 14 | PEB-211, PEB-217, PEB-256 | Orbit: back up everything to a .json file (`GET /api/backup`) and restore it (`POST /api/restore`, adds copies, never overwrites); "Try with example data" / "Clear example data" (`POST /api/example`, `/api/example/clear`, marker tag `example-data`, hidden on the map); clickable breadcrumb on a note (Map > Topic > Note) | `e2e/orbit-backup.mjs`, `e2e/orbit-notes4.mjs` |
+| Round 13 | PEB-199, PEB-200, PEB-205 | Orbit map: topic colours (tint) and icons from Manage topics, download the map as PNG or SVG (P / G), arrow-key navigation between nodes with Enter to select | `e2e/orbit-map3.mjs` + `mapImage.test.mjs` |
+| Round 12 | PEB-216 | Orbit getting-started checklist on the map (create a topic, write a note, add a task, take a quiz) with progress bar; each undone step is a shortcut; can be hidden (saved per account in `settings.orbit.checklistOff`); hides itself when all four are done | `e2e/orbit-checklist.mjs` |
+| Round 11 | PEB-210 | Orbit Trash and Archive screens: Restore, Unarchive, "Empty trash" with confirmation, "deleted N ago" label (list API now returns `deletedAt`). No auto-purge, so no days-left label | `e2e/orbit-trash.mjs` |
+| Round 10 | PEB-182, PEB-185, PEB-186 | Orbit notes: templates (lecture, Cornell, daily log, meeting) on empty notes, outline panel (jump to heading), find and replace with Ctrl/Cmd+F, match case, replace all | `e2e/orbit-notes4.mjs` + `noteTemplates.test.mjs` |
+| Round 9 | PEB-181 | Orbit topic manager: `/api/tags` list/rename(merge)/delete, "Manage topics" sheet with search, rename, merge, two-step delete, colour swatches (colours only shown in the manager, not yet on the map) | `e2e/orbit-topics.mjs` + smoke |
+| G-12 | Peblo Connect: use other MCP servers (CON-01…06, P0/P1) | PEB-107 |
+| G-13 | Opt-in crash reports (PLAT-04, P0) | PEB-108 |
+| G-14 | First-run onboarding (PLAT-10, P0) | PEB-109 |
+| G-15 | Inbox triage (CAP-03) | PEB-110 |
+| G-16 | Attachments (KN-06, CAP-07) | PEB-111 |
+| G-17 | Calendar sync / .ics (ACT-06) | PEB-112 |
+| G-18 | Any OpenAI-compatible provider (HUB-08) | PEB-113 |
+| G-19 | Scheduled AI automations (HUB-09) | PEB-114 |
+| G-20 | Editable prompt library (HUB-10) | PEB-115 |
+| G-21 | Local model guidance and install (HUB-13) | PEB-116 |
+| G-22 | CLI (PLAT-05) | PEB-117 |
+| G-23 | Phase 2: local vault + E2E sync decision (DATA-05/06/07, ADR-2/4/7) | PEB-118 |
+| G-24 | Phase 2: mobile (PLAT-07) | PEB-119 |
+| — | Password reset, email verification, account deletion, chat history on the server, deployment, backups, CI, unit tests, accessibility, responsive | PEB-22…34 (created earlier) |
+
+The longer list of about 60 planned items (by PRD requirement ID) is in `05-platform.md` §6.2.
+
+## Suggested order
+
+1. **This week (owner):** revoke all four leaked Gemini keys and the DB password (PEB-55), then purge them and the PDF from history and fix the default branch in one force-push (PEB-67, PEB-100).
+2. **Before anyone outside uses the app:** PEB-56, PEB-57, PEB-58, PEB-59, PEB-60, PEB-61, PEB-62, PEB-24, PEB-26, PEB-74, PEB-29.
+3. **Quick wins for new developers:** PEB-68, PEB-69, PEB-70, PEB-78, PEB-86, PEB-88.
+4. **Then:** quality (PEB-31, PEB-72, PEB-75, PEB-77), then features (PEB-91, PEB-92, PEB-93, PEB-94).
+
+| Studio and Console removed | (no ticket) | Studio and Console styles deleted at the owner's request: removed from Settings, the Ctrl+K palette, `AppShell`, `ConsoleShell.jsx`, `Sidebar.jsx`, `useShellData.js`. Soft Studio is now the default; a saved `studio`/`console` style falls back to Soft. The shared pages (Home, Workspace, Tasks, Calendar, AI Hub, Connections) are still in the code as the fallback `other` screens. The old Studio-only status line ("AI is off") is gone, so that check was dropped from `e2e/aioff.mjs`. |
+
+
+## Ecosystem stories raised 2026-10-21
+| Jira | Story |
+|---|---|
+| PEB-95 | Done: MCP server + access tokens (branch supabase) |
+| PEB-272 | Sharing and collaboration |
+| PEB-273 | Backlinks, wiki links, daily notes |
+| PEB-274 | Web app, mobile apps, offline sync |
+| PEB-275 | Web clipper extension |
+| PEB-276 | Public API docs, webhooks, integrations |
+| PEB-277 | Google Calendar two-way sync |
+| PEB-278 | Templates gallery and more importers |
+| PEB-279 | AI search and Q&A with citations |
+| PEB-280 | Password reset by email, Google sign-in, two-factor |

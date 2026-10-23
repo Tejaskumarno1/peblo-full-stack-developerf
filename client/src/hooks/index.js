@@ -114,8 +114,10 @@ export function useKeyboardShortcut(key, callback, modifiers = { ctrl: false, sh
   useEffect(() => {
     function handler(e) {
       const mods = modRef.current;
-      if (mods.ctrl && !(e.ctrlKey || e.metaKey)) return;
-      if (mods.shift && !e.shiftKey) return;
+      // Exact modifier match: Ctrl+Shift+S must not fire the Ctrl+S handler, Alt+K must not fire K (PEB-78)
+      if (!!mods.ctrl !== (e.ctrlKey || e.metaKey)) return;
+      if (!!mods.shift !== e.shiftKey) return;
+      if (!!mods.alt !== e.altKey) return;
       if (e.key.toLowerCase() === key.toLowerCase()) {
         e.preventDefault();
         e.stopPropagation();

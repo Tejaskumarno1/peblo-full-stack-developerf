@@ -1,19 +1,29 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
-import { autoSyncTodoToGoogle } from './calendarController.js';
+import { tzOf, dayBounds, dayBoundsOf } from '../utils/userTime.js';
+import { RECURRENCES, isRepeating, topUpSeries } from '../services/todoSeries.js';
+import { cleanTodoMeta } from '../utils/meta.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
-    const { date, from, to, priority, completed } = req.query;
+    const { date, from, to, priority, completed, noteId } = req.query;
+    await topUpSeries(req.user!.id); // repeating tasks never run out
     const where: any = { userId: req.user!.id };
+    if (typeof noteId === 'string' && noteId) where.noteId = noteId;
 
     // Filter by single date
     if (date) {
-      const dayStart = new Date(date as string);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date as string);
-      dayEnd.setHours(23, 59, 59, 999);
-      where.deadline = { gte: dayStart, lte: dayEnd }; 
+      // "2026-10-12" names a calendar day; a full timestamp means the day that moment falls on. Either way the person's day.
+      const tz = tzOf(req);
+      const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
+      let b;
+      if (ymd) b = dayBoundsOf(Number(ymd[1]), Number(ymd[2]), Number(ymd[3]), tz);
+      else {
+        const at = new Date(String(date));
+        if (Number.isNaN(at.getTime())) return res.status(400).json({ error: 'Invalid date' });
+        b = dayBounds(tz, at);
+      }
+      where.deadline = { gte: b.start, lte: b.end };
     }
 
     // Filter by date range
@@ -52,29 +62,19 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
 export async function getTodayTodos(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    const threeDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59, 999).toISOString();
+    await topUpSeries(userId);
+    const tz = tzOf(req);
+    const todayStart = dayBounds(tz).start.toISOString();
+    const todayEnd = dayBounds(tz).end.toISOString();
+    const threeDaysLater = dayBounds(tz, new Date(), 3).end.toISOString();
 
-    // Single raw SQL query fetches ALL incomplete tasks with deadlines up to 3 days out
-    // We split them into today/overdue/upcoming in JS (zero extra round-trips)
-    const allTasks = await prisma.$queryRaw<any[]>`
-      SELECT t.id, t.text, t.is_completed AS "completed", t.priority, t.deadline,
-             t.tags AS "todoTags", t.start_time AS "startTime", t.end_time AS "endTime",
-             t.recurrence, t.created_at AS "createdAt", t.updated_at AS "updatedAt",
-             CASE WHEN t.linked_note_id IS NOT NULL
-               THEN json_build_object('id', n.id, 'title', n.title)
-               ELSE NULL
-             END AS note
-      FROM todos t
-      LEFT JOIN notes n ON n.id = t.linked_note_id
-      WHERE t.user_id = ${userId}
-        AND t.is_completed = false
-        AND t.deadline IS NOT NULL
-        AND t.deadline <= ${threeDaysLater}::timestamptz
-      ORDER BY t.deadline ASC
-    `;
+    // One query fetches all incomplete tasks due up to 3 days out;
+    // they are split into today/overdue/upcoming below.
+    const allTasks = await prisma.todo.findMany({
+      where: { userId, completed: false, deadline: { not: null, lte: new Date(threeDaysLater) } },
+      include: { note: { select: { id: true, title: true } } },
+      orderBy: { deadline: 'asc' },
+    }) as any[];
 
     const todayStartDate = new Date(todayStart);
     const todayEndDate = new Date(todayEnd);
@@ -108,6 +108,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
     if (!from || !to) {
       return res.status(400).json({ error: 'from and to query params are required' });
     }
+    await topUpSeries(req.user!.id);
 
     const todos = await prisma.todo.findMany({
       where: {
@@ -124,18 +125,20 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
   }
 }
 
+const SERIES_FIELDS = ['text', 'priority', 'todoTags', 'startTime', 'endTime', 'noteId'] as const;
+const SCOPES = ['this', 'following', 'all'];
+const scopeOf = (v: unknown) => (typeof v === 'string' && SCOPES.includes(v) ? v : 'this');
+
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, timezone } = req.body;
+    const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     if (!text || text.trim() === '') {
       return res.status(400).json({ error: 'Text is required' });
     }
 
     const validPriorities = ['high', 'medium', 'low'];
     const safePriority = validPriorities.includes(priority) ? priority : 'medium';
-
-    const validRecurrence = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
-    const safeRecurrence = validRecurrence.includes(recurrence) ? recurrence : 'none';
+    const safeRecurrence = (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : 'none';
 
     if (noteId) {
       const note = await prisma.note.findFirst({
@@ -146,68 +149,35 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       }
     }
 
-    let currentDeadline = deadline ? new Date(deadline) : null;
-    const count = (!currentDeadline || safeRecurrence === 'none') ? 1 : 
-      (safeRecurrence === 'daily' ? 30 : 
-      (safeRecurrence === 'weekly' ? 12 : 
-      (safeRecurrence === 'monthly' ? 12 : 
-      (safeRecurrence === 'yearly' ? 5 : 1))));
-    
-    const dataToInsert = [];
+    const userId = req.user!.id;
+    const when = deadline ? new Date(deadline) : null;
+    const cleanTags = Array.isArray(tags) ? tags.map((t: any) => t.trim()).filter(Boolean) : [];
+    const base = {
+      text: text.trim(), priority: safePriority, startTime: startTime || null, endTime: endTime || null,
+      recurrence: safeRecurrence, todoTags: cleanTags, noteId: noteId || null, userId,
+    } as any;
+    const cleanMeta = cleanTodoMeta(meta);
+    if (Object.keys(cleanMeta).length) base.meta = cleanMeta;
 
-    for (let i = 0; i < count; i++) {
-      dataToInsert.push({
-        text: text.trim(),
-        priority: safePriority,
-        deadline: currentDeadline,
-        startTime: startTime || null,
-        endTime: endTime || null,
-        recurrence: safeRecurrence,
-        todoTags: Array.isArray(tags) ? tags.map((t: any) => t.trim()).filter(Boolean) : [],
-        noteId: noteId || null,
-        userId: req.user!.id
+    let todo;
+    if (when && isRepeating(safeRecurrence)) {
+      // One series; the first occurrence is this task, the rest are generated ahead (and kept topped up).
+      const series = await prisma.todoSeries.create({
+        data: {
+          userId, recurrence: safeRecurrence, timezone: tzOf(req), anchor: when, lastGenerated: when,
+          text: base.text, priority: safePriority, todoTags: cleanTags, startTime: base.startTime, endTime: base.endTime, noteId: base.noteId,
+        },
       });
-
-      if (currentDeadline && safeRecurrence !== 'none') {
-        currentDeadline = new Date(currentDeadline);
-        if (safeRecurrence === 'daily') currentDeadline.setDate(currentDeadline.getDate() + 1);
-        else if (safeRecurrence === 'weekly') currentDeadline.setDate(currentDeadline.getDate() + 7);
-        else if (safeRecurrence === 'monthly') currentDeadline.setMonth(currentDeadline.getMonth() + 1);
-        else if (safeRecurrence === 'yearly') currentDeadline.setFullYear(currentDeadline.getFullYear() + 1);
-      }
-    }
-
-    if (count === 1) {
-      const todo = await prisma.todo.create({
-        data: dataToInsert[0],
-        include: { note: { select: { id: true, title: true } } }
-      });
-      // Background sync
-      autoSyncTodoToGoogle(todo, req.user!.id, 'create', timezone);
-      
-      const io = req.app.get('io');
-      if (io) io.to(req.user!.id).emit('todos_changed');
-      
-      return res.status(201).json({ todo });
-    }
-
-    await prisma.todo.createMany({ data: dataToInsert });
-    
-    const firstTodo = await prisma.todo.findFirst({
-      where: { userId: req.user!.id, text: text.trim(), deadline: dataToInsert[0].deadline },
-      orderBy: { createdAt: 'desc' },
-      include: { note: { select: { id: true, title: true } } }
-    });
-
-    // Background sync the first recurrence instance
-    if (firstTodo) {
-      autoSyncTodoToGoogle(firstTodo, req.user!.id, 'create', timezone);
+      todo = await prisma.todo.create({ data: { ...base, deadline: when, seriesId: series.id }, include: { note: { select: { id: true, title: true } } } });
+      await topUpSeries(userId, series.id);
+    } else {
+      todo = await prisma.todo.create({ data: { ...base, deadline: when }, include: { note: { select: { id: true, title: true } } } });
     }
 
     const io = req.app.get('io');
-    if (io) io.to(req.user!.id).emit('todos_changed');
+    if (io) io.to(userId).emit('todos_changed');
 
-    res.status(201).json({ todo: firstTodo });
+    res.status(201).json({ todo });
   } catch (error) {
     next(error);
   }
@@ -216,10 +186,12 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 export async function updateTodo(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence, timezone } = req.body;
+    const userId = req.user!.id;
+    const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
+    const scope = scopeOf(req.body.scope);
 
     const todo = await prisma.todo.findFirst({
-      where: { id: id as string, userId: req.user!.id }
+      where: { id: id as string, userId }
     });
 
     if (!todo) {
@@ -229,6 +201,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     const data: any = {};
     if (text !== undefined) data.text = text.trim();
     if (completed !== undefined) data.completed = completed;
+    if (meta !== undefined) data.meta = cleanTodoMeta(meta, todo.meta);
     if (priority !== undefined) {
       const validPriorities = ['high', 'medium', 'low'];
       data.priority = validPriorities.includes(priority) ? priority : todo.priority;
@@ -236,15 +209,11 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     if (deadline !== undefined) data.deadline = deadline ? new Date(deadline) : null;
     if (startTime !== undefined) data.startTime = startTime || null;
     if (endTime !== undefined) data.endTime = endTime || null;
-    if (recurrence !== undefined) {
-      const validRecurrence = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
-      data.recurrence = validRecurrence.includes(recurrence) ? recurrence : todo.recurrence;
-    }
     if (tags !== undefined) data.todoTags = Array.isArray(tags) ? tags.map((t: any) => t.trim()).filter(Boolean) : [];
     if (noteId !== undefined) {
       if (noteId) {
         const note = await prisma.note.findFirst({
-          where: { id: noteId as string, userId: req.user!.id }
+          where: { id: noteId as string, userId }
         });
         if (!note) {
           return res.status(400).json({ error: 'Invalid note ID' });
@@ -253,17 +222,50 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       data.noteId = noteId || null;
     }
 
+    // Changing "repeat" ends the old series after this task and starts a new one from it (or none).
+    const newRule = recurrence !== undefined && (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : undefined;
+    const ruleChanged = newRule !== undefined && newRule !== (todo.recurrence || 'none');
+    let startSeries = false;
+    if (ruleChanged) {
+      if (todo.seriesId) {
+        await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, id: { not: todo.id }, completed: false, deadline: { gt: todo.deadline ?? new Date(0) } } });
+        await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { endedAt: new Date() } });
+        data.seriesId = null;
+      }
+      data.recurrence = newRule;
+      startSeries = isRepeating(newRule) && !!(data.deadline ?? todo.deadline);
+    }
+
     const updatedTodo = await prisma.todo.update({
       where: { id: id as string },
       data,
       include: { note: { select: { id: true, title: true } } }
     });
 
-    // Background sync
-    autoSyncTodoToGoogle(updatedTodo, req.user!.id, 'update', timezone);
+    if (startSeries && updatedTodo.deadline) {
+      const series = await prisma.todoSeries.create({
+        data: {
+          userId, recurrence: newRule as string, timezone: tzOf(req), anchor: updatedTodo.deadline, lastGenerated: updatedTodo.deadline,
+          text: updatedTodo.text, priority: updatedTodo.priority, todoTags: updatedTodo.todoTags ?? [], startTime: updatedTodo.startTime, endTime: updatedTodo.endTime, noteId: updatedTodo.noteId,
+        },
+      });
+      await prisma.todo.update({ where: { id: updatedTodo.id }, data: { seriesId: series.id } });
+      (updatedTodo as any).seriesId = series.id;
+      await topUpSeries(userId, series.id);
+    } else if (!ruleChanged && todo.seriesId && scope !== 'this') {
+      // "This and following" / "all": the shared details change for the other open occurrences too, and for the ones still to come.
+      const shared: any = {};
+      for (const f of SERIES_FIELDS) if (f in data) shared[f] = data[f];
+      if (Object.keys(shared).length) {
+        const where: any = { seriesId: todo.seriesId, completed: false, id: { not: todo.id } };
+        if (scope === 'following' && todo.deadline) where.deadline = { gte: todo.deadline };
+        await prisma.todo.updateMany({ where, data: shared });
+        await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: shared });
+      }
+    }
 
     const io = req.app.get('io');
-    if (io) io.to(req.user!.id).emit('todos_changed');
+    if (io) io.to(userId).emit('todos_changed');
 
     res.json({ todo: updatedTodo });
   } catch (error) {
@@ -275,8 +277,8 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
   try {
     const { id } = req.params;
     const userId = req.user!.id;
+    const scope = scopeOf(req.query.scope);
 
-    // Fetch todo data for Google sync before deleting (still needed for sync)
     const todo = await prisma.todo.findFirst({
       where: { id: id as string, userId }
     });
@@ -285,12 +287,16 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
       return res.status(404).json({ error: 'Todo not found' });
     }
 
-    await prisma.todo.delete({
-      where: { id: id as string }
-    });
-
-    // Background sync deletion (non-blocking)
-    autoSyncTodoToGoogle(todo, userId, 'delete');
+    if (todo.seriesId && scope === 'all') {
+      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId } });
+      await prisma.todoSeries.deleteMany({ where: { id: todo.seriesId, userId } });
+    } else if (todo.seriesId && scope === 'following') {
+      // Delete this one and every later one, and stop the series so it does not start again.
+      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId, ...(todo.deadline ? { deadline: { gte: todo.deadline } } : { id: todo.id }) } });
+      await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { endedAt: new Date() } });
+    } else {
+      await prisma.todo.delete({ where: { id: id as string } });
+    }
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');

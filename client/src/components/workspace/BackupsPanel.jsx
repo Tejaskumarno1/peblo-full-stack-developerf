@@ -12,6 +12,7 @@ function BackupsPanel({
   backupsList,
   selectedBackupForDiff,
   setSelectedBackupForDiff,
+  onCompare,
   noteContent,
   handleRestoreBackup,
 }) {
@@ -22,11 +23,11 @@ function BackupsPanel({
   return (
     <div className="backups-banner">
       <div className="backups-header">
-        <h4>{selectedBackupForDiff ? 'Compare AI Edit History' : 'AI Edit History'}</h4>
-        <button type="button" onClick={() => { setShowBackups(false); setSelectedBackupForDiff(null); }}>×</button>
+        <h4>{selectedBackupForDiff ? 'Compare with this version' : 'Earlier versions'}</h4>
+        <button type="button" aria-label="Close earlier versions" onClick={() => { setShowBackups(false); setSelectedBackupForDiff(null); }}>×</button>
       </div>
       {loadingBackups ? (
-        <p>Loading backups...</p>
+        <p className="no-backups">Loading…</p>
       ) : selectedBackupForDiff ? (
         <DiffViewer
           oldText={selectedBackupForDiff.content}
@@ -38,7 +39,7 @@ function BackupsPanel({
           }}
         />
       ) : backupsList.length === 0 ? (
-        <p className="no-backups">No backups available for this note. AI edits will appear here.</p>
+        <p className="no-backups">No earlier versions yet. Peblo keeps a copy while you edit (at most one every 10 minutes) and each time AI changes this note, so you can go back here.</p>
       ) : (
         <div className="backups-list">
           {backupsList.map((backup) => (
@@ -48,16 +49,16 @@ function BackupsPanel({
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
-                  onClick={() => setSelectedBackupForDiff(backup)}
+                  onClick={() => onCompare(backup)}
                 >
-                  Compare Diff
+                  Compare
                 </button>
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
                   onClick={() => handleRestoreBackup(backup.id)}
                 >
-                  Restore this version
+                  Restore
                 </button>
               </div>
             </div>

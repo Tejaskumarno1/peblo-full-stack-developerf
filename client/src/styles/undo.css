@@ -1,0 +1,3 @@
+.pb-undo { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 200; display: flex; align-items: center; gap: 16px; padding: 11px 18px; border-radius: 999px; background: #1d1d1f; color: #fff; font: 600 13.5px/1.2 system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); max-width: calc(100vw - 32px); }
+.pb-undo button { border: none; background: transparent; color: #ffd36b; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
+.pb-undo button:focus-visible { outline: 2px solid #ffd36b; outline-offset: 3px; border-radius: 4px; }

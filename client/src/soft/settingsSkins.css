@@ -1,0 +1,45 @@
+/* Settings in River and Orbit: the Soft Studio page, wearing the style's own colours, fonts and shapes. */
+html .soft.s-skin { position: static; height: calc(100vh - 100px); min-height: 0; padding: 0 var(--pb-skin-pad, 20px) 0; overflow: hidden; background: transparent; gap: 14px; }
+html .soft.s-skin .s-set-body { grid-template-columns: 260px minmax(0, 1fr); gap: 24px; min-height: 0; }
+html .soft.s-skin .s-set-main { max-width: none; }
+html .soft.s-skin .s-set-h1 { font-size: 24px; }
+html .soft.s-skin .s-set-h2 { font-size: 28px; }
+
+html .soft.s-skin-river {
+  --s-bg: var(--r-bg); --s-surface: var(--r-surface); --s-line: var(--r-line); --s-fg: var(--r-fg); --s-fg2: var(--r-fg2); --s-fg3: var(--r-fg3);
+  --s-peach: var(--r-personal); --s-mint: var(--r-focus); --s-butter: var(--r-highlight); --s-lilac: var(--r-meet); --s-sky: var(--r-meet);
+  --s-item: var(--r-surface); --s-chip: var(--r-surface); --s-chip-solid: var(--r-lane); --s-col: var(--r-lane);
+  --s-accent: var(--r-now); --s-accent-ink: var(--r-now-ink); --s-accent-soft: var(--r-personal); --s-on-accent: #fff; --s-local: var(--r-focus-ink);
+  --s-dock: var(--r-ink); --s-dock-fg: var(--r-on-ink); --s-shadow: var(--r-shadow); --s-soft-shadow: none; --s-card-shadow: none;
+  --s-display: var(--r-display); --s-body: var(--r-body);
+  color: var(--r-fg);
+}
+html .soft.s-skin-river .s-set-card { border-radius: 20px; border: 1px solid var(--r-line); }
+html .soft.s-skin-river .s-set-link { color: var(--r-fg2); border-radius: 12px; }
+html .soft.s-skin-river .s-set-link.on { background: var(--r-ink); color: var(--r-on-ink); }
+html .soft.s-skin-river .s-set-status { background: var(--r-focus); color: var(--r-focus-ink); }
+
+html .soft.s-skin-orbit {
+  --s-bg: var(--o-bg); --s-surface: var(--o-surface); --s-line: var(--o-line); --s-fg: var(--o-fg); --s-fg2: var(--o-fg2); --s-fg3: var(--o-fg2);
+  --s-peach: var(--o-soft); --s-mint: var(--o-path-soft); --s-butter: var(--o-mark); --s-lilac: var(--o-path-soft); --s-sky: var(--o-path-soft);
+  --s-item: var(--o-surface); --s-chip: var(--o-surface); --s-chip-solid: var(--o-soft); --s-col: var(--o-rail);
+  --s-accent: var(--o-path); --s-accent-ink: var(--o-path-ink); --s-accent-soft: var(--o-path-soft); --s-on-accent: #fff; --s-local: var(--o-strong);
+  --s-dock: var(--o-ink); --s-dock-fg: var(--o-on-ink); --s-shadow: var(--o-shadow); --s-soft-shadow: var(--o-shadow-sm); --s-card-shadow: var(--o-shadow-sm);
+  --s-display: var(--o-body); --s-body: var(--o-body);
+  color: var(--o-fg);
+}
+html .soft.s-skin-orbit .s-set-card { border-radius: 10px; border: 1px solid var(--o-line); }
+html .soft.s-skin-orbit .s-set-link { color: var(--o-fg2); border-radius: 8px; }
+html .soft.s-skin-orbit .s-set-link.on { background: var(--o-ink); color: var(--o-on-ink); }
+html .soft.s-skin-orbit .s-set-status { background: var(--o-path-soft); color: var(--o-path-ink); }
+
+/* Segmented controls stay one row in every style; rows wrap instead of squeezing them. */
+html .soft.s-skin .s-set-row { flex-wrap: wrap; }
+html .soft.s-skin .s-set-row-ctl { flex-shrink: 0; max-width: 100%; }
+html .soft.s-skin .s-sg { display: inline-flex; flex-direction: row; flex-wrap: nowrap; align-items: center; width: auto; height: auto; flex: 0 0 auto; overflow: hidden; border-radius: 999px; padding: 3px; gap: 2px; }
+html .soft.s-skin .s-sg button { display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto; min-width: 0; flex: 0 0 auto; white-space: nowrap; margin: 0; border-radius: 999px; line-height: 1.2; }
+html .soft.s-skin-orbit .s-sg, html .soft.s-skin-orbit .s-sg button { border-radius: 8px; }
+
+/* Orbit: settings cover the map completely. */
+.o-page:has(.s-skin-orbit) { left: 0; right: 0; top: 0; bottom: 0; padding: 92px 24px 20px; background: var(--o-bg); overflow: hidden; }
+html .soft.s-skin-orbit { background: var(--o-bg); }

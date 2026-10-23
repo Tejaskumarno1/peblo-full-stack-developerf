@@ -1,20 +1,25 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
-import { notesAPI, aiAPI } from '../api/index';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import useNoteSearch from '../hooks/useNoteSearch';
+import { notesAPI, aiAPI, todosAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
-import Navigation from '../components/Navigation';
-import ShareModal from '../components/ShareModal';
 import TodoListPanel from '../components/TodoListPanel';
-import { marked } from 'marked';
+import { renderMarkdown, escapeHtml } from '../utils/safeHtml';
+import { extractUrls, hostOf } from '../utils/linkUrls';
 import {
   Link2,
   PanelLeft,
 } from 'lucide-react';
 import BlockEditor from '../components/BlockEditor';
+import NoteContextPanel from '../components/workspace/NoteContextPanel';
 import '../styles/workspace.css';
+import '../styles/notes.css';
+
+// New notes are stored as "Untitled"; show that as an empty title with a placeholder.
+const editableTitle = (title) => (!title || title === 'Untitled' ? '' : title);
 
 // Import subcomponents for cleaner SPA loading/rendering
 import {
@@ -26,6 +31,7 @@ import {
   WelcomeScreen,
 } from '../components/workspace';
 import { useWorkspaceStore } from '../store/workspaceStore';
+import { canvasWidth } from '../design/canvas';
 
 class EditorErrorBoundary extends Component {
   constructor(props) {
@@ -101,8 +107,15 @@ export default function WorkspacePage() {
     showBackups, setShowBackups,
     isShareModalOpen, setIsShareModalOpen,
   } = useWorkspaceStore();
+  // Sidebar links like /notes?tag=inbox open the list filtered by that tag.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const tag = searchParams.get('tag');
+    setFilterTag(tag || '');
+  }, [searchParams, setFilterTag]);
   const [suggestedTag, setSuggestedTag] = useState('');
   const [linkPreviews, setLinkPreviews] = useState([]);
+  const previewCache = useRef(new Map());
   const [showLinkPreviews, setShowLinkPreviews] = useState(false);
 
   const { data: notes = [], isLoading: listLoading } = useQuery({
@@ -142,6 +155,9 @@ export default function WorkspacePage() {
   const [showPreview, setShowPreview] = useState(true);
 
   const [aiPanelTab, setAiPanelTab] = useState('assist');
+  // Which document the editor shows. A new note keeps its key when it is first saved,
+  // so the editor (and an open / menu) is not reloaded mid-typing.
+  const [editorKey, setEditorKey] = useState('empty');
   const [aiResults, setAiResults] = useState({});
   const [aiError, setAiError] = useState('');
   
@@ -180,26 +196,40 @@ export default function WorkspacePage() {
     return { title: noteTitle, content: noteContent, tags: noteTags, category: noteCategory || undefined };
   }, [noteTitle, noteContent, noteTags, noteCategory, selectedNote]);
 
-  const persistDraft = useCallback(async (title, content, tags, category) => {
-    try {
-      const res = await notesAPI.create({
-        title: title || 'Untitled',
-        content: content || '',
-        tags,
-        category: category || undefined,
-      });
-      const newNote = res.data.note;
-      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
-        if (!old) return old;
-        return [newNote, ...old];
-      });
-      setSelectedNote(newNote);
-      navigate(`/notes/${newNote.id}`, { replace: true });
-      return newNote;
-    } catch (err) {
-      console.error('Failed to persist draft:', err);
-      return null;
-    }
+  // One create at a time: if the first POST is still in flight when the next autosave fires, reuse it
+  // instead of creating a second note (PEB-70).
+  const draftCreateRef = useRef(null);
+  const persistDraft = useCallback((title, content, tags, category) => {
+    if (draftCreateRef.current) return draftCreateRef.current;
+    const run = (async () => {
+      try {
+        const res = await notesAPI.create({
+          title: title || 'Untitled',
+          content: content || '',
+          tags,
+          category: category || undefined,
+        });
+        const newNote = res.data.note;
+        // Only the plain "All notes" lists get the new note, not Archive, Trash or tag views.
+        queryClient.setQueriesData({
+          queryKey: ['notes'],
+          predicate: (q) => { const k = q.queryKey[1] || {}; return !k.archived && !k.deleted && !k.tag; },
+        }, (old) => {
+          if (!old) return old;
+          return [newNote, ...old];
+        });
+        setSelectedNote(newNote);
+        navigate(`/notes/${newNote.id}`, { replace: true });
+        return newNote;
+      } catch (err) {
+        console.error('Failed to persist draft:', err);
+        return null;
+      } finally {
+        draftCreateRef.current = null;
+      }
+    })();
+    draftCreateRef.current = run;
+    return run;
   }, [navigate, queryClient]);
 
   const handleSave = useCallback(async (noteId, data) => {
@@ -232,6 +262,7 @@ export default function WorkspacePage() {
       updatedAt: new Date().toISOString(),
     };
     setSelectedNote(draftNote);
+    setEditorKey(`draft-${Date.now()}`);
     setNoteTitle('');
     setNoteContent('');
     setNoteTags([]);
@@ -240,12 +271,15 @@ export default function WorkspacePage() {
     setAiError('');
     setAiPanelOpen(false);
     setShowPreview(false);
+    // The URL still names the open note for one render; without this the route effect re-opens it over the new draft.
+    if (routeId) ignoredNoteIdsRef.current.add(routeId);
     navigate('/notes', { replace: true });
-  }, [navigate]);
+  }, [navigate, routeId]);
 
   useKeyboardShortcut('s', () => forceSave(), { ctrl: true });
-  useKeyboardShortcut('k', () => document.getElementById('search-input')?.focus(), { ctrl: true });
+  // Ctrl+K is the global command palette (CommandPalette.jsx); it must not be swallowed here (PEB-78)
   useKeyboardShortcut('n', handleCreateNote, { ctrl: true });
+  useKeyboardShortcut('n', handleCreateNote, { ctrl: true, alt: true }); // the button's tooltip says Ctrl+Alt+N
   useKeyboardShortcut('p', () => setShowPreview((p) => !p), { ctrl: true });
   useKeyboardShortcut('j', () => setAiPanelOpen((p) => !p), { ctrl: true });
 
@@ -258,7 +292,8 @@ export default function WorkspacePage() {
       });
       if (selectedNote?.id === updatedNote.id) {
         setNoteContent(updatedNote.content || '');
-        setNoteTitle(updatedNote.title || '');
+        setEditorKey(`${updatedNote.id}-${Date.now()}`);
+        setNoteTitle(editableTitle(updatedNote.title));
         setNoteTags(updatedNote.tags || []);
         setSelectedNote(updatedNote);
       }
@@ -290,8 +325,17 @@ export default function WorkspacePage() {
     }
   };
 
+  const handleCompareBackup = async (backup) => {
+    try {
+      const res = await notesAPI.getBackup(selectedNote.id, backup.id);
+      setSelectedBackupForDiff({ ...backup, content: res.data.backup.content });
+    } catch (err) {
+      console.error('Failed to load version', err);
+    }
+  };
+
   const handleRestoreBackup = async (backupId) => {
-    if (!confirm('Are you sure you want to restore this version? Current changes will be overwritten.')) return;
+    if (!confirm('Restore this version? The text you have now is saved as a version first, so you can come back to it.')) return;
     try {
       const res = await notesAPI.revertBackup(selectedNote.id, backupId);
       applyNoteToEditor(res.data.note);
@@ -318,10 +362,10 @@ export default function WorkspacePage() {
       mimeType = 'application/msword';
       fileExtension = 'doc';
       outputContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head><meta charset='utf-8'><title>${noteTitle || 'Untitled'}</title></head>
+<head><meta charset='utf-8'><title>${escapeHtml(noteTitle || 'Untitled')}</title></head>
 <body>
-<h1>${noteTitle || 'Untitled'}</h1>
-<div>${marked.parse(noteContent || '')}</div>
+<h1>${escapeHtml(noteTitle || 'Untitled')}</h1>
+<div>${renderMarkdown(noteContent || '')}</div>
 </body></html>`;
     } else if (format === 'html') {
       mimeType = 'text/html';
@@ -330,7 +374,7 @@ export default function WorkspacePage() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>${noteTitle || 'Untitled'}</title>
+  <title>${escapeHtml(noteTitle || 'Untitled')}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1e293b; background: #f8fafc; }
     .container { background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
@@ -343,8 +387,8 @@ export default function WorkspacePage() {
 </head>
 <body>
   <div class="container">
-    <h1>${noteTitle || 'Untitled'}</h1>
-    <div>${marked.parse(noteContent || '')}</div>
+    <h1>${escapeHtml(noteTitle || 'Untitled')}</h1>
+    <div>${renderMarkdown(noteContent || '')}</div>
   </div>
 </body>
 </html>`;
@@ -355,8 +399,8 @@ export default function WorkspacePage() {
           const container = document.createElement('div');
           container.innerHTML = `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
-              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${noteTitle || 'Untitled'}</h1>
-              <div>${marked.parse(noteContent || '')}</div>
+              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${escapeHtml(noteTitle || 'Untitled')}</h1>
+              <div>${renderMarkdown(noteContent || '')}</div>
             </div>
           `;
           const opt = {
@@ -398,7 +442,8 @@ export default function WorkspacePage() {
 
   const applyNoteToEditor = useCallback((note) => {
     setSelectedNote(note);
-    setNoteTitle(note.title || '');
+    setEditorKey(note.id === '__draft__' ? `draft-${Date.now()}` : note.id);
+    setNoteTitle(editableTitle(note.title));
     setNoteContent(note.content || '');
     setNoteTags(note.tags || []);
     setNoteCategory(note.category || '');
@@ -415,7 +460,7 @@ export default function WorkspacePage() {
     
     setAiError('');
     setAiPanelOpen(false);
-    setShowPreview(note.id !== '__draft__');
+    setShowPreview(false);
     setSelectedBackupForDiff(null);
     setShowBackups(false);
   }, []);
@@ -423,7 +468,7 @@ export default function WorkspacePage() {
   const selectNote = useCallback(
     (note) => {
       forceSave();
-      if (window.innerWidth <= 768) {
+      if (canvasWidth() <= 768) {
         setSidebarOpen(false);
       }
       if (note.id === '__draft__') {
@@ -442,9 +487,15 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!routeId) {
       lastRouteIdRef.current = null;
+      ignoredNoteIdsRef.current.clear();
       return;
     }
 
+    // An id is only ignored while the URL still points at it (it was just deleted/archived/restored).
+    // Once the route moves on, forget it so the note can be opened again later (PEB-70).
+    for (const id of Array.from(ignoredNoteIdsRef.current)) {
+      if (id !== routeId) ignoredNoteIdsRef.current.delete(id);
+    }
     if (ignoredNoteIdsRef.current.has(routeId)) {
       return;
     }
@@ -523,6 +574,7 @@ export default function WorkspacePage() {
         if (!old) return old;
         return old.filter((n) => n.id !== noteId);
       });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });
@@ -540,29 +592,13 @@ export default function WorkspacePage() {
         if (!old) return old;
         return old.filter((n) => n.id !== noteId);
       });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
       if (selectedNote?.id === noteId) {
         setSelectedNote(null);
         navigate('/notes', { replace: true });
       }
     } catch (err) {
       console.error('Failed to archive note:', err);
-    }
-  };
-
-  const handleToggleShare = async () => {
-    if (!selectedNote || isDraft) return;
-    try {
-      const res = await notesAPI.share(selectedNote.id);
-      const updatedNote = res.data.note;
-      
-      queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
-        if (!old) return old;
-        return old.map((n) => (n.id === updatedNote.id ? updatedNote : n));
-      });
-      setSelectedNote(updatedNote);
-    } catch (err) {
-      console.error('Failed to share note:', err);
-      alert('Failed to update sharing settings.');
     }
   };
 
@@ -658,12 +694,23 @@ export default function WorkspacePage() {
       const message =
         err.response?.data?.error ||
         (err.response?.status === 502
-          ? 'AI service unavailable. Check GEMINI_API_KEY in server/.env and restart the server.'
+          ? 'The AI is not available. Check AI Hub > Connections, then try again.'
           : 'AI request failed. Try again.');
       setAiError(message);
     } finally {
       setGenerating(false);
     }
+  };
+
+  // "Extract action items" -> real tasks linked to this note
+  const createTasksFromActions = async (items) => {
+    const noteId = selectedNote?.id;
+    if (!noteId || selectedNote.isDraft || noteId === '__draft__') throw new Error('Save the note first.');
+    for (const text of items) {
+      await todosAPI.create({ text: String(text).slice(0, 500), noteId });
+    }
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
   const handleWsChatSubmit = async (e) => {
@@ -697,7 +744,8 @@ export default function WorkspacePage() {
       
       if (updatedNote) {
         setNoteContent(updatedNote.content);
-        setNoteTitle(updatedNote.title);
+        setEditorKey(`${updatedNote.id}-${Date.now()}`);
+        setNoteTitle(editableTitle(updatedNote.title));
         setNoteTags(updatedNote.tags || []);
         queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
           if (!old) return old;
@@ -713,15 +761,17 @@ export default function WorkspacePage() {
     }
   };
 
+  const { hits: noteHits } = useNoteSearch(searchQuery, { archived: showArchived.toString(), deleted: showDeleted.toString() });
   const filteredNotes = useMemo(() => {
     if (!searchQuery.trim()) return notes;
+    if (noteHits) { const byId = new Map(notes.map((n) => [n.id, n])); return noteHits.map((h) => byId.get(h.id)).filter(Boolean); }
     const query = searchQuery.toLowerCase();
     return notes.filter((note) => {
       const titleMatch = note.title?.toLowerCase().includes(query);
       const contentMatch = note.content?.toLowerCase().includes(query);
       return titleMatch || contentMatch;
     });
-  }, [notes, searchQuery]);
+  }, [notes, searchQuery, noteHits]);
 
 
 
@@ -732,9 +782,7 @@ export default function WorkspacePage() {
       return;
     }
 
-    const urlRegex = /(https?:\/\/[^\s\)]+)/gi;
-    const matches = noteContent.match(urlRegex) || [];
-    const uniqueUrls = Array.from(new Set(matches.map(url => url.replace(/[.,;:]$/, ''))));
+    const uniqueUrls = extractUrls(noteContent);
 
     if (uniqueUrls.length === 0) {
       setLinkPreviews([]);
@@ -749,8 +797,8 @@ export default function WorkspacePage() {
           const embedUrl = getYouTubeEmbedUrl(url);
 
           try {
-            const existing = linkPreviews.find(p => p.url === url);
-            if (existing) return { ...existing, embedUrl: existing.embedUrl || embedUrl };
+            const existing = previewCache.current.get(url);
+            if (existing) return existing;
 
             if (embedUrl) {
               return {
@@ -758,11 +806,12 @@ export default function WorkspacePage() {
                 embedUrl,
                 title: 'YouTube video',
                 description: 'Playable embedded video',
-                domain: new URL(url).hostname.replace(/^www\./, '')
+                domain: hostOf(url)
               };
             }
 
             const res = await aiAPI.linkPreview(url);
+            previewCache.current.set(url, res.data);
             return res.data;
           } catch (err) {
             console.warn('Failed to fetch link preview:', err?.response?.status || err?.message);
@@ -771,7 +820,7 @@ export default function WorkspacePage() {
               embedUrl,
               title: embedUrl ? 'YouTube video' : url,
               description: embedUrl ? 'Playable embedded video' : 'No description available.',
-              domain: new URL(url).hostname.replace(/^www\./, '')
+              domain: hostOf(url)
             };
           }
         })
@@ -782,10 +831,12 @@ export default function WorkspacePage() {
       }
     };
 
-    fetchPreviews();
+    // wait for the user to stop typing before fetching anything
+    const timer = setTimeout(fetchPreviews, 800);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [noteContent]);
 
@@ -807,7 +858,7 @@ export default function WorkspacePage() {
       const swipeDistance = touchEndX - touchStartX;
       const minSwipeDistance = 50;
       
-      if (window.innerWidth > 768) return;
+      if (canvasWidth() > 768) return;
       
       if (swipeDistance > minSwipeDistance && touchStartX < 80) {
         setSidebarOpen(true);
@@ -860,7 +911,6 @@ export default function WorkspacePage() {
 
   return (
     <div className={`workspace-page ${settings?.compactMode ? 'compact-mode' : ''} ${isFocusMode ? 'focus-mode-active' : ''}`}>
-      {!isFocusMode && <Navigation activeTab="notes" />}
 
       <div className="ws-body">
         <div className={`ws-mobile-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => { if (selectedNote) setSidebarOpen(false) }} />
@@ -892,6 +942,7 @@ export default function WorkspacePage() {
         <main className="ws-main">
           {selectedNote ? (
             <>
+              <div className="nt-layout">
               <div className="editor-container">
                 <MobileEditorControls
                   noteTitle={noteTitle}
@@ -918,6 +969,8 @@ export default function WorkspacePage() {
                   selectedNote={selectedNote}
                   loadBackups={loadBackups}
                   handleExport={handleExport}
+                  noteTitle={noteTitle}
+                  noteTags={noteTags}
                 />
 
                 <BackupsPanel
@@ -925,6 +978,7 @@ export default function WorkspacePage() {
                   backupsList={backupsList}
                   selectedBackupForDiff={selectedBackupForDiff}
                   setSelectedBackupForDiff={setSelectedBackupForDiff}
+                  onCompare={handleCompareBackup}
                   noteContent={noteContent}
                   handleRestoreBackup={handleRestoreBackup}
                 />
@@ -977,12 +1031,20 @@ export default function WorkspacePage() {
                     )}
 
                   </div>
+                  <div className="nt-meta">
+                    {isDraft ? 'New note' : `Edited ${formatRelativeDate(selectedNote.updatedAt)}`}
+                    <span aria-hidden="true">·</span>
+                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                    <span aria-hidden="true">·</span>
+                    {Math.max(1, Math.ceil(wordCount / 200))} min read
+                  </div>
                 </div>
 
                 <div className="editor-body">
                   <div className={`editor-content ${aiPanelOpen ? 'with-panel' : ''}`}>
-                    <EditorErrorBoundary key={selectedNote?.id || 'new'}>
+                    <EditorErrorBoundary key={editorKey}>
                       <BlockEditor
+                        noteId={selectedNote?.id}
                         initialContent={noteContent}
                         onChange={(content) => setNoteContent(content)}
                         editable={!showPreview && !selectedNote?.isDeleted}
@@ -1047,8 +1109,7 @@ export default function WorkspacePage() {
                     )}
 
                     <div className="editor-footer">
-                      <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-                      <span>Ctrl+S save · Ctrl+K search</span>
+                      <span>Ctrl+S save · Ctrl+K search · Ctrl+J ask AI</span>
                     </div>
                   </div>
 
@@ -1066,13 +1127,28 @@ export default function WorkspacePage() {
                     wsChatMessages={wsChatMessages}
                     wsChatLoading={wsChatLoading}
                     handleWsChatSubmit={handleWsChatSubmit}
+                    onCreateTasks={createTasksFromActions}
                   />
+
                 </div>
+              </div>
+                {!aiPanelOpen && !isFocusMode && (
+                    <NoteContextPanel
+                      note={selectedNote}
+                      noteTitle={noteTitle}
+                      notes={notes}
+                      isDraft={isDraft}
+                      onSummarise={() => { setAiPanelTab('assist'); setAiPanelOpen(true); generateAIContent('summary'); }}
+                      onGetTasks={() => { setAiPanelTab('assist'); setAiPanelOpen(true); generateAIContent('actions'); }}
+                      onSelectNote={selectNote}
+                      onHistory={loadBackups}
+                    />
+                  )}
               </div>
 
               {showTodoList && (
                 <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', zIndex: 100, boxShadow: '-4px 0 15px rgba(0,0,0,0.05)' }}>
-                  <TodoListPanel onClose={() => setShowTodoList(false)} />
+                  <TodoListPanel noteId={isDraft ? null : selectedNote?.id} onClose={() => setShowTodoList(false)} />
                 </div>
               )}
             </>
@@ -1088,12 +1164,6 @@ export default function WorkspacePage() {
         </main>
       </div>
 
-      <ShareModal 
-        isOpen={isShareModalOpen} 
-        onClose={() => setIsShareModalOpen(false)} 
-        note={selectedNote} 
-        onToggleShare={handleToggleShare} 
-      />
     </div>
   );
 }

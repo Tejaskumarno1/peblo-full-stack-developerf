@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { todosAPI } from '../api';
 import {
@@ -15,10 +15,12 @@ import {
   Trash2,
   Edit2
 } from 'lucide-react';
-import Navigation from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
+import { weekStartDay, weekdayNames } from '../utils/weekStart';
+import { askScope } from '../utils/askScope';
 import '../styles/dashboard.css';
 import '../styles/calendar.css';
+import '../styles/calendar-pb.css';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -41,6 +43,7 @@ export default function CalendarPage() {
   const [newTaskRecurrence, setNewTaskRecurrence] = useState('none');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTaskText, setEditTaskText] = useState('');
+  const savingEditRef = useRef(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -51,8 +54,8 @@ export default function CalendarPage() {
     loadMonthTodos();
   }, [year, month]);
 
-  const loadMonthTodos = async () => {
-    setLoading(true);
+  const loadMonthTodos = async (silent = false) => {
+    if (silent !== true) setLoading(true);
     try {
       const from = new Date(year, month, 1).toISOString();
       const to = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
@@ -66,8 +69,9 @@ export default function CalendarPage() {
   };
 
   useEffect(() => {
-    window.addEventListener('todo-updated', loadMonthTodos);
-    return () => window.removeEventListener('todo-updated', loadMonthTodos);
+    const refresh = () => loadMonthTodos(true);
+    window.addEventListener('todo-updated', refresh);
+    return () => window.removeEventListener('todo-updated', refresh);
   }, [year, month]);
 
   const handleToggle = async (todo) => {
@@ -85,15 +89,17 @@ export default function CalendarPage() {
     if (!newTaskText.trim() || !selectedDay) return;
     
     const deadline = new Date(selectedDay);
-    deadline.setHours(23, 59, 59, 999);
+    const at = /^(\d{1,2}):(\d{2})$/.exec(newTaskStartTime || '');
+    if (at) deadline.setHours(Number(at[1]), Number(at[2]), 0, 0);
+    else deadline.setHours(23, 59, 59, 999); // no time: due at the end of the day
     
     try {
       const res = await todosAPI.create({
         text: newTaskText,
         priority: newTaskPriority,
         deadline: deadline.toISOString(),
-        startTime: newTaskStartTime,
-        endTime: newTaskEndTime,
+        startTime: newTaskStartTime || null,
+        endTime: newTaskEndTime || null,
         recurrence: newTaskRecurrence
       });
       setTodos([...todos, res.data.todo]);
@@ -108,10 +114,13 @@ export default function CalendarPage() {
   };
 
   const handleDeleteTask = async (id) => {
+    const scope = await askScope(todos.find(t => t.id === id), 'delete');
+    if (!scope) return;
     const backup = [...todos];
-    setTodos(todos.filter(t => t.id !== id));
+    setTodos(scope === 'this' ? todos.filter(t => t.id !== id) : todos);
     try {
-      await todosAPI.delete(id);
+      await todosAPI.delete(id, scope);
+      if (scope !== 'this') window.dispatchEvent(new Event('todo-updated'));
     } catch {
       setTodos(backup);
     }
@@ -119,22 +128,37 @@ export default function CalendarPage() {
 
   const handleUpdateTask = async (e, id) => {
     e.preventDefault();
+    // Enter fires submit and then the input loses focus (blur): only the first of them may save
+    if (savingEditRef.current === id) return;
     if (!editTaskText.trim()) return;
+    savingEditRef.current = id;
+    const current = todos.find(t => t.id === id);
+    const scope = current && editTaskText.trim() !== (current.text || '').trim() ? await askScope(current, 'edit') : 'this';
+    if (!scope) { savingEditRef.current = null; setEditingTaskId(null); return; }
     
     const backup = [...todos];
     setTodos(todos.map(t => t.id === id ? { ...t, text: editTaskText } : t));
     setEditingTaskId(null);
     
     try {
-      await todosAPI.update(id, { text: editTaskText });
+      await todosAPI.update(id, { text: editTaskText, scope });
     } catch {
       setTodos(backup);
+    } finally {
+      savingEditRef.current = null;
     }
   };
 
   const handleDropTask = async (taskId, newDate) => {
     const d = new Date(newDate);
-    d.setHours(23, 59, 59, 999);
+    const before = todos.find(t => t.id === taskId)?.deadline;
+    if (before) {
+      // move to the new day but keep the time of day (a 09:00 task stays 09:00)
+      const o = new Date(before);
+      d.setHours(o.getHours(), o.getMinutes(), o.getSeconds(), o.getMilliseconds());
+    } else {
+      d.setHours(23, 59, 59, 999);
+    }
     
     const backup = [...todos];
     setTodos(todos.map(t => t.id === taskId ? { ...t, deadline: d.toISOString() } : t));
@@ -191,8 +215,9 @@ export default function CalendarPage() {
   }, [selectedDay]);
 
   // Build calendar grid
+  const weekFirst = weekStartDay();
   const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month, 1).getDay();
+    const firstDay = (new Date(year, month, 1).getDay() - weekFirst + 7) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
 
@@ -213,7 +238,7 @@ export default function CalendarPage() {
     }
 
     return cells;
-  }, [year, month]);
+  }, [year, month, weekFirst]);
 
   // Map: dateString -> tasks
   const tasksByDate = useMemo(() => {
@@ -263,13 +288,23 @@ export default function CalendarPage() {
     setSelectedDay(cell.date);
   };
 
+  const stepDay = (n) => {
+    const d = new Date(selectedDay || new Date(year, month, 1));
+    d.setDate(d.getDate() + n);
+    setSelectedDay(d);
+    setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
+    setIsAddingTask(false);
+  };
+
   const handlePrevMonth = () => {
+    if (viewMode === 'day') return stepDay(-1);
     setCurrentDate(new Date(year, month - 1, 1));
     setSelectedDay(null);
     setIsAddingTask(false);
   };
 
   const handleNextMonth = () => {
+    if (viewMode === 'day') return stepDay(1);
     setCurrentDate(new Date(year, month + 1, 1));
     setSelectedDay(null);
     setIsAddingTask(false);
@@ -322,7 +357,6 @@ export default function CalendarPage() {
 
   return (
     <div className="dashboard-page">
-      <Navigation activeTab="calendar" />
 
       <div className="cal-layout">
         {/* Left: Calendar Grid */}
@@ -341,11 +375,11 @@ export default function CalendarPage() {
           {/* Month Nav */}
           <div className="cal-top-bar">
             <div className="cal-month-nav">
-              <button className="cal-nav-btn" onClick={handlePrevMonth} aria-label="Previous month">
+              <button className="cal-nav-btn" onClick={handlePrevMonth} aria-label={viewMode === 'day' ? 'Previous day' : 'Previous month'}>
                 <ChevronLeft size={18} />
               </button>
               <h2 className="cal-month-label">{viewMode === 'month' ? monthLabel : selectedDayLabel}</h2>
-              <button className="cal-nav-btn" onClick={handleNextMonth} aria-label="Next month">
+              <button className="cal-nav-btn" onClick={handleNextMonth} aria-label={viewMode === 'day' ? 'Next day' : 'Next month'}>
                 <ChevronRight size={18} />
               </button>
             </div>
@@ -444,7 +478,7 @@ export default function CalendarPage() {
             </div>
           ) : (
           <div className="cal-grid">
-            {DAYS.map(day => (
+            {weekdayNames(DAYS).map(day => (
               <div key={day} className="cal-day-header">{day}</div>
             ))}
 
@@ -687,7 +721,8 @@ export default function CalendarPage() {
                     <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
+                      <option value="weekdays">Every weekday</option>
+<option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                       <option value="yearly">Yearly</option>
                     </select>
@@ -732,7 +767,7 @@ export default function CalendarPage() {
                 <button className="cal-mobile-close" onClick={() => setSelectedDay(null)}>✕</button>
               </div>
 
-              <div className="cal-sidebar-tasks" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              <div className="cal-sidebar-tasks" style={{ maxHeight: 'calc(var(--pb-canvas-h) * 50 / 100)', overflowY: 'auto' }}>
                 {selectedDayTasks.length === 0 ? (
                   <div className="cal-sidebar-empty compact">
                     <p>No tasks scheduled</p>
@@ -823,7 +858,8 @@ export default function CalendarPage() {
                     <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
+                      <option value="weekdays">Every weekday</option>
+<option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                       <option value="yearly">Yearly</option>
                     </select>

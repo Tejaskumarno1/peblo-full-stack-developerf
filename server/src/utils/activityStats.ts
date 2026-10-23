@@ -1,8 +1,18 @@
-export function toDateKey(date: Date | string | number): string {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split('T')[0];
+// Home's streak and heatmap. A "day" is the person's calendar day in their time zone, written "YYYY-MM-DD".
+// Day keys are only ever compared or stepped as plain calendar dates (through UTC midnight), never through local time.
+import { dayKey, serverZone } from './userTime.js';
+
+export function toDateKey(date: Date | string | number, tz: string = serverZone()): string {
+  return dayKey(new Date(date), tz);
 }
+
+const keyMs = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+const msKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+export const addDaysToKey = (key: string, n: number) => msKey(keyMs(key) + n * 86400000);
+const weekdayOfKey = (key: string) => new Date(keyMs(key)).getUTCDay();
 
 interface ActivityDay {
   date: string;
@@ -11,7 +21,10 @@ interface ActivityDay {
   total: number;
 }
 
-export function buildDailyActivity(notes: { createdAt: Date | string; updatedAt: Date | string }[]): Record<string, ActivityDay> {
+export function buildDailyActivity(
+  notes: { createdAt: Date | string; updatedAt: Date | string }[],
+  tz: string = serverZone(),
+): Record<string, ActivityDay> {
   const dayMap: Record<string, ActivityDay> = {};
 
   const ensureDay = (key: string): ActivityDay => {
@@ -22,12 +35,12 @@ export function buildDailyActivity(notes: { createdAt: Date | string; updatedAt:
   };
 
   for (const note of notes) {
-    const createdKey = toDateKey(note.createdAt);
+    const createdKey = toDateKey(note.createdAt, tz);
     const createdDay = ensureDay(createdKey);
     createdDay.created += 1;
     createdDay.total += 1;
 
-    const updatedKey = toDateKey(note.updatedAt);
+    const updatedKey = toDateKey(note.updatedAt, tz);
     if (updatedKey !== createdKey) {
       const updatedDay = ensureDay(updatedKey);
       updatedDay.updated += 1;
@@ -38,7 +51,7 @@ export function buildDailyActivity(notes: { createdAt: Date | string; updatedAt:
   return dayMap;
 }
 
-export function calculateStreakStats(dayMap: Record<string, ActivityDay>) {
+export function calculateStreakStats(dayMap: Record<string, ActivityDay>, tz: string = serverZone(), now: Date = new Date()) {
   const activeDates = Object.keys(dayMap)
     .filter((key) => dayMap[key].total > 0)
     .sort();
@@ -49,34 +62,23 @@ export function calculateStreakStats(dayMap: Record<string, ActivityDay>) {
   let longest = 0;
   let run = 0;
   for (let i = 0; i < activeDates.length; i++) {
-    if (i === 0) {
-      run = 1;
-    } else {
-      const prev = new Date(activeDates[i - 1] + 'T12:00:00');
-      const curr = new Date(activeDates[i] + 'T12:00:00');
-      prev.setDate(prev.getDate() + 1);
-      run = prev.getTime() === curr.getTime() ? run + 1 : 1;
-    }
+    run = i > 0 && addDaysToKey(activeDates[i - 1], 1) === activeDates[i] ? run + 1 : 1;
     longest = Math.max(longest, run);
   }
 
+  // The streak is still alive if you were active yesterday and today is not over yet.
   let current = 0;
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  const todayKey = toDateKey(cursor);
-  if (!activeSet.has(todayKey)) {
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  while (activeSet.has(toDateKey(cursor))) {
+  let cursor = toDateKey(now, tz);
+  if (!activeSet.has(cursor)) cursor = addDaysToKey(cursor, -1);
+  while (activeSet.has(cursor)) {
     current += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = addDaysToKey(cursor, -1);
   }
 
   const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
   const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   for (const key of activeDates) {
-    const day = new Date(key + 'T12:00:00').getDay();
-    weekdayTotals[day] += dayMap[key].total;
+    weekdayTotals[weekdayOfKey(key)] += dayMap[key].total;
   }
   const maxWeekday = weekdayTotals.indexOf(Math.max(...weekdayTotals));
   const mostActiveDay = activeDays > 0 ? weekdayNames[maxWeekday] : '—';
@@ -84,40 +86,31 @@ export function calculateStreakStats(dayMap: Record<string, ActivityDay>) {
   const recentActiveDates = [...activeDates]
     .reverse()
     .slice(0, 4)
-    .map((key) => {
-      const d = new Date(key + 'T12:00:00');
-      return {
-        date: key,
-        label: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }),
-      };
-    });
+    .map((key) => ({
+      date: key,
+      label: new Date(keyMs(key)).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+    }));
 
   return { current, longest, activeDays, mostActiveDay, recentActiveDates };
 }
 
-export function buildYearHeatmap(dayMap: Record<string, ActivityDay>) {
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
+export function buildYearHeatmap(dayMap: Record<string, ActivityDay>, tz: string = serverZone(), now: Date = new Date()) {
+  const end = toDateKey(now, tz);
 
-  const start = new Date(end);
-  start.setDate(start.getDate() - 364);
-  while (start.getDay() !== 0) {
-    start.setDate(start.getDate() - 1);
-  }
+  // 52 weeks back, then back to the Sunday that starts that week
+  let start = addDaysToKey(end, -364);
+  while (weekdayOfKey(start) !== 0) start = addDaysToKey(start, -1);
 
   const days = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const key = toDateKey(cursor);
+  for (let key = start; key <= end; key = addDaysToKey(key, 1)) {
     const entry = dayMap[key] || { date: key, created: 0, updated: 0, total: 0 };
     days.push({
       date: key,
       created: entry.created,
       updated: entry.updated,
       total: entry.total,
-      dayOfWeek: cursor.getDay(),
+      dayOfWeek: weekdayOfKey(key),
     });
-    cursor.setDate(cursor.getDate() + 1);
   }
 
   const weeks = [];
@@ -128,15 +121,7 @@ export function buildYearHeatmap(dayMap: Record<string, ActivityDay>) {
   return weeks;
 }
 
-export function getEditsThisMonth(dayMap: Record<string, ActivityDay>): number {
-  const now = new Date();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  return Object.entries(dayMap).reduce((sum, [key, day]) => {
-    const d = new Date(key + 'T12:00:00');
-    if (d.getMonth() === month && d.getFullYear() === year) {
-      return sum + day.total;
-    }
-    return sum;
-  }, 0);
+export function getEditsThisMonth(dayMap: Record<string, ActivityDay>, tz: string = serverZone(), now: Date = new Date()): number {
+  const month = toDateKey(now, tz).slice(0, 7);
+  return Object.entries(dayMap).reduce((sum, [key, day]) => (key.startsWith(month) ? sum + day.total : sum), 0);
 }

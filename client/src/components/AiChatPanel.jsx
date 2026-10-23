@@ -21,11 +21,13 @@ import {
   Paperclip,
   Mic
 } from 'lucide-react';
-import { marked } from 'marked';
+import { renderMarkdown } from '../utils/safeHtml';
 import { aiAPI, notesAPI } from '../api/index';
 import { useUIStore } from '../store/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
 import '../styles/ai-chat.css';
+import { canvasWidth } from '../design/canvas';
+import { authHeaders, signOutIfRejected } from '../api/token';
 
 const SUGGESTIONS = [
   { label: 'Sprint planning notes', prompt: 'Create meeting notes for sprint planning with action items' },
@@ -228,7 +230,7 @@ export default function AiChatPanel() {
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('keydown', onShortcut);
-    document.body.style.overflow = window.innerWidth <= 520 ? 'hidden' : '';
+    document.body.style.overflow = canvasWidth() <= 520 ? 'hidden' : '';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keydown', onShortcut);
@@ -329,17 +331,13 @@ export default function AiChatPanel() {
         const tempId = Date.now().toString();
         setMessages(prev => [...prev, { id: tempId, role: 'assistant', text: '', isStreaming: true }]);
 
-        const token = localStorage.getItem('token');
         const apiUrl = import.meta.env.VITE_API_URL || '/api';
-        const response = await fetch(`${apiUrl}/ai/chat-stream`, {
+        const response = signOutIfRejected(await fetch(`${apiUrl}/ai/chat-stream`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ message: trimmed, mode, noteId: mode === 'append' ? selectedNoteId : undefined }),
           signal: abortControllerRef.current.signal
-        });
+        }));
 
         if (!response.ok) {
           throw new Error('Failed to reach AI streaming endpoint');
@@ -614,7 +612,7 @@ export default function AiChatPanel() {
                   <div className={`ai-chat-bubble ${m.isError ? 'error' : ''}`}>
                     <div 
                       className="ai-chat-markdown"
-                      dangerouslySetInnerHTML={{ __html: marked.parse(typeof m.text === 'string' ? m.text : (m.text ? JSON.stringify(m.text) : '')) }} 
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(typeof m.text === 'string' ? m.text : (m.text ? JSON.stringify(m.text) : '')) }} 
                     />
                     {m.links?.length > 0 && (
                       <div className="ai-chat-results">
