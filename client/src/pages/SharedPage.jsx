@@ -62,6 +62,7 @@ export default function SharedPage() {
   const timer = useRef(null);
   const toastTimer = useRef(null);
   const menuRef = useRef(null);
+  const articleRef = useRef(null);
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
 
