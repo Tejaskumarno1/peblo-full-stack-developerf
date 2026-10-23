@@ -2,10 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, Link2, LoaderCircle, Moon, MoreHorizontal, Pencil, Printer, Sun, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, Pencil, Printer, Sun, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
+import { exportDocs } from '../utils/exporters';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -41,6 +42,7 @@ export default function SharedPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [exporting, setExporting] = useState('');
   const [activeHeading, setActiveHeading] = useState('');
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
   const [previewMode, setPreviewMode] = useState(false);
@@ -281,20 +283,23 @@ export default function SharedPage() {
     catch { showToast('Clipboard access is unavailable in this browser'); }
     setMenuOpen(false);
   };
-  const downloadMarkdown = () => {
-    const text = data?.kind === 'todo'
-      ? `# ${data.text}\n\n- [${data.completed ? 'x' : ' '}] ${data.text}\n\n${data.note?.content || ''}`
-      : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`;
-    const blobUrl = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `${(pageTitle || 'peblo-note').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'peblo-note'}.md`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    showToast('Markdown downloaded');
+  const exportShared = async (format) => {
+    if (!data || exporting) return;
+    const note = data.kind === 'todo'
+      ? { title: data.text, content: `## Task\n\n- [${data.completed ? 'x' : ' '}] ${data.text}\n\n${data.note?.content || ''}`, tags: data.tags }
+      : { title: data.title || 'Untitled', content: data.content || '', tags: data.tags };
+    const labels = { md: 'Markdown', pdf: 'PDF', doc: 'Word document', html: 'HTML', txt: 'plain text' };
     setMenuOpen(false);
+    setExporting(format);
+    showToast(format === 'pdf' ? 'Preparing PDF…' : `Preparing ${labels[format]}…`);
+    try {
+      await exportDocs([note], format, pageTitle);
+      showToast(`${labels[format]} downloaded`);
+    } catch (cause) {
+      showToast(cause.message || `Could not download ${labels[format]}`);
+    } finally {
+      setExporting('');
+    }
   };
 
   const rememberSavedCopy = (account, copy) => {
@@ -459,8 +464,12 @@ export default function SharedPage() {
               <h4>Share</h4>
               <div className="linkbox"><input readOnly value={window.location.href} aria-label="Share link" /><button className="btn dark" type="button" onClick={() => copy(window.location.href)}>Copy</button></div>
               <hr />
-              <button type="button" role="menuitem" onClick={downloadMarkdown}><Download size={17} /><span>Download as Markdown<small>Keep your note formatting</small></span></button>
-              <button type="button" role="menuitem" onClick={() => { window.print(); setMenuOpen(false); }}><Printer size={17} /><span>Print or save as PDF</span></button>
+              <button type="button" role="menuitem" onClick={() => exportShared('md')}><Download size={17} /><span>Download as Markdown<small>Keep your note formatting</small></span></button>
+              <button type="button" role="menuitem" onClick={() => exportShared('pdf')}><FileText size={17} /><span>Download as PDF<small>Ready to share or print</small></span></button>
+              <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={17} /><span>Download as Word<small>Editable .doc document</small></span></button>
+              <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={17} /><span>Download as HTML</span></button>
+              <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={17} /><span>Download as plain text</span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print</span></button>
               <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy note text</span></button>
               <button type="button" role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setMenuOpen(false); }}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? 'Light mode' : 'Dark mode'}</span></button>
               {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Disable this link for everyone</small></span></button></>}

@@ -23,6 +23,15 @@ export function docsToHtml(docs) {
   }).join('\n');
 }
 
+export function docsToPlainText(docs) {
+  return docs.map((d) => {
+    const title = d.title || 'Untitled';
+    const content = new DOMParser().parseFromString(mdToHtml(d.content), 'text/html').body.textContent || '';
+    const tags = (d.tags || []).filter((t) => t !== 'inbox');
+    return `${title}\n${'='.repeat(title.length)}\n\n${tags.length ? `Topics: ${tags.join(', ')}\n\n` : ''}${content.trim()}`;
+  }).join('\n\n');
+}
+
 const PAGE_CSS = 'body{font-family:Georgia,"Times New Roman",serif;font-size:12pt;line-height:1.55;color:#111}h1{font-size:22pt;margin:0 0 6pt}h2{font-size:16pt}h3{font-size:13pt}.pb-tags{color:#555;font-size:10pt;margin:0 0 12pt}.pb-doc{page-break-after:always}.pb-doc:last-child{page-break-after:auto}pre,code{font-family:Consolas,monospace;font-size:10pt;background:#f3f3f3}pre{padding:8pt;white-space:pre-wrap}table{border-collapse:collapse}td,th{border:1px solid #999;padding:3pt 6pt}img{max-width:100%}blockquote{border-left:3pt solid #bbb;margin-left:0;padding-left:10pt;color:#444}';
 
 export const wordPage = (title, html) =>
@@ -60,6 +69,8 @@ export async function exportDocs(docs, fmt, name) {
   docs = await Promise.all(docs.map(async (d) => ({ ...d, content: await inlineMedia(d.content) }))); // pictures stored on the server go inside the file
   if (fmt === 'md') return downloadText(`${base}.md`, docsToMarkdown(docs), 'text/markdown');
   const html = docsToHtml(docs);
+  if (fmt === 'html') return downloadText(`${base}.html`, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(base)}</title><style>${PAGE_CSS}</style></head><body>${html}</body></html>`, 'text/html');
+  if (fmt === 'txt') return downloadText(`${base}.txt`, docsToPlainText(docs), 'text/plain');
   if (fmt === 'doc') return downloadBlob(`${base}.doc`, new Blob([wordPage(base, html)], { type: 'application/msword' }));
   if (fmt === 'pdf') return toPdf(html, `${base}.pdf`);
   if (fmt === 'print') return printHtml(html);
