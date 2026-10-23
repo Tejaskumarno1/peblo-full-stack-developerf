@@ -180,6 +180,29 @@ export default function SharedPage() {
     const parsed = new DOMParser().parseFromString(body, 'text/html');
     return [...parsed.body.querySelectorAll('h2, h3')].map((heading) => ({ id: heading.id, title: heading.textContent.trim(), level: Number(heading.tagName.slice(1)) }));
   }, [body]);
+  const scrollToHeading = useCallback((id, behavior = 'smooth') => {
+    const article = articleRef.current;
+    if (!article) return;
+    let target = document.getElementById(id);
+    if (!target || !article.contains(target)) {
+      const ids = new Map();
+      for (const heading of article.querySelectorAll('h1, h2, h3')) {
+        const base = heading.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section';
+        const count = ids.get(base) || 0;
+        ids.set(base, count + 1);
+        const headingId = count ? `${base}-${count + 1}` : base;
+        if (headingId === id) {
+          heading.id = id;
+          target = heading;
+          break;
+        }
+      }
+    }
+    if (!target || !article.contains(target)) return;
+    const top = target.getBoundingClientRect().top - article.getBoundingClientRect().top + article.scrollTop;
+    article.scrollTo({ top: Math.max(0, top - 16), behavior });
+    setActiveHeading(id);
+  }, []);
   const wordCount = useMemo(() => {
     if (!body) return 0;
     const parsed = new DOMParser().parseFromString(body, 'text/html');
@@ -389,6 +412,27 @@ export default function SharedPage() {
     return () => observer.disconnect();
   }, [headings, data]);
 
+  useEffect(() => {
+    const scrollFromHash = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (id) requestAnimationFrame(() => scrollToHeading(id, 'auto'));
+    };
+    window.addEventListener('hashchange', scrollFromHash);
+    window.addEventListener('popstate', scrollFromHash);
+    scrollFromHash();
+    return () => {
+      window.removeEventListener('hashchange', scrollFromHash);
+      window.removeEventListener('popstate', scrollFromHash);
+    };
+  }, [scrollToHeading, headings, data]);
+
+  const handleHeadingClick = (event, id) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (window.location.hash !== `#${id}`) window.history.pushState(null, '', `#${id}`);
+    scrollToHeading(id);
+  };
+
   return (
     <div className="pb-shared" data-theme={darkMode ? 'dark' : 'light'}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
@@ -439,7 +483,7 @@ export default function SharedPage() {
         <main className={`stage${data.kind === 'todo' ? ' task-stage' : ''}`}>
           {data.kind === 'note' && headings.length > 0 && <aside className="toc" aria-label="On this page">
             <h2>On this page</h2>
-            {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}>{title}</a>)}
+            {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}>{title}</a>)}
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
