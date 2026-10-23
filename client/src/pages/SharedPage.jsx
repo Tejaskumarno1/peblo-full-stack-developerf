@@ -62,7 +62,6 @@ export default function SharedPage() {
   const timer = useRef(null);
   const toastTimer = useRef(null);
   const menuRef = useRef(null);
-  const articleRef = useRef(null);
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
 
@@ -72,8 +71,6 @@ export default function SharedPage() {
     const sharedPage = root?.querySelector('.pb-shared');
     const html = document.documentElement;
     const previousRootZoom = root?.style.zoom || '';
-    const previousRootWidth = root?.style.width || '';
-    const previousRootHeight = root?.style.height || '';
     let baselineDpr = window.devicePixelRatio || 1;
     try {
       const saved = Number(localStorage.getItem('peblo-share-base-dpr'));
@@ -83,24 +80,16 @@ export default function SharedPage() {
     const syncCanvasScale = () => {
       const currentDpr = window.devicePixelRatio || baselineDpr;
       const viewportRatio = currentDpr / baselineDpr;
-      html.style.setProperty('--pb-canvas-w', `clamp(1440px, calc(100vw * ${viewportRatio}), 2160px)`);
+      html.style.setProperty('--pb-canvas-w', `min(2160px, calc(100vw * ${viewportRatio}))`);
       html.style.setProperty('--pb-canvas-h', `max(900px, calc(100dvh * ${viewportRatio}))`);
-      if (root) {
-        root.style.removeProperty('zoom');
-        root.style.width = '100vw';
-        root.style.height = '100dvh';
-      }
+      if (root) root.style.removeProperty('zoom');
       if (sharedPage) sharedPage.style.zoom = String(1 / viewportRatio);
     };
     syncCanvasScale();
     window.addEventListener('resize', syncCanvasScale);
     return () => {
       window.removeEventListener('resize', syncCanvasScale);
-      if (root) {
-        root.style.zoom = previousRootZoom;
-        root.style.width = previousRootWidth;
-        root.style.height = previousRootHeight;
-      }
+      if (root) root.style.zoom = previousRootZoom;
       sharedPage?.style.removeProperty('zoom');
       html.style.removeProperty('--pb-canvas-w');
       html.style.removeProperty('--pb-canvas-h');
@@ -357,15 +346,14 @@ export default function SharedPage() {
 
   useEffect(() => {
     const updateProgress = () => {
-      const scroller = articleRef.current;
-      const range = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
-      setScrollProgress(range > 0 ? Math.min(100, (scroller.scrollTop / range) * 100) : 0);
+      const page = document.documentElement;
+      const range = page.scrollHeight - window.innerHeight;
+      setScrollProgress(range > 0 ? Math.min(100, (window.scrollY / range) * 100) : 0);
     };
+    window.addEventListener('scroll', updateProgress, { passive: true });
     window.addEventListener('resize', updateProgress);
-    const scroller = articleRef.current;
-    scroller?.addEventListener('scroll', updateProgress, { passive: true });
     updateProgress();
-    return () => { scroller?.removeEventListener('scroll', updateProgress); window.removeEventListener('resize', updateProgress); };
+    return () => { window.removeEventListener('scroll', updateProgress); window.removeEventListener('resize', updateProgress); };
   }, [data]);
 
   useEffect(() => {
@@ -384,7 +372,7 @@ export default function SharedPage() {
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
       if (visible[0]) setActiveHeading(visible[0].target.id);
-    }, { root: articleRef.current, rootMargin: '-30px 0px -72% 0px' });
+    }, { root: null, rootMargin: '-96px 0px -72% 0px' });
     headings.forEach(({ id }) => { const element = document.getElementById(id); if (element) observer.observe(element); });
     return () => observer.disconnect();
   }, [headings, data]);
@@ -443,7 +431,7 @@ export default function SharedPage() {
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
-          <article ref={articleRef}>
+          <article>
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
                 ? <input className="title-in" aria-label="Title" key={`t${rev}`} value={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; setData((current) => ({ ...current, title: event.target.value })); queueSave(); }} />
@@ -479,7 +467,7 @@ export default function SharedPage() {
           </article>
         </main>
       )}
-      {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
+      {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
       {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
         <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">

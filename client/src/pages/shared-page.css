@@ -21,9 +21,10 @@
   --card-shadow: 0 6px 16px rgba(70, 45, 20, .1);
   --glass: rgba(251, 246, 238, .82);
   width: var(--pb-canvas-w);
-  height: var(--pb-canvas-h);
+  min-height: var(--pb-canvas-h);
+  height: auto;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg);
   color: var(--fg);
   font: 400 14px/1.45 'Figtree', system-ui, sans-serif;
@@ -41,8 +42,9 @@ html.theme-dark .pb-shared {
 html.theme-midnight .pb-shared { --bg: #07050A; --surface: #141019; --line: #231C2B; --chip: #1F1A27; }
 .pb-shared[data-theme="light"] { --bg:#FBF6EE; --surface:#FFFFFF; --line:#EADFD0; --fg:#241F1A; --fg2:#564D43; --fg3:#6E6559; --peach:#FFD9C4; --mint:#CDEBD9; --butter:#FFE9A6; --lilac:#DDD8FF; --sky:#CFE5F8; --chip:#F4EEE5; --accent:#C4441C; --accent-ink:#A8380F; --on-accent:#fff; --ok:#1E7A46; --danger:#B3261E; --shadow:0 10px 24px rgba(70,45,20,.12); --soft-shadow:0 2px 6px rgba(70,45,20,.08); --card-shadow:0 6px 16px rgba(70,45,20,.10); --glass:rgba(251,246,238,.82); color-scheme:light; }
 .pb-shared[data-theme="dark"] { --bg:#120F17; --surface:#1F1A27; --line:#2F2839; --fg:#F5F0F7; --fg2:#CFC6D8; --fg3:#A59BB0; --peach:#3A261E; --mint:#18302A; --butter:#332B13; --lilac:#2A2545; --sky:#1B2B3B; --chip:#2A2333; --accent:#FF8F6B; --accent-ink:#FFB59C; --on-accent:#1A0F0B; --ok:#6FD39A; --danger:#FF8A80; --shadow:0 10px 28px rgba(0,0,0,.45); --soft-shadow:0 2px 6px rgba(0,0,0,.35); --card-shadow:0 6px 18px rgba(0,0,0,.4); --glass:rgba(18,15,23,.82); color-scheme:dark; }
-html.pb-public-share { scroll-behavior: smooth; scroll-padding-top: 96px; }
-html.pb-public-share #root { width: 100vw !important; height: 100dvh !important; margin: 0 !important; }
+html.pb-public-share { height: auto !important; min-height: 100%; overflow-x: hidden !important; overflow-y: auto !important; scroll-behavior: smooth; scroll-padding-top: 96px; }
+html.pb-public-share body { height: auto !important; min-height: 100%; overflow-x: hidden !important; overflow-y: auto !important; }
+html.pb-public-share #root { position: relative !important; inset: auto !important; width: 100vw !important; height: auto !important; min-height: 100dvh !important; margin: 0 !important; overflow: visible !important; }
 .pb-shared *, .pb-shared *::before, .pb-shared *::after { box-sizing: border-box; }
 .pb-shared button, .pb-shared input { font: inherit; }
 .pb-shared button { cursor: pointer; color: inherit; }
@@ -106,15 +108,15 @@ html.pb-public-share #root { width: 100vw !important; height: 100dvh !important;
 .pb-shared .share-off-banner { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; width: min(900px, calc(100% - 32px)); margin: 18px auto 0; border-radius: 16px; padding: 13px 16px; background: var(--mint); color: var(--fg); font-size: 14px; }
 .pb-shared .share-off-banner svg { flex: none; }
 
-.pb-shared .stage { position: relative; z-index: 1; width: min(1180px, 100%); height: calc(var(--pb-canvas-h) - 65px); margin: 0 auto; padding: 38px 24px 40px; display: grid; grid-template-columns: 230px minmax(0, 740px); gap: 56px; justify-content: center; overflow: hidden; }
-.pb-shared .toc { position: sticky; top: 104px; align-self: start; max-height: calc(100vh - 124px); overflow-y: auto; font-size: 14px; }
+.pb-shared .stage { position: relative; z-index: 1; width: min(1180px, 100%); min-height: calc(var(--pb-canvas-h) - 65px); height: auto; margin: 0 auto; padding: 24px 24px 40px; display: grid; grid-template-columns: 230px minmax(0, 740px); gap: 56px; justify-content: center; overflow: visible; }
+.pb-shared .toc { position: sticky; top: 89px; align-self: start; max-height: calc(100dvh - 112px); overflow-y: auto; font-size: 14px; }
 .pb-shared .toc h2 { margin: 0 0 12px; color: var(--fg3); font: 700 12px/1.4 'Figtree', system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; }
 .pb-shared .toc a { display: block; border-left: 2px solid var(--line); padding: 7px 0 7px 14px; color: var(--fg3); text-decoration: none; font-weight: 600; line-height: 1.35; transition: color .15s, border-color .15s; }
 .pb-shared .toc a:hover, .pb-shared .toc a.on { color: var(--accent-ink); border-color: var(--accent); }
 .pb-shared .toc a.sub { padding-left: 26px; font-size: 13px; }
 .pb-shared .toc .meta { margin-top: 22px; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--soft-shadow); color: var(--fg3); font-size: 13px; line-height: 1.7; }
 .pb-shared .toc .meta b { color: var(--fg); }
-.pb-shared article { min-width: 0; min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.pb-shared article { min-width: 0; min-height: 0; height: auto; overflow: visible; }
 .pb-shared .title { margin: 0 0 18px; color: var(--fg); font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .pb-shared .title-in { width: 100%; margin: 0 0 18px; border: 0; padding: 0; background: transparent; color: var(--fg); outline: none; font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; }
 .pb-shared .title-in:focus { box-shadow: 0 3px var(--accent); }
@@ -202,7 +204,7 @@ html.pb-public-share #root { width: 100vw !important; height: 100dvh !important;
 @media (max-width: 960px) {
   .pb-shared .top-in { gap: 8px; padding-inline: 16px; }
   .pb-shared .crumb { display: none; }
-  .pb-shared .stage { grid-template-columns: minmax(0, 740px); gap: 0; padding-top: 30px; }
+  .pb-shared .stage { min-height: calc(var(--pb-canvas-h) - 65px); grid-template-columns: minmax(0, 740px); gap: 0; padding-top: 24px; }
   .pb-shared .toc { display: none; }
 }
 @media (max-width: 640px) {
@@ -232,8 +234,9 @@ html.pb-public-share #root { width: 100vw !important; height: 100dvh !important;
 }
 @media print {
   html, body, html #root { position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
+  html.pb-public-share #root { position: static !important; inset: auto !important; width: auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
   .pb-shared .top, .pb-shared .blobs, .pb-shared .toc, .pb-shared .cta, .pb-shared .totop, .pb-shared .toast { display: none !important; }
-  .pb-shared { width: auto; height: auto; overflow: visible; }
+  .pb-shared { width: auto; min-height: 0; height: auto; overflow: visible; }
   .pb-shared .stage { display: block; width: 100%; height: auto; overflow: visible; padding: 0; }
   .pb-shared article { height: auto; overflow: visible; }
   .pb-shared .taskcard { box-shadow: none; border: 1px solid var(--line); }
