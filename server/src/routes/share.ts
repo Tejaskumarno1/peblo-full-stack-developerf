@@ -45,7 +45,7 @@ shareRoutes.get('/', async (req, res, next) => {
 // GET /api/share/:kind/:id -> { token: string | null }
 shareRoutes.get('/:kind/:id', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
@@ -57,7 +57,7 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
 // Calling it also marks the owner as present (and typing) so people on the link see "<owner> is typing…".
 shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
@@ -75,7 +75,7 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
 // the list and cannot come back in on this link (turning the link off and on again gives a new one).
 shareRoutes.post('/:kind/:id/viewers/:vid/remove', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row || !row.shareToken) return res.status(404).json({ error: 'Not found.' });
@@ -91,7 +91,7 @@ shareRoutes.post('/:kind/:id/viewers/:vid/remove', async (req, res, next) => {
 // GET /api/share/note/:id/activity -> what happened on this note's link, newest first.
 shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (kind !== 'note') return res.json({ activity: [] });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
@@ -105,7 +105,7 @@ shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
 // POST /api/share/:kind/:id -> turn the link on (keeps the same link if it is already on)
 shareRoutes.post('/:kind/:id', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
@@ -125,7 +125,7 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
 // DELETE /api/share/:kind/:id -> turn the link off
 shareRoutes.delete('/:kind/:id', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
@@ -207,18 +207,18 @@ async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) 
 // The share link remains public, but only its owner can see management controls or revoke it.
 publicRoutes.get('/:kind/:token/owner', authenticate, async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
-    if (!kind || !validToken(req.params.token)) return res.status(404).json({ error: 'Not found.' });
-    const row = await shareOwner(kind, req.params.token, req.user!.id);
+    const kind = kindOf(String(req.params.kind));
+    if (!kind || !validToken(String(req.params.token))) return res.status(404).json({ error: 'Not found.' });
+    const row = await shareOwner(kind, String(req.params.token), req.user!.id);
     res.json({ isOwner: !!row });
   } catch (e) { next(e); }
 });
 
 publicRoutes.delete('/:kind/:token', authenticate, async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
-    if (!kind || !validToken(req.params.token)) return res.status(404).json({ error: 'Not found.' });
-    const row = await shareOwner(kind, req.params.token, req.user!.id);
+    const kind = kindOf(String(req.params.kind));
+    if (!kind || !validToken(String(req.params.token))) return res.status(404).json({ error: 'Not found.' });
+    const row = await shareOwner(kind, String(req.params.token), req.user!.id);
     if (!row) return res.status(404).json({ error: 'This link is not yours to turn off.' });
     await setToken(kind, row.id, null);
     await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2', kind, req.params.token);
@@ -230,7 +230,7 @@ publicRoutes.delete('/:kind/:token', authenticate, async (req, res, next) => {
 // No email, IP address, or other account detail is returned. Inactive sessions expire automatically.
 publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
   try {
-    const kind = kindOf(req.params.kind);
+    const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
     const sessionId = req.body?.sessionId;
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
