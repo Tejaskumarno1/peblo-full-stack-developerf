@@ -398,6 +398,7 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-filters button.on { background: var(--s-ink, #2b2b2b); color: var(--s-paper, #fff); }
 /* Same look as the Tags / Sort / Group buttons above: soft filled pills, no outline, no browser-default dropdown. */
 .soft .s-filters { gap: 6px; padding: 0; }
+.soft .s-note-bar { flex-wrap: wrap; row-gap: 6px; }
 /* Give the list the room: tighter header and controls, one row each. */
 .soft .s-notes-list { padding: 14px 16px; gap: 8px; }
 .soft .s-notes-h1 { font-size: 24px; }

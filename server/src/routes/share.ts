@@ -66,8 +66,25 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
     await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor));
-    const viewers = (await listViewers(kind, row.shareToken, session)).filter((v) => !v.self);
-    res.json({ shared: true, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers });
+    const viewers = await listViewers(kind, row.shareToken, session, !!row.shareEdit);
+    res.json({ shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers });
+  } catch (e) { next(e); }
+});
+
+// POST /api/share/:kind/:id/viewers/:vid/remove -> the owner removes one person from the link. They are dropped from
+// the list and cannot come back in on this link (turning the link off and on again gives a new one).
+shareRoutes.post('/:kind/:id/viewers/:vid/remove', async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row || !row.shareToken) return res.status(404).json({ error: 'Not found.' });
+    const rows = await prisma.$queryRawUnsafe<{ session_id: string }[]>('SELECT session_id FROM share_viewers WHERE kind = $1 AND share_token = $2', kind, row.shareToken);
+    const hit = rows.find((r) => !r.session_id.startsWith('owner:') && viewerHash(r.session_id) === req.params.vid);
+    if (!hit) return res.status(404).json({ error: 'That person already left.' });
+    await prisma.$executeRawUnsafe('INSERT INTO share_blocked (kind, share_token, session_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', kind, row.shareToken, hit.session_id);
+    await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, row.shareToken, hit.session_id);
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
@@ -128,7 +145,14 @@ publicRoutes.use((_req, res, next) => {
 const validToken = (t: string) => /^[A-Za-z0-9_-]{20,40}$/.test(t);
 const viewerNames = new Map<string, { name: string; expiresAt: number }>();
 
-const prunePresence = () => prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\'').catch(() => {});
+const viewerHash = (sessionId: string) => crypto.createHash('sha256').update(sessionId).digest('hex').slice(0, 12);
+const isBlocked = async (kind: string, token: string, sessionId: unknown) =>
+  typeof sessionId === 'string' && /^[A-Za-z0-9_-]{16,80}$/.test(sessionId)
+  && (await prisma.$queryRawUnsafe<{ n: number }[]>('SELECT 1 AS n FROM share_blocked WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId)).length > 0;
+const prunePresence = () => Promise.all([
+  prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\''),
+  prisma.$executeRawUnsafe('DELETE FROM share_blocked WHERE at < NOW() - INTERVAL \'7 days\''),
+]).catch(() => {});
 const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
@@ -156,16 +180,20 @@ async function logActivity(noteId: string, actor: string, action: 'viewed' | 'ed
   } catch { /* the log is a convenience, never a reason to fail a save */ }
 }
 /** Everyone on the link right now. No emails or addresses: a short id, a name, and whether they are typing. */
-async function listViewers(kind: string, token: string, mySession: string) {
-  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null }[]>(
-    'SELECT session_id, display_name, cursor_block, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+async function listViewers(kind: string, token: string, mySession: string, canEdit = false) {
+  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null; idle_s: number }[]>(
+    'SELECT session_id, display_name, cursor_block, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing, EXTRACT(EPOCH FROM (NOW() - seen_at))::int AS idle_s FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
     kind, token,
   );
   return rows.map((v) => ({
-    id: crypto.createHash('sha256').update(v.session_id).digest('hex').slice(0, 12),
+    id: viewerHash(v.session_id),
     name: v.display_name,
     self: v.session_id === mySession,
     typing: !!v.typing,
+    // editing: typed in the last few seconds; idle: no sign of life for 20 s (a hidden tab slows its heartbeat);
+    // reading: on a view-only link; viewing: on an editable link without typing
+    status: v.typing ? 'editing' : Number(v.idle_s) >= 20 ? 'idle' : canEdit ? 'viewing' : 'reading',
+    idleSeconds: Math.max(0, Number(v.idle_s)),
     cursor: v.cursor_block,
     owner: v.session_id.startsWith('owner:'), // guests cannot use ':' in a session id
   }));
@@ -208,9 +236,10 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{16,80}$/.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const record = kind === 'note'
-      ? await prisma.note.findFirst({ where: { shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true } })
-      : await prisma.todo.findFirst({ where: { shareToken: token, ...LIVE() }, select: { id: true } });
+      ? await prisma.note.findFirst({ where: { shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } })
+      : await prisma.todo.findFirst({ where: { shareToken: token, ...LIVE() }, select: { id: true, shareEdit: true } });
     if (!record) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
 
     const auth = req.headers.authorization || '';
     const user = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : null);
@@ -231,7 +260,7 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
       const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor));
       if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');
     }
-    res.json({ viewers: await listViewers(kind, token, sessionId) });
+    res.json({ viewers: await listViewers(kind, token, sessionId, !!record.shareEdit) });
   } catch (e) { next(e); }
 });
 
@@ -277,6 +306,7 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
     const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (!note.shareEdit) return res.status(403).json({ error: 'This link is view only.' });
+    if (await isBlocked('note', req.params.token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const { title, content, baseUpdatedAt, baseContent, force, keepBoth } = req.body || {};
     if (typeof content !== 'string' || content.length > MAX_NOTE) return res.status(400).json({ error: 'That note is too big to save.' });
     // Both people's edits are merged; the write is conditional so two saves at the same moment cannot overwrite each other.

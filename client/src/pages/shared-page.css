@@ -264,3 +264,7 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .guest-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pb-shared .guest-name small { font-weight: 500; }
 .pb-shared .expiry.soon { color: var(--danger); font-weight: 700; }
+
+/* the avatar stack opens the live collaboration panel */
+.pb-shared button.avatars { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+.pb-shared button.avatars:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 999px; }

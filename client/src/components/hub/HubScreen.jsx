@@ -182,7 +182,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
                     <button key={m} type="button" role="option" aria-selected={modelChoice?.model === m} onClick={() => { setModelChoice({ provider: 'ollama', model: m }); setPickerOpen(false); }}>{m} · on this computer</button>
                   ))}
                   {cloudModels.map((cm) => (
-                    <button key={cm.provider} type="button" role="option" aria-selected={modelChoice?.provider === cm.provider} disabled={routing === 'ollama'} onClick={() => { setModelChoice({ provider: cm.provider, model: cm.model }); setPickerOpen(false); }}>{cm.model} · cloud{routing === 'ollama' ? ' (off)' : ''}</button>
+                    <button key={cm.provider} type="button" role="option" aria-selected={modelChoice?.provider === cm.provider} disabled={routing === 'ollama' && !cm.local} onClick={() => { setModelChoice({ provider: cm.provider, model: cm.model }); setPickerOpen(false); }}>{cm.provider.startsWith('conn:') ? `${cm.label} · ${cm.model}` : `${cm.model} · cloud`}{cm.local ? ' · on this computer' : ''}{routing === 'ollama' && !cm.local ? ' (off)' : ''}</button>
                   ))}
                   {!localModels.length && !cloudModels.length && <Link to="/ai/connections">{local?.enabled ? 'Ollama is not running. Open Your AI' : 'Set up AI in Your AI'}</Link>}
                 </div>

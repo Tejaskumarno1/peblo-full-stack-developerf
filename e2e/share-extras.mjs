@@ -67,10 +67,12 @@ try {
   await panel.waitFor({ timeout: 5000 });
   const pt = await panel.innerText();
   check('panel names the guest and the paragraph', /Priya/.test(pt) && /paragraph 2/.test(pt), pt.slice(0, 300));
+  await page.screenshot({ path: `${SHOTS}/extras-4-panel.png` });
+  await panel.getByRole('tab', { name: 'Activity' }).click();
   await page.getByTestId('live-activity').locator('li').first().waitFor({ timeout: 8000 });
   const log = await page.getByTestId('live-activity').innerText();
-  check('activity lists the guest opening and editing', /opened the link/.test(log) && /Priya\s+edited/.test(log), log);
-  await page.screenshot({ path: `${SHOTS}/extras-4-panel.png` });
+  check('activity lists the guest opening and editing', /opened the note/.test(log) && /Priya\s+edited/.test(log), log);
+  await panel.getByRole('tab', { name: 'Viewers' }).click();
 
   // 7. extend the link from the panel
   await panel.getByRole('button', { name: '+7 days' }).click();

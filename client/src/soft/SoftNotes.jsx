@@ -16,6 +16,7 @@ import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
 import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
+import ShareChips from '../components/ShareChips';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
@@ -536,6 +537,7 @@ export default function SoftNotes() {
             <div className="s-note-bar">
               <span className="s-crumb">Notes{crumb ? `  ›  ${crumb}` : ''}</span>
               <span className={`s-saved${saved.bad ? ' bad' : ''}`}>{saved.icon}{saved.text}</span>
+              {!doc.isDraft && <ShareChips noteId={doc.id} />}
               <span className="grow" />
               {doc.isDeleted ? (
                 <button type="button" className="s-outline" onClick={restore}>Restore</button>

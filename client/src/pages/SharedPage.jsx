@@ -8,6 +8,7 @@ import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
 import { caretBlock, showPeers } from '../utils/peerCursors';
+import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -48,6 +49,12 @@ export default function SharedPage() {
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
   const [previewMode, setPreviewMode] = useState(false);
   const [viewers, setViewers] = useState([]);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [synced, setSynced] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const sessionIdRef = useRef(null);
+  const missed = useRef(0);
   const [isOwner, setIsOwner] = useState(false);
   const [shareOff, setShareOff] = useState(false);
   const [revokeConfirm, setRevokeConfirm] = useState(false);
@@ -180,7 +187,7 @@ export default function SharedPage() {
     setStatus('saving');
     const sent = { title: draft.current.title, content: draft.current.content };
     try {
-      const response = await put({ ...sent, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
+      const response = await put({ ...sent, sessionId: sessionIdRef.current || undefined, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
       if (response.status === 404 || response.status === 403) { setError(response.body.error || 'This link is not available.'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
@@ -292,6 +299,7 @@ export default function SharedPage() {
         sessionStorage.setItem(sessionKey, sessionId);
       }
     } catch { sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+    sessionIdRef.current = sessionId;
     const presenceUrl = `/api/public/${kindPath}/${encodeURIComponent(token)}/presence`;
     let live = true;
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
@@ -307,10 +315,24 @@ export default function SharedPage() {
         setError('This share link expired or was turned off. Ask the owner for a new link.');
         return null;
       }
-      return response.ok ? response.json() : null;
+      if (response.status === 403 && live) {
+        // the owner took this person off the link
+        setData(null);
+        setViewers([]);
+        setError('The owner removed you from this page.');
+        return null;
+      }
+      if (!response.ok) throw new Error('presence');
+      return response.json();
     })
-      .then((json) => { if (live && json?.viewers) setViewers(json.viewers); })
-      .catch(() => {});
+      .then((json) => {
+        if (!live || !json?.viewers) return;
+        if (missed.current >= 2) { setSynced(true); window.setTimeout(() => setSynced(false), 4000); }
+        missed.current = 0;
+        setOffline(false);
+        setViewers(json.viewers);
+      })
+      .catch(() => { missed.current += 1; if (live && missed.current >= 2) setOffline(true); });
     void beat();
     // an editable link checks every 3 s so "someone is typing" feels live; a read-only link only needs to be counted
     const interval = window.setInterval(() => { void beat(); }, data?.canEdit ? 3000 : 12_000);
@@ -338,6 +360,13 @@ export default function SharedPage() {
     return () => { window.clearInterval(t); showPeers([]); };
   }, [viewers, previewMode, rev]);
 
+  const collab = useCollabEvents(viewers, !!data && !shareOff);
+  const recentEvents = collab.muted ? [] : collab.events.filter((e) => (e.kind === 'joined' || e.kind === 'left') && now - e.at < 5000).slice(0, 2);
+  useEffect(() => {
+    if (!recentEvents.length) return undefined;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [recentEvents.length]);
   const others = viewers.filter((viewer) => !viewer.self);
   const typers = others.filter((viewer) => viewer.typing);
   const typingText = typers.length === 1 ? `${typers[0].name}${typers[0].owner ? ' (owner)' : ''} is typing`
@@ -520,10 +549,10 @@ export default function SharedPage() {
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
           </button>}
-          {data && viewers.length > 0 && <div className="avatars" aria-label={`${viewers.length} people viewing this page`} title={`${viewers.length} viewing now`}>
+          {data && viewers.length > 0 && <button type="button" className="avatars" aria-label={`${viewers.length} people viewing this page. Open live collaboration`} aria-expanded={panelOpen} title={`${viewers.length} viewing now`} onClick={() => setPanelOpen((open) => !open)}>
             {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}${viewer.typing && !viewer.self ? ' typing' : ''}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}${viewer.typing && !viewer.self ? ' · typing' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
             {viewers.length > 3 && <span className="av avatar-extra">+{viewers.length - 3}</span>}
-          </div>}
+          </button>}
           {data && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
             {saveBusy ? <LoaderCircle className="spin" size={16} /> : savedCopy ? <Check size={16} /> : <Clipboard size={16} />}
             <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
@@ -612,6 +641,15 @@ export default function SharedPage() {
         <span className="typing-text">{typingText}</span>
         <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
       </div>}
+      {data && panelOpen && <div className="cp-drawer">
+        <CollabPanel
+          mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
+          muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
+        />
+      </div>}
+      {data && !previewMode && !typingText && (others.length > 0 || panelOpen || offline) && <CollabBar
+        viewers={viewers} open={panelOpen} offline={offline} toasts={recentEvents} onDismissToast={collab.dismiss} onToggle={() => setPanelOpen((open) => !open)}
+      />}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
       {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
         <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">
