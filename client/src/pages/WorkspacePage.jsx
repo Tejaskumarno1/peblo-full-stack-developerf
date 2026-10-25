@@ -4,6 +4,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { notesAPI, aiAPI, todosAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
+import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import TodoListPanel from '../components/TodoListPanel';
@@ -210,6 +211,7 @@ export default function WorkspacePage() {
           category: category || undefined,
         });
         const newNote = res.data.note;
+        setNoteBase(newNote.id, newNote.updatedAt, content || '');
         // Only the plain "All notes" lists get the new note, not Archive, Trash or tag views.
         queryClient.setQueriesData({
           queryKey: ['notes'],
@@ -239,16 +241,48 @@ export default function WorkspacePage() {
       if (!created) throw new Error('Failed to save new note');
       return;
     }
-    await notesAPI.update(noteId, data);
-    
+    const res = await saveNoteSafe(noteId, data);
+    const now = res?.updatedAt ? new Date(res.updatedAt).toISOString() : new Date().toISOString();
+
     queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
       if (!old) return old;
-      return old.map((n) => (n.id === noteId ? { ...n, ...data, updatedAt: new Date().toISOString() } : n));
+      return old.map((n) => (n.id === noteId ? { ...n, ...data, updatedAt: now } : n));
     });
-    setSelectedNote((prev) => (prev?.id === noteId ? { ...prev, ...data, updatedAt: new Date().toISOString() } : prev));
+    setSelectedNote((prev) => (prev?.id === noteId ? { ...prev, ...data, updatedAt: now } : prev));
   }, [persistDraft, queryClient]);
 
   const { saveStatus, forceSave } = useAutoSave(selectedNote?.id, saveData, handleSave);
+  const selectedRef = useRef(null);
+  selectedRef.current = selectedNote;
+
+  // What the editor loaded is what later saves are merged against.
+  useEffect(() => {
+    const d = selectedRef.current;
+    if (d && d.id !== '__draft__' && !d.isDraft) setNoteBase(d.id, d.updatedAt, d.content);
+  }, [editorKey]);
+  // A save that had to be merged with someone else's edit (a shared link): show the combined text.
+  useEffect(() => {
+    const onMerged = (e) => {
+      const m = e.detail;
+      const d = selectedRef.current;
+      if (!d || d.id !== m.id || d.content !== m.sent) return; // typed more meanwhile: the next save merges again
+      setSelectedNote((cur) => (cur ? { ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() } : cur));
+      setEditorKey(`merged-${Date.now()}`);
+    };
+    window.addEventListener('pb-note-merged', onMerged);
+    return () => window.removeEventListener('pb-note-merged', onMerged);
+  }, []);
+  // Someone else saved this note and this editor has nothing unsaved: load their text.
+  useEffect(() => {
+    const d = selectedRef.current;
+    if (!d || d.id === '__draft__' || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    const f = notes.find((n) => n.id === d.id);
+    const base = getNoteBase(d.id);
+    if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save
+    if (new Date(f.updatedAt).getTime() <= new Date(base.updatedAt).getTime()) return;
+    setSelectedNote((cur) => (cur ? { ...cur, content: f.content, updatedAt: f.updatedAt } : cur));
+    setEditorKey(`remote-${Date.now()}`);
+  }, [notes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateNote = useCallback(() => {
     const draftNote = {

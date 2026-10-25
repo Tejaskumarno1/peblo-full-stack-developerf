@@ -3,6 +3,7 @@ import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { saveVersion } from '../services/noteVersions.js';
+import { saveNoteMerged } from '../services/noteSave.js';
 import { cleanNoteMeta } from '../utils/meta.js';
 
 // prisma imported from db.js
@@ -378,11 +379,25 @@ export async function createNote(req: any, res: any, next: any) {
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
-    const { title, content, category, isArchived, tags, meta } = req.body;
+    const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, force, keepBoth } = req.body;
+
+    // An editor that tells us what it started from gets a safe save: if the note changed elsewhere meanwhile
+    // (another window, a shared-link editor), the changes are merged instead of one side being overwritten.
+    let merged: { status: string; content: string; updatedAt: Date } | null = null;
+    if (typeof content === 'string' && baseUpdatedAt) {
+      const r = await saveNoteMerged(
+        { id: req.params.id, userId: req.user.id },
+        { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth },
+      );
+      if (r.status === 'missing') return res.status(404).json({ error: 'Note not found' });
+      if (r.status === 'conflict') return res.status(409).json({ error: 'This note changed somewhere else while you were editing.', latest: r.latest });
+      merged = r;
+      await syncLinks(req.user.id, req.params.id, r.content);
+    }
 
     const data: any = {};
-    if (title !== undefined) data.title = title;
-    if (content !== undefined) data.content = content;
+    if (title !== undefined && !merged) data.title = title;
+    if (content !== undefined && !merged) data.content = content;
     if (category !== undefined) data.category = category || null;
     if (isArchived !== undefined) data.isArchived = isArchived;
     if (meta !== undefined) {
@@ -395,7 +410,7 @@ export async function updateNote(req: any, res: any, next: any) {
     }
 
     // the text before this edit is kept as a version (at most one every 10 minutes while editing)
-    const before = content !== undefined
+    const before = content !== undefined && !merged
       ? await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { content: true } })
       : null;
 
@@ -411,7 +426,7 @@ export async function updateNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
     if (before && before.content !== content) await saveVersion(req.params.id, before.content || '').catch(() => {});
-    if (content !== undefined) await syncLinks(req.user.id, req.params.id, content);
+    if (content !== undefined && !merged) await syncLinks(req.user.id, req.params.id, content);
 
     if (tags !== undefined) {
       await syncTags(req.user.id, req.params.id, tags);
@@ -419,6 +434,10 @@ export async function updateNote(req: any, res: any, next: any) {
 
     notify(req, 'notes_changed');
     // Return early to save an extra sequential database lookup
+    if (merged) {
+      const fresh = Object.keys(data).length ? await prisma.note.findUnique({ where: { id: req.params.id }, select: { updatedAt: true } }) : null;
+      return res.json({ message: 'Note updated', status: merged.status, updatedAt: fresh?.updatedAt ?? merged.updatedAt, ...(merged.status !== 'saved' ? { content: merged.content } : {}) });
+    }
     res.json({ message: 'Note updated' });
   } catch (error) {
     next(error);

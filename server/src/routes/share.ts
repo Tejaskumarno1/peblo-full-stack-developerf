@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate, verifyToken } from '../middleware/auth.js';
+import { saveNoteMerged } from '../services/noteSave.js';
 
 /*
  * Share links. The owner turns a link on for one note or one task; anyone who has the link can read it (never edit).
@@ -212,20 +213,20 @@ const MAX_NOTE = 8_000_000;
 publicRoutes.put('/note/:token', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, title: true, content: true, updatedAt: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (!note.shareEdit) return res.status(403).json({ error: 'This link is view only.' });
-    const { title, content, baseUpdatedAt, force } = req.body || {};
+    const { title, content, baseUpdatedAt, baseContent, force, keepBoth } = req.body || {};
     if (typeof content !== 'string' || content.length > MAX_NOTE) return res.status(400).json({ error: 'That note is too big to save.' });
-    if (!force && baseUpdatedAt && new Date(baseUpdatedAt).getTime() < note.updatedAt.getTime() && content !== note.content) {
-      return res.status(409).json({ error: 'Someone else changed this note while you were editing.', latest: { title: note.title, content: note.content, updatedAt: note.updatedAt } });
-    }
-    const saved = await prisma.note.update({
-      where: { id: note.id },
-      data: { content, ...(typeof title === 'string' ? { title: title.slice(0, 300) || 'Untitled' } : {}) },
-      select: { updatedAt: true },
-    });
-    res.json({ ok: true, updatedAt: saved.updatedAt });
+    // Both people's edits are merged; the write is conditional so two saves at the same moment cannot overwrite each other.
+    const r = await saveNoteMerged(
+      { id: note.id, shareToken: req.params.token, isDeleted: false },
+      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth },
+    );
+    if (r.status === 'missing') return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (r.status === 'conflict') return res.status(409).json({ error: 'Someone else changed the same words while you were editing.', latest: r.latest });
+    try { (req.app as any)?.get?.('io')?.to(note.userId).emit('notes_changed'); } catch { /* live refresh is best-effort */ }
+    res.json({ ok: true, status: r.status, updatedAt: r.updatedAt, ...(r.status !== 'saved' ? { content: r.content } : {}) });
   } catch (e) { next(e); }
 });
 

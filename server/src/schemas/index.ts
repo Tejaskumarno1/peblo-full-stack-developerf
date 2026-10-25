@@ -18,7 +18,12 @@ export const noteSchemas = {
       tags: z.array(z.string()).optional(),
       category: z.string().optional(),
       isArchived: z.boolean().optional(),
-      meta: z.record(z.string(), z.any()).optional()
+      meta: z.record(z.string(), z.any()).optional(),
+      // safe saving when someone else may be editing too (see services/noteSave.ts)
+      baseUpdatedAt: z.string().nullable().optional(),
+      baseContent: z.string().nullable().optional(),
+      force: z.boolean().optional(),
+      keepBoth: z.boolean().optional()
     })
   }
 };

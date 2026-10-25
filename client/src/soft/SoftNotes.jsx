@@ -14,6 +14,7 @@ import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
+import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 
@@ -213,18 +214,52 @@ export default function SoftNotes() {
       const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled' });
       const created = data.note;
       // Keep the editor as it is; only the id changes.
+      setNoteBase(created.id, created.updatedAt, payload.content);
       setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate(`/notes/${created.id}`, { replace: true });
       return;
     }
-    await notesAPI.update(id, { ...payload, title: payload.title || 'Untitled' });
+    const res = await saveNoteSafe(id, { ...payload, title: payload.title || 'Untitled' });
+    const now = res?.updatedAt ? new Date(res.updatedAt).toISOString() : new Date().toISOString();
+    setDoc((d) => (d && d.id === id ? { ...d, updatedAt: now } : d));
     queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old)
-      ? old.map((n) => (n.id === id ? { ...n, ...payload, title: payload.title || 'Untitled', updatedAt: new Date().toISOString() } : n))
+      ? old.map((n) => (n.id === id ? { ...n, ...payload, title: payload.title || 'Untitled', updatedAt: now } : n))
       : old));
   }, [navigate, queryClient]);
 
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
+  const docRef = useRef(null);
+  docRef.current = doc;
+
+  // What the editor loaded is what later saves are merged against.
+  useEffect(() => {
+    const d = docRef.current;
+    if (d && !d.isDraft) setNoteBase(d.id, d.updatedAt, d.content);
+  }, [editorKey]);
+  // A save that had to be merged with someone else's edit (a shared link): show the combined text.
+  useEffect(() => {
+    const onMerged = (e) => {
+      const m = e.detail;
+      const d = docRef.current;
+      if (!d || d.id !== m.id || d.content !== m.sent) return; // typed more meanwhile: the next save merges again
+      setDoc((cur) => ({ ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() }));
+      setEditorKey(`merged-${Date.now()}`);
+    };
+    window.addEventListener('pb-note-merged', onMerged);
+    return () => window.removeEventListener('pb-note-merged', onMerged);
+  }, []);
+  // Someone else saved this note and this editor has nothing unsaved: load their text.
+  useEffect(() => {
+    const d = docRef.current;
+    if (!d || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    const f = allNotes.find((n) => n.id === d.id);
+    const base = getNoteBase(d.id);
+    if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save
+    if (new Date(f.updatedAt).getTime() <= new Date(base.updatedAt).getTime()) return;
+    setDoc((cur) => ({ ...cur, content: f.content, updatedAt: f.updatedAt }));
+    setEditorKey(`remote-${Date.now()}`);
+  }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p) => setDoc((d) => ({ ...d, ...p }));
 

@@ -118,7 +118,7 @@ export default function SharedPage() {
       .then(async (response) => { const json = await response.json().catch(() => ({})); if (!response.ok) throw new Error(json.error || 'This link is not shared any more.'); return json; })
       .then((json) => {
         if (!live) return;
-        draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt };
+        draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt, baseContent: json.content || '' };
         if (json.kind === 'todo') taskSavedText.current = json.text;
         setConflict(null); setStatus('saved'); setData(json);
       })
@@ -143,7 +143,9 @@ export default function SharedPage() {
         const latest = await response.json();
         const current = shareStateRef.current;
         if (!live || latest.updatedAt === current.data?.updatedAt || current.status !== 'saved') return;
-        draft.current = { title: latest.title || '', content: latest.content || '', base: latest.updatedAt };
+        // someone else saved and this editor has nothing unsaved: show their version (a pending local edit is merged by the server on save)
+        if (timer.current) return;
+        draft.current = { title: latest.title || '', content: latest.content || '', base: latest.updatedAt, baseContent: latest.content || '' };
         setData(latest);
         setRev((n) => n + 1);
       } catch { /* Keep the current page visible during a brief connection loss. */ }
@@ -157,16 +159,40 @@ export default function SharedPage() {
     return { status: response.status, body: await response.json().catch(() => ({})) };
   }, [url]);
 
-  const saveNote = useCallback(async (force = false) => {
+  const saving = useRef(false);
+  const again = useRef(false);
+  const saveNote = useCallback(async (force = false, keepBoth = false) => {
+    timer.current = null;
+    // one save at a time: edits made while a save is in flight go out right after it
+    if (saving.current) { again.current = true; return; }
+    saving.current = true;
     setStatus('saving');
+    const sent = { title: draft.current.title, content: draft.current.content };
     try {
-      const response = await put({ title: draft.current.title, content: draft.current.content, baseUpdatedAt: draft.current.base, force });
+      const response = await put({ ...sent, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
+      if (response.status === 404 || response.status === 403) { setError(response.body.error || 'This link is not available.'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
-      draft.current.base = response.body.updatedAt;
-      setData((current) => current ? { ...current, title: draft.current.title, content: draft.current.content, updatedAt: response.body.updatedAt } : current);
-      setConflict(null); setStatus('saved');
+      const typedMore = draft.current.content !== sent.content;
+      if (response.body.status && response.body.status !== 'saved' && typeof response.body.content === 'string') {
+        // the other person's edits were merged with ours: show the combined text
+        if (!typedMore) {
+          draft.current = { ...draft.current, content: response.body.content, base: response.body.updatedAt, baseContent: response.body.content };
+          setData((current) => current ? { ...current, title: draft.current.title, content: response.body.content, updatedAt: response.body.updatedAt } : current);
+          setRev((n) => n + 1);
+          showToast(response.body.status === 'clash' ? 'Both versions were kept. Tidy up the part you do not need.' : 'Merged with changes made by someone else');
+        } // else: keep the old base so the next save merges again; the poll shows the merged text afterwards
+      } else {
+        draft.current.base = response.body.updatedAt;
+        draft.current.baseContent = sent.content;
+        setData((current) => current ? { ...current, title: sent.title, content: sent.content, updatedAt: response.body.updatedAt } : current);
+      }
+      setConflict(null); setStatus(typedMore ? 'saving' : 'saved');
     } catch { setStatus('error'); }
+    finally {
+      saving.current = false;
+      if (again.current) { again.current = false; clearTimeout(timer.current); timer.current = setTimeout(() => saveNote(false), 300); }
+    }
   }, [put]);
   const queueSave = () => { setStatus((current) => current === 'saving' ? current : 'saving'); clearTimeout(timer.current); timer.current = setTimeout(() => saveNote(false), 1200); };
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -519,7 +545,7 @@ export default function SharedPage() {
                 <span>Updated {when(data.updatedAt)}</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
               </div>
-              {conflict && <div className="conflict" role="alert">Someone else changed this note while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => setRev((n) => n + 1)}>Load their version</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
+              {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}

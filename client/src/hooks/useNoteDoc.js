@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
+import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 
@@ -84,13 +85,14 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
         try { await todosAPI.update(forTask.id, { noteId: created.id }); } catch { /* the note is saved either way */ }
         queryClient.invalidateQueries({ queryKey: ['todos'] });
       }
+      setNoteBase(created.id, created.updatedAt, payload.content);
       setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate(`/notes/${created.id}`, { replace: true });
       return;
     }
-    await notesAPI.update(id, { ...payload, title: payload.title || 'Untitled' });
-    const now = new Date().toISOString();
+    const res = await saveNoteSafe(id, { ...payload, title: payload.title || 'Untitled' });
+    const now = res?.updatedAt ? new Date(res.updatedAt).toISOString() : new Date().toISOString();
     setDoc((d) => (d && d.id === id ? { ...d, updatedAt: now } : d));
     queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old)
       ? old.map((n) => (n.id === id ? { ...n, ...payload, title: payload.title || 'Untitled', updatedAt: now } : n))
@@ -99,6 +101,35 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
 
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
   docRef.current = doc;
+
+  // What the editor loaded is what later saves are merged against.
+  useEffect(() => {
+    const d = docRef.current;
+    if (d && !d.isDraft) setNoteBase(d.id, d.updatedAt, d.content);
+  }, [editorKey]);
+  // A save that had to be merged with someone else's edit (a shared link): show the combined text.
+  useEffect(() => {
+    const onMerged = (e) => {
+      const m = e.detail;
+      const d = docRef.current;
+      if (!d || d.id !== m.id || d.content !== m.sent) return; // typed more meanwhile: the next save merges again
+      setDoc((cur) => ({ ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() }));
+      setEditorKey(`merged-${Date.now()}`);
+    };
+    window.addEventListener('pb-note-merged', onMerged);
+    return () => window.removeEventListener('pb-note-merged', onMerged);
+  }, []);
+  // Someone else saved this note (list refreshed through the socket) and this editor has nothing unsaved: load their text.
+  useEffect(() => {
+    const d = docRef.current;
+    if (!d || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    const f = allNotes.find((n) => n.id === d.id);
+    const base = getNoteBase(d.id);
+    if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save
+    if (new Date(f.updatedAt).getTime() <= new Date(base.updatedAt).getTime()) return;
+    setDoc((cur) => ({ ...cur, content: f.content, title: editable(f.title), updatedAt: f.updatedAt }));
+    setEditorKey(`remote-${Date.now()}`);
+  }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const patch = (p) => setDoc((d) => ({ ...d, ...p }));
   // Replace the text from outside the editor (templates, find & replace): remounts the editor with the new content
   const applyContent = (p) => { setDoc((d) => ({ ...d, ...p })); setEditorKey(`apply-${Date.now()}`); };
