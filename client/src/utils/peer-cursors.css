@@ -1,0 +1,5 @@
+/* Other people's place in the text: a coloured bar beside their block, and their name. Drawn in its own layer. */
+#pb-peer-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.pb-peer { position: fixed; box-sizing: border-box; border-left: 3px solid var(--peer); border-radius: 3px; background: color-mix(in srgb, var(--peer) 8%, transparent); transition: top .15s, height .15s; }
+.pb-peer span { position: absolute; right: 0; top: -17px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 7px; border-radius: 6px 6px 0 6px; background: var(--peer); color: #fff; font: 700 10.5px/1.5 system-ui, sans-serif; }
+@media (prefers-reduced-motion: reduce) { .pb-peer { transition: none; } }

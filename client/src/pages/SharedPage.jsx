@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
+import { caretBlock, showPeers } from '../utils/peerCursors';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -61,6 +62,15 @@ export default function SharedPage() {
   const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
   const typedAt = useRef(0);
+  const cursorRef = useRef(null);
+  const [guestName, setGuestName] = useState(() => { try { return localStorage.getItem('peblo-guest-name') || ''; } catch { return ''; } });
+  const nameRef = useRef(guestName);
+  nameRef.current = guestName;
+  const saveGuestName = (value) => {
+    const clean = value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    setGuestName(clean);
+    try { if (clean) localStorage.setItem('peblo-guest-name', clean); else localStorage.removeItem('peblo-guest-name'); } catch { /* the name just is not remembered */ }
+  };
   const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -170,7 +180,7 @@ export default function SharedPage() {
     setStatus('saving');
     const sent = { title: draft.current.title, content: draft.current.content };
     try {
-      const response = await put({ ...sent, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
+      const response = await put({ ...sent, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
       if (response.status === 404 || response.status === 403) { setError(response.body.error || 'This link is not available.'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
@@ -287,7 +297,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000 }),
+      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -313,6 +323,20 @@ export default function SharedPage() {
       void beat(false, true);
     };
   }, [data?.kind, data?.canEdit, kindPath, token, user?.id, shareOff]);
+
+  // where my cursor is (reported to others) and where theirs are (marked in the text)
+  useEffect(() => {
+    const onSel = () => { const at = caretBlock(); if (at !== null) cursorRef.current = at; };
+    document.addEventListener('selectionchange', onSel);
+    return () => document.removeEventListener('selectionchange', onSel);
+  }, []);
+  useEffect(() => {
+    const peers = viewers.filter((v) => !v.self);
+    const draw = () => showPeers(previewMode ? [] : peers);
+    draw();
+    const t = window.setInterval(draw, 1000); // the editor may redraw its blocks; mark them again
+    return () => { window.clearInterval(t); showPeers([]); };
+  }, [viewers, previewMode, rev]);
 
   const others = viewers.filter((viewer) => !viewer.self);
   const typers = others.filter((viewer) => viewer.typing);
@@ -552,7 +576,11 @@ export default function SharedPage() {
                 <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
                 <span>Updated {when(data.updatedAt)}</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
+                {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span></>}
               </div>
+              {data.canEdit && !user && !previewMode && <label className="guest-name"><span>You are editing as</span>
+                <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
+                <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; typedAt.current = Date.now(); queueSave(); }} /></Suspense>

@@ -257,3 +257,10 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 @keyframes pb-typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
 @keyframes pb-typing-ring { 0%, 100% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); } 50% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 7px transparent; } }
 @media (prefers-reduced-motion: reduce) { .pb-shared .typing-pill, .pb-shared .typing-dots i, .pb-shared .av.typing { animation: none; } }
+
+/* Named guests and the link's end date */
+.pb-shared .guest-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 14px; color: var(--fg3); font: 600 13px 'Figtree', system-ui, sans-serif; }
+.pb-shared .guest-name input { width: 170px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font: 600 13px 'Figtree', system-ui, sans-serif; }
+.pb-shared .guest-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pb-shared .guest-name small { font-weight: 500; }
+.pb-shared .expiry.soon { color: var(--danger); font-weight: 700; }

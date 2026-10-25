@@ -65,9 +65,23 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     if (kind !== 'note' || !row.shareToken || !live) return res.json({ shared: false, viewers: [] });
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
-    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1');
+    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor));
     const viewers = (await listViewers(kind, row.shareToken, session)).filter((v) => !v.self);
-    res.json({ shared: true, canEdit: !!row.shareEdit, viewers });
+    res.json({ shared: true, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers });
+  } catch (e) { next(e); }
+});
+
+// GET /api/share/note/:id/activity -> what happened on this note's link, newest first.
+shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    if (kind !== 'note') return res.json({ activity: [] });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    const rows = await prisma.$queryRawUnsafe<{ actor: string; action: string; at: Date }[]>(
+      'SELECT actor, action, at FROM share_activity WHERE note_id = $1 ORDER BY at DESC LIMIT 30', row.id,
+    );
+    res.json({ activity: rows });
   } catch (e) { next(e); }
 });
 
@@ -119,14 +133,32 @@ const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
 /** Mark a person as present (and, when `typing`, as typing for the next few seconds). */
-const touchViewer = (kind: string, token: string, sessionId: string, name: string, typing: boolean) => prisma.$executeRawUnsafe(
-  'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END',
-  kind, token, sessionId, name, typing,
-);
+async function touchViewer(kind: string, token: string, sessionId: string, name: string, typing: boolean, cursor: number | null = null): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<{ inserted: boolean }[]>(
+    'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at, cursor_block) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END, $6) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END, cursor_block = COALESCE($6, share_viewers.cursor_block) RETURNING (xmax = 0) AS inserted',
+    kind, token, sessionId, name, typing, cursor,
+  );
+  return !!rows[0]?.inserted;
+}
+/** A guest's name from the share page: plain text only, 40 characters, never empty. */
+const cleanName = (raw: unknown) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '') || 'Guest';
+const cleanCursor = (raw: unknown) => { const n = Number(raw); return Number.isInteger(n) && n >= 0 && n < 100000 ? n : null; };
+/** What happened on a shared note. An edit by the same person within 2 minutes just refreshes the last line. */
+async function logActivity(noteId: string, actor: string, action: 'viewed' | 'edited' | 'merged' | 'clash') {
+  try {
+    if (action === 'edited' || action === 'viewed') {
+      const within = action === 'edited' ? '2 minutes' : '10 minutes';
+      const n = await prisma.$executeRawUnsafe(`UPDATE share_activity SET at = NOW() WHERE id = (SELECT id FROM share_activity WHERE note_id = $1 AND actor = $2 AND action = $3 AND at >= NOW() - INTERVAL '${within}' ORDER BY at DESC LIMIT 1)`, noteId, actor, action);
+      if (n > 0) return;
+    }
+    await prisma.$executeRawUnsafe('INSERT INTO share_activity (note_id, actor, action) VALUES ($1, $2, $3)', noteId, actor, action);
+    await prisma.$executeRawUnsafe("DELETE FROM share_activity WHERE note_id = $1 AND at < NOW() - INTERVAL '60 days'", noteId);
+  } catch { /* the log is a convenience, never a reason to fail a save */ }
+}
 /** Everyone on the link right now. No emails or addresses: a short id, a name, and whether they are typing. */
 async function listViewers(kind: string, token: string, mySession: string) {
-  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean }[]>(
-    'SELECT session_id, display_name, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null }[]>(
+    'SELECT session_id, display_name, cursor_block, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
     kind, token,
   );
   return rows.map((v) => ({
@@ -134,6 +166,7 @@ async function listViewers(kind: string, token: string, mySession: string) {
     name: v.display_name,
     self: v.session_id === mySession,
     typing: !!v.typing,
+    cursor: v.cursor_block,
     owner: v.session_id.startsWith('owner:'), // guests cannot use ':' in a session id
   }));
 }
@@ -181,7 +214,7 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
 
     const auth = req.headers.authorization || '';
     const user = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : null);
-    let name = 'Guest';
+    let name = cleanName(req.body?.name);
     if (user) {
       const cached = viewerNames.get(user.id);
       if (cached && cached.expiresAt > Date.now()) name = cached.name;
@@ -195,7 +228,8 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
     if (req.body?.active === false) {
       await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId);
     } else {
-      await touchViewer(kind, token, sessionId, name, req.body?.typing === true);
+      const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor));
+      if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');
     }
     res.json({ viewers: await listViewers(kind, token, sessionId) });
   } catch (e) { next(e); }
@@ -206,10 +240,10 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const note = await prisma.note.findFirst({
       where: { shareToken: req.params.token, ...LIVE(), isDeleted: false },
-      select: { title: true, content: true, updatedAt: true, shareEdit: true, user: { select: { name: true } } },
+      select: { title: true, content: true, updatedAt: true, shareEdit: true, shareExpiresAt: true, user: { select: { name: true } } },
     });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
-    res.json({ kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: note.shareEdit, author: note.user?.name || null });
+    res.json({ kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: note.shareEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
   } catch (e) { next(e); }
 });
 
@@ -252,6 +286,8 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
     );
     if (r.status === 'missing') return res.status(404).json({ error: 'This link is not shared any more.' });
     if (r.status === 'conflict') return res.status(409).json({ error: 'Someone else changed the same words while you were editing.', latest: r.latest });
+    const who = cleanName(req.body?.name);
+    void logActivity(note.id, who, r.status === 'saved' ? 'edited' : r.status === 'merged' ? 'merged' : 'clash');
     try { (req.app as any)?.get?.('io')?.to(note.userId).emit('notes_changed'); } catch { /* live refresh is best-effort */ }
     res.json({ ok: true, status: r.status, updatedAt: r.updatedAt, ...(r.status !== 'saved' ? { content: r.content } : {}) });
   } catch (e) { next(e); }
