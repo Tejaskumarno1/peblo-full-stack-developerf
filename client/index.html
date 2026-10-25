@@ -25,10 +25,11 @@
   <body>
     <!-- Shown until the app draws itself, so the page is never blank. If the app has not started after 12 s
          (a file failed to load, a very slow connection), it says so and offers a reload. -->
-    <div id="root"><div id="pb-boot" style="min-height:100vh;display:grid;place-items:center;font:15px system-ui,sans-serif;color:#6e6559;text-align:center;padding:24px;box-sizing:border-box"><div><div id="pb-boot-msg">Loading Peblo…</div><button id="pb-boot-btn" type="button" style="display:none;margin-top:14px;padding:10px 22px;border:0;border-radius:999px;background:#C4441C;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer" onclick="location.reload()">Reload</button></div></div></div>
+    <div id="root"><div id="pb-boot" style="min-height:100vh;display:grid;place-items:center;font:15px system-ui,sans-serif;color:#6e6559;text-align:center;padding:24px;box-sizing:border-box"><div><div id="pb-boot-msg">Loading Peblo…</div><button id="pb-boot-btn" type="button" style="display:none;margin-top:14px;padding:10px 22px;border:0;border-radius:999px;background:#C4441C;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer">Reload</button></div></div></div>
     <script>
       setTimeout(function () {
         var m = document.getElementById('pb-boot-msg'), b = document.getElementById('pb-boot-btn');
+        if (b) b.addEventListener('click', function () { location.reload(); });
         if (m && b) { m.textContent = 'Peblo is taking longer than usual to start.'; b.style.display = 'inline-block'; }
       }, 12000);
     </script>
