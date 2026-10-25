@@ -69,6 +69,7 @@ try {
   check('moving a note to a folder saves it', meta.folder === 'Work', JSON.stringify(meta));
   await page.reload();
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
+  await page.locator('.s-filters-toggle').click();
   await page.locator('.s-filters select[aria-label="Folder"]').selectOption('Work');
   await page.waitForTimeout(400);
   const rows = await page.locator('.s-note-row .t').allTextContents();

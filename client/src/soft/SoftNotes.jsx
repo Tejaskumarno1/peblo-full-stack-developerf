@@ -72,6 +72,7 @@ export default function SoftNotes() {
   const [onlyTasks, setOnlyTasks] = useState(false);
   const [onlyPics, setOnlyPics] = useState(false);
   const [onlyPinned, setOnlyPinned] = useState(false);
+  const [showF, setShowF] = useState(false); // the extra filters are folded away so the list gets the room
   const [edited, setEdited] = useState(0);
   const passes = (n) => {
     if (folderSel && (n.meta?.folder || '') !== (folderSel === '__none' ? '' : folderSel)) return false;
@@ -478,13 +479,16 @@ export default function SoftNotes() {
         {savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
         <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
         <div className="s-filters" aria-label="Filters">
+          <button type="button" className={`s-filters-toggle${showF || anyFilter ? ' open' : ''}`} aria-expanded={showF} onClick={() => setShowF((v) => !v)}>Filters{anyFilter ? ' ·' : ''} <span aria-hidden="true">{showF ? '▴' : '▾'}</span></button>
+          <button type="button" className={selectMode ? 'on' : ''} onClick={() => { setSelectMode((v) => !v); setPicked([]); }}>{selectMode ? 'Done' : 'Select'}</button>
+          {showF && <>
           <select aria-label="Folder" value={folderSel} onChange={(e) => setFolderSel(e.target.value)}><option value="">All folders</option>{folders.map((f) => <option key={f} value={f}>{f}</option>)}<option value="__none">No folder</option></select>
           <button type="button" className={onlyTasks ? 'on' : ''} aria-pressed={onlyTasks} onClick={() => setOnlyTasks((v) => !v)}>With tasks</button>
           <button type="button" className={onlyPics ? 'on' : ''} aria-pressed={onlyPics} onClick={() => setOnlyPics((v) => !v)}>With pictures</button>
           <button type="button" className={onlyPinned ? 'on' : ''} aria-pressed={onlyPinned} onClick={() => setOnlyPinned((v) => !v)}>Pinned</button>
           <select aria-label="Edited" value={edited} onChange={(e) => setEdited(Number(e.target.value))}><option value={0}>Any time</option><option value={1}>Today</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select>
           {anyFilter && <button type="button" className="clr" onClick={() => { setFolderSel(''); setOnlyTasks(false); setOnlyPics(false); setOnlyPinned(false); setEdited(0); }}>Clear</button>}
-          <button type="button" className={selectMode ? 'on' : ''} onClick={() => { setSelectMode((v) => !v); setPicked([]); }}>{selectMode ? 'Done' : 'Select'}</button>
+          </>}
         </div>
         {selectMode && <div className="s-bulk" role="toolbar" aria-label="Bulk actions"><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(shownList.map((n) => n.id))}>All</button><button type="button" disabled={!picked.length} onClick={() => setFolderOpen(true)}>Folder</button><button type="button" disabled={!picked.length} onClick={() => bulk('archive')}>Archive</button><button type="button" disabled={!picked.length} onClick={() => bulk('trash')}>Trash</button></div>}
         <div className="s-notes-rows">
