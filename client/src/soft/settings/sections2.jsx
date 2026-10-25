@@ -10,6 +10,7 @@ import { usePublicUrl } from '../../api/publicUrl';
 import AccessTokens from '../../components/AccessTokens';
 import DataTools from '../../components/DataTools';
 import CaptureShortcut from './CaptureShortcut';
+import UninstallApp from './UninstallApp';
 import { exportCalendar, importCalendar } from '../../river/calendarIO';
 import SoftConnections from '../SoftConnections';
 import { Card, Row, Switch, Seg, CopyButton, Confirm, useSave } from './ui';
@@ -343,11 +344,14 @@ export function AboutSection() {
   const { user } = useAuth();
   const base = usePublicUrl();
   return (
+    <>
     <Card title="About Peblo" hint="Notes, tasks and a calendar that your AI can work with.">
       <Row label="Signed in as"><span className="s-set-static">{user?.email}</span></Row>
       <Row label="Public address" hint="Share links and the AI-app connection use this."><span className="s-set-static">{base || '…'}</span></Row>
       <Row label="This app talks to"><span className="s-set-static">{window.location.origin}</span></Row>
       <Row label="Send feedback"><a className="s-link-btn" href="https://github.com/Tejaskumarno1/peblo-full-stack-developerf/issues/new" target="_blank" rel="noreferrer">Report a problem or idea</a></Row>
     </Card>
+    <UninstallApp />
+    </>
   );
 }

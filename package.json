@@ -1,7 +1,7 @@
 {
   "name": "peblo",
   "productName": "Peblo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "Peblo — AI-powered notes, to-dos and calendar that runs on your computer",
@@ -30,7 +30,7 @@
     "mcp": "node dist/server/mcp/index.js",
     "db:sql": "node scripts/make-sql.mjs",
     "seed": "tsx scripts/seed.ts",
-    "test": "npm run build:server && node scripts/smoke-test.mjs && node scripts/connections-unit.mjs && node scripts/connections-test.mjs",
+    "test": "npm run build:server && node scripts/smoke-test.mjs && node scripts/connections-unit.mjs && node scripts/uninstall-unit.mjs && node scripts/connections-test.mjs",
     "check:canvas": "node scripts/run-canvas-check.mjs"
   },
   "dependencies": {
@@ -75,7 +75,12 @@
     "appId": "dev.peblo.app",
     "productName": "Peblo",
     "publish": [
-      { "provider": "github", "owner": "Tejaskumarno1", "repo": "peblo-full-stack-developerf", "releaseType": "release" }
+      {
+        "provider": "github",
+        "owner": "Tejaskumarno1",
+        "repo": "peblo-full-stack-developerf",
+        "releaseType": "release"
+      }
     ],
     "directories": {
       "output": "release",
@@ -107,19 +112,15 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "msi",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "include": "build/installer.nsh",
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
@@ -128,13 +129,6 @@
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "artifactName": "Peblo-Setup-${version}.exe"
-    },
-    "msi": {
-      "oneClick": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "runAfterFinish": true,
-      "artifactName": "Peblo-${version}-win-x64.msi"
     },
     "mac": {
       "target": [

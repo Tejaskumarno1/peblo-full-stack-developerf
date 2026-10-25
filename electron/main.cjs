@@ -8,6 +8,7 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 
 const updates = require('./updates.cjs');
+const uninstaller = require('./uninstall.cjs');
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.PEBLO_DEV_URL; // e.g. http://localhost:5173 when running `npm run dev`
 
@@ -119,6 +120,9 @@ ipcMain.handle('peblo:capture-shortcut:reset', (event) => {
   if (!trustedSender(event)) return { ok: false, error: 'Not allowed.' };
   return applyCaptureShortcut(DEFAULT_CAPTURE_SHORTCUT);
 });
+
+// Settings > About > Uninstall Peblo (see uninstall.cjs).
+uninstaller.register({ trusted: trustedSender, getWindow: () => mainWindow, beforeQuit: () => { isQuitting = true; } });
 
 // ── Design canvas ──
 // Every screen is designed at 1440 × 900 (client/src/styles/canvas.css). Here we pick one
