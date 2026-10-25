@@ -120,9 +120,16 @@ app.use('/api/public', publicRoutes);
   app.use('/api', errorHandler);
 
   if (staticDir && existsSync(staticDir)) {
+    // Built files have a hash in their name, so they can be cached for good. A file that does not exist is a real 404:
+    // answering with index.html (as the catch-all below would) made an open tab that still wanted a chunk from an
+    // older version get a web page instead of JavaScript, which ended as a blank screen until a reload.
+    app.use('/assets', express.static(path.join(staticDir, 'assets'), { index: false, immutable: true, maxAge: '1y', fallthrough: true }));
+    app.use('/assets', (_req, res) => res.status(404).type('text/plain').send('Not found'));
     app.use(express.static(staticDir, { index: false }));
-    // Single-page app: every non-API route returns index.html
+    // Single-page app: every other non-API route returns index.html. It must never be cached, because it names the
+    // current build's files.
     app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       res.sendFile(path.join(staticDir, 'index.html'));
     });
   }
