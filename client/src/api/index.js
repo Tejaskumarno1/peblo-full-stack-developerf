@@ -81,13 +81,21 @@ export const aiConnectionsAPI = {
   list: () => api.get('/ai/connections'),
   detect: (data) => api.post('/ai/connections/detect', data),
   add: (data) => api.post('/ai/connections', data),
+  models: (id) => api.get(`/ai/connections/${id}/models`),
   update: (id, data) => api.patch(`/ai/connections/${id}`, data),
   order: (ids) => api.put('/ai/connections/order', { ids }),
   remove: (id) => api.delete(`/ai/connections/${id}`)
 };
 
 export const hubAPI = {
-  models: () => api.get('/ai/hub/models'),
+  // Local AI (Ollama) belongs to the Windows / Mac / Linux app only. On the web the app itself says "hosted",
+  // whatever the server answers, so no "Only on this computer", Local AI or model store can show there.
+  models: () => api.get('/ai/hub/models').then((res) => {
+    if (res?.data && typeof window !== 'undefined' && !window.pebloDesktop) {
+      res.data = { ...res.data, hosted: true, routing: 'auto', local: res.data.local ? { ...res.data.local, enabled: false, ok: false, models: [] } : res.data.local };
+    }
+    return res;
+  }),
   search: (query, noteIds) => api.post('/ai/hub/search', { query, noteIds })
 };
 

@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Monitor, MessageCircleQuestion, Cloud, Check } from 'lucide-react';
+import { Monitor, MessageCircleQuestion, Cloud } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { aiAPI, hubAPI } from '../../api';
 import { normalizeRouting } from '../../utils/aiRouting';
-import { unreadableKeyMessage } from '../../utils/keyStatus';
 import LocalModels from './LocalModels';
-import CloudModels from './CloudModels';
 import AiConnections from './AiConnections';
 
 const CHOICES = [
@@ -14,23 +12,6 @@ const CHOICES = [
   { id: 'ask', title: 'Ask me first', desc: 'Uses your computer when it can. Asks before anything goes to the cloud.', icon: MessageCircleQuestion, tone: 'b' },
   { id: 'auto', title: 'Best available', desc: 'Uses your OpenAI or Gemini key when one is set. Fastest answers.', icon: Cloud, tone: 'c' },
 ];
-
-function KeyInput({ p, id, label, value, placeholder, onSave }) {
-  const [draft, setDraft] = useState(value || '');
-  const [saved, setSaved] = useState(false);
-  useEffect(() => setDraft(value || ''), [value]);
-  const dirty = draft.trim() !== (value || '');
-  return (
-    <div className={`${p}-field`}>
-      <label htmlFor={id}>{label}</label>
-      <div className="row">
-        <input id={id} type="password" value={draft} placeholder={placeholder} onChange={(e) => { setDraft(e.target.value); setSaved(false); }} autoComplete="off" spellCheck={false} />
-        {dirty && <button type="button" className={`${p}-btn small`} onClick={() => { onSave(draft.trim()); setSaved(true); }}>Save</button>}
-        {saved && !dirty && <span className={`${p}-ok`}><Check size={14} strokeWidth={2.6} /> Saved</span>}
-      </div>
-    </div>
-  );
-}
 
 /**
  * "Your AI" shared by River and Orbit: where AI runs, Local AI (Ollama) and cloud keys.
@@ -136,13 +117,9 @@ export default function ConnectionsScreen({ p, extra }) {
         </section>}
 
         <section className={c('card')} aria-labelledby={`${p}-keys`}>
-          <h2 id={`${p}-keys`} className={c('card-title')}>Cloud keys</h2>
+          <h2 id={`${p}-keys`} className={c('card-title')}>Cloud AI</h2>
           <span className={c('quiet')}>Saved encrypted in your account. {hosted ? 'Peblo sends your question and the notes it found (never #private ones) to the provider you connect.' : routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
-          {unreadableKeyMessage(settings) && <p role="alert" className={c('quiet')} style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
-<KeyInput p={p} id={`${p}-openai`} label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
-          <KeyInput p={p} id={`${p}-gemini`} label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
-          <CloudModels apply={apply} />
-          <AiConnections theme={p === 'r' ? 'river' : 'orbit'} apply={apply} />
+          <AiConnections theme={p === 'r' ? 'river' : 'orbit'} />
           <span className={c('quiet')} style={{ fontSize: 13 }}>Notes tagged #private are never sent to any AI.</span>
         </section>
       </div>

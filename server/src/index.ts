@@ -30,7 +30,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
 import { apiLimiter } from './middleware/rateLimit.js';
-import { protectExistingKeys } from './services/profile.js';
+import { protectExistingKeys, migrateLegacyKeys } from './services/profile.js';
 
 export interface StartOptions {
   /** Port to listen on. 0 picks a free port (what the desktop app uses). */
@@ -143,6 +143,7 @@ app.use('/api/public', publicRoutes);
 export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: StartOptions = {}): Promise<{ server: Server; port: number }> {
   await initDatabase();
   await protectExistingKeys().catch((e) => console.error('[keys] could not protect existing keys:', e));
+  await migrateLegacyKeys().catch((e) => console.error('[keys] could not move saved keys to AI connections:', e));
 
   const app = createApp(staticDir);
   const httpServer = createServer(app);

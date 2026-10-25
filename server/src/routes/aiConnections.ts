@@ -2,8 +2,7 @@ import { Router } from 'express';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
-import { encryptSecret, isUnreadable } from '../secrets.js';
-import { saveKeys } from '../services/profile.js';
+import { encryptSecret, decryptSecret, isUnreadable } from '../secrets.js';
 import { PROVIDERS, providerById, detectConnection, verifyConnection, checkBaseUrl, suggestModel } from '../services/aiProviders.js';
 import { hosted } from '../utils/ollamaPolicy.js';
 
@@ -28,7 +27,7 @@ router.get('/', async (req, res, next) => {
   try {
     res.json({
       connections: (await listFor(req.user!.id)).map(shape),
-      providers: PROVIDERS.map(({ id, label, defaultModel, keyHint, baseUrl, slot }) => ({ id, label, defaultModel, keyHint, fixedAddress: !!baseUrl, slot: slot || null })),
+      providers: PROVIDERS.map(({ id, label, defaultModel, keyHint, baseUrl }) => ({ id, label, defaultModel, keyHint, fixedAddress: !!baseUrl })),
       // On a shared server a custom address must be public https; the desktop app may also point at localhost (LM Studio, vLLM...).
       localAddressesAllowed: !hosted(),
     });
@@ -51,7 +50,7 @@ router.post('/detect', checkLimit, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-// Step 2: save it. OpenAI and Gemini keys go to their own fields (so the existing key boxes show them); everything else becomes a connection.
+// Step 2: save it as a connection (every provider, OpenAI and Gemini included, is saved the same way).
 router.post('/', checkLimit, async (req, res, next) => {
   try {
     const userId = req.user!.id;
@@ -60,14 +59,6 @@ router.post('/', checkLimit, async (req, res, next) => {
     const info = typeof provider === 'string' ? providerById(provider) : undefined;
     if (!info) return bad(res, 'Pick a provider.');
     if (apiKey.length > 500) return bad(res, 'That does not look like an API key.');
-
-    if (info.slot) {
-      if (!apiKey) return bad(res, 'Paste an API key first.');
-      const v = await verifyConnection(info.id, apiKey);
-      if (!v.ok) return bad(res, v.error || 'That key was not accepted.');
-      await saveKeys(userId, { [info.slot]: apiKey });
-      return res.status(201).json({ slot: info.slot });
-    }
 
     let baseUrl = info.baseUrl;
     if (info.id === 'custom') {
@@ -86,6 +77,20 @@ router.post('/', checkLimit, async (req, res, next) => {
       data: { userId, provider: info.id, label: name, baseUrl, apiKey: encryptSecret(apiKey), model: modelName, position: (last?.position ?? -1) + 1 },
     });
     res.status(201).json({ connection: shape(row) });
+  } catch (error) { next(error); }
+});
+
+// The models this connection's key can use right now (asked of the provider each time, so new models show up).
+router.get('/:id/models', checkLimit, async (req, res, next) => {
+  try {
+    const c = await prisma.aiConnection.findFirst({ where: { id: String(req.params.id), userId: req.user!.id } });
+    if (!c) return bad(res, 'Connection not found.', 404);
+    const key = c.apiKey ? decryptSecret(c.apiKey) : '';
+    if (c.apiKey && !key) return res.json({ models: [], current: c.model, error: 'The saved key cannot be read here. Add it again.' });
+    const v = await verifyConnection(c.provider, key || '', c.baseUrl);
+    // The model in use is always offered, even when the provider no longer lists it.
+    const models = v.ok ? Array.from(new Set([c.model, ...v.models])) : [c.model];
+    res.json({ models, current: c.model, error: v.ok ? undefined : v.error });
   } catch (error) { next(error); }
 });
 

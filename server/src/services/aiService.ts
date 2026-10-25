@@ -1,6 +1,6 @@
 import { decryptSecret, isUnreadable } from '../secrets.js';
 import { effectiveOllamaUrl, ollamaUrlProblem, hosted } from '../utils/ollamaPolicy.js';
-import { usableConnections } from './aiProviders.js';
+import { usableConnections, providerById } from './aiProviders.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -58,7 +58,7 @@ function connectionProviders(user: any): Record<string, OAIProvider> {
     out[name] = {
       name, label: c.label, local: !hosted() && isLoopbackUrl(c.baseUrl),
       client: new OpenAI({ apiKey: key || 'none', baseURL: c.baseUrl, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }),
-      model: c.model, embedModel: '',
+      model: c.model, embedModel: providerById(c.provider)?.embedModel || '',
     };
   }
   return out;
@@ -919,6 +919,7 @@ export async function generateEmbedding(userId: string, text: string): Promise<n
   try {
     return await runWithCascade('AI Embedding', userId,
       async (openai, p) => {
+        if (!p.embedModel) throw new Error('This connection has no embeddings model.');
         const response = await openai.embeddings.create({
           model: p.embedModel,
           input: text
@@ -965,10 +966,12 @@ ${text}`;
 
 /** Speech to text for the AI assistant's microphone. Uses the person's Gemini key (or the server's) and sends the recording nowhere else. */
 export async function transcribeAudio(userId: string, base64: string, mime: string): Promise<string> {
-  const user: any = await prisma.user.findUnique({ where: { id: userId }, include: { apiKeys: true } });
-  const g = getGeminiInstance(user);
+  const user: any = await getUserSettings(userId);
+  // A Gemini key can be a saved connection (the normal way now) or an older key field / the server's own key.
+  const connKey = decryptSecret((user?.aiConnections || []).find((c: any) => c.provider === 'gemini' && c.enabled)?.apiKey)?.trim();
+  const g = getGeminiInstance(user) || (connKey && !aiIsOff(user) ? new GoogleGenerativeAI(connKey) : null);
   if (!g) {
-    const e: any = new Error('Speech to text needs a Gemini key. Add one in Settings, AI and models, or turn the AI off.');
+    const e: any = new Error('Speech to text needs a Google Gemini key. Paste one in AI Hub → Connections, or turn the AI off.');
     e.status = 400;
     throw e;
   }

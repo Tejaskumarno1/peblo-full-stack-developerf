@@ -450,3 +450,7 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-tasktools input[type=search] { flex: 1 1 200px; min-width: 160px; max-width: 320px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: inherit; }
 .soft .s-tt-sel { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--s-fg2); }
 .soft .s-tt-sel select { height: 34px; border-radius: 999px; border: 1.5px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: inherit; font-weight: 600; padding: 0 10px; }
+
+/* Settings list: a small coloured icon in front of each section name */
+.soft .s-set-link .ico { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--s-fg, #3b2f26); }
+.soft .s-set-link.on .ico { box-shadow: 0 0 0 2px rgba(255,255,255,.28); }

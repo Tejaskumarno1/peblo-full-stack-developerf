@@ -1,5 +1,7 @@
 import prisma from '../db.js';
 import { decryptSecret, encryptSecret, isUnreadable } from '../secrets.js';
+import { openAiModelOf, geminiModelOf } from './aiService.js';
+import { providerById } from './aiProviders.js';
 
 export const KEY_FIELDS = ['openAiKey', 'geminiKey', 'groqKey', 'huggingFaceKey'] as const;
 
@@ -66,5 +68,29 @@ export async function protectExistingKeys() {
       }
       await prisma.user.update({ where: { id: u.id }, data: { settings: s } });
     }
+  }
+}
+
+/**
+ * One-time move at start-up: an OpenAI or Gemini key saved in the old key fields becomes a normal AI connection
+ * (same encrypted value, same chosen model) and the old field is emptied, so a key lives in exactly one place
+ * and deleting its connection really removes it. Safe to run again: it only touches accounts that still have an old key.
+ */
+export async function migrateLegacyKeys() {
+  const rows = await prisma.userApiKeys.findMany({ where: { OR: [{ openAiKey: { not: null } }, { geminiKey: { not: null } }] } });
+  for (const row of rows) {
+    const user = await prisma.user.findUnique({ where: { id: row.userId }, select: { settings: true } });
+    if (!user) continue;
+    const forModels = { settings: user.settings };
+    const last = await prisma.aiConnection.findFirst({ where: { userId: row.userId }, orderBy: { position: 'desc' }, select: { position: true } });
+    let position = (last?.position ?? -1) + 1;
+    const ops: any[] = [];
+    for (const [field, id, model] of [['openAiKey', 'openai', openAiModelOf(forModels)], ['geminiKey', 'gemini', geminiModelOf(forModels)]] as const) {
+      const stored = (row as any)[field];
+      const info = providerById(id)!;
+      if (stored) ops.push(prisma.aiConnection.create({ data: { userId: row.userId, provider: id, label: info.label, baseUrl: info.baseUrl, apiKey: stored, model, position: position++ } }));
+    }
+    ops.push(prisma.userApiKeys.update({ where: { userId: row.userId }, data: { openAiKey: null, geminiKey: null } }));
+    await prisma.$transaction(ops);
   }
 }

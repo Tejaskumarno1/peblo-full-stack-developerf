@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer } from '../hooks/useHubChat';
+import ConnectionModelOptions from '../components/hub/ConnectionModelOptions';
 import { MicButton, SpeakButton } from '../components/VoiceButtons';
 
 const TILTS = [-1.5, 1.2, -0.6, 0.9, -1];
@@ -179,9 +180,10 @@ export default function SoftAI() {
                   {localModels.map((m) => (
                     <button key={m} type="button" role="option" aria-selected={modelChoice?.model === m} onClick={() => { setModelChoice({ provider: 'ollama', model: m }); setPickerOpen(false); }}>{m} · on this computer</button>
                   ))}
-                  {cloudModels.map((c) => (
+                  {cloudModels.filter((c) => !c.provider.startsWith('conn:')).map((c) => (
                     <button key={c.provider} type="button" role="option" aria-selected={modelChoice?.provider === c.provider} disabled={routing === 'ollama'} onClick={() => { setModelChoice({ provider: c.provider, model: c.model }); setPickerOpen(false); }}>{c.model} · cloud{routing === 'ollama' ? ' (off)' : ''}</button>
                   ))}
+                  <ConnectionModelOptions cloud={cloudModels} modelChoice={modelChoice} open={pickerOpen} disabledFor={(c) => routing === 'ollama' && !c.local} onPick={(choice) => { setModelChoice(choice); setPickerOpen(false); }} />
                   {!localModels.length && !cloudModels.length && <Link to="/ai/connections" className="s-menu-link">{local?.enabled ? 'Ollama is not running. Open Your AI' : 'Set up AI in Your AI'}</Link>}
                 </div>
               )}

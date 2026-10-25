@@ -1,23 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { aiConnectionsAPI } from '../../api';
+import { connectionModelsQuery } from './ConnectionModelOptions';
 import './aiConnections.css';
 
 const errText = (e, fallback) => e?.response?.data?.error || fallback;
 
-/** One saved connection: on/off, which model, its place in the order, remove. */
+/** The models this connection's key can use, as a list to pick from (the provider is asked, so new models show up). */
+function ModelSelect({ c, onPick }) {
+  const { data } = useQuery(connectionModelsQuery(c.id));
+  const models = data?.models?.length ? data.models : [c.model];
+  return (
+    <select className="ac-model" aria-label={`Model for ${c.label}`} value={c.model} onChange={(e) => onPick(c.id, { model: e.target.value })}>
+      {models.map((m) => <option key={m} value={m}>{m}</option>)}
+    </select>
+  );
+}
+
+/** One saved connection: which company, which model, on/off, its place in the order, remove. */
 function Row({ c, first, last, onChange, onMove, onRemove, busy }) {
-  const [model, setModel] = useState(c.model);
   const [sure, setSure] = useState(false);
-  const commit = () => { const m = model.trim(); if (m && m !== c.model) onChange(c.id, { model: m }); else setModel(c.model); };
   return (
     <li className={`ac-row${c.enabled ? '' : ' off'}`}>
       <div className="ac-row-main">
         <b>{c.label}</b>
-        <span className="ac-sub">{c.provider === 'custom' ? c.baseUrl : c.provider}{c.unreadable ? ' · key cannot be read here, add it again' : ''}</span>
+        <span className="ac-sub">{c.provider === 'custom' ? c.baseUrl : 'Key saved'}{c.unreadable ? ' · the saved key cannot be read here: add it again' : ''}</span>
       </div>
-      <input className="ac-model" aria-label={`Model for ${c.label}`} value={model} onChange={(e) => setModel(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} spellCheck={false} />
+      <ModelSelect c={c} onPick={onChange} />
       <label className="ac-switch"><input type="checkbox" checked={c.enabled} disabled={busy} onChange={(e) => onChange(c.id, { enabled: e.target.checked })} /> On</label>
       <span className="ac-move">
         <button type="button" aria-label={`Move ${c.label} up`} disabled={first || busy} onClick={() => onMove(c.id, -1)}><ChevronUp size={15} /></button>
@@ -31,59 +41,62 @@ function Row({ c, first, last, onChange, onMove, onRemove, busy }) {
 }
 
 /**
- * "Add any AI": paste a key, Peblo works out which company it is from and checks it, then you pick a model.
- * OpenAI and Gemini keys go to their own boxes above (through `apply`); everything else is saved as a connection here.
+ * Everything about cloud AI in one place: paste a key, Peblo finds the company and lists the models that key can use,
+ * you pick one and add it. Your connections are listed below, each with a model list of its own.
  * theme: 'soft' | 'river' | 'orbit' (which style's colours to borrow).
  */
-export default function AiConnections({ theme, apply }) {
+export default function AiConnections({ theme }) {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['ai-connections'], queryFn: () => aiConnectionsAPI.list().then((r) => r.data) });
   const [key, setKey] = useState('');
-  const [provider, setProvider] = useState('');   // chosen by hand when the key's company could not be told
+  const [provider, setProvider] = useState('');   // picked by hand, only when the key's company could not be told
   const [address, setAddress] = useState('');
   const [found, setFound] = useState(null);       // answer of "detect"
   const [model, setModel] = useState('');
-  const [label, setLabel] = useState('');
-  const [state, setState] = useState({ busy: false, error: '', note: '' });
+  const [state, setState] = useState({ busy: false, checking: false, error: '', note: '' });
   const [pickProvider, setPickProvider] = useState(false);
+  const checked = useRef('');                     // the key (and provider) already looked at, so it is not asked twice
 
   const connections = data?.connections || [];
   const providers = data?.providers || [];
   const isCustom = provider === 'custom';
   const refresh = () => { queryClient.invalidateQueries({ queryKey: ['ai-connections'] }); queryClient.invalidateQueries({ queryKey: ['hub-models'] }); };
-  const reset = () => { setKey(''); setProvider(''); setAddress(''); setFound(null); setModel(''); setLabel(''); setPickProvider(false); };
+  const reset = () => { setKey(''); setProvider(''); setAddress(''); setFound(null); setModel(''); setPickProvider(false); checked.current = ''; };
 
   const check = async () => {
-    setState({ busy: true, error: '', note: '' }); setFound(null);
+    const k = key.trim();
+    checked.current = `${provider}|${k}`;
+    setState({ busy: false, checking: true, error: '', note: '' }); setFound(null);
     try {
-      const { data: r } = await aiConnectionsAPI.detect({ key, provider: provider || undefined, baseUrl: isCustom ? address : undefined });
+      const { data: r } = await aiConnectionsAPI.detect({ key: k, provider: provider || undefined, baseUrl: isCustom ? address : undefined });
       if (!r.ok) {
         if (r.needsProvider) setPickProvider(true);
-        setState({ busy: false, error: r.error || 'That key was not accepted.', note: '' });
+        setState({ busy: false, checking: false, error: r.error || 'That key was not accepted.', note: '' });
         return;
       }
-      setFound(r); setModel(r.suggestedModel || ''); setLabel('');
-      setState({ busy: false, error: '', note: '' });
+      setFound(r); setModel(r.suggestedModel || r.models?.[0] || '');
+      setState({ busy: false, checking: false, error: '', note: '' });
     } catch (e) {
-      setState({ busy: false, error: errText(e, 'Could not check that key.'), note: '' });
+      setState({ busy: false, checking: false, error: errText(e, 'Could not check that key.'), note: '' });
     }
   };
 
+  // A pasted key is looked at by itself: no button to press.
+  useEffect(() => {
+    const k = key.trim();
+    if (isCustom || k.length < 20 || checked.current === `${provider}|${k}`) return undefined;
+    const t = setTimeout(check, 500);
+    return () => clearTimeout(t);
+  }, [key, provider]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const save = async () => {
-    setState({ busy: true, error: '', note: '' });
+    setState({ busy: true, checking: false, error: '', note: '' });
     try {
-      const info = providers.find((p) => p.id === found.provider);
-      if (info?.slot) {
-        // OpenAI and Gemini keep their own boxes (and model lists) above.
-        await apply({ [info.slot]: key.trim() });
-        setState({ busy: false, error: '', note: `${found.label} key saved in its box above.` });
-      } else {
-        await aiConnectionsAPI.add({ provider: found.provider, key: key.trim(), baseUrl: found.baseUrl || undefined, model, label: label.trim() || undefined });
-        setState({ busy: false, error: '', note: `${label.trim() || found.label} added.` });
-      }
+      await aiConnectionsAPI.add({ provider: found.provider, key: key.trim(), baseUrl: found.baseUrl || undefined, model });
+      setState({ busy: false, checking: false, error: '', note: `${found.label} added.` });
       reset(); refresh();
     } catch (e) {
-      setState({ busy: false, error: errText(e, 'Could not save that connection.'), note: '' });
+      setState({ busy: false, checking: false, error: errText(e, 'Could not save that.'), note: '' });
     }
   };
 
@@ -105,61 +118,53 @@ export default function AiConnections({ theme, apply }) {
   };
 
   const hint = providers.find((p) => p.id === provider)?.keyHint;
-  const canCheck = !state.busy && (isCustom ? !!address.trim() : !!key.trim());
 
   return (
     <div className="ac" data-theme={theme}>
-      <h3 className="ac-h">Add any AI</h3>
-      <p className="ac-sub">Paste a key from OpenAI, Gemini, Claude, Groq, OpenRouter, DeepSeek and others. Peblo works out whose it is and checks it before saving.</p>
+      <h3 className="ac-h">Add an AI</h3>
+      <p className="ac-sub">Paste an API key from any company. Peblo finds out whose it is and lists the models it can use.</p>
 
-      <form className="ac-form" onSubmit={(e) => { e.preventDefault(); if (canCheck) check(); }}>
+      <form className="ac-form" onSubmit={(e) => { e.preventDefault(); check(); }}>
         <label className="ac-sr" htmlFor="ac-key">API key</label>
-        <input id="ac-key" type="password" value={key} placeholder={isCustom ? 'API key (leave empty if the server needs none)' : 'Paste an API key…'} autoComplete="off" spellCheck={false} onChange={(e) => { setKey(e.target.value); setFound(null); setState({ busy: false, error: '', note: '' }); }} />
-        <button type="submit" className="ac-btn" disabled={!canCheck}>{state.busy && !found ? 'Checking…' : 'Check key'}</button>
+        <input id="ac-key" type="password" value={key} placeholder={isCustom ? 'API key (leave empty if the server needs none)' : 'Paste an API key…'} autoComplete="off" spellCheck={false}
+          onChange={(e) => { setKey(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }} />
+        {isCustom && <button type="submit" className="ac-btn" disabled={state.checking || !address.trim()}>{state.checking ? 'Checking…' : 'Check'}</button>}
       </form>
 
       {(pickProvider || provider) && (
         <div className="ac-pick">
-          <label htmlFor="ac-provider">Provider</label>
-          <select id="ac-provider" value={provider} onChange={(e) => { setProvider(e.target.value); setFound(null); setState({ busy: false, error: '', note: '' }); }}>
+          <label htmlFor="ac-provider">Company</label>
+          <select id="ac-provider" value={provider} onChange={(e) => { setProvider(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }}>
             <option value="">Pick one…</option>
             {providers.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
-          {isCustom && (
-            <input aria-label="Server address" value={address} onChange={(e) => { setAddress(e.target.value); setFound(null); }} placeholder={data?.localAddressesAllowed ? 'http://127.0.0.1:1234/v1' : 'https://api.example.com/v1'} spellCheck={false} />
-          )}
-          {hint && !isCustom && <span className="ac-sub">Get a key at {hint}</span>}
-          {isCustom && <span className="ac-sub">{hint}{data?.localAddressesAllowed ? '' : ' It must be a public https:// address.'}</span>}
+          {isCustom && <input aria-label="Server address" value={address} onChange={(e) => { setAddress(e.target.value); setFound(null); }} placeholder={data?.localAddressesAllowed ? 'http://127.0.0.1:1234/v1' : 'https://api.example.com/v1'} spellCheck={false} />}
+          {hint && <span className="ac-sub">{isCustom ? hint : `Get a key at ${hint}`}{isCustom && !data?.localAddressesAllowed ? ' It must be a public https:// address.' : ''}</span>}
         </div>
       )}
-      {!pickProvider && !provider && <button type="button" className="ac-link" onClick={() => setPickProvider(true)}>Pick the provider myself or use a custom address</button>}
+      {!pickProvider && !provider && <button type="button" className="ac-link" onClick={() => setPickProvider(true)}>Not detected? Pick the company, or use your own server address</button>}
 
+      {state.checking && <p role="status" className="ac-sub">Checking the key…</p>}
       {state.error && <p role="alert" className="ac-msg bad">{state.error}</p>}
       {state.note && <p role="status" className="ac-msg ok"><Check size={14} strokeWidth={2.6} /> {state.note}</p>}
 
       {found && (
         <div className="ac-found">
-          <p className="ac-msg ok"><Check size={14} strokeWidth={2.6} /> That is a <b>{found.label}</b> key, and it works.</p>
-          {!providers.find((p) => p.id === found.provider)?.slot && (
-            <>
-              <div className="ac-pick">
-                <label htmlFor="ac-model">Model</label>
-                <input id="ac-model" list="ac-models" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model name" spellCheck={false} />
-                <datalist id="ac-models">{found.models.map((m) => <option key={m} value={m} />)}</datalist>
-                <label htmlFor="ac-label">Name (optional)</label>
-                <input id="ac-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={found.label} maxLength={60} />
-              </div>
-              {found.models.length === 0 && <span className="ac-sub">This server did not list its models, so type the model name.</span>}
-            </>
-          )}
-          <button type="button" className="ac-btn" disabled={state.busy || (!providers.find((p) => p.id === found.provider)?.slot && !model.trim())} onClick={save}>{state.busy ? 'Saving…' : 'Add it'}</button>
+          <p className="ac-msg ok"><Check size={14} strokeWidth={2.6} /> <span><b>{found.label}</b> key{found.models.length ? ` · ${found.models.length} model${found.models.length === 1 ? '' : 's'} available` : ''}</span></p>
+          <div className="ac-pick">
+            <label htmlFor="ac-model">Model</label>
+            {found.models.length
+              ? <select id="ac-model" value={model} onChange={(e) => setModel(e.target.value)}>{found.models.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+              : <input id="ac-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Type the model name" spellCheck={false} />}
+          </div>
+          <button type="button" className="ac-btn" disabled={state.busy || !model.trim()} onClick={save}>{state.busy ? 'Adding…' : 'Add it'}</button>
         </div>
       )}
 
       {connections.length > 0 && (
         <>
-          <h3 className="ac-h" style={{ marginTop: 16 }}>Your connections</h3>
-          <p className="ac-sub">Peblo tries them from the top, after your OpenAI and Gemini keys. Connections on this computer (localhost) never count as cloud.</p>
+          <h3 className="ac-h" style={{ marginTop: 16 }}>Your AI</h3>
+          <p className="ac-sub">Peblo tries these from the top. You can also switch the model right in the chat.</p>
           <ul className="ac-list">
             {connections.map((c, i) => (
               <Row key={c.id} c={c} first={i === 0} last={i === connections.length - 1} busy={state.busy} onChange={change} onMove={move} onRemove={remove} />

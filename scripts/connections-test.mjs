@@ -106,6 +106,12 @@ try {
   const row = await prisma.aiConnection.findUnique({ where: { id: idOne } });
   check('the key is encrypted in the database', row.apiKey?.startsWith('enc:v1:') && !row.apiKey.includes(GOOD), row.apiKey?.slice(0, 12));
 
+  // ---- the models a key can use ----
+  r = await call('GET', `/api/ai/connections/${idOne}/models`);
+  check('models: lists what the key can use (chat models only), the current one included', r.status === 200 && r.json.models.includes('fake-chat-1') && r.json.models.includes('fake-chat-2') && !r.json.models.includes('text-embedding-x') && r.json.current === 'fake-chat-1', r.json);
+  r = await call('GET', '/api/ai/connections/00000000-0000-0000-0000-000000000000/models');
+  check('models: an unknown connection is a 404', r.status === 404, r.status);
+
   // ---- changing, ordering, other people's connections ----
   r = await call('PATCH', `/api/ai/connections/${idTwo}`, { model: 'fake-chat-2b', enabled: false });
   check('patch: model and on/off change', r.status === 200 && r.json.connection.model === 'fake-chat-2b' && r.json.connection.enabled === false, r.json);
@@ -115,6 +121,8 @@ try {
   r = await call('PUT', '/api/ai/connections/order', { ids: [idTwo, idOne] });
   check('order: can be rearranged', r.status === 200 && r.json.connections[0].id === idTwo && r.json.connections[1].id === idOne, r.json);
   token = tokenB;
+  r = await call('GET', `/api/ai/connections/${idOne}/models`);
+  check("another account cannot list my connection's models", r.status === 404, r.status);
   r = await call('PATCH', `/api/ai/connections/${idOne}`, { model: 'hijack' });
   check("another account cannot change my connection", r.status === 404, r.status);
   r = await call('DELETE', `/api/ai/connections/${idOne}`);
@@ -174,6 +182,27 @@ try {
   await prisma.aiConnection.createMany({ data: Array.from({ length: 19 }, (_, i) => ({ userId: row.userId, provider: 'custom', label: 'x' + i, baseUrl: fakeBase, model: 'm', position: 10 + i })) });
   const last = await call('POST', '/api/ai/connections', { provider: 'custom', baseUrl: fakeBase, key: GOOD, model: 'one-too-many' });
   check('at most 20 connections', last.status === 400 && /20/.test(last.json.error), last.json);
+
+  // ---- old OpenAI / Gemini key fields move into connections on start-up ----
+  const { migrateLegacyKeys } = await import(pathToFileURL(path.resolve('dist/server/services/profile.js')).href);
+  const { encryptSecret } = await import(pathToFileURL(path.resolve('dist/server/secrets.js')).href);
+  token = tokenB;
+  r = await call('GET', '/api/profile'); const userBId = r.json.user.id;
+  await call('PUT', '/api/profile', { settings: { openAiModel: 'gpt-4.1-mini' } });
+  await prisma.userApiKeys.upsert({ where: { userId: userBId }, create: { userId: userBId, openAiKey: encryptSecret('sk-legacy-openai-key'), geminiKey: encryptSecret('AIzaLegacyGeminiKey') }, update: { openAiKey: encryptSecret('sk-legacy-openai-key'), geminiKey: encryptSecret('AIzaLegacyGeminiKey') } });
+  await migrateLegacyKeys();
+  r = await call('GET', '/api/ai/connections');
+  const moved = r.json.connections;
+  check('migration: both old keys became connections, with the model that was chosen', moved.length === 2 && moved[0].provider === 'openai' && moved[0].model === 'gpt-4.1-mini' && moved[1].provider === 'gemini' && moved[1].hasKey && !moved[0].unreadable, moved);
+  check('migration: the old fields are emptied (a key lives in one place)', (await prisma.userApiKeys.findUnique({ where: { userId: userBId } })).openAiKey === null && (await prisma.userApiKeys.findUnique({ where: { userId: userBId } })).geminiKey === null);
+  check('migration: the key itself is unchanged and still encrypted', (await prisma.aiConnection.findFirst({ where: { userId: userBId, provider: 'openai' } })).apiKey.startsWith('enc:v1:'));
+  await migrateLegacyKeys();
+  check('migration: running it again changes nothing', (await call('GET', '/api/ai/connections')).json.connections.length === 2);
+  r = await call('GET', '/api/ai/hub/models');
+  check('migration: the moved keys show up as models to choose from', r.json.cloud.filter((c) => c.provider.startsWith('conn:')).length === 2, r.json.cloud);
+  r = await call('DELETE', `/api/ai/connections/${moved[0].id}`);
+  check('deleting a moved connection really removes the key', r.status === 200 && (await prisma.aiConnection.count({ where: { userId: userBId, provider: 'openai' } })) === 0 && (await prisma.userApiKeys.findUnique({ where: { userId: userBId } })).openAiKey === null);
+  token = tokenA;
 
   // ---- deleting the account removes its connections ----
   await prisma.user.deleteMany({ where: { email: emailA } });

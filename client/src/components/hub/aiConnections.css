@@ -32,3 +32,6 @@
 .ac-move { display: flex; flex-direction: column; }
 .ac-move button, .ac-icon { background: none; border: 0; padding: 2px 4px; cursor: pointer; display: inline-flex; border-radius: 6px; }
 .ac-move button:disabled { opacity: .3; cursor: default; }
+/* The chat's model picker: models grouped under their connection. */
+.ac-group-wrap { display: contents; }
+.ac-group { display: block; padding: 8px 12px 2px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; opacity: .6; }

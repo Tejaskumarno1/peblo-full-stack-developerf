@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer, groupLabel } from '../../hooks/useHubChat';
 import { MicButton, SpeakButton } from '../VoiceButtons';
+import ConnectionModelOptions from './ConnectionModelOptions';
 
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make a checklist from this'];
 
@@ -181,9 +182,10 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
                   {localModels.map((m) => (
                     <button key={m} type="button" role="option" aria-selected={modelChoice?.model === m} onClick={() => { setModelChoice({ provider: 'ollama', model: m }); setPickerOpen(false); }}>{m} · on this computer</button>
                   ))}
-                  {cloudModels.map((cm) => (
-                    <button key={cm.provider} type="button" role="option" aria-selected={modelChoice?.provider === cm.provider} disabled={routing === 'ollama' && !cm.local} onClick={() => { setModelChoice({ provider: cm.provider, model: cm.model }); setPickerOpen(false); }}>{cm.provider.startsWith('conn:') ? `${cm.label} · ${cm.model}` : `${cm.model} · cloud`}{cm.local ? ' · on this computer' : ''}{routing === 'ollama' && !cm.local ? ' (off)' : ''}</button>
+                  {cloudModels.filter((cm) => !cm.provider.startsWith('conn:')).map((cm) => (
+                    <button key={cm.provider} type="button" role="option" aria-selected={modelChoice?.provider === cm.provider} disabled={routing === 'ollama'} onClick={() => { setModelChoice({ provider: cm.provider, model: cm.model }); setPickerOpen(false); }}>{cm.model} · cloud{routing === 'ollama' ? ' (off)' : ''}</button>
                   ))}
+                  <ConnectionModelOptions cloud={cloudModels} modelChoice={modelChoice} open={pickerOpen} disabledFor={(cm) => routing === 'ollama' && !cm.local} onPick={(choice) => { setModelChoice(choice); setPickerOpen(false); }} />
                   {!localModels.length && !cloudModels.length && <Link to="/ai/connections">{local?.enabled ? 'Ollama is not running. Open Your AI' : 'Set up AI in Your AI'}</Link>}
                 </div>
               )}

@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Monitor, MessageCircleQuestion, Cloud, Check } from 'lucide-react';
+import { Monitor, MessageCircleQuestion, Cloud } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { aiAPI, hubAPI } from '../api';
 import { normalizeRouting } from '../utils/aiRouting';
-import { unreadableKeyMessage } from '../utils/keyStatus';
 import LocalModels from '../components/hub/LocalModels';
-import CloudModels from '../components/hub/CloudModels';
 import AiConnections from '../components/hub/AiConnections';
 
 const CHOICES = [
@@ -14,23 +12,6 @@ const CHOICES = [
   { id: 'ask', title: 'Ask me first', desc: 'Uses your computer when it can. Asks before anything goes to the cloud.', tone: 'butter', icon: MessageCircleQuestion },
   { id: 'auto', title: 'Best available', desc: 'Uses your OpenAI or Gemini key when one is set. Fastest answers.', tone: 'sky', icon: Cloud },
 ];
-
-function KeyInput({ id, label, value, placeholder, onSave }) {
-  const [draft, setDraft] = useState(value || '');
-  const [saved, setSaved] = useState(false);
-  useEffect(() => setDraft(value || ''), [value]);
-  const dirty = draft.trim() !== (value || '');
-  return (
-    <div className="s-key">
-      <label htmlFor={id} className="s-key-label">{label}</label>
-      <div className="s-key-row">
-        <input id={id} type="password" value={draft} placeholder={placeholder} onChange={(e) => { setDraft(e.target.value); setSaved(false); }} autoComplete="off" spellCheck={false} />
-        {dirty && <button type="button" className="s-key-save" onClick={() => { onSave(draft.trim()); setSaved(true); }}>Save</button>}
-        {saved && !dirty && <span className="s-key-ok"><Check size={14} strokeWidth={2.6} /> Saved</span>}
-      </div>
-    </div>
-  );
-}
 
 /** Soft Studio · Your AI (mockup: SoftConnections). Same settings as Connections, friendlier layout. */
 export default function SoftConnections({ embedded = false }) {
@@ -137,13 +118,9 @@ export default function SoftConnections({ embedded = false }) {
         </section>}
 
         <section className="s-conn-card" aria-labelledby="s-keys">
-          <h2 id="s-keys" className="s-conn-h2">Cloud keys</h2>
+          <h2 id="s-keys" className="s-conn-h2">Cloud AI</h2>
           <span className="s-empty small">Saved encrypted in your account. {hosted ? 'Peblo sends your question and the notes it found (never #private ones) to the provider you connect.' : routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
-          {unreadableKeyMessage(settings) && <p role="alert" className="s-empty small" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
-<KeyInput id="s-openai" label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
-          <KeyInput id="s-gemini" label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
-          <CloudModels apply={apply} />
-          <AiConnections theme="soft" apply={apply} />
+          <AiConnections theme="soft" />
         </section>
 
         {showLocal && <LocalModels variant="soft" />}

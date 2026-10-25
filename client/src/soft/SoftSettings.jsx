@@ -101,7 +101,7 @@ export default function SoftSettings({ skin = 'soft' }) {
             <div key={g.label} className="s-set-group">
               <span>{g.label}</span>
               {g.items.map((i) => (
-                <NavLink key={i.id} to={`/settings/${i.id}`} className={({ isActive }) => `s-set-link${isActive ? ' on' : ''}`}><i className="dot" style={{ background: `var(--s-${g.tone})` }} />{i.name}</NavLink>
+                <NavLink key={i.id} to={`/settings/${i.id}`} className={({ isActive }) => `s-set-link${isActive ? ' on' : ''}`}><i className="ico" style={{ background: `var(--s-${g.tone})` }}><i.icon size={16} strokeWidth={2.2} aria-hidden="true" /></i>{i.name}</NavLink>
               ))}
             </div>
           ))}
@@ -111,7 +111,7 @@ export default function SoftSettings({ skin = 'soft' }) {
           <header className="s-set-head">
             <div>
               <h2 className="s-set-h2">{current.name}</h2>
-              <span className="s-set-subtitle">{current.sub}</span>
+              <span className="s-set-subtitle">{current.id === 'ai' && typeof window !== 'undefined' && !window.pebloDesktop ? 'Add your AI keys and pick the models Peblo uses. Notes tagged #private are never sent.' : current.sub}</span>
             </div>
             <span className={`s-set-status ${status}`} role="status" aria-live="polite">
               {status === 'idle' && 'Saved automatically'}

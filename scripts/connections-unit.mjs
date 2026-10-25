@@ -17,6 +17,8 @@ t('32 alnum → mistral', eq(P.candidatesFor('Ab3'.repeat(10) + 'xy'), ['mistral
 t('unknown → ask', eq(P.candidatesFor('hello world'), []) && eq(P.candidatesFor('  '), []));
 t('suggestModel prefers the usual one', P.suggestModel('groq', ['a-embed', 'llama-3.3-70b-versatile', 'z']) === 'llama-3.3-70b-versatile');
 t('suggestModel skips non-chat models', P.suggestModel('custom', ['text-embedding-3', 'whisper-1', 'chat-a']) === 'chat-a');
+t('Gemini is a normal connection, through Google\'s OpenAI-compatible address', P.providerById('gemini').baseUrl === 'https://generativelanguage.googleapis.com/v1beta/openai' && P.providerById('gemini').slot === undefined);
+t('OpenAI and Gemini know their embeddings models', P.providerById('openai').embedModel === 'text-embedding-3-small' && !!P.providerById('gemini').embedModel);
 // desktop (not hosted): any address is fine
 let r = await P.checkBaseUrl('http://127.0.0.1:1234/v1/');
 t('desktop: localhost allowed, trailing slash cleaned', r.problem === null && r.url === 'http://127.0.0.1:1234/v1', r);

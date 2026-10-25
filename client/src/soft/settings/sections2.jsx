@@ -33,7 +33,7 @@ export function AISection() {
           <Switch label="Turn off all AI" checked={off} onChange={(v) => save({ aiOff: v })} />
         </Row>
       </Card>
-      <Card title="Where each feature runs" hint={localOnly ? 'Your main choice below is "Only on this computer", so cloud is switched off for everything.' : 'Pin a feature to your computer for privacy, or to the cloud for speed. Automatic follows your main choice below.'}>
+      {typeof window !== 'undefined' && window.pebloDesktop && <Card title="Where each feature runs" hint={localOnly ? 'Your main choice below is "Only on this computer", so cloud is switched off for everything.' : 'Pin a feature to your computer for privacy, or to the cloud for speed. Automatic follows your main choice below.'}>
         <ul className="s-set-feats">
           {FEATURES.map((f) => (
             <li key={f.id}>
@@ -48,7 +48,7 @@ export function AISection() {
             </li>
           ))}
         </ul>
-      </Card>
+      </Card>}
       <SoftConnections embedded />
     </>
   );

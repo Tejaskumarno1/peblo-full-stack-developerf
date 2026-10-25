@@ -13,15 +13,16 @@ export interface ProviderInfo {
   /** Fixed address of the provider. Empty for "custom", where the person supplies it. */
   baseUrl: string;
   defaultModel: string;
-  /** Where the key is stored: its own field in the account (openai, gemini) or a connection row (everything else). */
-  slot?: 'openAiKey' | 'geminiKey';
+  /** The provider's embeddings model (used for searching notes), when it has one. */
+  embedModel?: string;
   /** Shown under the key box so a person knows where to get one. */
   keyHint: string;
 }
 
 export const PROVIDERS: ProviderInfo[] = [
-  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', slot: 'openAiKey', keyHint: 'platform.openai.com/api-keys' },
-  { id: 'gemini', label: 'Google Gemini', baseUrl: '', defaultModel: 'gemini-2.5-flash', slot: 'geminiKey', keyHint: 'aistudio.google.com/apikey' },
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini', embedModel: 'text-embedding-3-small', keyHint: 'platform.openai.com/api-keys' },
+  // Google's OpenAI-compatible address: a Gemini key then works like every other connection.
+  { id: 'gemini', label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', defaultModel: 'gemini-2.5-flash', embedModel: 'gemini-embedding-001', keyHint: 'aistudio.google.com/apikey' },
   { id: 'anthropic', label: 'Anthropic (Claude)', baseUrl: 'https://api.anthropic.com/v1', defaultModel: 'claude-sonnet-4-5', keyHint: 'console.anthropic.com/settings/keys' },
   { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', defaultModel: 'openai/gpt-4o-mini', keyHint: 'openrouter.ai/keys' },
   { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', defaultModel: 'llama-3.3-70b-versatile', keyHint: 'console.groq.com/keys' },
@@ -105,17 +106,6 @@ export async function verifyConnection(providerId: string, key: string, baseUrl?
   if (!info) return fail('other', 'Unknown provider.');
   const apiKey = (key || '').trim();
 
-  if (providerId === 'gemini') {
-    if (!apiKey) return fail('key', 'Paste a key first.');
-    try {
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=100', { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(8000) });
-      if (res.status === 400 || res.status === 401 || res.status === 403) return fail('key', 'Google did not accept that key.');
-      if (!res.ok) return fail('other', `Google answered with HTTP ${res.status}.`);
-      const models = modelIds(await res.json()).filter((m) => /^gemini-/.test(m) && !NOT_CHAT.test(m));
-      return { ok: true, provider: 'gemini', label: info.label, baseUrl: '', models };
-    } catch { return fail('unreachable', 'Could not reach Google.'); }
-  }
-
   let base = info.baseUrl;
   if (providerId === 'custom') {
     const c = await checkBaseUrl(baseUrl || '');
@@ -128,10 +118,11 @@ export async function verifyConnection(providerId: string, key: string, baseUrl?
   try {
     // Redirects are not followed: an address that answers with one could be pointing somewhere the server must not go.
     const res = await fetch(`${base}/models`, { headers, redirect: 'manual', signal: AbortSignal.timeout(8000) });
-    if (res.status === 401 || res.status === 403) return fail('key', `${info.label} did not accept that key.`, base);
+    if (res.status === 400 || res.status === 401 || res.status === 403) return fail('key', `${info.label} did not accept that key.`, base);
     if (res.status >= 300 && res.status < 400) return fail('address', 'That address redirects somewhere else. Use the final address.', base);
     if (!res.ok) return fail('other', `${info.label} answered with HTTP ${res.status}.`, base);
-    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: modelIds(await res.json()) };
+    // Only models that can chat: embedding, speech and image models are not something to answer questions with.
+    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: modelIds(await res.json()).filter((m) => !NOT_CHAT.test(m)) };
   } catch {
     return fail('unreachable', providerId === 'custom' ? `Could not reach ${base}.` : `Could not reach ${info.label}.`, base);
   }
