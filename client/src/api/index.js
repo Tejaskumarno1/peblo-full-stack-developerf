@@ -29,6 +29,8 @@ export const notesAPI = {
   mentions: (id) => api.get(`/notes/${id}/mentions`),
   linkMention: (id, otherId) => api.post(`/notes/${id}/mentions/${otherId}/link`)
 };
+  nameVersion: (id, label) => api.post(`/notes/${id}/versions`, { label }),
+  renameBackup: (id, backupId, label) => api.patch(`/notes/${id}/backups/${backupId}`, { label }),
 
 export const aiAPI = {
   localStatus: () => api.get('/ai/local/status'),

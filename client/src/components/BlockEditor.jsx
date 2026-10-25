@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -14,6 +14,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { aiAPI, notesAPI, todosAPI } from '../api/index';
 import { fileToAttachment } from '../utils/imageData';
 import { createCollab } from '../utils/collab';
+import PresenceBar from './Presence';
+import CommentsDock from './CommentsDock';
+import Reactions from './Reactions';
+import { commentTarget } from '../utils/comments';
 import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
@@ -173,7 +177,23 @@ function ImageTools() {
     </>
   );
 }
-const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />]}</FormattingToolbar>;
+// Comment on the selected words, or suggest new words for them (the comments drawer opens with the words attached).
+const CommentsOn = createContext(false);
+function CommentTools() {
+  const on = useContext(CommentsOn);
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext();
+  if (!on || !Components) return null;
+  const Btn = Components.FormattingToolbar.Button;
+  const go = (mode) => window.dispatchEvent(new CustomEvent('pb-comment-start', { detail: { quote: (editor.getSelectedText() || '').trim(), mode } }));
+  return (
+    <>
+      <Btn key="cm" mainTooltip="Comment on this text" icon={<span aria-hidden="true">💬</span>} onClick={() => go('comment')} />
+      <Btn key="sg" mainTooltip="Suggest new words for this text" icon={<span aria-hidden="true" style={{ fontWeight: 800, fontSize: 12 }}>±</span>} onClick={() => go('suggest')} />
+    </>
+  );
+}
+const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />, <CommentTools key="comments" />]}</FormattingToolbar>;
 
 // Ready-made starting points, offered in the slash menu.
 const TEMPLATES = {
@@ -614,10 +634,18 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   };
 
   const title = { todo: 'Action items', improve: 'Improve writing', summarize: 'Summary', continue: 'Continue writing' }[card?.kind];
+  const target = useMemo(() => (editable !== false ? commentTarget({ noteId, collab }) : null), [noteId, collab?.share, collab?.sid, editable]); // eslint-disable-line react-hooks/exhaustive-deps
   const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
     <div ref={rootRef} data-live={rt && live.ready && live.connected ? '1' : undefined} className={`block-editor-container${focusMode ? ' pb-focus' : ''}${fullPage ? ' pb-editor-full-page' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: fullPage ? 'none' : 1, height: fullPage ? 'auto' : '100%', overflowY: fullPage ? 'visible' : 'auto', cursor: editable ? 'text' : 'default' }}>
+      {(rt || target) && (
+        <CommentsDock rt={rt} editor={editor} rootRef={rootRef} target={target} ready={live.ready && live.connected} dark={dark}>
+          {rt && <PresenceBar rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} />}
+        </CommentsDock>
+      )}
+      {rt && <Reactions rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} canReact={editable} dark={dark} />}
+      <CommentsOn.Provider value={!!target}>
       <BlockNoteView
         editor={editor}
         editable={editable && (!rt || live.ready)}
@@ -630,6 +658,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
       </BlockNoteView>
+      </CommentsOn.Provider>
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}

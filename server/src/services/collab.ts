@@ -299,6 +299,29 @@ function roomFor(id: string): Room {
   return r;
 }
 
+/** Notes that have a room open right now. */
+export function liveRoomIds(): string[] { return [...rooms.keys()]; }
+
+/** Who from outside (people on a share link) is in each of these notes right now. The owner's own tabs do not count. */
+export function presenceOf(noteIds: string[]): Record<string, { name: string; color: string }[]> {
+  const out: Record<string, { name: string; color: string }[]> = {};
+  for (const id of noteIds) {
+    const r = rooms.get(id);
+    if (!r) continue;
+    const states = r.awareness.getStates();
+    const list: { name: string; color: string }[] = [];
+    for (const c of r.conns.values()) {
+      if (c.userId || c.ws.readyState !== WebSocket.OPEN) continue;
+      for (const cid of c.awarenessIds) {
+        const u = (states.get(cid) as { user?: { name?: string; color?: string } } | undefined)?.user;
+        if (u) list.push({ name: String(u.name || 'Someone').slice(0, 40), color: String(u.color || '#888888').slice(0, 20) });
+      }
+    }
+    if (list.length) out[id] = list;
+  }
+  return out;
+}
+
 function send(ws: WebSocket, buf: Uint8Array) {
   if (ws.readyState !== WebSocket.OPEN) return;
   ws.send(buf, (err) => { if (err) { try { ws.close(); } catch { /* gone */ } } });

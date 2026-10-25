@@ -41,6 +41,8 @@ export type SaveInput = {
   keepBoth?: boolean;
   /** The save comes from an editor in a live room (it already holds everyone's merged text). */
   collab?: boolean;
+  /** Who is saving (shown in the version history). */
+  by?: string;
 };
 export type SaveResult =
   | { status: 'saved' | 'merged' | 'clash'; content: string; updatedAt: Date }
@@ -50,7 +52,7 @@ export type SaveResult =
 /** `where` must pin the note (id, and userId for the owner; a share token for guests). */
 export async function saveNoteMerged(where: Record<string, unknown>, input: SaveInput): Promise<SaveResult> {
   const baseTime = input.baseUpdatedAt ? new Date(input.baseUpdatedAt).getTime() : null;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < (input.force || input.collab ? 8 : 4); attempt++) {
     const cur = await prisma.note.findFirst({ where: where as any, select: { id: true, title: true, content: true, updatedAt: true } });
     if (!cur) return { status: 'missing' };
 
@@ -76,12 +78,22 @@ export async function saveNoteMerged(where: Record<string, unknown>, input: Save
       // A save that did not come from a live editor changes the text under any open live room: reset it.
       if (!input.collab && next !== cur.content) invalidateNote(cur.id, next);
       // keep the text we replaced (always when a merge happened, otherwise at most every 10 minutes)
-      if (cur.content !== next) await saveVersion(cur.id, cur.content, { force: status !== 'saved' }).catch(() => {});
+      if (cur.content !== next) await saveVersion(cur.id, cur.content, { force: status !== 'saved', by: input.by }).catch(() => {});
       const fresh = await prisma.note.findUnique({ where: { id: cur.id }, select: { updatedAt: true } });
       return { status, content: next, updatedAt: fresh?.updatedAt ?? new Date() };
     }
     // lost a race with another save: read again and merge on top of it
   }
-  const last = await prisma.note.findFirst({ where: where as any, select: { title: true, content: true, updatedAt: true } });
-  return last ? { status: 'conflict', latest: last } : { status: 'missing' };
+  const last = await prisma.note.findFirst({ where: where as any, select: { id: true, title: true, content: true, updatedAt: true } });
+  if (!last) return { status: 'missing' };
+  if (input.force || input.collab) {
+    // Several live editors save the same merged text at once and keep beating each other to the conditional write.
+    // Their text is the merged truth, so write it without the condition instead of reporting a conflict nobody can resolve.
+    const titleChanged = typeof input.title === 'string' && input.title.slice(0, 300) !== last.title;
+    await prisma.note.updateMany({ where: { id: last.id }, data: { content: input.content, ...(titleChanged ? { title: (input.title as string).slice(0, 300) || 'Untitled' } : {}) } });
+    if (!input.collab && input.content !== last.content) invalidateNote(last.id, input.content);
+    const fresh = await prisma.note.findUnique({ where: { id: last.id }, select: { updatedAt: true } });
+    return { status: 'saved', content: input.content, updatedAt: fresh?.updatedAt ?? new Date() };
+  }
+  return { status: 'conflict', latest: last };
 }

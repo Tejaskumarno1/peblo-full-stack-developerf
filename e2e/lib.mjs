@@ -31,6 +31,7 @@ export async function boot() {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: !process.env.HEADED, args: process.env.HEADED ? ['--window-position=-1366,0', '--window-size=1366,768'] : [] });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((t) => { try { if (!localStorage.getItem('peblo-token')) localStorage.setItem('peblo-token', t); } catch {} }, token);
+  if (process.env.STYLE) await ctx.addInitScript((st) => { try { localStorage.setItem('peblo-style', st); } catch {} }, process.env.STYLE);
   if (process.env.COLLAB_OFF) await ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch {} });
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());

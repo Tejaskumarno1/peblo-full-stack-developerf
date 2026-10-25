@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Check, Loader2, X } from 'lucide-react';
@@ -473,7 +474,7 @@ function NoteRow({ n, words = [], acts, basis = 'updatedAt', selecting = false, 
       {selecting && <input type="checkbox" className="r-pick" aria-label={'Select ' + (n.title || 'Untitled')} checked={picked} readOnly />}
       <span className="tm">{whenLabel(n[basis])}<small>{basis === 'createdAt' ? 'written' : 'edited'}</small></span>
       <span style={{ minWidth: 0 }}>
-        <span className="t"><Marked text={n.title || 'Untitled'} words={words} /></span>
+        <span className="t"><LiveDot id={n.id} /><Marked text={n.title || 'Untitled'} words={words} /></span>
         <span className="s" style={{ display: 'block' }}>
           <Marked text={(words.length ? matchSnippet(n.content, words) : snippetOf(n.content, 140)) || 'Empty note'} words={words} />
         </span>
@@ -749,7 +750,7 @@ function RiverNoteList({ onNew }) {
                     {latest.map((n) => (
                       <Link key={n.id} to={`/notes/${n.id}`} className="r-recent-card">
                         <span className="w">{whenLabel(n.updatedAt)}</span>
-                        <span className="t">{n.title || 'Untitled'}</span>
+                        <span className="t"><LiveDot id={n.id} />{n.title || 'Untitled'}</span>
                         <span className="s">{snippetOf(n.content, 90) || 'Empty note'}</span>
                       </Link>
                     ))}

@@ -35,11 +35,10 @@ try {
   await shot('notes3-callouts');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
   const cb = page.locator('.bn-block-content[data-content-type="codeBlock"]').first();
-  await cb.scrollIntoViewIfNeeded();
+  await cb.evaluate((el) => el.scrollIntoView({ block: 'center' })); // away from the comments button pinned at the top right
   const box = await cb.boundingBox();
   await page.mouse.click(box.x + box.width - 30, box.y + 14);
-  await page.waitForTimeout(300);
-  check('clicking Copy on a code block copies it and says so', /Code copied/.test(await page.locator('.pb-notice').first().textContent().catch(() => '')));
+  check('clicking Copy on a code block copies it and says so', await page.locator('.pb-notice', { hasText: 'Code copied' }).waitFor({ timeout: 1500 }).then(() => true, () => false));
 
   // slash menu extras
   await page.locator('.bn-inline-content', { hasText: 'The end.' }).click();

@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
+import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Network, Star, Check } from 'lucide-react';
@@ -213,7 +214,7 @@ export default function OrbitNoteList({ onNew }) {
         </button>
       )}
       <Link to={`/notes/${n.id}`} className="o-note-tile" onClick={(e) => { if (picking) { e.preventDefault(); togglePick(n.id); } else opened(n.id); }}>
-        <span className="t">{n.meta?.emoji ? `${n.meta.emoji} ` : ''}<Hit text={n.title || 'Untitled'} q={q} /></span>
+        <span className="t"><LiveDot id={n.id} />{n.meta?.emoji ? `${n.meta.emoji} ` : ''}<Hit text={n.title || 'Untitled'} q={q} /></span>
         <span className="s">{snippetFor(n.content, q) ? <Hit text={snippetFor(n.content, q)} q={q} /> : 'Empty note'}</span>
         <span className="m">{archived === 'trash' && n.deletedAt ? `DELETED ${agoText(n.deletedAt).toUpperCase()}` : sort === 'created' ? `CREATED ${agoText(n.createdAt).toUpperCase()}` : `EDITED ${agoText(n.updatedAt).toUpperCase()}`}</span>
       </Link>

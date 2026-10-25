@@ -208,6 +208,10 @@ export function AuthProvider({ children }) {
     setUser((prev) => { previous = prev; return { ...prev, ...updatedUser }; });
     try {
       await profileAPI.updateProfile(updatedUser);
+    socket.on('notifications_changed', () => {
+      window.dispatchEvent(new Event('pb-notifications-changed'));
+    });
+
       if ('avatar' in updatedUser) rememberAccount({ ...(previous || {}), ...updatedUser });
       return true;
     } catch (err) {

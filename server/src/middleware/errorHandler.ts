@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   // Prisma unique constraint violation
   if (err.code === 'P2002') {
+    console.error(`Unique clash on ${req.method} ${req.originalUrl}:`, JSON.stringify(err.meta?.target ?? err.meta ?? null));
     return res.status(409).json({ error: 'A record with this value already exists' });
   }
 

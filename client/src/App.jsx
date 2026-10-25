@@ -48,6 +48,7 @@ const GoHome = () => <Navigate to="/" replace />;
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const LiveEditors = lazy(() => import('./components/LiveEditors'));
 
+const NotificationPill = lazy(() => import('./components/NotificationPill'));
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
 /** Picks the screen for the current style (Soft, River or Orbit each have their own). */
@@ -88,6 +89,7 @@ function ShellLayout() {
         <HelpDialog />
         <LiveEditors />
       </Suspense>
+        <NotificationPill />
     </AppShell>
   );
 }

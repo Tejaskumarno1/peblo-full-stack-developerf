@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star } from 'lucide-react';
@@ -515,7 +516,7 @@ export default function SoftNotes() {
               <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on ? ' on' : ''}`} style={on ? { background: tone } : undefined} onClick={(e) => { if (selectMode) { e.preventDefault(); setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id])); } else forceSave(); }}>
                 {selectMode ? <input type="checkbox" className="s-pick" aria-label={`Select ${n.title || 'Untitled'}`} checked={picked.includes(n.id)} readOnly /> : <span className="dot" style={{ background: tone }} aria-hidden="true" />}
                 <span className="txt">
-                  <span className="t">{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
+                  <span className="t"><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
                   <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>
                   <span className="m">{n.meta?.folder ? `${n.meta.folder} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{(() => { const w = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; return w >= 30 ? ` · ${w} words` : ''; })()}</span>
                 </span>

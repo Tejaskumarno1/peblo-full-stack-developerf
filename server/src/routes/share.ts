@@ -315,7 +315,7 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
     // Both people's edits are merged; the write is conditional so two saves at the same moment cannot overwrite each other.
     const r = await saveNoteMerged(
       { id: note.id, shareToken: req.params.token, isDeleted: false },
-      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true },
+      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true, by: String(req.body?.name || '').trim().slice(0, 40) || undefined },
     );
     if (r.status === 'missing') return res.status(404).json({ error: 'This link is not shared any more.' });
     if (r.status === 'conflict') return res.status(409).json({ error: 'Someone else changed the same words while you were editing.', latest: r.latest });

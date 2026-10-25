@@ -20,6 +20,7 @@ import aiChatRoutes from './routes/aiChat.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
 import transferRoutes from './routes/transfer.js';
+import collabRoutes, { collabPublic } from './routes/collab.js';
 import hubRoutes from './routes/hub.js';
 import aiConnectionsRoutes from './routes/aiConnections.js';
 import studyRoutes from './routes/study.js';
@@ -115,6 +116,8 @@ app.use('/api/tokens', tokensRoutes);
   app.use('/api/river', riverRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/share', shareRoutes);
+app.use('/api/collab', collabRoutes);
+app.use('/api/public/collab', collabPublic);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 

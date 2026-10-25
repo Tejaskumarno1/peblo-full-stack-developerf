@@ -378,6 +378,16 @@ export async function createNote(req: any, res: any, next: any) {
   }
 }
 
+const ownerNames = new Map<string, { name: string; at: number }>();
+/** The signed-in person's display name, for "saved by" in the version history (remembered for a minute). */
+async function nameOf(userId: string): Promise<string | undefined> {
+  const hit = ownerNames.get(userId);
+  if (hit && Date.now() - hit.at < 60000) return hit.name || undefined;
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+  ownerNames.set(userId, { name: u?.name?.trim() || '', at: Date.now() });
+  return u?.name?.trim() || undefined;
+}
+
 export async function updateNote(req: any, res: any, next: any) {
   try {
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
@@ -390,7 +400,7 @@ export async function updateNote(req: any, res: any, next: any) {
     if (typeof content === 'string' && baseUpdatedAt) {
       const r = await saveNoteMerged(
         { id: req.params.id, userId: req.user.id },
-        { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true },
+        { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true, by: await nameOf(req.user.id) },
       );
       if (r.status === 'missing') return res.status(404).json({ error: 'Note not found' });
       if (r.status === 'conflict') return res.status(409).json({ error: 'This note changed somewhere else while you were editing.', latest: r.latest });
@@ -530,11 +540,11 @@ export async function getBackups(req: any, res: any, next: any) {
   try {
     // Metadata only (the text of one version is fetched on demand). If the note is not the user's, the JOIN returns 0 rows.
     const rows: any[] = await prisma.$queryRaw`
-      SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview
+      SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview, b.label AS label, b.saved_by AS "savedBy"
       FROM note_backups b JOIN notes n ON n.id = b.note_id
       WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
       ORDER BY b.created_at DESC LIMIT 100`;
-    res.json({ backups: rows.map((r) => ({ id: r.id, createdAt: r.createdAt, size: Number(r.size), preview: r.preview })) });
+    res.json({ backups: rows.map((r) => ({ id: r.id, createdAt: r.createdAt, size: Number(r.size), preview: r.preview, label: r.label || null, savedBy: r.savedBy || null })) });
   } catch (error) {
     next(error);
   }
@@ -630,6 +640,41 @@ export async function openDailyNote(req: any, res: any, next: any) {
     if (existing) return res.json({ note: formatNote(existing), created: false });
     const made = await prisma.note.create({ data: { userId: req.user.id, title, content: DAILY_BODY }, include: noteInclude });
     res.status(201).json({ note: formatNote(made), created: true });
+  } catch (error) {
+    next(error);
+  }
+}
+
+
+/** POST /api/notes/:id/versions { label } - keep the note as it is now under a name that never gets trimmed. */
+export async function nameVersion(req: any, res: any, next: any) {
+  try {
+    const label = String(req.body?.label || '').trim().slice(0, 80);
+    if (!label) return res.status(400).json({ error: 'Give this version a name.' });
+    const note = await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id, isDeleted: false }, select: { content: true } });
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    const by = await nameOf(req.user.id);
+    const latest = await prisma.noteBackup.findFirst({ where: { noteId: req.params.id }, orderBy: { createdAt: 'desc' }, select: { id: true, content: true } });
+    let id = latest?.id;
+    if (!latest || latest.content !== (note.content || '')) {
+      const made = await prisma.noteBackup.create({ data: { noteId: req.params.id, content: note.content || '' }, select: { id: true } });
+      id = made.id;
+    }
+    await prisma.$executeRawUnsafe('UPDATE note_backups SET label = $1, saved_by = COALESCE(saved_by, $2) WHERE id = $3', label, by ?? null, id);
+    res.json({ ok: true, id });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** PATCH /api/notes/:id/backups/:backupId { label } - rename a version, or clear its name with an empty label. */
+export async function renameBackup(req: any, res: any, next: any) {
+  try {
+    const label = String(req.body?.label ?? '').trim().slice(0, 80);
+    const own = await prisma.noteBackup.findFirst({ where: { id: req.params.backupId, noteId: req.params.id, note: { userId: req.user.id } }, select: { id: true } });
+    if (!own) return res.status(404).json({ error: 'Backup not found' });
+    await prisma.$executeRawUnsafe('UPDATE note_backups SET label = $1 WHERE id = $2', label || null, own.id);
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }

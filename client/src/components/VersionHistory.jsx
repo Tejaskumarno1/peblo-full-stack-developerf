@@ -20,12 +20,14 @@ export default function VersionHistory({ noteId, currentContent, onClose, onRest
   const [body, setBody] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [label, setLabel] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
     notesAPI.getBackups(noteId).then((r) => { if (alive) setVersions(r.data.backups || []); }).catch(() => { if (alive) { setVersions([]); setError('Could not load the versions.'); } });
     return () => { alive = false; };
-  }, [noteId]);
+  }, [noteId, reload]);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -46,6 +48,14 @@ export default function VersionHistory({ noteId, currentContent, onClose, onRest
     try { const r = await notesAPI.revertBackup(noteId, sel); onRestored(r.data.note); onClose(); }
     catch (e) { setError(e.response?.data?.error || 'Could not restore it.'); setBusy(false); }
   };
+  const nameNow = async () => {
+    const name = label.trim();
+    if (!name || busy) return;
+    setBusy(true); setError('');
+    try { await notesAPI.nameVersion(noteId, name); setLabel(''); setReload((n) => n + 1); }
+    catch (e) { setError(e.response?.data?.error || 'Could not name this version.'); }
+    setBusy(false);
+  };
   const when = (d) => new Date(d).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
   const panel = { background: V('surface', '#fff'), color: V('fg', '#111'), border: `1px solid ${V('line', '#ddd')}`, borderRadius: 12, width: 'min(920px, 94vw)', height: 'min(620px, 88vh)', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.3)' };
@@ -65,7 +75,8 @@ export default function VersionHistory({ noteId, currentContent, onClose, onRest
             {versions?.map((v) => (
               <li key={v.id}>
                 <button type="button" onClick={() => setSel(v.id)} aria-pressed={sel === v.id} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', font: 'inherit', background: sel === v.id ? V('soft', '#eee') : 'transparent', color: 'inherit' }}>
-                  <strong style={{ display: 'block' }}>{when(v.createdAt)}</strong>
+                  {v.label && <strong data-testid="vh-label" style={{ display: 'block', color: V('accent', '#2563eb') }}>★ {v.label}</strong>}
+                  <strong style={{ display: 'block', fontWeight: v.label ? 500 : 700, fontSize: v.label ? 13 : undefined }}>{when(v.createdAt)}{v.savedBy ? ` · ${v.savedBy}` : ''}</strong>
                   <span style={{ fontSize: 12.5, opacity: 0.75, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.preview || '(empty)'}</span>
                 </button>
               </li>
@@ -98,7 +109,11 @@ export default function VersionHistory({ noteId, currentContent, onClose, onRest
           </section>
         </div>
         <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, padding: '12px 18px', borderTop: `1px solid ${V('line', '#ddd')}` }}>
-          {error && <span role="alert" style={{ color: '#c0392b', marginRight: 'auto' }}>{error}</span>}
+          <form onSubmit={(e) => { e.preventDefault(); void nameNow(); }} style={{ display: 'flex', gap: 6, marginRight: 'auto' }}>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Name the note as it is now" aria-label="Name this version" data-testid="vh-name" style={{ height: 36, padding: '0 10px', borderRadius: 8, border: `1px solid ${V('line', '#ccc')}`, background: 'transparent', color: 'inherit', font: 'inherit', width: 220 }} />
+            <button type="submit" disabled={!label.trim() || busy} style={btn} data-testid="vh-save-name">Save version</button>
+          </form>
+          {error && <span role="alert" style={{ color: '#c0392b' }}>{error}</span>}
           <span style={{ opacity: 0.7, fontSize: 13 }}>Restoring keeps today's text as a version, so you can undo it.</span>
           <button type="button" style={{ ...btn, background: V('ink', V('path', '#222')), color: '#fff', borderColor: 'transparent', opacity: sel && body ? 1 : 0.5 }} disabled={!sel || !body || busy} onClick={restore}><RotateCcw size={14} /> Restore this version</button>
         </footer>
