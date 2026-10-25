@@ -120,3 +120,7 @@ html.theme-dark .cp-bar-eye { background: #3a261e; }
 .pb-shared[data-theme="dark"] .cp-banner.ok, .pb-shared[data-theme="dark"] .cp-live, .pb-shared[data-theme="dark"] .cp-chip.ok { background: #18302a; color: #6fd39a; }
 .pb-shared[data-theme="dark"] .cp-tip { background: #3a261e; color: #ffd9c4; }
 .pb-shared[data-theme="dark"] .cp-badge.you { background: #1b2b3b; color: #9cc7f5; }
+
+.cp-follow { margin-left: auto; height: 26px; padding: 0 11px; border: 1.5px solid var(--cp-line); border-radius: 999px; background: transparent; color: var(--cp-fg); font: 700 12px/1 inherit; cursor: pointer; }
+.cp-follow.on { background: var(--cp-accent); border-color: var(--cp-accent); color: #fff; }
+.cp-row .cp-badge + .cp-follow, .cp-row .cp-who + .cp-follow { margin-left: auto; }

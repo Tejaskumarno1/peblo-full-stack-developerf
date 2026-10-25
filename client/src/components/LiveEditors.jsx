@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import api from '../api/client';
-import { caretSelection, showPeers } from '../utils/peerCursors';
+import { caretSelection, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
 import { setLive, useLive } from '../utils/liveStore';
 import { CollabBar, CollabPanel, useCollabEvents } from './CollabPanel';
 
@@ -26,6 +26,27 @@ export default function LiveEditors() {
   const sharedRef = useRef(false);
   const fails = useRef(0);
   const collab = useCollabEvents(live.viewers, live.shared);
+
+  // Follow: keep the view on another person until you scroll, press Escape, or they leave
+  const [followId, setFollowId] = useState(null);
+  const followBlock = useRef(null);
+  useEffect(() => {
+    if (!followId) { followBlock.current = null; return undefined; }
+    const who = live.viewers.find((v) => v.id === followId && !v.self);
+    if (!who) { setFollowId(null); return undefined; }
+    if (who.cursor != null && who.cursor !== followBlock.current) { followBlock.current = who.cursor; scrollToPeerBlock(who.cursor); }
+    return undefined;
+  }, [followId, live.viewers]);
+  useEffect(() => {
+    if (!followId) return undefined;
+    const stop = () => setFollowId(null);
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } }; // stop following without also closing the panel
+    const scroller = document;
+    scroller.addEventListener('wheel', stop, { passive: true });
+    scroller.addEventListener('touchmove', stop, { passive: true });
+    document.addEventListener('keydown', onKey, true);
+    return () => { scroller.removeEventListener('wheel', stop); scroller.removeEventListener('touchmove', stop); document.removeEventListener('keydown', onKey, true); };
+  }, [followId]);
 
   // typing anywhere in the note editor or its title marks you as typing; the caret tells others where you are
   useEffect(() => {
@@ -127,6 +148,7 @@ export default function LiveEditors() {
           events={collab.events} offline={live.offline} synced={synced}
           muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear}
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}
+          followId={followId} onFollow={setFollowId}
           onClose={() => setLive({ open: false })}
         />
       </div>}

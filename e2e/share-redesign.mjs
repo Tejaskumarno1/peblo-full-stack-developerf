@@ -61,6 +61,15 @@ try {
   await g.waitForFunction(() => document.querySelector('[data-testid="toc-pips"] i'), null, { timeout: 15000 });
   const pip = await g.evaluate(() => ({ title: document.querySelector('[data-testid="toc-pips"] i').title, link: document.querySelector('[data-testid="toc-pips"]').closest('a').textContent }));
   check('the outline marks the section the owner is in', /is here/.test(pip.title) && /Goal/.test(pip.link), JSON.stringify(pip));
+
+  // Follow: click it to follow the owner, Escape to stop
+  const follow = g.locator('.cp-follow').first();
+  await follow.waitFor({ timeout: 10000 });
+  await follow.click();
+  check('Follow turns into Following', /Following/.test(await follow.innerText()));
+  await g.keyboard.press('Escape');
+  await g.waitForFunction(() => /^Follow$/.test(document.querySelector('.cp-follow')?.textContent || ''), null, { timeout: 5000 });
+  check('Escape stops following', true);
   await gctx.close();
 
   // phone: bottom bar, page card, no horizontal scroll
@@ -72,6 +81,8 @@ try {
   const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check('phone: no sideways scroll', overflow <= 1, String(overflow));
   check('phone: the bottom bar shows who is here', await m.getByTestId('live-editors').isVisible());
+  const gutter = await m.evaluate(() => { const a = document.querySelector('.pb-shared article').getBoundingClientRect(); const p = document.querySelector('.bn-editor p, .bn-editor [data-content-type]').getBoundingClientRect(); return { left: Math.round(p.left - a.left), width: Math.round(p.width), card: Math.round(a.width) }; });
+  check('phone: the text has at least 85% of the screen width', gutter.width >= 390 * 0.85 - 16, JSON.stringify(gutter));
   await m.screenshot({ path: `${SHOTS}/range-phone.png` });
   await mctx.close();
 

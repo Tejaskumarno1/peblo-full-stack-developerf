@@ -103,7 +103,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 
 export function CollabPanel({
   viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose,
+  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -159,6 +159,7 @@ export function CollabPanel({
               </span>
               {v.self && <span className="cp-badge you">You</span>}
               {v.owner && !v.self && <span className="cp-badge">Owner</span>}
+              {onFollow && !v.self && v.cursor != null && <button type="button" className={`cp-follow`} aria-pressed={followId === v.id} onClick={() => onFollow(followId === v.id ? null : v.id)}>{followId === v.id ? 'Following' : 'Follow'}</button>}
               {mode === 'owner' && !v.self && !v.owner && onRemove && (
                 <span className="cp-menuwrap">
                   <button type="button" className="cp-more" aria-label={`Options for ${v.name}`} aria-haspopup="menu" aria-expanded={menu === v.id} onClick={() => setMenu(menu === v.id ? null : v.id)}><MoreHorizontal size={16} /></button>

@@ -295,3 +295,18 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 /* no card inside the card for a task; less wasted editor gutter on a phone */
 .pb-shared article .taskcard { margin-bottom: 20px; padding: 6px 0 0; border-radius: 0; box-shadow: none; background: transparent; }
 @media (max-width: 640px) { .pb-shared .pb-editor-full-page .bn-editor { padding-inline: 2px; } }
+
+/* Phone: the words get the width. Small gutters, no editor side padding, fewer header buttons, room above the bottom bar. */
+@media (max-width: 640px) {
+  .pb-shared .stage { padding: 6px 8px 8px; }
+  .pb-shared article { padding: 16px 14px 96px; border-radius: 20px; }
+  .pb-shared .pb-editor-full-page .bn-editor { padding-inline: 0 !important; margin-inline: 0 !important; }
+  .pb-shared .pb-editor-full-page .bn-block-group, .pb-shared .pb-editor-full-page .bn-block-outer { margin-inline: 0; }
+  .pb-shared .pill, .pb-shared .copy-btn { display: none; }
+  .pb-shared .by { margin-bottom: 14px; padding-bottom: 14px; gap: 6px 10px; }
+  .pb-shared .guest-name { margin-bottom: 8px; }
+  .pb-shared .guest-name small { display: none; }
+  .pb-shared .doc { font-size: 17px; line-height: 1.7; }
+  .pb-shared .cta { margin-top: 24px; }
+}
+@media (max-width: 640px) { .pb-shared .block-editor-container.pb-editor-full-page { padding-inline: 0 !important; } }

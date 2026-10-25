@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
-import { caretSelection, headingIndexes, peerColor, showPeers } from '../utils/peerCursors';
+import { caretSelection, headingIndexes, peerColor, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import './shared-page.css';
 
@@ -378,6 +378,27 @@ export default function SharedPage() {
     return () => { window.clearInterval(t); showPeers([]); };
   }, [viewers, previewMode, rev, headings]);
 
+
+  // Follow: keep the view on another person until you scroll, press Escape, or they leave
+  const [followId, setFollowId] = useState(null);
+  const followBlock = useRef(null);
+  useEffect(() => {
+    if (!followId) { followBlock.current = null; return undefined; }
+    const who = viewers.find((v) => v.id === followId && !v.self);
+    if (!who) { setFollowId(null); return undefined; }
+    if (who.cursor != null && who.cursor !== followBlock.current) { followBlock.current = who.cursor; scrollToPeerBlock(who.cursor); }
+    return undefined;
+  }, [followId, viewers]);
+  useEffect(() => {
+    if (!followId) return undefined;
+    const stop = () => setFollowId(null);
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } }; // stop following without also closing the panel
+    const scroller = document;
+    scroller.addEventListener('wheel', stop, { passive: true });
+    scroller.addEventListener('touchmove', stop, { passive: true });
+    document.addEventListener('keydown', onKey, true);
+    return () => { scroller.removeEventListener('wheel', stop); scroller.removeEventListener('touchmove', stop); document.removeEventListener('keydown', onKey, true); };
+  }, [followId]);
   const collab = useCollabEvents(viewers, !!data && !shareOff);
   const recentEvents = collab.muted ? [] : collab.events.filter((e) => (e.kind === 'joined' || e.kind === 'left') && now - e.at < 5000).slice(0, 2);
   useEffect(() => {
@@ -655,6 +676,7 @@ export default function SharedPage() {
             <CollabPanel
               mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
               muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
+              followId={followId} onFollow={setFollowId}
             />
           </div>}
         </main>

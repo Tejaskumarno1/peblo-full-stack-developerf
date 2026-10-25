@@ -7,6 +7,16 @@ import './peer-cursors.css';
  */
 const PALETTE = ['#E2501A', '#2350FF', '#2FB67C', '#B05AF0', '#D9A400', '#0E9AA7', '#E0457B'];
 export const peerColor = (id = '') => PALETTE[[...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % PALETTE.length];
+/** Idle people are drawn grey so they are not mistaken for someone who is active. */
+const colorOf = (p) => (p.status === 'idle' ? '#8A8071' : peerColor(p.id));
+const nameOf = (p) => (p.status === 'idle' ? `${p.name} \u00B7 idle` : p.name);
+
+/** Scroll the editor so a person's block is in view (used by Follow). */
+export function scrollToPeerBlock(index) {
+  const root = document.querySelector('.bn-editor');
+  const blk = root && topBlocks(root)[index];
+  blk?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
 
 const topBlocks = (root) => {
   const group = root?.querySelector(':scope > .bn-block-group') || root?.querySelector('.bn-block-group');
@@ -76,7 +86,7 @@ function drawRange(frag, blk, p, clip) {
   if (p.selStart == null || p.selEnd == null) return;
   const range = rangeIn(blk, p.selStart, p.selEnd);
   if (!range) return;
-  const color = peerColor(p.id);
+  const color = colorOf(p);
   const rects = [...range.getClientRects()].filter((r) => r.width > 0 || p.selEnd === p.selStart);
   if (!rects.length) return;
   const inView = (r) => r.bottom >= clip.top + 4 && r.top <= clip.bottom - 4;
@@ -85,7 +95,7 @@ function drawRange(frag, blk, p, clip) {
     if (!inView(r)) return;
     const caret = el('div', 'pb-peer-caret', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;height:${Math.round(r.height || 20)}px;--peer:${color}`);
     caret.setAttribute('data-peer-caret', p.name);
-    caret.appendChild(el('span', '', '', p.name));
+    caret.appendChild(el('span', '', '', nameOf(p)));
     frag.appendChild(caret);
     return;
   }
@@ -130,7 +140,7 @@ function draw() {
   for (const p of current) {
     if (p.cursor == null || !blocks[p.cursor]) continue;
     const prev = byBlock.get(p.cursor);
-    byBlock.set(p.cursor, prev ? { ...prev, name: `${prev.name} + ${p.name}` } : { name: p.name, color: peerColor(p.id) });
+    byBlock.set(p.cursor, prev ? { ...prev, name: `${prev.name} + ${p.name}` } : { name: nameOf(p), color: colorOf(p) });
   }
   const frag = document.createDocumentFragment();
   for (const [idx, info] of byBlock) {
