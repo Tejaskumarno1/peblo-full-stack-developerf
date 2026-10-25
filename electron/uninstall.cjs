@@ -103,6 +103,33 @@ function makeBackup() {
   return { dest, copied };
 }
 
+/** Run the cleanup script detached, and resolve only once it has proved it is running (or failed to). */
+function launchScript(scriptFile, logFile) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    let child;
+    try {
+      child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptFile], {
+        // Not "detached": on Windows a detached PowerShell with no console never runs its script (tested). A normal
+        // child keeps running after Peblo quits, which is all that is needed.
+        stdio: 'ignore', windowsHide: true,
+      });
+    } catch (err) { finish({ ok: false, error: err.message }); return; }
+    child.once('error', (err) => finish({ ok: false, error: err.message }));
+    child.once('spawn', () => {
+      child.unref();
+      const began = Date.now();
+      const poll = setInterval(() => {
+        let text = '';
+        try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* not yet */ }
+        if (text.includes('start')) { clearInterval(poll); finish({ ok: true }); }
+        else if (Date.now() - began > 10000) { clearInterval(poll); finish({ ok: false, error: 'it did not start' }); }
+      }, 200);
+    });
+  });
+}
+
 /**
  * @param {{ trusted: (event: any) => boolean, getWindow: () => import('electron').BrowserWindow | null, beforeQuit: () => void }} ctx
  */
@@ -154,15 +181,15 @@ function register(ctx) {
       logFile,
     });
     const scriptFile = path.join(os.tmpdir(), `peblo-uninstall-${process.pid}.ps1`);
+    try { fs.rmSync(logFile, { force: true }); } catch { /* none */ }
     try {
-      fs.writeFileSync(scriptFile, '﻿' + script, 'utf8'); // BOM so PowerShell reads any non-ASCII path correctly
-      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptFile], {
-        detached: true, stdio: 'ignore', windowsHide: true,
-      });
-      child.unref();
+      fs.writeFileSync(scriptFile, '\ufeff' + script, 'utf8'); // BOM so PowerShell reads any non-ASCII path correctly
     } catch (err) {
-      return { ok: false, error: 'Could not start the uninstaller: ' + err.message };
+      return { ok: false, error: 'Could not prepare the uninstaller: ' + err.message };
     }
+    // Start the script and make sure it is really running before Peblo closes: it writes "start" to the log first.
+    const started = await launchScript(scriptFile, logFile);
+    if (!started.ok) return { ok: false, error: 'Could not start the uninstaller (' + started.error + '). Nothing was removed.' };
 
     try { app.setLoginItemSettings({ openAtLogin: false }); } catch { /* not set */ }
     ctx.beforeQuit();

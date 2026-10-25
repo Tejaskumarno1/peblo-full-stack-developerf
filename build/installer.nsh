@@ -9,6 +9,8 @@
 !include "WordFunc.nsh"
 !insertmacro VersionCompare
 
+Var PebloBackup
+
 !macro customInit
   SetRegView 64
 
@@ -46,4 +48,35 @@
     MessageBox MB_OK|MB_ICONINFORMATION "A newer Peblo ($R6) is already installed, so there is nothing to update." /SD IDOK
     Abort
   pebloFresh:
+!macroend
+
+; Uninstalling from Windows (Settings > Apps > Peblo > Uninstall) asks the same question as the Uninstall button inside
+; Peblo: keep a backup of the data stored on this computer, or not. Everything else is removed either way.
+; (Silent runs - Peblo uninstalling itself, or an update replacing an older version - never touch the data here:
+; the app handles its own, and an update must keep it.)
+!macro customUnInit
+  StrCpy $PebloBackup "0"
+  ${IfNot} ${Silent}
+    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION "Uninstall Peblo?$\r$\n$\r$\nYes: keep a backup of my data (saved in your Documents folder), then remove everything.$\r$\nNo: remove everything, no backup.$\r$\nCancel: leave Peblo installed.$\r$\n$\r$\nNotes and tasks in your Peblo account are not deleted." IDYES pebloUnYes IDNO pebloUnNo
+    Abort
+    pebloUnYes:
+      StrCpy $PebloBackup "1"
+    pebloUnNo:
+  ${EndIf}
+!macroend
+
+!macro customUnInstall
+  ${IfNot} ${Silent}
+  ${IfNot} ${isUpdated}
+    SetShellVarContext current
+    ${If} $PebloBackup == "1"
+      CreateDirectory "$DOCUMENTS\Peblo backup"
+      CopyFiles /SILENT "$APPDATA\Peblo\peblo.db" "$DOCUMENTS\Peblo backup"
+      CopyFiles /SILENT "$APPDATA\Peblo\desktop-settings.json" "$DOCUMENTS\Peblo backup"
+      CopyFiles /SILENT "$APPDATA\Peblo\server-url.txt" "$DOCUMENTS\Peblo backup"
+    ${EndIf}
+    RMDir /r "$APPDATA\Peblo"
+    RMDir /r "$LOCALAPPDATA\peblo-updater"
+  ${EndIf}
+  ${EndIf}
 !macroend
