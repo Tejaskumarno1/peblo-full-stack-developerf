@@ -396,6 +396,16 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 8px; }
 .s-filters button, .s-filters select { font: inherit; font-size: 12px; border: 1px solid var(--s-line, rgba(128,128,128,.3)); background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
 .s-filters button.on { background: var(--s-ink, #2b2b2b); color: var(--s-paper, #fff); }
+/* Same look as the Tags / Sort / Group buttons above: soft filled pills, no outline, no browser-default dropdown. */
+.soft .s-filters { gap: 6px; padding: 8px 0 4px; }
+.soft .s-filters button, .soft .s-filters select { border: none; border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 12.5px; font-weight: 700; background-color: #f4ede2; color: var(--s-fg); cursor: pointer; white-space: nowrap; line-height: 1.2; }
+.soft .s-filters select { appearance: none; -webkit-appearance: none; padding-right: 28px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23241F1A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+.soft .s-filters button.on { background: #fff; color: var(--s-fg); box-shadow: inset 0 0 0 2px var(--s-fg); }
+.soft .s-filters button:hover, .soft .s-filters select:hover { background-color: #efe5d6; }
+.soft .s-filters button.on:hover { background-color: #fff; }
+.soft .s-filters button:focus, .soft .s-filters select:focus { outline: none; }
+.soft .s-filters button:focus-visible, .soft .s-filters select:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--s-fg); background-color: #fff; }
+.soft .s-filters .clr { background: transparent; color: var(--s-fg2); padding-left: 6px; padding-right: 6px; }
 .s-bulk { display: flex; align-items: center; gap: 6px; padding: 4px 12px 8px; font-size: 12px; }
 .s-bulk b { flex: 1; }
 .s-bulk button { font: inherit; font-size: 12px; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
