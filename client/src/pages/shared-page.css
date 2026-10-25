@@ -284,3 +284,14 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .stage .cp-drawer.docked { position: sticky; inset: auto; top: 0; width: auto; height: calc(var(--pb-canvas-h) - 114px); align-self: start; z-index: 1; }
   .pb-shared .stage.has-panel ~ .cp-wrap { display: none; }
 }
+
+/* who is in which section: coloured dots on the outline */
+.pb-shared .toc a { display: flex; align-items: center; gap: 8px; }
+.pb-shared .toc .toc-t { flex: 1; min-width: 0; }
+.pb-shared .toc-pips { display: inline-flex; flex: none; }
+.pb-shared .toc-pips i { width: 11px; height: 11px; margin-left: -3px; border: 2px solid var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
+.pb-shared .toc-pips i:first-child { margin-left: 0; }
+
+/* no card inside the card for a task; less wasted editor gutter on a phone */
+.pb-shared article .taskcard { margin-bottom: 20px; padding: 6px 0 0; border-radius: 0; box-shadow: none; background: transparent; }
+@media (max-width: 640px) { .pb-shared .pb-editor-full-page .bn-editor { padding-inline: 2px; } }

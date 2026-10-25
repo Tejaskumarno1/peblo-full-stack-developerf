@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
-import { caretSelection, showPeers } from '../utils/peerCursors';
+import { caretSelection, headingIndexes, peerColor, showPeers } from '../utils/peerCursors';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import './shared-page.css';
 
@@ -50,6 +50,7 @@ export default function SharedPage() {
   const [previewMode, setPreviewMode] = useState(false);
   const [viewers, setViewers] = useState([]);
   const [panelOpen, setPanelOpen] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1200px)').matches);
+  const [sectionPeers, setSectionPeers] = useState({});
   const [offline, setOffline] = useState(false);
   const [synced, setSynced] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -355,11 +356,27 @@ export default function SharedPage() {
   }, []);
   useEffect(() => {
     const peers = viewers.filter((v) => !v.self);
-    const draw = () => showPeers(previewMode ? [] : peers);
+    const draw = () => {
+      showPeers(previewMode ? [] : peers);
+      // which section of the outline each person is in
+      const hi = headingIndexes();
+      const next = {};
+      if (hi.length && headings.length) {
+        for (const peer of peers) {
+          if (peer.cursor == null) continue;
+          // the last outline heading at or above the person's block
+          let hit = null;
+          for (const h of hi) { if (h.index <= peer.cursor && headings.some((x) => x.title === h.text)) hit = h; }
+          const target = hit && headings.find((x) => x.title === hit.text);
+          if (target) (next[target.id] ||= []).push({ id: peer.id, name: peer.name });
+        }
+      }
+      setSectionPeers((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
     draw();
     const t = window.setInterval(draw, 1000); // the editor may redraw its blocks; mark them again
     return () => { window.clearInterval(t); showPeers([]); };
-  }, [viewers, previewMode, rev]);
+  }, [viewers, previewMode, rev, headings]);
 
   const collab = useCollabEvents(viewers, !!data && !shareOff);
   const recentEvents = collab.muted ? [] : collab.events.filter((e) => (e.kind === 'joined' || e.kind === 'left') && now - e.at < 5000).slice(0, 2);
@@ -592,7 +609,7 @@ export default function SharedPage() {
         <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${panelOpen ? ' has-panel' : ''}`}>
           {data.kind === 'note' && headings.length > 0 && <aside className="toc" aria-label="On this page">
             <h2>On this page</h2>
-            {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}>{title}</a>)}
+            {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>)}
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 

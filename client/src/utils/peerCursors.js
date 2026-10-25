@@ -13,6 +13,13 @@ const topBlocks = (root) => {
   return group ? [...group.children].filter((el) => el.classList?.contains('bn-block-outer')) : [];
 };
 
+/** The top-level blocks that are headings, in order: { index, text }. */
+export function headingIndexes() {
+  const root = document.querySelector('.bn-editor');
+  if (!root) return [];
+  return topBlocks(root).map((b, i) => { const c = b.querySelector('.bn-block-content'); return c?.getAttribute('data-content-type') === 'heading' ? { index: i, text: (c.textContent || '').trim() } : null; }).filter(Boolean);
+}
+
 /** Index of the top-level block the caret is in, or null when the caret is not in the note editor. */
 export function caretBlock() {
   const sel = window.getSelection?.();

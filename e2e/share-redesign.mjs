@@ -4,7 +4,7 @@ import { boot } from './lib.mjs';
 const { base, api, page, ctx, check, finish } = await boot();
 const SHOTS = 'C:/Users/tejas/Documents/peblo-full-stack-developerf/.shots';
 try {
-  const note = (await api('POST', '/api/notes', { title: 'Range note', content: '# Goal\n\nShip the redesign by Friday with no open blockers\n\nSecond paragraph stays plain', tags: [] })).note;
+  const note = (await api('POST', '/api/notes', { title: 'Range note', content: '## Goal\n\nShip the redesign by Friday with no open blockers\n\nSecond paragraph stays plain', tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
   await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } });
   await page.setViewportSize({ width: 1440, height: 860 });
@@ -56,7 +56,36 @@ try {
   const guestSees = await g.evaluate(() => document.querySelector('[data-peer-end] span').textContent);
   check('guest sees the owner\'s selection end and its word count', /End · 4 words/.test(guestSees), guestSees);
   await g.screenshot({ path: `${SHOTS}/range-guest.png` });
+
+  // the outline shows who is in which section
+  await g.waitForFunction(() => document.querySelector('[data-testid="toc-pips"] i'), null, { timeout: 15000 });
+  const pip = await g.evaluate(() => ({ title: document.querySelector('[data-testid="toc-pips"] i').title, link: document.querySelector('[data-testid="toc-pips"]').closest('a').textContent }));
+  check('the outline marks the section the owner is in', /is here/.test(pip.title) && /Goal/.test(pip.link), JSON.stringify(pip));
   await gctx.close();
+
+  // phone: bottom bar, page card, no horizontal scroll
+  const mctx = await ctx.browser().newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const m = await mctx.newPage();
+  await m.goto(`${base}/s/note/${tok}`);
+  await m.locator('.bn-editor').waitFor({ timeout: 15000 });
+  await m.waitForTimeout(1500);
+  const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  check('phone: no sideways scroll', overflow <= 1, String(overflow));
+  check('phone: the bottom bar shows who is here', await m.getByTestId('live-editors').isVisible());
+  await m.screenshot({ path: `${SHOTS}/range-phone.png` });
+  await mctx.close();
+
+  // a shared task uses the same page
+  const todo = (await api('POST', '/api/todos', { text: 'Write the release announcement', priority: 'high' }));
+  const todoId = (todo.todo || todo).id;
+  const ttok = (await api('POST', `/api/share/todo/${todoId}`, { edit: true })).token;
+  const tctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 860 } });
+  const t = await tctx.newPage();
+  await t.goto(`${base}/s/todo/${ttok}`);
+  await t.getByLabel('Task').waitFor({ timeout: 15000 });
+  check('task page: docked panel and white card', await t.getByTestId('live-panel').isVisible() && /255, 255, 255/.test(await t.evaluate(() => getComputedStyle(document.querySelector('.pb-shared article')).backgroundColor)));
+  await t.screenshot({ path: `${SHOTS}/range-task.png` });
+  await tctx.close();
 } catch (error) {
   check('ran', false, String(error));
 }
