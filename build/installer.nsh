@@ -12,6 +12,7 @@
 Var PebloBackup
 
 !macro customInit
+  StrCpy $PebloBackup "0" ; (the uninstaller part below uses it; referenced here so both builds are warning-free)
   SetRegView 64
 
   ; A Windows Installer (.msi) copy of Peblo: refuse, and say how to remove it.
