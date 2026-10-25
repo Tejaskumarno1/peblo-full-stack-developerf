@@ -1,6 +1,7 @@
 import DiffMatchPatch from 'diff-match-patch';
 import prisma from '../db.js';
 import { saveVersion } from './noteVersions.js';
+import { invalidateNote } from './collab.js';
 
 /*
  * Saving a note when more than one person (or window) may be editing it.
@@ -38,6 +39,8 @@ export type SaveInput = {
   baseContent?: string | null;
   force?: boolean;
   keepBoth?: boolean;
+  /** The save comes from an editor in a live room (it already holds everyone's merged text). */
+  collab?: boolean;
 };
 export type SaveResult =
   | { status: 'saved' | 'merged' | 'clash'; content: string; updatedAt: Date }
@@ -70,6 +73,8 @@ export async function saveNoteMerged(where: Record<string, unknown>, input: Save
       data: { content: next, ...(titleChanged ? { title: (input.title as string).slice(0, 300) || 'Untitled' } : {}) },
     });
     if (done.count === 1) {
+      // A save that did not come from a live editor changes the text under any open live room: reset it.
+      if (!input.collab && next !== cur.content) invalidateNote(cur.id, next);
       // keep the text we replaced (always when a merge happened, otherwise at most every 10 minutes)
       if (cur.content !== next) await saveVersion(cur.id, cur.content, { force: status !== 'saved' }).catch(() => {});
       const fresh = await prisma.note.findUnique({ where: { id: cur.id }, select: { updatedAt: true } });

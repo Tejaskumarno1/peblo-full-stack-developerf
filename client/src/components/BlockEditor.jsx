@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { aiAPI, notesAPI, todosAPI } from '../api/index';
 import { fileToAttachment } from '../utils/imageData';
+import { createCollab } from '../utils/collab';
+import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
@@ -187,14 +189,21 @@ const remember = (title) => { try { localStorage.setItem(RECENT_KEY, JSON.string
 
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
-export default function BlockEditor({ initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true, fullPage = false, themeOverride }) {
+function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
   const taskCache = useRef({ at: 0, tasks: [] });
-  const editor = useCreateBlockNote({ uploadFile });
+  // Live co-editing (Yjs): when `collab` is given, the document is shared with everyone else on this note.
+  // The room is created once per mount; the page remounts the editor (key) to switch notes.
+  const [rt] = useState(() => (collab ? createCollab(collab) : null));
+  const [live, setLive] = useState({ connected: false, ready: false });
+  const editor = useCreateBlockNote({
+    uploadFile,
+    ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity' } } : {}),
+  });
   const { theme } = useAuth();
-  const loadingRef = useRef(false);
+  const loadingRef = useRef(!!rt); // a live document is not edited until it is in step with the server
   const changeSequenceRef = useRef(0);
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
@@ -247,8 +256,103 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloEditor = editor; } catch { /* ignore */ }
   }, [editor]);
 
+  // ---------- live co-editing: connect, fill an empty document once, and report the connection ----------
+  const resetEpochRef = useRef(resetEpoch);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const liveRef = useRef(false);
+  const connRef = useRef(false);
+  liveRef.current = live.connected && live.ready;
+  useEffect(() => {
+    if (!rt) return undefined;
+    const { provider, doc } = rt;
+    const meta = doc.getMap('meta');
+    let seedText = null;
+    let busy = false;
+    let dead = false;
+    let readyTimer;
+    // Tell the page the text the shared document holds now (after a reset, or after a dropped connection came back).
+    const flush = async () => {
+      if (dead || !onChangeRef.current) return;
+      try { const md = await editor.blocksToMarkdownLossy(toStorage(editor.document)); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
+    };
+    let everReady = false;
+    const markReady = () => {
+      loadingRef.current = true; // what arrives from the server is not an edit to save
+      everReady = true;
+      setLive((s) => ({ ...s, ready: true }));
+      readyTimer = setTimeout(() => {
+        loadingRef.current = false;
+        // After the room was reset (the note was changed another way) the page still holds the old text: tell it the new one.
+        if (resetEpochRef.current > 0) void flush();
+      }, 400);
+    };
+    const check = async () => {
+      if (dead || busy || !provider.synced) return;
+      if (meta.get('seeded') === true) { markReady(); busy = true; return; }
+      if (seedText === null) return;
+      busy = true;
+      try {
+        loadingRef.current = true;
+        const blocks = seedText.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(seedText)) : null;
+        if (dead) return;
+        if (meta.get('seeded') !== true) {
+          if (blocks && blocks.length) editor.replaceBlocks(editor.document, blocks);
+          doc.transact(() => meta.set('seeded', true));
+        }
+        markReady();
+      } catch (err) {
+        console.error('Could not fill the shared document:', err);
+        busy = false;
+      }
+    };
+    const onSeed = (text) => { seedText = text; void check(); };
+    const onStatus = ({ status }) => { connRef.current = status === 'connected'; setLive((s) => ({ ...s, connected: status === 'connected' })); };
+    // The connection came back: everything typed meanwhile has merged, so the saved copy catches up.
+    const onSync = (isSynced) => { if (isSynced && everReady) setTimeout(() => { void flush(); }, 300); };
+    const onClose = (ev) => {
+      const code = ev?.code;
+      if (code === 4002 || code === 4003) {
+        provider.disconnect();
+        window.dispatchEvent(new CustomEvent('pb-collab-closed', { detail: { code, noteId, share: collab?.share } }));
+      }
+    };
+    provider.on('seed', onSeed);
+    provider.on('sync', check);
+    provider.on('sync', onSync);
+    provider.on('status', onStatus);
+    provider.on('connection-close', onClose);
+    meta.observe(check);
+    const dbg = (m) => { try { if (localStorage.getItem('peblo-debug') === '1') console.log('[collab]', m); } catch { /* ignore */ } };
+    dbg('connect ' + (noteId || collab?.share));
+    provider.on('connection-close', (ev) => dbg('close code ' + ev?.code));
+    rt.connect();
+    try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloCollab = rt; } catch { /* ignore */ }
+    // Could not reach the live server (a firewall, an old server): fall back to ordinary editing after a while.
+    const giveUp = setTimeout(() => { if (!dead && !provider.synced) onCollabFail?.(); }, 12000);
+    return () => {
+      dead = true;
+      clearTimeout(giveUp); clearTimeout(readyTimer);
+      provider.off('seed', onSeed); provider.off('sync', check); provider.off('sync', onSync); provider.off('status', onStatus); provider.off('connection-close', onClose);
+      meta.unobserve(check);
+      dbg('release');
+      rt.release();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rt]);
+
+  // Saves from this note use the live rules only while the connection is up and the document is in step.
+  useEffect(() => {
+    if (!rt || !noteId) return undefined;
+    setNoteLive(noteId, live.connected && live.ready ? 'live' : 'wait');
+    return () => setNoteLive(noteId, false);
+  }, [rt, noteId, live.connected, live.ready]);
+  // 'live' | 'wait' | 'off' for pages that do their own saving (the share page)
+  useEffect(() => { onCollabState?.(!rt ? 'off' : live.connected && live.ready ? 'live' : 'wait'); }, [rt, live.connected, live.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     async function loadContent() {
+      if (rt) return; // a live document is filled from the server's copy instead
       if (!initialContent) return;
       try {
         const parsed = await editor.tryParseMarkdownToBlocks(initialContent);
@@ -279,11 +383,15 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const handleChange = async () => {
     checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
+    // While a live connection is down, edits stay in the shared document and sync when it returns. Saving the page's own
+    // copy now could overwrite what other people typed meanwhile.
+    if (rt && !connRef.current) return;
     const sequence = ++changeSequenceRef.current;
     const markdown = await editor.blocksToMarkdownLossy(toStorage(editor.document));
     // Markdown conversion is asynchronous. Ignore an older conversion that
     // finishes after a newer edit, otherwise autosave can roll content back.
     if (sequence !== changeSequenceRef.current) return;
+    if (rt && liveRef.current) rt.announce(markdown); // the server learns this text is ours before it is saved
     onChange(markdown);
   };
 
@@ -493,7 +601,8 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     });
     editor.registerExtension({ key: 'pb-callouts', prosemirrorPlugins: [plugin] });
     return () => { try { editor.unregisterExtension('pb-callouts'); } catch { /* editor already gone */ } };
-  }, [editor]);
+    // registered again once a live document is ready: the shared document sets the editor up afresh when it first syncs
+  }, [editor, live.ready]);
 
   const onLinkClick = (e) => {
     if (copyCode(e)) return;
@@ -508,10 +617,10 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
   const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
-    <div ref={rootRef} className={`block-editor-container${focusMode ? ' pb-focus' : ''}${fullPage ? ' pb-editor-full-page' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: fullPage ? 'none' : 1, height: fullPage ? 'auto' : '100%', overflowY: fullPage ? 'visible' : 'auto', cursor: editable ? 'text' : 'default' }}>
+    <div ref={rootRef} data-live={rt && live.ready && live.connected ? '1' : undefined} className={`block-editor-container${focusMode ? ' pb-focus' : ''}${fullPage ? ' pb-editor-full-page' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: fullPage ? 'none' : 1, height: fullPage ? 'auto' : '100%', overflowY: fullPage ? 'visible' : 'auto', cursor: editable ? 'text' : 'default' }}>
       <BlockNoteView
         editor={editor}
-        editable={editable}
+        editable={editable && (!rt || live.ready)}
         onChange={handleChange}
         theme={dark ? 'dark' : 'light'}
         slashMenu={false}
@@ -524,6 +633,7 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
+      {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
       {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
       {findOpen && <FindBar root={rootRef} onClose={() => setFindOpen(false)} />}
       {lightbox && (
@@ -585,3 +695,29 @@ export default function BlockEditor({ initialContent, onChange, editable = true,
     </div>
   );
 }
+
+/**
+ * The note editor. A saved note is opened as a live room (Yjs) by default, so everyone editing it, on any device or
+ * through a share link, sees each other's typing as it happens and nothing is ever lost to a conflict.
+ * If the live server cannot be reached, it falls back to ordinary editing with the safe-save merge.
+ */
+export default function BlockEditor(props) {
+  const { noteId, guest, editable = true, collab, onCollabFail } = props;
+  const { user } = useAuth();
+  const [off, setOff] = useState(false);
+  const [epoch, setEpoch] = useState(0);
+  const flagOff = useMemo(() => { try { return localStorage.getItem('peblo-collab') === 'off'; } catch { return false; } }, []);
+  const auto = !guest && !!noteId && noteId !== '__draft__' && editable !== false;
+  const resolved = off || flagOff ? undefined : (collab || (auto ? { noteId, name: user?.name || 'Me' } : undefined));
+  useEffect(() => {
+    const on = (e) => {
+      const d = e.detail || {};
+      if (d.code !== 4002) return;
+      if ((noteId && d.noteId === noteId) || (collab?.share && d.share === collab.share)) setEpoch((n) => n + 1); // the note was changed another way: start the room again from its new text
+    };
+    window.addEventListener('pb-collab-closed', on);
+    return () => window.removeEventListener('pb-collab-closed', on);
+  }, [noteId, collab?.share]);
+  return <BlockEditorInner key={`${noteId || collab?.share || ''}:${epoch}${off ? 'p' : ''}`} {...props} resetEpoch={epoch} collab={resolved} onCollabFail={() => { setOff(true); onCollabFail?.(); }} />;
+}
+

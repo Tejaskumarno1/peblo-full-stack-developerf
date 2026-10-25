@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { createServer, Server } from 'http';
 import { AddressInfo } from 'net';
 import { Server as SocketIOServer } from 'socket.io';
+import { attachCollab } from './services/collab.js';
 import { pathToFileURL } from 'url';
 
 import prisma, { initDatabase } from './db.js';
@@ -150,7 +151,9 @@ export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: S
 
   // Socket.IO lets the server tell the UI to refresh after AI creates notes/tasks.
   // Each connection must carry a valid sign-in token; it only ever hears its own account's events.
-  const io = new SocketIOServer(httpServer);
+  // destroyUpgrade:false so Socket.IO leaves the /collab WebSocket (live co-editing) alone while it signs a person in.
+  const io = new SocketIOServer(httpServer, { destroyUpgrade: false });
+  attachCollab(httpServer);
   io.use(async (socket, next) => {
     try {
       const user = await verifyToken(socket.handshake.auth?.token);

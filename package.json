@@ -45,11 +45,15 @@
     "electron-updater": "^6.8.11",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
+    "lib0": "^0.2.119",
     "multer": "^2.1.1",
     "openai": "^6.39.0",
     "pdf-parse": "^1.1.1",
     "socket.io": "^4.8.3",
     "uuid": "^11.0.5",
+    "ws": "^8.18.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33",
     "zod": "^4.4.3"
   },
   "devDependencies": {

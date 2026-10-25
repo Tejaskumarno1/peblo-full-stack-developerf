@@ -211,7 +211,8 @@ function draw() {
 
 /** Mark the blocks other people are in. `peers`: [{ id, name, cursor }]. Pass [] to clear. Safe to call often. */
 export function showPeers(peers) {
-  current = peers;
+  // In a live room the editor draws everyone's real cursor itself; the block markers would double it.
+  current = typeof document !== 'undefined' && document.querySelector('[data-live="1"]') ? [] : peers;
   if (!layer) {
     layer = document.createElement('div');
     layer.id = 'pb-peer-layer';

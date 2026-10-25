@@ -14,7 +14,7 @@ import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
-import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
+import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import ShareChips from '../components/ShareChips';
 import { useLive } from '../utils/liveStore';
@@ -257,6 +257,7 @@ export default function SoftNotes() {
   useEffect(() => {
     const d = docRef.current;
     if (!d || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    if (isNoteLive(d.id)) return; // the live room already has it
     const f = allNotes.find((n) => n.id === d.id);
     const base = getNoteBase(d.id);
     if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save

@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
-import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
+import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 
@@ -123,6 +123,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   useEffect(() => {
     const d = docRef.current;
     if (!d || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    if (isNoteLive(d.id)) return; // the live room already has it
     const f = allNotes.find((n) => n.id === d.id);
     const base = getNoteBase(d.id);
     if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save

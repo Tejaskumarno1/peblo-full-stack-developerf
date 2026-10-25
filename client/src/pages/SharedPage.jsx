@@ -160,6 +160,7 @@ export default function SharedPage() {
           return;
         }
         if (!response.ok) return;
+        if (collabState.current !== 'off') return; // the live room keeps this editor current
         const latest = await response.json();
         const current = shareStateRef.current;
         if (!live || latest.updatedAt === current.data?.updatedAt || current.status !== 'saved') return;
@@ -179,17 +180,28 @@ export default function SharedPage() {
     return { status: response.status, body: await response.json().catch(() => ({})) };
   }, [url]);
 
+  // Live co-editing: while the editor is in a live room, the room (not this page) merges what other people typed.
+  const collabState = useRef('off'); // 'off' | 'wait' | 'live'
+  const [collabOff, setCollabOff] = useState(false);
+  useEffect(() => {
+    const on = (e) => { if (e.detail?.share === token && e.detail.code === 4002) setRev((n) => n + 1); }; // the owner changed the note some other way: reload it
+    window.addEventListener('pb-collab-closed', on);
+    return () => window.removeEventListener('pb-collab-closed', on);
+  }, [token]);
+
   const saving = useRef(false);
   const again = useRef(false);
   const saveNote = useCallback(async (force = false, keepBoth = false) => {
     timer.current = null;
     // one save at a time: edits made while a save is in flight go out right after it
     if (saving.current) { again.current = true; return; }
+    // the live room is opening or reopening: wait for it, so this save is in step with it
+    for (let i = 0; i < 130 && collabState.current === 'wait'; i++) await new Promise((r) => setTimeout(r, 150));
     saving.current = true;
     setStatus('saving');
     const sent = { title: draft.current.title, content: draft.current.content };
     try {
-      const response = await put({ ...sent, sessionId: sessionIdRef.current || undefined, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth });
+      const response = await put({ ...sent, sessionId: sessionIdRef.current || undefined, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth, ...(collabState.current === 'live' ? { collab: true } : {}) });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
       if (response.status === 404 || response.status === 403) { setError(response.body.error || 'This link is not available.'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
@@ -651,7 +663,9 @@ export default function SharedPage() {
                 <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
-                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; typedAt.current = Date.now(); queueSave(); }} /></Suspense>
+                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
+                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest' }}
+                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
             </>}
 

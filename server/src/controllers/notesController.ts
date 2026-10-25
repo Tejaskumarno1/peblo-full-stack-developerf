@@ -4,6 +4,7 @@ import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
 import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
+import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta } from '../utils/meta.js';
 
 // prisma imported from db.js
@@ -379,7 +380,9 @@ export async function createNote(req: any, res: any, next: any) {
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
-    const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, force, keepBoth } = req.body;
+    const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
+    // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.
+    const force = req.body.force || collab === true;
 
     // An editor that tells us what it started from gets a safe save: if the note changed elsewhere meanwhile
     // (another window, a shared-link editor), the changes are merged instead of one side being overwritten.
@@ -387,7 +390,7 @@ export async function updateNote(req: any, res: any, next: any) {
     if (typeof content === 'string' && baseUpdatedAt) {
       const r = await saveNoteMerged(
         { id: req.params.id, userId: req.user.id },
-        { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth },
+        { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true },
       );
       if (r.status === 'missing') return res.status(404).json({ error: 'Note not found' });
       if (r.status === 'conflict') return res.status(409).json({ error: 'This note changed somewhere else while you were editing.', latest: r.latest });
@@ -426,7 +429,7 @@ export async function updateNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
     if (before && before.content !== content) await saveVersion(req.params.id, before.content || '').catch(() => {});
-    if (content !== undefined && !merged) await syncLinks(req.user.id, req.params.id, content);
+    if (content !== undefined && !merged) { await syncLinks(req.user.id, req.params.id, content); if (before && before.content !== content && collab !== true) invalidateNote(req.params.id, content); }
 
     if (tags !== undefined) {
       await syncTags(req.user.id, req.params.id, tags);
@@ -572,6 +575,7 @@ export async function revertBackup(req: any, res: any, next: any) {
       include: noteInclude
     });
     await syncLinks(req.user.id, req.params.id, backup.content || '');
+    invalidateNote(req.params.id); // an open live room reloads the restored text
 
     notify(req, 'notes_changed');
     res.json({ note: formatNote(note) });

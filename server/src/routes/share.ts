@@ -309,12 +309,13 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (!note.shareEdit) return res.status(403).json({ error: 'This link is view only.' });
     if (await isBlocked('note', req.params.token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
-    const { title, content, baseUpdatedAt, baseContent, force, keepBoth } = req.body || {};
+    const { title, content, baseUpdatedAt, baseContent, keepBoth, collab } = req.body || {};
+    const force = req.body?.force || collab === true; // live-room editors already hold the merged text
     if (typeof content !== 'string' || content.length > MAX_NOTE) return res.status(400).json({ error: 'That note is too big to save.' });
     // Both people's edits are merged; the write is conditional so two saves at the same moment cannot overwrite each other.
     const r = await saveNoteMerged(
       { id: note.id, shareToken: req.params.token, isDeleted: false },
-      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth },
+      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true },
     );
     if (r.status === 'missing') return res.status(404).json({ error: 'This link is not shared any more.' });
     if (r.status === 'conflict') return res.status(409).json({ error: 'Someone else changed the same words while you were editing.', latest: r.latest });

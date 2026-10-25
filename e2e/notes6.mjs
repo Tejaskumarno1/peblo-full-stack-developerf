@@ -30,6 +30,7 @@ try {
   const ln = await page.locator('.bn-inline-content', { hasText: 'Call the vet' }).boundingBox();
   await page.mouse.click(ln.x + ln.width - 2, ln.y + ln.height / 2);
   await page.waitForTimeout(500);
+  await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   await page.keyboard.type('/task from', { delay: 60 });

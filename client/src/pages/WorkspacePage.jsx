@@ -4,7 +4,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { notesAPI, aiAPI, todosAPI } from '../api/index';
 import { useDebounce, useAutoSave, useKeyboardShortcut } from '../hooks/index';
-import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
+import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import TodoListPanel from '../components/TodoListPanel';
@@ -276,6 +276,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     const d = selectedRef.current;
     if (!d || d.id === '__draft__' || d.isDraft || saveStatus === 'saving' || saveStatus === 'unsaved') return;
+    if (isNoteLive(d.id)) return; // the live room already has it
     const f = notes.find((n) => n.id === d.id);
     const base = getNoteBase(d.id);
     if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save

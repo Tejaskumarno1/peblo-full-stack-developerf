@@ -11,10 +11,23 @@ const bases = new Map();
 export const setNoteBase = (id, updatedAt, content) => { if (id && updatedAt) bases.set(id, { updatedAt, content: content ?? '' }); };
 export const getNoteBase = (id) => bases.get(id);
 
+// Notes open in a live room (Yjs): the editor already holds everyone's merged text, so a save replaces the saved copy.
+// state: 'live' (connected and in step) or 'wait' (the room is opening, reopening or the connection is down)
+const live = new Map();
+export const setNoteLive = (id, state) => { if (id) { if (state) live.set(id, state); else live.delete(id); } };
+export const isNoteLive = (id) => live.has(id);
+/** While the room is not ready, a save would write a copy that is not in step with it: wait (up to 20 s) until it is. */
+async function whileWaiting(id) {
+  for (let i = 0; i < 130 && live.get(id) === 'wait'; i++) await new Promise((r) => setTimeout(r, 150));
+}
+
 export async function saveNoteSafe(id, payload) {
+  if (typeof payload.content === 'string') await whileWaiting(id);
   const base = bases.get(id);
   const hasText = typeof payload.content === 'string';
-  const body = base && hasText ? { ...payload, baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : payload;
+  const body = live.get(id) === 'live' && hasText
+    ? { ...payload, collab: true, baseUpdatedAt: base?.updatedAt || new Date().toISOString() }
+    : base && hasText ? { ...payload, baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : payload;
   const { data } = await notesAPI.update(id, body);
   if (hasText && data?.updatedAt) {
     if (typeof data.content === 'string' && data.status && data.status !== 'saved') {

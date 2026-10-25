@@ -76,6 +76,9 @@ try {
   const g = await guestCtx.newPage();
   await g.goto(`${base}/s/note/${s.tok}`);
   await g.locator('.bn-editor').waitFor({ timeout: 15000 });
+  // the editors join the live room first; typing before that is not possible (the editor shows "Connecting…")
+  for (const pg of [page, g]) await pg.locator('[data-testid="collab-status"]').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(600);
   const edG = g.locator('.bn-editor'); const edO = page.locator('.bn-editor');
   await edO.click(); await page.keyboard.press('Control+Home'); await page.keyboard.type('OWNER-TOP ', { delay: 40 });
   await edG.click(); await g.keyboard.press('Control+End');
