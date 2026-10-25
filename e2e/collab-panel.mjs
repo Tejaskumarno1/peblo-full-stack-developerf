@@ -57,7 +57,7 @@ try {
   await panel.getByRole('tab', { name: 'Viewers' }).click();
 
   // the guest's own panel
-  await g.getByRole('button', { name: /Open live collaboration/ }).click();
+  if (!(await g.getByTestId('live-panel').isVisible())) await g.getByRole('button', { name: /Open live collaboration/ }).click(); // docked and open by default on wide screens
   const gp = g.getByTestId('live-panel');
   await gp.waitFor({ timeout: 5000 });
   await g.waitForFunction(() => /Owner/.test(document.querySelector('[data-testid="live-viewers"]')?.textContent || ''), null, { timeout: 9000 });

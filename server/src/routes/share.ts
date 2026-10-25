@@ -65,7 +65,7 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     if (kind !== 'note' || !row.shareToken || !live) return res.json({ shared: false, viewers: [] });
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
-    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor));
+    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor), cleanCursor(req.query.selStart), cleanCursor(req.query.selEnd));
     const viewers = await listViewers(kind, row.shareToken, session, !!row.shareEdit);
     res.json({ shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers });
   } catch (e) { next(e); }
@@ -157,10 +157,10 @@ const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
 /** Mark a person as present (and, when `typing`, as typing for the next few seconds). */
-async function touchViewer(kind: string, token: string, sessionId: string, name: string, typing: boolean, cursor: number | null = null): Promise<boolean> {
+async function touchViewer(kind: string, token: string, sessionId: string, name: string, typing: boolean, cursor: number | null = null, selStart: number | null = null, selEnd: number | null = null): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<{ inserted: boolean }[]>(
-    'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at, cursor_block) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END, $6) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END, cursor_block = COALESCE($6, share_viewers.cursor_block) RETURNING (xmax = 0) AS inserted',
-    kind, token, sessionId, name, typing, cursor,
+    'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at, cursor_block, sel_start, sel_end) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END, $6, $7, $8) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END, cursor_block = COALESCE($6, share_viewers.cursor_block), sel_start = CASE WHEN $6 IS NULL THEN share_viewers.sel_start ELSE $7 END, sel_end = CASE WHEN $6 IS NULL THEN share_viewers.sel_end ELSE $8 END RETURNING (xmax = 0) AS inserted',
+    kind, token, sessionId, name, typing, cursor, selStart, selEnd,
   );
   return !!rows[0]?.inserted;
 }
@@ -181,8 +181,8 @@ async function logActivity(noteId: string, actor: string, action: 'viewed' | 'ed
 }
 /** Everyone on the link right now. No emails or addresses: a short id, a name, and whether they are typing. */
 async function listViewers(kind: string, token: string, mySession: string, canEdit = false) {
-  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null; idle_s: number }[]>(
-    'SELECT session_id, display_name, cursor_block, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing, EXTRACT(EPOCH FROM (NOW() - seen_at))::int AS idle_s FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null; sel_start: number | null; sel_end: number | null; idle_s: number }[]>(
+    'SELECT session_id, display_name, cursor_block, sel_start, sel_end, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing, EXTRACT(EPOCH FROM (NOW() - seen_at))::int AS idle_s FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
     kind, token,
   );
   return rows.map((v) => ({
@@ -195,6 +195,8 @@ async function listViewers(kind: string, token: string, mySession: string, canEd
     status: v.typing ? 'editing' : Number(v.idle_s) >= 20 ? 'idle' : canEdit ? 'viewing' : 'reading',
     idleSeconds: Math.max(0, Number(v.idle_s)),
     cursor: v.cursor_block,
+    selStart: v.sel_start,
+    selEnd: v.sel_end,
     owner: v.session_id.startsWith('owner:'), // guests cannot use ':' in a session id
   }));
 }
@@ -257,7 +259,7 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
     if (req.body?.active === false) {
       await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId);
     } else {
-      const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor));
+      const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor), cleanCursor(req.body?.selStart), cleanCursor(req.body?.selEnd));
       if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');
     }
     res.json({ viewers: await listViewers(kind, token, sessionId, !!record.shareEdit) });

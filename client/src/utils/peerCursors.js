@@ -25,6 +25,82 @@ export function caretBlock() {
   return at >= 0 ? at : null;
 }
 
+
+/** The caret or selection inside the top-level block it starts in: { block, start, end } as character offsets in that block's text. */
+export function caretSelection() {
+  const sel = window.getSelection?.();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  const elOf = (n) => n && (n.nodeType === 1 ? n : n.parentElement);
+  const startEl = elOf(range.startContainer);
+  const root = startEl?.closest?.('.bn-editor');
+  if (!root) return null;
+  const blocks = topBlocks(root);
+  const at = blocks.findIndex((b) => b.contains(startEl));
+  if (at < 0) return null;
+  const blk = blocks[at];
+  const offsetOf = (node, off) => { const r = document.createRange(); r.selectNodeContents(blk); r.setEnd(node, off); return r.toString().length; };
+  const start = offsetOf(range.startContainer, range.startOffset);
+  const end = blk.contains(elOf(range.endContainer)) ? offsetOf(range.endContainer, range.endOffset) : (blk.textContent || '').length;
+  return { block: at, start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+/** A DOM range for characters [s, e) of a block's text, or null when the text is shorter than that. */
+function rangeIn(blk, s, e) {
+  const walker = document.createTreeWalker(blk, NodeFilter.SHOW_TEXT);
+  let pos = 0; let a = null; let b = null; let node;
+  while ((node = walker.nextNode())) {
+    const len = node.nodeValue.length;
+    if (!a && s <= pos + len) a = [node, s - pos];
+    if (e <= pos + len) { b = [node, e - pos]; break; }
+    pos += len;
+  }
+  if (!a) return null;
+  if (!b) b = [a[0], a[0].nodeValue.length];
+  const r = document.createRange();
+  try { r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); } catch { return null; }
+  return r;
+}
+
+const el = (tag, cls, css, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (css) n.style.cssText = css; if (text) n.textContent = text; return n; };
+
+/** Where a person's selection starts and ends: a tinted range, a pin at the start, a flag at the end. Also a thin caret. */
+function drawRange(frag, blk, p, clip) {
+  if (p.selStart == null || p.selEnd == null) return;
+  const range = rangeIn(blk, p.selStart, p.selEnd);
+  if (!range) return;
+  const color = peerColor(p.id);
+  const rects = [...range.getClientRects()].filter((r) => r.width > 0 || p.selEnd === p.selStart);
+  if (!rects.length) return;
+  const inView = (r) => r.bottom >= clip.top + 4 && r.top <= clip.bottom - 4;
+  if (p.selEnd === p.selStart) {
+    const r = rects[0];
+    if (!inView(r)) return;
+    const caret = el('div', 'pb-peer-caret', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;height:${Math.round(r.height || 20)}px;--peer:${color}`);
+    caret.setAttribute('data-peer-caret', p.name);
+    caret.appendChild(el('span', '', '', p.name));
+    frag.appendChild(caret);
+    return;
+  }
+  for (const r of rects) {
+    if (!inView(r)) continue;
+    frag.appendChild(el('div', 'pb-peer-sel', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;width:${Math.round(r.width)}px;height:${Math.round(r.height)}px;--peer:${color}`));
+  }
+  const first = rects[0]; const last = rects[rects.length - 1];
+  const words = range.toString().trim().split(/\s+/).filter(Boolean).length;
+  if (inView(first)) {
+    const pin = el('div', 'pb-peer-pin', `left:${Math.round(first.left)}px;top:${Math.round(first.top)}px;height:${Math.round(first.height)}px;--peer:${color}`);
+    pin.setAttribute('data-peer-start', p.name);
+    pin.appendChild(el('span', '', '', 'Start'));
+    frag.appendChild(pin);
+  }
+  if (inView(last)) {
+    const end = el('div', 'pb-peer-end', `left:${Math.round(last.right)}px;top:${Math.round(last.top)}px;height:${Math.round(last.height)}px;--peer:${color}`);
+    end.setAttribute('data-peer-end', p.name);
+    end.appendChild(el('span', '', '', `${p.name} · End · ${words} word${words === 1 ? '' : 's'}`));
+    frag.appendChild(end);
+  }
+}
 let layer = null;
 let current = [];
 let bound = false;
@@ -62,6 +138,7 @@ function draw() {
     mark.appendChild(label);
     frag.appendChild(mark);
   }
+  for (const p of current) { if (p.cursor != null && blocks[p.cursor]) drawRange(frag, blocks[p.cursor], p, clip); }
   layer.replaceChildren(frag);
 }
 

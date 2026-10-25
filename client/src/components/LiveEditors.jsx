@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import api from '../api/client';
-import { caretBlock, showPeers } from '../utils/peerCursors';
+import { caretSelection, showPeers } from '../utils/peerCursors';
 import { setLive, useLive } from '../utils/liveStore';
 import { CollabBar, CollabPanel, useCollabEvents } from './CollabPanel';
 
@@ -22,6 +22,7 @@ export default function LiveEditors() {
   const [now, setNow] = useState(Date.now());
   const typedAt = useRef(0);
   const cursorRef = useRef(null);
+  const selRef = useRef(null);
   const sharedRef = useRef(false);
   const fails = useRef(0);
   const collab = useCollabEvents(live.viewers, live.shared);
@@ -33,7 +34,7 @@ export default function LiveEditors() {
       if (e.ctrlKey || e.metaKey || (e.key.length > 1 && e.key !== 'Backspace' && e.key !== 'Enter' && e.key !== 'Delete')) return;
       if (e.target?.closest?.('.bn-editor, .block-editor-container, input, textarea')) typedAt.current = Date.now();
     };
-    const onSel = () => { const at = caretBlock(); if (at !== null) cursorRef.current = at; };
+    const onSel = () => { const s = caretSelection(); if (s) { cursorRef.current = s.block; selRef.current = s; } };
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('selectionchange', onSel);
     return () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('selectionchange', onSel); };
@@ -42,7 +43,7 @@ export default function LiveEditors() {
   const poll = useCallback(async (id) => {
     const params = {};
     if (Date.now() - typedAt.current < 3000) params.typing = 1;
-    if (cursorRef.current !== null) params.cursor = cursorRef.current;
+    if (cursorRef.current !== null) { params.cursor = cursorRef.current; if (selRef.current) { params.selStart = selRef.current.start; params.selEnd = selRef.current.end; } }
     const { data } = await api.get(`/share/note/${id}/live`, { params });
     sharedRef.current = !!data.shared;
     setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [] });

@@ -268,3 +268,19 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 /* the avatar stack opens the live collaboration panel */
 .pb-shared button.avatars { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: inherit; }
 .pb-shared button.avatars:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 999px; }
+
+
+/* Soft redesign: no white bar behind the header, the page is one big white card, and the live panel docks on the right. */
+.pb-shared .top { background: transparent; border-bottom: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.pb-shared article { border-radius: 28px; background: var(--surface); box-shadow: var(--card-shadow); padding: 28px 44px 24px; }
+.pb-shared article .cta { margin-top: 40px; }
+@media (max-width: 640px) { .pb-shared article { border-radius: 22px; padding: 18px 16px 18px; } }
+@media (min-width: 1200px) {
+  .pb-shared .top-in { width: min(1520px, 100%); }
+  .pb-shared .stage { width: min(1520px, 100%); grid-template-columns: 220px minmax(0, 1fr); gap: 20px; }
+  .pb-shared .stage.task-stage { grid-template-columns: minmax(0, 1fr); }
+  .pb-shared .stage.has-panel { grid-template-columns: 220px minmax(0, 1fr) 330px; }
+  .pb-shared .stage.task-stage.has-panel { grid-template-columns: minmax(0, 1fr) 330px; }
+  .pb-shared .stage .cp-drawer.docked { position: sticky; inset: auto; top: 0; width: auto; height: calc(var(--pb-canvas-h) - 114px); align-self: start; z-index: 1; }
+  .pb-shared .stage.has-panel ~ .cp-wrap { display: none; }
+}

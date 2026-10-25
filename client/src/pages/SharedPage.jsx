@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
-import { caretBlock, showPeers } from '../utils/peerCursors';
+import { caretSelection, showPeers } from '../utils/peerCursors';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import './shared-page.css';
 
@@ -49,7 +49,7 @@ export default function SharedPage() {
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
   const [previewMode, setPreviewMode] = useState(false);
   const [viewers, setViewers] = useState([]);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1200px)').matches);
   const [offline, setOffline] = useState(false);
   const [synced, setSynced] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -70,6 +70,7 @@ export default function SharedPage() {
   const draft = useRef({ title: '', content: '', base: null });
   const typedAt = useRef(0);
   const cursorRef = useRef(null);
+  const selRef = useRef(null);
   const [guestName, setGuestName] = useState(() => { try { return localStorage.getItem('peblo-guest-name') || ''; } catch { return ''; } });
   const nameRef = useRef(guestName);
   nameRef.current = guestName;
@@ -305,7 +306,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined }),
+      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -348,7 +349,7 @@ export default function SharedPage() {
 
   // where my cursor is (reported to others) and where theirs are (marked in the text)
   useEffect(() => {
-    const onSel = () => { const at = caretBlock(); if (at !== null) cursorRef.current = at; };
+    const onSel = () => { const s = caretSelection(); if (s) { cursorRef.current = s.block; selRef.current = s; } };
     document.addEventListener('selectionchange', onSel);
     return () => document.removeEventListener('selectionchange', onSel);
   }, []);
@@ -588,7 +589,7 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}`}>
+        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${panelOpen ? ' has-panel' : ''}`}>
           {data.kind === 'note' && headings.length > 0 && <aside className="toc" aria-label="On this page">
             <h2>On this page</h2>
             {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}>{title}</a>)}
@@ -633,6 +634,12 @@ export default function SharedPage() {
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
+          {panelOpen && <div className="cp-drawer docked">
+            <CollabPanel
+              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
+              muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
+            />
+          </div>}
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
@@ -640,12 +647,6 @@ export default function SharedPage() {
         <span className="typing-av" aria-hidden="true">{initials(typers[0].name)}</span>
         <span className="typing-text">{typingText}</span>
         <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
-      </div>}
-      {data && panelOpen && <div className="cp-drawer">
-        <CollabPanel
-          mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
-          muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
-        />
       </div>}
       {data && !previewMode && !typingText && (others.length > 0 || panelOpen || offline) && <CollabBar
         viewers={viewers} open={panelOpen} offline={offline} toasts={recentEvents} onDismissToast={collab.dismiss} onToggle={() => setPanelOpen((open) => !open)}
