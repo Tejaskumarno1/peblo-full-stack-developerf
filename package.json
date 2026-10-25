@@ -30,7 +30,7 @@
     "mcp": "node dist/server/mcp/index.js",
     "db:sql": "node scripts/make-sql.mjs",
     "seed": "tsx scripts/seed.ts",
-    "test": "npm run build:server && node scripts/smoke-test.mjs",
+    "test": "npm run build:server && node scripts/smoke-test.mjs && node scripts/connections-unit.mjs && node scripts/connections-test.mjs",
     "check:canvas": "node scripts/run-canvas-check.mjs"
   },
   "dependencies": {

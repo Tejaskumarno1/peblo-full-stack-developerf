@@ -7,6 +7,7 @@ import { normalizeRouting } from '../../utils/aiRouting';
 import { unreadableKeyMessage } from '../../utils/keyStatus';
 import LocalModels from './LocalModels';
 import CloudModels from './CloudModels';
+import AiConnections from './AiConnections';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', icon: Monitor, tone: 'a' },
@@ -44,7 +45,10 @@ export default function ConnectionsScreen({ p, extra }) {
   const [url, setUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
   const c = (n) => `${p}-${n}`;
 
-  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel);
+  // The web app (hosted server) has no AI on the person's computer: no Local AI, no "Only on this computer" / "Ask me first".
+  const hosted = models?.hosted === true;
+  const showLocal = !!models && !hosted;
+  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel, hosted);
   const local = models?.local;
   const enabled = settings?.ollamaEnabled === true;
   const installed = check?.ok ? check.models : local?.models || [];
@@ -76,11 +80,11 @@ export default function ConnectionsScreen({ p, extra }) {
   return (
     <div className={c('conn')}>
       <div className={c('conn-title')}>
-        <h1>How Peblo uses AI</h1>
-        <p>Pick one. You can change it any time, and every answer shows what it read.</p>
+        <h1>{hosted ? 'Connect your AI' : 'How Peblo uses AI'}</h1>
+        <p>{hosted ? 'Add a key from OpenAI or Google. You can change it any time, and every answer shows what it read.' : 'Pick one. You can change it any time, and every answer shows what it read.'}</p>
       </div>
 
-      <fieldset className={c('choices')}>
+      {showLocal && <fieldset className={c('choices')}>
         <legend className={c('sr')}>When Peblo needs AI</legend>
         {CHOICES.map(({ id, title, desc, icon: Icon, tone }) => (
           <label key={id} className={`${c('choice')} ${tone}${routing === id ? ' on' : ''}`}>
@@ -91,10 +95,10 @@ export default function ConnectionsScreen({ p, extra }) {
             {routing === id && <span className="badge">Chosen</span>}
           </label>
         ))}
-      </fieldset>
+      </fieldset>}
 
       <div className={c('conn-cards')}>
-        <section className={c('card')} aria-labelledby={`${p}-ollama`}>
+        {showLocal && <section className={c('card')} aria-labelledby={`${p}-ollama`}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <h2 id={`${p}-ollama`} className={c('card-title')}>Local AI · Ollama</h2>
             <span className={`${c('status')} ${status.cls}`}>{status.text}</span>
@@ -129,19 +133,20 @@ export default function ConnectionsScreen({ p, extra }) {
               <button type="button" className={c('link-btn')} style={{ alignSelf: 'flex-start' }} onClick={() => apply({ ollamaEnabled: false })}>Turn off Local AI</button>
             </>
           )}
-        </section>
+        </section>}
 
         <section className={c('card')} aria-labelledby={`${p}-keys`}>
           <h2 id={`${p}-keys`} className={c('card-title')}>Cloud keys</h2>
-          <span className={c('quiet')}>Saved encrypted in your account. {routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
+          <span className={c('quiet')}>Saved encrypted in your account. {hosted ? 'Peblo sends your question and the notes it found (never #private ones) to the provider you connect.' : routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
           {unreadableKeyMessage(settings) && <p role="alert" className={c('quiet')} style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
 <KeyInput p={p} id={`${p}-openai`} label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput p={p} id={`${p}-gemini`} label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
           <CloudModels apply={apply} />
+          <AiConnections theme={p === 'r' ? 'river' : 'orbit'} apply={apply} />
           <span className={c('quiet')} style={{ fontSize: 13 }}>Notes tagged #private are never sent to any AI.</span>
         </section>
       </div>
-      <LocalModels variant={p === 'r' ? 'river' : 'orbit'} />
+      {showLocal && <LocalModels variant={p === 'r' ? 'river' : 'orbit'} />}
       {extra}
     </div>
   );

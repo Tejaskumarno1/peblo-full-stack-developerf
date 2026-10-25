@@ -7,7 +7,8 @@ export const ROUTING_CHOICES = [
 ];
 
 /** Older accounts may hold 'openai' or 'gemini' (a preferred cloud provider): show them as "Best available". */
-export function normalizeRouting(value) {
+export function normalizeRouting(value, hosted = false) {
+  if (hosted) return 'auto'; // the web app has no AI on the person's computer, so every choice means the cloud keys
   return value === 'ollama' || value === 'ask' ? value : 'auto';
 }
 
@@ -19,7 +20,10 @@ export function describeModel(models) {
   if (models?.aiOff) return { kind: 'off', name: 'AI is off' }; // "Turn off all AI" (PEB-106)
   const local = models?.local;
   const cloudReady = (models?.cloud || []).filter((c) => c.configured);
-  const routing = normalizeRouting(models?.routing);
+  const routing = normalizeRouting(models?.routing, models?.hosted === true);
+  if (models?.hosted === true) {
+    return cloudReady.length ? { kind: 'cloud', name: cloudReady[0].model } : { kind: 'off', name: 'No AI set up' };
+  }
   if (local?.enabled && local.ok) return { kind: 'local', name: local.chatModel };
   if (local?.enabled && !local.ok && (routing === 'ollama' || !cloudReady.length)) return { kind: 'warn', name: 'Ollama not running' };
   if (cloudReady.length && routing !== 'ollama') return { kind: 'cloud', name: cloudReady[0].model };

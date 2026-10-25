@@ -37,6 +37,7 @@ model User {
   todos         Todo[]
   todoSeries    TodoSeries[]
   apiKeys       UserApiKeys?
+  aiConnections AiConnection[]
   quizRuns      QuizRun[]
   mastery       TopicMastery[]
   apiTokens     ApiToken[]
@@ -208,6 +209,26 @@ model UserApiKeys {
   @@map("user_api_keys")
 }
 
+
+// Any number of OpenAI-compatible AI providers per person (migration 015). The key is stored encrypted (secrets.ts).
+model AiConnection {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  provider  String
+  label     String
+  baseUrl   String   @map("base_url")
+  apiKey    String?  @map("api_key") @db.Text
+  model     String
+  enabled   Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@map("ai_connections")
+}
 
 // Orbit style: a quiz made from one topic's notes (questions and answers as JSON).
 model QuizRun {

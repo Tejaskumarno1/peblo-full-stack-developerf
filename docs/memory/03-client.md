@@ -109,7 +109,8 @@ Outside the shell: `/quick-capture` → `CaptureGate` (renders nothing while loa
 | `todosAPI.update` | PATCH `/todos/:id` | partial + `timezone` | many |
 | `todosAPI.delete` | DELETE `/todos/:id` | – | TasksPage, CalendarPage, TodoListPanel |
 | `transferAPI.importFiles` | POST `/import` | multipart field `files` (many), 10 min timeout → `{imported,skippedImages,skippedFiles}` | SettingsModal |
-| `hubAPI.models` | GET `/ai/hub/models` | → `{local:{enabled,ok,models,chatModel,error}, cloud:[{provider,model,label,configured}], routing}` | Sidebar, useShellData, HomePage, useHubChat, ConnectionsPage, ConnectionsScreen |
+| `aiConnectionsAPI.*` | `/ai/connections` (list, detect, add, update, order, remove) | → see server §2.7b | `components/hub/AiConnections` |
+| `hubAPI.models` | GET `/ai/hub/models` | → `{local:{enabled,ok,models,chatModel,error}, cloud:[{provider,model,label,configured}], routing, hosted}` | Sidebar, useShellData, HomePage, useHubChat, ConnectionsPage, ConnectionsScreen |
 | `hubAPI.search` | POST `/ai/hub/search` | `{query,noteIds}` | orbit/river only |
 | `studyAPI.mastery/quiz/answer/noteQuestions` | GET `/study/mastery`; POST `/study/quiz` (5 min timeout); POST `/study/quiz/:id/answers`; GET `/study/notes/:noteId/questions` | | orbit only |
 | `riverAPI.brief/findPromises/promises/setPromise` | POST `/river/brief`; POST `/river/notes/:id/promises`; GET `/river/promises`; PATCH `/river/promises/:id` | | river only |
@@ -304,6 +305,8 @@ Frameless Electron window opened by the global shortcut Ctrl/Cmd+Shift+Space (`e
 - Cloud keys: OpenAI and Gemini key fields (password type with show/hide, Save when dirty) → `updateSettings({openAiKey|geminiKey})`; note when routing is Local only.
 - Static "Coming next" cards: Peblo MCP Server (Claude Desktop, Cursor, VS Code; "Planned for Peblo 1.2. See docs/03-mcp.md"), Peblo Connect ("Planned for Peblo 1.4"), "What stays private" list.
 - `ConnectionsScreen` (River/Orbit) offers the same settings with different copy; its Test connection also saves a changed URL.
+- **Hosted web app**: `hubAPI.models` returns `hosted:true`; Soft, River and Orbit then hide the routing choices, the Local AI card and the Model store and show only cloud keys (title "Connect your AI"). `normalizeRouting(value, hosted)` returns `auto` when hosted.
+- **"Add any AI"** (`components/hub/AiConnections.jsx`, used by `ConnectionsScreen` and `SoftConnections` under the cloud keys): paste a key -> Check key (server `detect`) -> pick a model -> Add it. OpenAI and Gemini keys are saved through `apply` into their own boxes; other providers become rows with on/off, model, up/down order and remove. Colours come from the style (`theme`: soft, river, orbit).
 
 ### 5.11 Command palette (`components/CommandPalette.jsx`, `styles/command-palette.css`)
 Toggled by Ctrl/Cmd+K (window listener), closed by Esc or overlay click. On open it fetches all notes (`GET /notes?sort=updated`). Items: "Ask AI: "<query>"" (when query > 2 chars) → `/ai?q=`; navigation (Home, Notes, Tasks, Calendar, Open AI Hub, AI models and privacy); "Change style to <X>" for the four other styles; up to 5 notes whose title contains the query → `/notes/:id`. Arrow keys + Enter, mouse hover selects. Rendered in a portal on `document.body`.

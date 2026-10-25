@@ -1,0 +1,34 @@
+/* "Add any AI": borrows the colours of whichever style (Soft Studio, River, Orbit) it sits in. */
+.ac { --ac-fg: currentColor; --ac-fg2: currentColor; --ac-line: rgba(128,128,128,.35); --ac-accent: #cf4b1f; --ac-on: #fff; display: flex; flex-direction: column; gap: 10px; }
+.ac[data-theme="soft"] { --ac-fg: var(--s-fg); --ac-fg2: var(--s-fg2); --ac-line: var(--s-line); --ac-accent: var(--s-accent); --ac-on: var(--s-on-accent, #fff); }
+.ac[data-theme="river"] { --ac-fg: var(--r-fg); --ac-fg2: var(--r-fg2); --ac-line: var(--r-line); --ac-accent: var(--r-ink); --ac-on: var(--r-on-ink); }
+.ac[data-theme="orbit"] { --ac-fg: var(--o-fg); --ac-fg2: var(--o-fg2); --ac-line: var(--o-line); --ac-accent: var(--o-ink); --ac-on: var(--o-on-ink); }
+.ac, .ac input, .ac select, .ac button { font: inherit; color: var(--ac-fg); }
+.ac-h { margin: 0; font-size: 16px; font-weight: 800; }
+.ac-sub { font-size: 13px; line-height: 1.45; color: var(--ac-fg2); }
+.ac-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ac-form { display: flex; gap: 8px; align-items: center; }
+.ac input:not([type="checkbox"]), .ac select { min-width: 0; height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--ac-line); background: transparent; outline: none; font-size: 14px; }
+.ac input:focus-visible, .ac select:focus-visible, .ac button:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+.ac-form input { flex: 1; }
+.ac-btn { height: 42px; padding: 0 18px; border-radius: 12px; border: 0; background: var(--ac-accent); color: var(--ac-on) !important; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ac-btn:disabled { opacity: .5; cursor: default; }
+.ac-btn.danger { background: #dc2626; height: 34px; padding: 0 12px; font-size: 13px; }
+.ac-link { align-self: flex-start; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; font-size: 13px; color: var(--ac-fg2) !important; }
+.ac-pick { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+.ac-pick label { font-size: 12px; font-weight: 700; color: var(--ac-fg2); }
+.ac-pick .ac-sub, .ac-pick input[aria-label="Server address"] { grid-column: 1 / -1; }
+.ac-msg { margin: 0; font-size: 13.5px; display: flex; gap: 6px; align-items: center; }
+.ac-msg.bad { color: #dc2626; font-weight: 600; }
+.ac-msg.ok { color: #15803d; font-weight: 600; }
+.ac-found { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--ac-line); border-radius: 14px; }
+.ac-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ac-row { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr) auto auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--ac-line); border-radius: 14px; }
+.ac-row.off { opacity: .6; }
+.ac-row-main { display: flex; flex-direction: column; min-width: 0; }
+.ac-row-main b, .ac-row-main .ac-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-model { height: 34px !important; font-size: 13px !important; }
+.ac-switch { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ac-move { display: flex; flex-direction: column; }
+.ac-move button, .ac-icon { background: none; border: 0; padding: 2px 4px; cursor: pointer; display: inline-flex; border-radius: 6px; }
+.ac-move button:disabled { opacity: .3; cursor: default; }

@@ -92,6 +92,7 @@ File sizes: aiService 1147 lines, aiChatController 450, dashboardController 329,
 - `todos`: text, is_completed, priority string, deadline DateTime?, tags JSON (`todoTags`), linked_note_id (SetNull on delete), start_time / end_time strings, recurrence, timestamps.
 - `note_embeddings`: noteId unique, vector stored as a JSON string.
 - `user_api_keys`: openai, gemini, groq and huggingface keys as TEXT.
+- `ai_connections`: one row per extra AI provider a person added (provider, label, base_url, encrypted api_key, model, enabled, position); see §2.7b.
 - `quiz_runs`, `topic_mastery`.
 
 All user-owned tables cascade on user delete.
@@ -163,9 +164,23 @@ All user-owned tables cascade on user delete.
 ### 2.7 AI Hub (`routes/hub.ts`). Mounted at `/api/ai/hub`; all routes require auth.
 | Method | Path | Does | Tables | Response |
 |---|---|---|---|---|
-| GET | `/api/ai/hub/models` | `listHubModels`: routing setting, Ollama status and installed models (live check if enabled), and whether OpenAI or Gemini is configured | users, user_api_keys | `{routing, local:{enabled,ok,url,chatModel,embedModel,models,error}, cloud:[{provider,label,configured,model}]}` |
+| GET | `/api/ai/hub/models` | `listHubModels`: routing setting, Ollama status and installed models (live check if enabled), and whether OpenAI or Gemini is configured | users, user_api_keys | `{aiOff, hosted, routing, local:{enabled,ok,url,chatModel,embedModel,models,error}, cloud:[{provider,label,configured,unreadable,model,local?}]}`. `cloud` lists OpenAI, Gemini and then the person's own connections (`provider:'conn:<id>'`; `local:true` for a localhost address) |
 | POST | `/api/ai/hub/search` | `retrieve(query, {noteIds})`, sources returned without `text` | notes, tags, todos | `{sources, searched:{notes,tasks}, excludedPrivate}` |
 | POST | `/api/ai/hub/chat` | **SSE** grounded chat, described in §7.6 | notes, tags, todos, users, user_api_keys | events `sources` → `delta`* → `done{provider,model,local,ms}`, or `consent{provider,message}` / `error{code,message}` |
+
+### 2.7b AI connections (`routes/aiConnections.ts`, `services/aiProviders.ts`). Mounted at `/api/ai/connections`; all routes require auth and are scoped by `userId`.
+Any number of OpenAI-compatible providers per person (table `ai_connections`, migration 015; keys encrypted with `secrets.ts`, never sent back: the app only sees `hasKey` / `unreadable`).
+| Method | Path | Does |
+|---|---|---|
+| GET | `/api/ai/connections` | `{connections, providers (catalog), localAddressesAllowed}` |
+| POST | `/api/ai/connections/detect` | Saves nothing. `{key, provider?, baseUrl?}` -> tries the providers a key's prefix suggests (`candidatesFor`), asking each for its model list; first that accepts wins -> `{ok, provider, label, baseUrl, models, suggestedModel}`, or `{ok:false, needsProvider?, error}`. 20 per minute per account (own limiter, not counted as AI use). |
+| POST | `/api/ai/connections` | `{provider, key, model, label?, baseUrl?}`. OpenAI and Gemini keys go to `user_api_keys` (their existing boxes); everything else becomes a row. Max 20 per account. |
+| PUT | `/api/ai/connections/order` | `{ids}` -> the order Peblo tries them in |
+| PATCH / DELETE | `/api/ai/connections/:id` | change `enabled`, `model`, `label` / remove |
+- Catalog (`PROVIDERS`): openai, gemini, anthropic, openrouter, groq, deepseek, mistral, together, xai, custom. All but Gemini are reached with the `openai` package and a `baseURL`. A named provider's address is fixed on the server; only `custom` takes one from the person.
+- **Address rules for `custom`** (`checkBaseUrl`): http(s) only, no user/password, no `?`/`#`, redirects not followed. On a hosted server (`PEBLO_HOSTED=1`) it must be `https` and resolve to a public address (`assertPublicHost`, PEB-24), and is checked again each time it is used (`usableConnections` in `getUserSettings`). On the desktop app any address is fine (LM Studio, vLLM on localhost).
+- **Routing.** `providerOrder` puts enabled connections after the OpenAI and Gemini keys, in the person's order (`position`). A connection whose address is loopback on the desktop app counts as local: it satisfies "Only on this computer" / "Ask me first" and is never a cloud consent question (`isCloudProvider`). `streamHubChat` accepts `provider:'conn:<id>'`. A connection whose key cannot be read on this install is skipped. Not routed through connections yet: embeddings, speech-to-text (they use OpenAI / Ollama only), and Gemini-style JSON schemas.
+- Test: `scripts/connections-unit.mjs` (key recognition, address rules) and `scripts/connections-test.mjs` (API, encryption, scoping, cascade, Hub streaming against a fake provider); both run in `npm test`.
 
 ### 2.8 Dashboard (`routes/dashboard.ts`). All routes require auth.
 | Method | Path | Does | Tables | Response |
@@ -420,6 +435,8 @@ Orphan tags are never removed. `aiChatController` has its own N+1 copy of `syncT
 | `gemini` | gemini → openai → ollama |
 | `ollama` (Local only) | ollama only |
 | `ask` | ollama only for background features |
+
+**Hosted servers (`PEBLO_HOSTED=1`).** There is no AI on the person's computer, so `routingOf(user)` turns a stored `ollama` or `ask` into `auto`, and a per-feature pin of `local` is ignored. `providerOrder`, `streamHubChat` and `listHubModels` all go through `routingOf`. `GET /api/ai/hub/models` returns `hosted: true`; the Connections screens (Soft, River, Orbit) then hide the routing choices, the Local AI card and the Model store and show only cloud keys. The stored setting is not rewritten, so the same account on the desktop app still honours `ollama` / `ask`. Because a hosted account that had picked "Only on this computer" now sends notes to its connected cloud key (or to the server's `SERVER_AI_KEYS`), the hosted screen says so in plain words.
 
 **`runWithCascade`** (lines 106-142)
 - Loads the user and keys on every call and builds new SDK clients each time.

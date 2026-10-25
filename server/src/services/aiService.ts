@@ -1,5 +1,6 @@
 import { decryptSecret, isUnreadable } from '../secrets.js';
-import { effectiveOllamaUrl, ollamaUrlProblem } from '../utils/ollamaPolicy.js';
+import { effectiveOllamaUrl, ollamaUrlProblem, hosted } from '../utils/ollamaPolicy.js';
+import { usableConnections } from './aiProviders.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -19,21 +20,78 @@ export function geminiModelOf(user?: any): string {
 }
 
 async function getUserSettings(userId: string) {
-  return await prisma.user.findUnique({ 
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { apiKeys: true }
+    include: { apiKeys: true, aiConnections: { where: { enabled: true }, orderBy: { position: 'asc' } } },
   });
+  // On a shared server a custom address is checked again each time it is used, not only when it was saved.
+  if (user && hosted()) (user as any).aiConnections = await usableConnections(user.aiConnections);
+  return user;
 }
 
 /** An OpenAI-compatible chat provider: OpenAI itself, or a local Ollama server. */
 export interface OAIProvider {
-  name: 'openai' | 'ollama';
+  name: string;
+  /** Shown to the person: the connection's own name. */
+  label?: string;
+  /** Runs on the person's own computer (a localhost address): nothing leaves it. */
+  local?: boolean;
   client: OpenAI;
   model: string;
   embedModel: string;
 }
 
-type ProviderName = 'openai' | 'gemini' | 'ollama';
+/** 'conn:<id>' is one of the person's own AI connections (any OpenAI-compatible provider). */
+type ProviderName = 'openai' | 'gemini' | 'ollama' | `conn:${string}`;
+
+const isLoopbackUrl = (u: string) => { try { const h = new URL(u).hostname.replace(/^\[|\]$/g, ''); return h === 'localhost' || h === '::1' || /^127\./.test(h); } catch { return false; } };
+
+/** The person's saved AI connections as providers, keyed 'conn:<id>'. A connection whose key cannot be read here is left out. */
+function connectionProviders(user: any): Record<string, OAIProvider> {
+  const out: Record<string, OAIProvider> = {};
+  if (aiIsOff(user)) return out;
+  for (const c of user?.aiConnections || []) {
+    if (!c.enabled) continue;
+    const key = c.apiKey ? decryptSecret(c.apiKey)?.trim() : '';
+    if (c.apiKey && !key) continue;
+    const name = `conn:${c.id}`;
+    out[name] = {
+      name, label: c.label, local: !hosted() && isLoopbackUrl(c.baseUrl),
+      client: new OpenAI({ apiKey: key || 'none', baseURL: c.baseUrl, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }),
+      model: c.model, embedModel: '',
+    };
+  }
+  return out;
+}
+
+/** Every provider this person can use right now. */
+function buildProviders(user: any): Record<string, any> {
+  return { openai: getOpenAIProvider(user), ollama: getOllamaProvider(user), gemini: getGeminiInstance(user), ...connectionProviders(user) };
+}
+
+/** Saved connections by kind: on this computer (localhost) or in the cloud. */
+function connNames(user: any, kind: 'local' | 'cloud'): ProviderName[] {
+  const list = (user?.aiConnections || []).filter((c: any) => c.enabled);
+  return list
+    .filter((c: any) => (!hosted() && isLoopbackUrl(c.baseUrl)) === (kind === 'local'))
+    .map((c: any) => `conn:${c.id}` as ProviderName);
+}
+
+/** Whether using this provider sends notes off the computer. */
+function isCloudProvider(user: any, name: string): boolean {
+  if (name === 'ollama') return false;
+  if (name.startsWith('conn:')) return connNames(user, 'cloud').includes(name as ProviderName);
+  return true;
+}
+
+function cloudLabel(providers: Record<string, any>, name: string): string {
+  return name === 'openai' ? 'OpenAI' : name === 'gemini' ? 'Google' : providers[name]?.label || 'a cloud AI';
+}
+
+/** The first cloud provider that is set up (what a consent question would name). */
+function firstCloud(user: any, providers: Record<string, any>): string | undefined {
+  return ['openai', 'gemini', ...connNames(user, 'cloud')].find((n) => providers[n]);
+}
 
 /**
  * Keys in the server's own environment (OPENAI_API_KEY, GEMINI_API_KEYS) are a fallback for accounts without a key of their own.
@@ -119,18 +177,32 @@ function featureOf(operationName: string): AiFeature | undefined {
   return undefined;
 }
 
-function providerOrder(user: any, feature?: AiFeature): ProviderName[] {
+/**
+ * The "when Peblo needs AI" choice that is really in force. A shared (hosted) server has no AI on the person's
+ * computer, so "Only on this computer" and "Ask me first" cannot work there and mean "Best available":
+ * the web app answers with the keys the person connected.
+ */
+export function routingOf(user: any): string {
   const choice = (user?.settings as any)?.defaultAiModel || 'auto';
+  return hosted() && (choice === 'ollama' || choice === 'ask') ? 'auto' : choice;
+}
+
+function providerOrder(user: any, feature?: AiFeature): ProviderName[] {
+  const choice = routingOf(user);
   // One feature can be pinned to this computer or to the cloud. "Only on this computer" overall always wins.
-  const pin = feature ? (user?.settings as any)?.aiFeatures?.[feature] : undefined;
-  if (pin === 'local') return ['ollama'];
-  if (pin === 'cloud' && choice !== 'ollama') return ['openai', 'gemini'];
+  // A feature pinned to this computer has nowhere to run on a hosted server, so the pin is ignored there.
+  const rawPin = feature ? (user?.settings as any)?.aiFeatures?.[feature] : undefined;
+  const pin = hosted() && rawPin === 'local' ? undefined : rawPin;
+  const local = connNames(user, 'local');
+  const cloud = connNames(user, 'cloud');
+  if (pin === 'local') return ['ollama', ...local];
+  if (pin === 'cloud' && choice !== 'ollama') return ['openai', 'gemini', ...cloud];
   // "Local only" and "Ask first" never send anything to the cloud from background features.
   // (The AI Hub asks the user before using a cloud model under "Ask first".)
-  if (choice === 'ollama' || choice === 'ask') return ['ollama'];
-  if (choice === 'openai') return ['openai', 'gemini', 'ollama'];
-  if (choice === 'gemini') return ['gemini', 'openai', 'ollama'];
-  return ['openai', 'gemini', 'ollama'];
+  if (choice === 'ollama' || choice === 'ask') return ['ollama', ...local];
+  // The person's own connections come after the OpenAI / Gemini keys, in the order they arranged them.
+  if (choice === 'gemini') return ['gemini', 'openai', ...cloud, 'ollama', ...local];
+  return ['openai', 'gemini', ...cloud, 'ollama', ...local];
 }
 
 function localOnlyError() {
@@ -158,7 +230,9 @@ function noKeyError(user?: any) {
   const bad = unreadableKeyNames(user);
   const err: any = new Error(bad.length
     ? `Your saved ${bad.join(' and ')} key can't be read on this computer (it was saved by a different Peblo install). Please enter it again in AI Hub → Connections.`
-    : 'No AI set up. Add an OpenAI or Gemini API key, or turn on Local AI (Ollama), in AI Hub → Connections.');
+    : hosted()
+      ? 'No AI set up. Paste an API key (OpenAI, Gemini, Claude, Groq...) in AI Hub → Connections.'
+      : 'No AI set up. Paste an API key (OpenAI, Gemini, Claude, Groq...), or turn on Local AI (Ollama), in AI Hub → Connections.');
   err.statusCode = 400;
   err.code = 'NO_AI_KEY';
   return err;
@@ -183,15 +257,11 @@ async function runWithCascade(
   executeGemini: (gemini: GoogleGenerativeAI) => Promise<any>
 ): Promise<any> {
   const user = await getUserSettings(userId);
-  const providers = {
-    openai: getOpenAIProvider(user),
-    ollama: getOllamaProvider(user),
-    gemini: getGeminiInstance(user),
-  };
+  const providers = buildProviders(user);
 
   const order = providerOrder(user, featureOf(operationName));
   if (!order.some((n) => providers[n])) {
-    if (order.length === 1 && (providers.openai || providers.gemini)) throw localOnlyError();
+    if (order.every((n) => !isCloudProvider(user, n)) && firstCloud(user, providers)) throw localOnlyError();
     throw noKeyError(user);
   }
 
@@ -202,8 +272,8 @@ async function runWithCascade(
         console.log(`[${operationName}] Trying Gemini...`);
         return await withTimeout(executeGemini(providers.gemini), PROVIDER_TIMEOUT_MS);
       }
-      if ((name === 'openai' || name === 'ollama') && providers[name]) {
-        const p = providers[name]!;
+      if ((name === 'openai' || name === 'ollama' || name.startsWith('conn:')) && providers[name]) {
+        const p: OAIProvider = providers[name];
         console.log(`[${operationName}] Trying ${p.name} (${p.model})...`);
         return await executeOpenAI(p.client, p);
       }
@@ -507,11 +577,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   const userPrompt = `Context:\n${titlesContext}\n\nUser message: "${message}"\n\nMode: ${modeHint}`;
 
   const user = await getUserSettings(userId);
-  const providers: Record<ProviderName, any> = {
-    openai: getOpenAIProvider(user),
-    ollama: getOllamaProvider(user),
-    gemini: getGeminiInstance(user),
-  };
+  const providers = buildProviders(user);
   const chosen = providerOrder(user).find((n) => providers[n]);
   if (!chosen) throw noKeyError(user);
 
@@ -959,9 +1025,12 @@ export interface HubMessage { role: 'user' | 'assistant'; content: string }
 export interface HubModelInfo {
   /** "Turn off all AI" is on: nothing below is usable. */
   aiOff?: boolean;
+  /** This is a shared server: there is no local AI, so the app hides it and only cloud keys apply. */
+  hosted: boolean;
   routing: string;
   local: { enabled: boolean; ok: boolean; url: string; chatModel: string; embedModel: string; models: string[]; error?: string };
-  cloud: { provider: 'openai' | 'gemini'; label: string; configured: boolean; unreadable: boolean; model: string }[];
+  /** OpenAI, Gemini and the person's own connections ('conn:<id>'). `local` marks a connection on this computer. */
+  cloud: { provider: string; label: string; configured: boolean; unreadable: boolean; model: string; local?: boolean }[];
 }
 
 /** Everything the model picker and the Connections page need to know. */
@@ -974,9 +1043,10 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
   const check = !off && settings.ollamaEnabled === true && url ? await checkOllama(url) : { ok: false, models: [] as string[], error: undefined };
   return {
     aiOff: off,
-    routing: settings.defaultAiModel || 'auto',
+    hosted: hosted(),
+    routing: routingOf(user),
     local: {
-      enabled: !off && settings.ollamaEnabled === true,
+      enabled: !off && settings.ollamaEnabled === true && !!url,
       ok: check.ok,
       url,
       chatModel: ollama?.model || DEFAULT_OLLAMA_MODEL,
@@ -987,6 +1057,7 @@ export async function listHubModels(userId: string): Promise<HubModelInfo> {
     cloud: [
       { provider: 'openai', label: 'OpenAI', configured: !!getOpenAIProvider(user), unreadable: isUnreadable(user?.apiKeys?.openAiKey), model: openAiModelOf(user) },
       { provider: 'gemini', label: 'Google Gemini', configured: !!getGeminiInstance(user), unreadable: isUnreadable(user?.apiKeys?.geminiKey), model: geminiModelOf(user) },
+      ...Object.entries(connectionProviders(user)).map(([name, p]) => ({ provider: name, label: p.label || 'Connection', configured: true, unreadable: false, model: p.model, local: p.local === true })),
     ],
   };
 }
@@ -1016,24 +1087,21 @@ export async function streamHubChat(
   onDelta: (text: string) => void
 ): Promise<HubRunResult> {
   const user = await getUserSettings(userId);
-  const routing = ((user?.settings as any)?.defaultAiModel) || 'auto';
-  const providers: Record<ProviderName, any> = {
-    openai: getOpenAIProvider(user),
-    ollama: getOllamaProvider(user),
-    gemini: getGeminiInstance(user),
-  };
+  const routing = routingOf(user);
+  const providers = buildProviders(user);
 
   let order: ProviderName[];
   if (opts.provider) {
     order = [opts.provider];
   } else if (routing === 'ask') {
     const pin = (user?.settings as any)?.aiFeatures?.ask;
-    order = opts.allowCloud && pin !== 'local' ? ['ollama', 'openai', 'gemini'] : ['ollama'];
+    const local: ProviderName[] = ['ollama', ...connNames(user, 'local')];
+    order = opts.allowCloud && pin !== 'local' ? [...local, 'openai', 'gemini', ...connNames(user, 'cloud')] : local;
   } else {
     order = providerOrder(user, 'ask');
   }
 
-  const isCloud = (n: ProviderName) => n !== 'ollama';
+  const isCloud = (n: ProviderName) => isCloudProvider(user, n);
   // "Local only" means local only: a yes to "use the cloud" (allowCloud) cannot override it, and neither can a named cloud provider.
   if (routing === 'ollama' && order.some(isCloud)) {
     const err: any = new Error('Your AI setting is "Local only", so cloud models are switched off. Change it in Connections to use them.');
@@ -1041,7 +1109,7 @@ export async function streamHubChat(
     throw err;
   }
   if (routing === 'ask' && opts.provider && isCloud(opts.provider) && !opts.allowCloud) {
-    const err: any = new Error('This will send your question and the matching notes to ' + (opts.provider === 'openai' ? 'OpenAI' : 'Google') + '.');
+    const err: any = new Error('This will send your question and the matching notes to ' + cloudLabel(providers, opts.provider) + '.');
     err.code = 'CLOUD_CONSENT';
     err.provider = opts.provider;
     throw err;
@@ -1049,13 +1117,14 @@ export async function streamHubChat(
 
   const available = order.filter((n) => providers[n]);
   if (!available.length) {
-    if (routing === 'ask' && !opts.allowCloud && (providers.openai || providers.gemini)) {
-      const err: any = new Error('Local AI isn\'t running. Answering this would send your question and the matching notes to ' + (providers.openai ? 'OpenAI' : 'Google') + '.');
+    const cloudName = firstCloud(user, providers);
+    if (routing === 'ask' && !opts.allowCloud && cloudName) {
+      const err: any = new Error('Local AI isn\'t running. Answering this would send your question and the matching notes to ' + cloudLabel(providers, cloudName) + '.');
       err.code = 'CLOUD_CONSENT';
-      err.provider = providers.openai ? 'openai' : 'gemini';
+      err.provider = cloudName;
       throw err;
     }
-    if (order.length === 1 && order[0] === 'ollama' && (providers.openai || providers.gemini)) throw localOnlyError();
+    if (order.every((n) => !isCloud(n)) && cloudName) throw localOnlyError();
     throw noKeyError(user);
   }
 
@@ -1086,7 +1155,7 @@ export async function streamHubChat(
         const text = part.choices[0]?.delta?.content || '';
         if (text) { sent = true; onDelta(text); }
       }
-      return { provider: name, model: modelName, local: name === 'ollama' };
+      return { provider: name, model: modelName, local: name === 'ollama' || p.local === true };
     } catch (error: any) {
       if (opts.signal?.aborted) throw error;
       lastError = error;
@@ -1095,10 +1164,11 @@ export async function streamHubChat(
     }
   }
   // "Ask first": local AI was tried and failed; offer the cloud instead of just failing.
-  if (routing === 'ask' && !opts.allowCloud && !opts.provider && (providers.openai || providers.gemini)) {
-    const err: any = new Error('Local AI didn\'t answer (is Ollama running?). Answering would send your question and the matching notes to ' + (providers.openai ? 'OpenAI' : 'Google') + '.');
+  const cloudAfter = firstCloud(user, providers);
+  if (routing === 'ask' && !opts.allowCloud && !opts.provider && cloudAfter) {
+    const err: any = new Error('Local AI didn\'t answer (is Ollama running?). Answering would send your question and the matching notes to ' + cloudLabel(providers, cloudAfter) + '.');
     err.code = 'CLOUD_CONSENT';
-    err.provider = providers.openai ? 'openai' : 'gemini';
+    err.provider = cloudAfter;
     throw err;
   }
   const err: any = new Error(lastError?.message?.includes('ECONNREFUSED') || lastError?.message?.includes('Connection error')

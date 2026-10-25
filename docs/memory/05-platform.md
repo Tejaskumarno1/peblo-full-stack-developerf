@@ -214,6 +214,7 @@ Relations: notes, tags, aiGenerations, todos, apiKeys (1:1), quizRuns, mastery.
 **NoteEmbedding -> `note_embeddings`**: id; `note_id` UNIQUE FK CASCADE; `vector` LONGTEXT (JSON float array); created_at. Almost unused (AI Hub retrieval is keyword-only, `services/retrieval.ts:1-6`).
 
 **UserApiKeys -> `user_api_keys`**: PK/FK `user_id` -> users CASCADE; `openai_key`, `gemini_key`, `groq_key`, `huggingface_key` TEXT NULL (changed from VARCHAR(191) by 002 to fit ciphertext); updated_at. Values are `enc:v1:<iv>:<tag>:<data>` base64 AES-256-GCM.
+**AiConnection -> `ai_connections`** (migration 015): PK `id` (uuid text); `user_id` -> users CASCADE; `provider`, `label`, `base_url`, `model` TEXT; `api_key` TEXT NULL (`enc:v1:…`, NULL for a keyless local server); `enabled` BOOLEAN default true; `position` INT; created_at, updated_at; index (`user_id`, `position`).
 
 **QuizRun -> `quiz_runs`** (Orbit style): id; `user_id` FK CASCADE; `topic` VARCHAR; `questions` LONGTEXT JSON; `answers` LONGTEXT NULL; `correct` INT NULL; `total` INT; created_at; `finished_at` NULL. Index `(user_id, topic)`.
 

@@ -34,7 +34,7 @@ export function isPrivateIp(ip: string): boolean {
   return true; // not an IP we understand: refuse
 }
 
-async function assertPublicHost(hostname: string) {
+export async function assertPublicHost(hostname: string) {
   const host = hostname.replace(/^\[|\]$/g, '');
   if (process.env.PEBLO_ALLOW_PRIVATE_FETCH === '1') return;
   if (net.isIP(host)) {

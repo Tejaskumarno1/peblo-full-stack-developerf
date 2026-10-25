@@ -76,6 +76,16 @@ export const transferAPI = {
   importFiles: (formData) => api.post('/import', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10 * 60 * 1000 })
 };
 
+// Any number of AI providers per person: paste a key and Peblo works out whose it is
+export const aiConnectionsAPI = {
+  list: () => api.get('/ai/connections'),
+  detect: (data) => api.post('/ai/connections/detect', data),
+  add: (data) => api.post('/ai/connections', data),
+  update: (id, data) => api.patch(`/ai/connections/${id}`, data),
+  order: (ids) => api.put('/ai/connections/order', { ids }),
+  remove: (id) => api.delete(`/ai/connections/${id}`)
+};
+
 export const hubAPI = {
   models: () => api.get('/ai/hub/models'),
   search: (query, noteIds) => api.post('/ai/hub/search', { query, noteIds })

@@ -7,6 +7,7 @@ import { normalizeRouting } from '../utils/aiRouting';
 import { unreadableKeyMessage } from '../utils/keyStatus';
 import LocalModels from '../components/hub/LocalModels';
 import CloudModels from '../components/hub/CloudModels';
+import AiConnections from '../components/hub/AiConnections';
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', tone: 'mint', icon: Monitor },
@@ -40,7 +41,10 @@ export default function SoftConnections({ embedded = false }) {
   const [checking, setChecking] = useState(false);
   const [url, setUrl] = useState(settings?.ollamaUrl || 'http://127.0.0.1:11434');
 
-  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel);
+  // The web app (hosted server) has no AI on the person's computer: no Local AI, no "Only on this computer" / "Ask me first".
+  const hosted = models?.hosted === true;
+  const showLocal = !!models && !hosted;
+  const routing = normalizeRouting(models?.routing || settings?.defaultAiModel, hosted);
   const local = models?.local;
   const enabled = settings?.ollamaEnabled === true;
   const installed = check?.ok ? check.models : local?.models || [];
@@ -73,14 +77,14 @@ export default function SoftConnections({ embedded = false }) {
 
   return (
     <div className={embedded ? 's-conn s-conn-embedded' : 'soft-page s-conn'}>
-      {embedded ? <h2 className="s-set-sub">When Peblo needs AI</h2> : (
+      {embedded ? <h2 className="s-set-sub">{hosted ? 'Connect your AI' : 'When Peblo needs AI'}</h2> : (
         <div className="s-page-title" style={{ flexShrink: 0 }}>
-          <h1 className="s-h1">How Peblo uses AI</h1>
-          <span className="s-sub">Pick one. You can change it any time, and every answer shows what it read.</span>
+          <h1 className="s-h1">{hosted ? 'Connect your AI' : 'How Peblo uses AI'}</h1>
+          <span className="s-sub">{hosted ? 'Add a key from OpenAI or Google. You can change it any time, and every answer shows what it read.' : 'Pick one. You can change it any time, and every answer shows what it read.'}</span>
         </div>
       )}
 
-      <fieldset className="s-choices">
+      {showLocal && <fieldset className="s-choices">
         <legend className="s-sr">When Peblo needs AI</legend>
         {CHOICES.map(({ id, title, desc, tone, icon: Icon }) => (
           <label key={id} className={`s-choice${routing === id ? ' on' : ''}`} style={{ background: `var(--s-${tone})` }}>
@@ -90,10 +94,10 @@ export default function SoftConnections({ embedded = false }) {
             <span className="s-choice-desc">{desc}</span>
           </label>
         ))}
-      </fieldset>
+      </fieldset>}
 
       <div className="s-conn-cards">
-        <section className="s-conn-card" aria-labelledby="s-ollama">
+        {showLocal && <section className="s-conn-card" aria-labelledby="s-ollama">
           <div className="s-tile-head" style={{ paddingBottom: 0 }}>
             <h2 id="s-ollama" className="s-conn-h2">Local AI · Ollama</h2>
             <span className="s-status" style={{ background: status.bg }}>{status.dot && <span className="dot" />}{status.text}</span>
@@ -130,18 +134,19 @@ export default function SoftConnections({ embedded = false }) {
               <button type="button" className="s-link-btn" style={{ alignSelf: 'flex-start', color: 'var(--s-fg3)' }} onClick={() => apply({ ollamaEnabled: false })}>Turn off Local AI</button>
             </>
           )}
-        </section>
+        </section>}
 
         <section className="s-conn-card" aria-labelledby="s-keys">
           <h2 id="s-keys" className="s-conn-h2">Cloud keys</h2>
-          <span className="s-empty small">Saved encrypted in your account. {routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
+          <span className="s-empty small">Saved encrypted in your account. {hosted ? 'Peblo sends your question and the notes it found (never #private ones) to the provider you connect.' : routing === 'ollama' ? 'Not used while "Only on this computer" is picked.' : 'Used only as your choice above allows.'}</span>
           {unreadableKeyMessage(settings) && <p role="alert" className="s-empty small" style={{ color: '#ef4444', fontWeight: 500 }}>{unreadableKeyMessage(settings)}</p>}
 <KeyInput id="s-openai" label="OpenAI key" placeholder="sk-…" value={settings?.openAiKey} onSave={(v) => apply({ openAiKey: v })} />
           <KeyInput id="s-gemini" label="Gemini key" placeholder="AIza…" value={settings?.geminiKey} onSave={(v) => apply({ geminiKey: v })} />
           <CloudModels apply={apply} />
+          <AiConnections theme="soft" apply={apply} />
         </section>
 
-        <LocalModels variant="soft" />
+        {showLocal && <LocalModels variant="soft" />}
 
         {!embedded && <section className="s-conn-card" style={{ background: 'var(--s-lilac)' }} aria-labelledby="s-next">
           <span className="s-count" style={{ alignSelf: 'flex-start', fontSize: 12.5, fontWeight: 800 }}>Coming next</span>
