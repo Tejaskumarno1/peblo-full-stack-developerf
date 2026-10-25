@@ -454,3 +454,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 /* Settings list: a small coloured icon in front of each section name */
 .soft .s-set-link .ico { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--s-fg, #3b2f26); }
 .soft .s-set-link.on .ico { box-shadow: 0 0 0 2px rgba(255,255,255,.28); }
+
+/* who is in which section: dots on the Outline card */
+.soft .s-outl-item { display: flex; align-items: center; gap: 8px; text-align: left; }
+.soft .s-pips { display: inline-flex; flex: none; margin-left: auto; }
+.soft .s-pips i { width: 11px; height: 11px; margin-left: -3px; border: 2px solid var(--s-butter); border-radius: 50%; box-shadow: 0 0 0 1px rgba(36, 31, 26, .18); }
+.soft .s-pips i:first-child { margin-left: 0; }

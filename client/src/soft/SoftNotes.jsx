@@ -17,6 +17,8 @@ import { useAutoSave } from '../hooks';
 import { saveNoteSafe, setNoteBase, getNoteBase } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import ShareChips from '../components/ShareChips';
+import { useLive } from '../utils/liveStore';
+import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
@@ -415,6 +417,17 @@ export default function SoftNotes() {
     return () => document.removeEventListener('keydown', esc);
   }, [focus]);
   const outline = useMemo(() => (doc?.content || '').split('\n').map((l) => /^(#{1,3})\s+(.+)$/.exec(l)).filter(Boolean).map((m) => ({ level: m[1].length, text: m[2].replace(/[*_`]/g, '').trim() })), [doc?.content]);
+  // who else is in which section (shown as dots on the Outline card)
+  const live = useLive();
+  const [sec, setSec] = useState({});
+  useEffect(() => {
+    const peers = (live.noteId === doc?.id ? live.viewers : []).filter((v) => !v.self);
+    const titles = outline.map((h) => h.text);
+    const tick = () => { const next = peersBySection(peers, titles); setSec((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next)); };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [live.viewers, live.noteId, outline, doc?.id]);
   const jump = (text) => {
     const el = [...document.querySelectorAll('.s-note-body [data-content-type="heading"]')].find((h) => h.textContent.trim() === text);
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -580,7 +593,7 @@ export default function SoftNotes() {
               <nav className="s-focus-outline" aria-label="Outline">
                 <span className="lab">Outline</span>
                 {outline.length === 0 && <span className="none">Add a heading to see it here.</span>}
-                {outline.map((h, i) => <button key={i} type="button" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}</button>)}
+                {outline.map((h, i) => <button key={i} type="button" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
                 <span className="lab" style={{ marginTop: 14 }}>This note</span>
                 <span className="none">{words} words · {Math.max(1, Math.round(words / 200))} min read</span>
                 <span className="none">{linked.length} linked task{linked.length === 1 ? '' : 's'}</span>
@@ -700,7 +713,7 @@ export default function SoftNotes() {
         {outline.length >= 2 && (
           <section className="s-side-card s-outline-card" style={{ background: 'var(--s-butter)' }} aria-labelledby="s-outl">
             <h3 id="s-outl" className="s-h3">Outline <span className="s-cnt">{outline.length}</span></h3>
-            {outline.slice(0, 20).map((h, i) => <button key={i} type="button" className="s-side-link s-outl-item" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}</button>)}
+            {outline.slice(0, 20).map((h, i) => <button key={i} type="button" className="s-side-link s-outl-item" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
           </section>
         )}
 

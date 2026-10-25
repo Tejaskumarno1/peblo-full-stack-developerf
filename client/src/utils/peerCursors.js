@@ -30,6 +30,20 @@ export function headingIndexes() {
   return topBlocks(root).map((b, i) => { const c = b.querySelector('.bn-block-content'); return c?.getAttribute('data-content-type') === 'heading' ? { index: i, text: (c.textContent || '').trim() } : null; }).filter(Boolean);
 }
 
+
+/** For each outline title, the people whose caret is in that section: { title: [{ id, name }] }. */
+export function peersBySection(peers, titles) {
+  const hi = headingIndexes();
+  const out = {};
+  if (!hi.length) return out;
+  for (const p of peers) {
+    if (p.cursor == null) continue;
+    let hit = null;
+    for (const h of hi) { if (h.index <= p.cursor && titles.includes(h.text)) hit = h; }
+    if (hit) (out[hit.text] ||= []).push({ id: p.id, name: p.name });
+  }
+  return out;
+}
 /** Index of the top-level block the caret is in, or null when the caret is not in the note editor. */
 export function caretBlock() {
   const sel = window.getSelection?.();
@@ -82,7 +96,14 @@ function rangeIn(blk, s, e) {
 const el = (tag, cls, css, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (css) n.style.cssText = css; if (text) n.textContent = text; return n; };
 
 /** Where a person's selection starts and ends: a tinted range, a pin at the start, a flag at the end. Also a thin caret. */
-function drawRange(frag, blk, p, clip) {
+const lastMove = new Map(); // person id -> { key, at }: flags fade after 3 s without movement
+const isQuiet = (p) => { const key = `${p.cursor}:${p.selStart}:${p.selEnd}`; const m = lastMove.get(p.id); if (!m || m.key !== key) { lastMove.set(p.id, { key, at: Date.now() }); return false; } return Date.now() - m.at > 3000; };
+
+/** Flags that would sit on top of each other stack upward instead. */
+const stackFlag = (used, node, left, top) => { const k = `${Math.round(top / 6)}:${Math.round(left / 60)}`; const n = used.get(k) || 0; used.set(k, n + 1); if (n) node.querySelector('span').style.marginBottom = `${1 + n * 21}px`; };
+
+function drawRange(frag, blk, p, clip, used) {
+  const quiet = isQuiet(p);
   if (p.selStart == null || p.selEnd == null) return;
   const range = rangeIn(blk, p.selStart, p.selEnd);
   if (!range) return;
@@ -96,12 +117,16 @@ function drawRange(frag, blk, p, clip) {
     const caret = el('div', 'pb-peer-caret', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;height:${Math.round(r.height || 20)}px;--peer:${color}`);
     caret.setAttribute('data-peer-caret', p.name);
     caret.appendChild(el('span', '', '', nameOf(p)));
+    if (quiet) caret.classList.add('quiet');
+    stackFlag(used, caret, r.left, r.top);
     frag.appendChild(caret);
     return;
   }
   for (const r of rects) {
     if (!inView(r)) continue;
-    frag.appendChild(el('div', 'pb-peer-sel', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;width:${Math.round(r.width)}px;height:${Math.round(r.height)}px;--peer:${color}`));
+    const sel = el('div', 'pb-peer-sel', `left:${Math.round(r.left)}px;top:${Math.round(r.top)}px;width:${Math.round(r.width)}px;height:${Math.round(r.height)}px;--peer:${color}`);
+    sel.setAttribute('data-peer-span', `${p.name}|${range.toString()}`);
+    frag.appendChild(sel);
   }
   const first = rects[0]; const last = rects[rects.length - 1];
   const words = range.toString().trim().split(/\s+/).filter(Boolean).length;
@@ -115,8 +140,31 @@ function drawRange(frag, blk, p, clip) {
     const end = el('div', 'pb-peer-end', `left:${Math.round(last.right)}px;top:${Math.round(last.top)}px;height:${Math.round(last.height)}px;--peer:${color}`);
     end.setAttribute('data-peer-end', p.name);
     end.appendChild(el('span', '', '', `${p.name} · End · ${words} word${words === 1 ? '' : 's'}`));
+    if (quiet) end.classList.add('quiet');
+    stackFlag(used, end, last.right, last.top);
     frag.appendChild(end);
   }
+}
+
+/** Pointing at someone's selection or caret shows their flag again and the exact words they selected. */
+let tip = null;
+let lastMouse = null;
+function hover(e) {
+  if (e) lastMouse = { x: e.clientX, y: e.clientY };
+  if (!layer || !lastMouse) return;
+  e = { clientX: lastMouse.x, clientY: lastMouse.y };
+  let tipText = null;
+  for (const n of layer.querySelectorAll('.pb-peer-sel, .pb-peer-caret')) {
+    const r = n.getBoundingClientRect();
+    const hit = e.clientX >= r.left - 6 && e.clientX <= r.right + 6 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2;
+    n.classList.toggle('hot', hit);
+    if (hit && n.dataset.peerSpan) { const [who, text] = n.dataset.peerSpan.split(/\|(.*)/s); tipText = `${who} selected \u201C${text.length > 90 ? `${text.slice(0, 87)}\u2026` : text}\u201D`; }
+  }
+  for (const n of layer.querySelectorAll('.pb-peer-end, .pb-peer-pin')) n.classList.toggle('hot', !!tipText);
+  if (!tipText) { tip?.remove(); tip = null; return; }
+  if (!tip) { tip = el('div', 'pb-peer-tip'); layer.parentNode.appendChild(tip); }
+  tip.textContent = tipText;
+  tip.style.cssText = `left:${Math.min(e.clientX + 14, window.innerWidth - 280)}px;top:${e.clientY + 18}px`;
 }
 let layer = null;
 let current = [];
@@ -155,8 +203,10 @@ function draw() {
     mark.appendChild(label);
     frag.appendChild(mark);
   }
-  for (const p of current) { if (p.cursor != null && blocks[p.cursor]) drawRange(frag, blocks[p.cursor], p, clip); }
+  const used = new Map();
+  for (const p of current) { if (p.cursor != null && blocks[p.cursor]) drawRange(frag, blocks[p.cursor], p, clip, used); }
   layer.replaceChildren(frag);
+  hover(); // keep the hover state across redraws
 }
 
 /** Mark the blocks other people are in. `peers`: [{ id, name, cursor }]. Pass [] to clear. Safe to call often. */
@@ -174,6 +224,7 @@ export function showPeers(peers) {
     const again = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
     window.addEventListener('scroll', again, true);
     window.addEventListener('resize', again);
+    window.addEventListener('mousemove', hover, { passive: true });
   }
   draw();
 }

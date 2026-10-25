@@ -4,7 +4,7 @@ import { boot } from './lib.mjs';
 const { base, api, page, ctx, check, finish } = await boot();
 const SHOTS = 'C:/Users/tejas/Documents/peblo-full-stack-developerf/.shots';
 try {
-  const note = (await api('POST', '/api/notes', { title: 'Range note', content: '## Goal\n\nShip the redesign by Friday with no open blockers\n\nSecond paragraph stays plain', tags: [] })).note;
+  const note = (await api('POST', '/api/notes', { title: 'Range note', content: '## Goal\n\nShip the redesign by Friday with no open blockers\n\n## Next\n\nSecond paragraph stays plain', tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
   await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } });
   await page.setViewportSize({ width: 1440, height: 860 });
@@ -42,6 +42,37 @@ try {
   check('owner sees Aarav\'s selection start and end with a word count', own.start === 'Aarav' && /Aarav · End · 9 words/.test(own.end) && own.rects >= 1, JSON.stringify(own));
   await page.screenshot({ path: `${SHOTS}/range-owner.png` });
 
+  // the owner's Outline card shows who is in which section
+  await page.waitForFunction(() => document.querySelector('[data-testid="outline-pips"] i'), null, { timeout: 15000 });
+  check('owner Outline card marks the section Aarav is in', /Aarav is here/.test(await page.evaluate(() => document.querySelector('[data-testid="outline-pips"] i').title)));
+
+  // flags fade when nobody moves, and come back (with the exact words) when you point at the selection
+  await page.waitForFunction(() => document.querySelector('.pb-peer-end.quiet'), null, { timeout: 12000 });
+  check('flags fade after a few seconds without movement', true);
+  const spot = await page.evaluate(() => { const r = document.querySelector('.pb-peer-sel').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(spot.x, spot.y);
+  await page.waitForFunction(() => document.querySelector('.pb-peer-tip'), null, { timeout: 5000 });
+  const tipText = await page.evaluate(() => document.querySelector('.pb-peer-tip').textContent);
+  check('pointing at a selection shows who selected which words', /Aarav selected .Ship the redesign by Friday with no open blockers./.test(tipText), tipText);
+  check('and the flag comes back', await page.evaluate(() => !!document.querySelector('.pb-peer-end.hot')));
+
+  // two people on the same words: their flags stack instead of overlapping
+  const g2ctx = await ctx.browser().newContext({ viewport: { width: 1280, height: 800 } });
+  const g2 = await g2ctx.newPage();
+  await g2.goto(`${base}/s/note/${tok}`);
+  await g2.locator('.bn-editor').waitFor({ timeout: 15000 });
+  await g2.getByLabel('Your name').fill('Bela');
+  await g2.getByLabel('Your name').press('Enter');
+  await g2.locator('.bn-editor').getByText('Ship the redesign by Friday with no open blockers').click();
+  await g2.keyboard.press('Home');
+  await g2.keyboard.press('Shift+End');
+  await page.mouse.move(5, 5);
+  await page.waitForFunction(() => document.querySelectorAll('.pb-peer-end').length >= 2, null, { timeout: 15000 });
+  const lifts = await page.evaluate(() => [...document.querySelectorAll('.pb-peer-end span')].map((s) => parseInt(s.style.marginBottom || '1', 10)).sort((a, b) => a - b));
+  check('two flags on the same words are stacked, not overlapping', lifts.length >= 2 && lifts[lifts.length - 1] >= 20, JSON.stringify(lifts));
+  await g2ctx.close();
+
+
   // collapsing the selection turns it into a thin caret with the name
   await g.keyboard.press('ArrowLeft');
   await page.waitForFunction(() => document.querySelector('[data-peer-caret]') && !document.querySelector('[data-peer-end]'), null, { timeout: 15000 });
@@ -60,7 +91,7 @@ try {
   // the outline shows who is in which section
   await g.waitForFunction(() => document.querySelector('[data-testid="toc-pips"] i'), null, { timeout: 15000 });
   const pip = await g.evaluate(() => ({ title: document.querySelector('[data-testid="toc-pips"] i').title, link: document.querySelector('[data-testid="toc-pips"]').closest('a').textContent }));
-  check('the outline marks the section the owner is in', /is here/.test(pip.title) && /Goal/.test(pip.link), JSON.stringify(pip));
+  check('the outline marks the section the owner is in', /is here/.test(pip.title) && /Next/.test(pip.link), JSON.stringify(pip));
 
   // Follow: click it to follow the owner, Escape to stop
   const follow = g.locator('.cp-follow').first();

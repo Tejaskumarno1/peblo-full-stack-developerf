@@ -10,3 +10,10 @@
 .pb-peer-caret span, .pb-peer-end span, .pb-peer-pin span { position: absolute; left: -2px; bottom: 100%; margin-bottom: 1px; padding: 3px 7px; border-radius: 6px 6px 6px 0; background: var(--peer); color: #fff; font: 800 11px/1 system-ui, sans-serif; white-space: nowrap; }
 .pb-peer-pin::before { content: ''; position: absolute; left: -4px; top: -6px; width: 10px; height: 10px; border-radius: 50% 50% 50% 0; background: var(--peer); }
 .pb-peer-pin span { left: -3px; font-size: 10px; padding: 2px 6px; margin-bottom: 7px; }
+
+/* Flags fade after 3 s without movement and come back when you point at the person's selection or caret. */
+.pb-peer-caret span, .pb-peer-end span, .pb-peer-pin span { transition: opacity .25s; }
+.pb-peer-caret.quiet span, .pb-peer-end.quiet span, .pb-peer-pin.quiet span { opacity: 0; }
+.pb-peer-caret.hot span, .pb-peer-end.hot span, .pb-peer-pin.hot span { opacity: 1; }
+.pb-peer-sel.hot { background: color-mix(in srgb, var(--peer) 38%, transparent); }
+.pb-peer-tip { position: fixed; z-index: 31; max-width: 270px; padding: 6px 10px; border-radius: 10px; background: #241F1A; color: #fff; font: 600 12px/1.4 system-ui, sans-serif; pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
