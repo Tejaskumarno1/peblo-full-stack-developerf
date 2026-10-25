@@ -1,7 +1,7 @@
 {
   "name": "peblo",
   "productName": "Peblo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Peblo — AI-powered notes, to-dos and calendar that runs on your computer",
@@ -42,6 +42,7 @@
     "cors": "^2.8.5",
     "diff-match-patch": "^1.0.5",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.11",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
@@ -73,6 +74,9 @@
   "build": {
     "appId": "dev.peblo.app",
     "productName": "Peblo",
+    "publish": [
+      { "provider": "github", "owner": "Tejaskumarno1", "repo": "peblo-full-stack-developerf", "releaseType": "release" }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"

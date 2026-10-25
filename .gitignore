@@ -13,3 +13,4 @@ dist/
 server/generated/
 
 e2e/node_modules/
+release-*/

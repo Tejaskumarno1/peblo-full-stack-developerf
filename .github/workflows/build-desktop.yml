@@ -38,9 +38,13 @@ jobs:
           name: peblo-${{ matrix.os }}
           path: |
             release/*.exe
+            release/*.exe.blockmap
             release/*.dmg
+            release/*.dmg.blockmap
+            release/*.zip
             release/*.AppImage
             release/*.deb
+            release/latest*.yml
           if-no-files-found: error
 
   release:

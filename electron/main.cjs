@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 
+const updates = require('./updates.cjs');
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.PEBLO_DEV_URL; // e.g. http://localhost:5173 when running `npm run dev`
 
@@ -66,6 +67,7 @@ function readRemoteUrl() {
 }
 let isQuitting = false;
 let trayHintShown = false;
+const updateCtx = { getWindow: () => mainWindow, beforeRestart: () => { isQuitting = true; } };
 
 const DEFAULT_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+Space';
 let captureShortcut = DEFAULT_CAPTURE_SHORTCUT;
@@ -486,6 +488,10 @@ function buildMenu() {
           click: () => toggleCapture(),
         },
         {
+          label: `Check for Updates… (v${app.getVersion()})`,
+          click: () => updates.checkNow(updateCtx),
+        },
+        {
           label: 'Open Data Folder',
           click: () => shell.openPath(app.getPath('userData')),
         },
@@ -512,8 +518,10 @@ app.whenReady().then(async () => {
   }
   captureShortcut = readDesktopSettings().captureShortcut || DEFAULT_CAPTURE_SHORTCUT;
   if (!ACCELERATOR_RE.test(captureShortcut)) captureShortcut = DEFAULT_CAPTURE_SHORTCUT;
+  await updates.clearStaleWebCache(); // a new app version must not show the pages of an old one
   buildMenu();
   createWindow();
+  updates.init({ ...updateCtx, icon: ICON_PATH });
   // Moving to another monitor or changing Windows/macOS display scaling can change the content size.
   screen.on('display-metrics-changed', applyScale);
   try {
