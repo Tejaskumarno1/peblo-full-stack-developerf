@@ -53,6 +53,24 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/share/:kind/:id/live[?typing=1] -> who is on this link right now (for the owner's open note).
+// Calling it also marks the owner as present (and typing) so people on the link see "<owner> is typing…".
+shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
+  try {
+    const kind = kindOf(req.params.kind);
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    const live = await prisma.note.count({ where: { id: row.id, shareToken: { not: null }, ...LIVE() } }).catch(() => 0);
+    if (kind !== 'note' || !row.shareToken || !live) return res.json({ shared: false, viewers: [] });
+    const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
+    const session = `owner:${req.user!.id}`;
+    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1');
+    const viewers = (await listViewers(kind, row.shareToken, session)).filter((v) => !v.self);
+    res.json({ shared: true, canEdit: !!row.shareEdit, viewers });
+  } catch (e) { next(e); }
+});
+
 // POST /api/share/:kind/:id -> turn the link on (keeps the same link if it is already on)
 shareRoutes.post('/:kind/:id', async (req, res, next) => {
   try {
@@ -99,6 +117,26 @@ const viewerNames = new Map<string, { name: string; expiresAt: number }>();
 const prunePresence = () => prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\'').catch(() => {});
 const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
+
+/** Mark a person as present (and, when `typing`, as typing for the next few seconds). */
+const touchViewer = (kind: string, token: string, sessionId: string, name: string, typing: boolean) => prisma.$executeRawUnsafe(
+  'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END',
+  kind, token, sessionId, name, typing,
+);
+/** Everyone on the link right now. No emails or addresses: a short id, a name, and whether they are typing. */
+async function listViewers(kind: string, token: string, mySession: string) {
+  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean }[]>(
+    'SELECT session_id, display_name, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+    kind, token,
+  );
+  return rows.map((v) => ({
+    id: crypto.createHash('sha256').update(v.session_id).digest('hex').slice(0, 12),
+    name: v.display_name,
+    self: v.session_id === mySession,
+    typing: !!v.typing,
+    owner: v.session_id.startsWith('owner:'), // guests cannot use ':' in a session id
+  }));
+}
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { shareToken: token, userId, isDeleted: false }, select: { id: true } });
@@ -157,20 +195,9 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
     if (req.body?.active === false) {
       await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId);
     } else {
-      await prisma.$executeRawUnsafe(
-        'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW()',
-        kind, token, sessionId, name,
-      );
+      await touchViewer(kind, token, sessionId, name, req.body?.typing === true);
     }
-    const active = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string }[]>(
-      'SELECT session_id, display_name FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
-      kind, token,
-    );
-    res.json({ viewers: active.map((viewer) => ({
-      id: crypto.createHash('sha256').update(viewer.session_id).digest('hex').slice(0, 12),
-      name: viewer.display_name,
-      self: viewer.session_id === sessionId,
-    })) });
+    res.json({ viewers: await listViewers(kind, token, sessionId) });
   } catch (e) { next(e); }
 });
 

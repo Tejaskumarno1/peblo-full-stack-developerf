@@ -46,6 +46,7 @@ const GoHome = () => <Navigate to="/" replace />;
 
 // Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const LiveEditors = lazy(() => import('./components/LiveEditors'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
@@ -85,6 +86,7 @@ function ShellLayout() {
         <SeriesScopeDialog />
         <CommandPalette />
         <HelpDialog />
+        <LiveEditors />
       </Suspense>
     </AppShell>
   );

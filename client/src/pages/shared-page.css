@@ -243,3 +243,17 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .taskcard { box-shadow: none; border: 1px solid var(--line); }
   .pb-shared { background: #fff; color: #000; }
 }
+
+/* Live typing: "Alex is typing…" floats bottom-left; the typist's avatar in the header pulses. */
+.pb-shared .typing-pill { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(18px, env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px 16px 8px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); box-shadow: var(--shadow); font: 600 13.5px 'Figtree', system-ui, sans-serif; animation: pb-typing-in .22s ease-out both; }
+.pb-shared .typing-av { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--butter); color: var(--fg); font: 700 11px 'Figtree', system-ui, sans-serif; }
+.pb-shared .typing-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-shared .typing-dots { display: inline-flex; gap: 3px; align-items: center; }
+.pb-shared .typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pb-typing-dot 1.1s infinite ease-in-out; }
+.pb-shared .typing-dots i:nth-child(2) { animation-delay: .15s; }
+.pb-shared .typing-dots i:nth-child(3) { animation-delay: .3s; }
+.pb-shared .av.typing { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); animation: pb-typing-ring 1.4s infinite ease-in-out; }
+@keyframes pb-typing-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pb-typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@keyframes pb-typing-ring { 0%, 100% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); } 50% { box-shadow: 0 0 0 2px var(--surface), 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .pb-shared .typing-pill, .pb-shared .typing-dots i, .pb-shared .av.typing { animation: none; } }

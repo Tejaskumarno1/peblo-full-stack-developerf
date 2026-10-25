@@ -60,6 +60,7 @@ export default function SharedPage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
+  const typedAt = useRef(0);
   const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -286,7 +287,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active }),
+      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000 }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -301,7 +302,8 @@ export default function SharedPage() {
       .then((json) => { if (live && json?.viewers) setViewers(json.viewers); })
       .catch(() => {});
     void beat();
-    const interval = window.setInterval(() => { void beat(); }, 12_000);
+    // an editable link checks every 3 s so "someone is typing" feels live; a read-only link only needs to be counted
+    const interval = window.setInterval(() => { void beat(); }, data?.canEdit ? 3000 : 12_000);
     const leave = () => { void beat(false, true); };
     window.addEventListener('pagehide', leave);
     return () => {
@@ -310,7 +312,13 @@ export default function SharedPage() {
       window.removeEventListener('pagehide', leave);
       void beat(false, true);
     };
-  }, [data?.kind, kindPath, token, user?.id, shareOff]);
+  }, [data?.kind, data?.canEdit, kindPath, token, user?.id, shareOff]);
+
+  const others = viewers.filter((viewer) => !viewer.self);
+  const typers = others.filter((viewer) => viewer.typing);
+  const typingText = typers.length === 1 ? `${typers[0].name}${typers[0].owner ? ' (owner)' : ''} is typing`
+    : typers.length === 2 ? `${typers[0].name} and ${typers[1].name} are typing`
+      : typers.length > 2 ? `${typers.length} people are typing` : '';
 
   const showToast = (message) => {
     setToast(message);
@@ -489,7 +497,7 @@ export default function SharedPage() {
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
           </button>}
           {data && viewers.length > 0 && <div className="avatars" aria-label={`${viewers.length} people viewing this page`} title={`${viewers.length} viewing now`}>
-            {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
+            {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}${viewer.typing && !viewer.self ? ' typing' : ''}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}${viewer.typing && !viewer.self ? ' · typing' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
             {viewers.length > 3 && <span className="av avatar-extra">+{viewers.length - 3}</span>}
           </div>}
           {data && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
@@ -527,7 +535,7 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' ? ' task-stage' : ''}`}>
+        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}`}>
           {data.kind === 'note' && headings.length > 0 && <aside className="toc" aria-label="On this page">
             <h2>On this page</h2>
             {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}>{title}</a>)}
@@ -537,7 +545,7 @@ export default function SharedPage() {
           <article ref={articleRef}>
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
-                ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; queueSave(); }} />
+                ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
@@ -547,7 +555,7 @@ export default function SharedPage() {
               </div>
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
-                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; queueSave(); }} /></Suspense>
+                ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content} onChange={(markdown) => { draft.current.content = markdown; typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
             </>}
 
@@ -571,6 +579,11 @@ export default function SharedPage() {
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
+      {data && typingText && <div className="typing-pill" role="status" aria-live="polite" data-testid="typing-pill">
+        <span className="typing-av" aria-hidden="true">{initials(typers[0].name)}</span>
+        <span className="typing-text">{typingText}</span>
+        <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+      </div>}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
       {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
         <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">
