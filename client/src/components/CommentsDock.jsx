@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Ic } from '../utils/icons';
 import { createPortal } from 'react-dom';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -178,11 +179,11 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
     return (
       <li key={c.id} className={`pb-cthread${focusId === c.id ? ' on' : ''}${done ? ' done' : ''}`} data-thread={c.id} data-testid="comment-thread">
         {c.quote && <blockquote style={{ borderColor: c.author.color }}>{c.kind === 'suggestion' ? <del>{c.quote}</del> : c.quote}</blockquote>}
-        {c.kind === 'suggestion' && <div className="pb-csug" data-testid="suggestion">→ <ins>{c.replacement || '(delete)'}</ins>{c.status === 'accepted' && <em> accepted</em>}{c.status === 'rejected' && <em> rejected</em>}</div>}
+        {c.kind === 'suggestion' && <div className="pb-csug" data-testid="suggestion"><Ic name="arrowRight" size={13} style={{ marginRight: 4, verticalAlign: '-2px' }} /><ins>{c.replacement || '(delete)'}</ins>{c.status === 'accepted' && <em> accepted</em>}{c.status === 'rejected' && <em> rejected</em>}</div>}
         {[c, ...list].map((x) => (
           <div key={x.id} className="pb-citem">
             <div className="who"><i style={{ background: x.author.color }}>{(x.author.name[0] || '?').toUpperCase()}</i><b>{x.author.name}{x.author.self ? ' (you)' : ''}</b><span>{ago(x.createdAt)}</span>
-              {(x.author.self || !target.sid) && <button type="button" className="x" aria-label="Delete this comment" onClick={() => remove(x)}>×</button>}
+              {(x.author.self || !target.sid) && <button type="button" className="x" aria-label="Delete this comment" onClick={() => remove(x)}><Ic name="x" size={15} /></button>}
             </div>
             {x.body && <p><Body text={x.body} /></p>}
           </div>
@@ -211,7 +212,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
     <>
       <div className="pb-dock" style={{ '--pb-bg': dark ? '#1f2430' : '#ffffff' }}>
         <button type="button" className={`pb-cbtn${fresh ? ' fresh' : ''}${open ? ' on' : ''}`} onClick={() => { setOpen((o) => !o); setFresh(false); }} aria-label={`Comments, ${openCount} open`} aria-expanded={open} data-testid="comments-button" title="Comments and suggestions">
-          <span aria-hidden="true">💬</span>{openCount > 0 && <b>{openCount}</b>}
+          <Ic name="comment" size={16} />{openCount > 0 && <b>{openCount}</b>}
         </button>
         {children}
       </div>
@@ -223,7 +224,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
               <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open</button>
               <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Done</button>
             </div>
-            <button type="button" className="x" aria-label="Close comments" onClick={() => setOpen(false)}>×</button>
+            <button type="button" className="x" aria-label="Close comments" onClick={() => setOpen(false)}><Ic name="x" size={15} /></button>
           </header>
           <div className="scroll">
             {draft ? (

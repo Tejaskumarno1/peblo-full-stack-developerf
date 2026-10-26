@@ -92,12 +92,12 @@ try {
   await para.hover();
   await page.locator('[data-testid="reaction-add"]').waitFor({ timeout: 4000 });
   await page.locator('[data-testid="reaction-add"]').click();
-  await page.locator('[data-testid="react-👍"]').click();
+  await page.locator('[data-testid="react-like"]').click();
   check('5 the reaction shows for the owner', await until(async () => (await page.locator('[data-testid="reaction"]').count()) === 1, 4000));
-  check('5 and for the guest', await until(async () => /👍 1/.test((await g.locator('[data-testid="reaction"]').first().textContent().catch(() => '')) || ''), 6000));
+  check('5 and for the guest', await until(async () => /^1$/.test((await g.locator('[data-testid="reaction"]').first().textContent().catch(() => '')) || ''), 6000));
   await g.locator('[data-testid="reaction"]').first().click();
-  check('5 the guest adds theirs: 2', await until(async () => /👍 2/.test((await page.locator('[data-testid="reaction"]').first().textContent().catch(() => '')) || ''), 6000));
-  check('5 the reaction does not change the note text', !/👍/.test((await api('GET', `/api/notes/${note.id}`)).note.content));
+  check('5 the guest adds theirs: 2', await until(async () => /^2$/.test((await page.locator('[data-testid="reaction"]').first().textContent().catch(() => '')) || ''), 6000));
+  check('5 the reaction does not change the note text', !/like/.test((await api('GET', `/api/notes/${note.id}`)).note.content));
 
   // 6. named versions
   await api('PATCH', `/api/notes/${note.id}`, { content: BASE + '\n\nThird paragraph.' });

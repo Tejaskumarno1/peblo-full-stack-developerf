@@ -18,6 +18,7 @@ import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
+import { Ic } from '../utils/icons';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
@@ -189,8 +190,8 @@ function CommentTools() {
   const go = (mode) => window.dispatchEvent(new CustomEvent('pb-comment-start', { detail: { quote: (editor.getSelectedText() || '').trim(), mode } }));
   return (
     <>
-      <Btn key="cm" mainTooltip="Comment on this text" icon={<span aria-hidden="true">💬</span>} onClick={() => go('comment')} />
-      <Btn key="sg" mainTooltip="Suggest new words for this text" icon={<span aria-hidden="true" style={{ fontWeight: 800, fontSize: 12 }}>±</span>} onClick={() => go('suggest')} />
+      <Btn key="cm" mainTooltip="Comment on this text" icon={<Ic name="comment" size={16} />} onClick={() => go('comment')} />
+      <Btn key="sg" mainTooltip="Suggest new words for this text" icon={<Ic name="suggest" size={16} />} onClick={() => go('suggest')} />
     </>
   );
 }

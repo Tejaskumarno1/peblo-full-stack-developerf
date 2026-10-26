@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Ic } from '../utils/icons';
 import { createPortal } from 'react-dom';
 import { X, RotateCcw } from 'lucide-react';
 import { notesAPI } from '../api';
@@ -75,7 +76,7 @@ export default function VersionHistory({ noteId, currentContent, onClose, onRest
             {versions?.map((v) => (
               <li key={v.id}>
                 <button type="button" onClick={() => setSel(v.id)} aria-pressed={sel === v.id} style={{ width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', font: 'inherit', background: sel === v.id ? V('soft', '#eee') : 'transparent', color: 'inherit' }}>
-                  {v.label && <strong data-testid="vh-label" style={{ display: 'block', color: V('accent', '#2563eb') }}>★ {v.label}</strong>}
+                  {v.label && <strong data-testid="vh-label" style={{ display: 'block', color: V('accent', '#2563eb') }}><Ic name="star" size={13} style={{ marginRight: 5, verticalAlign: '-2px' }} />{v.label}</strong>}
                   <strong style={{ display: 'block', fontWeight: v.label ? 500 : 700, fontSize: v.label ? 13 : undefined }}>{when(v.createdAt)}{v.savedBy ? ` · ${v.savedBy}` : ''}</strong>
                   <span style={{ fontSize: 12.5, opacity: 0.75, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.preview || '(empty)'}</span>
                 </button>

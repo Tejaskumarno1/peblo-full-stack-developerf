@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Ic } from '../utils/icons';
 
 /*
  * Who is in this note, drawn from the live document's awareness (temporary, never stored):
@@ -21,6 +22,33 @@ const ago = (t) => {
   return `${Math.round(s / 86400)} d ago`;
 };
 const keyOf = (p) => `${p.name}|${p.color}`;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/** The element that scrolls the note (the page itself when nothing inside does). */
+const scrollerOf = (root) => {
+  for (let p = root; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 2) return p;
+  }
+  return document.scrollingElement || document.documentElement;
+};
+const topOf = (sc) => (sc === document.scrollingElement || sc === document.documentElement ? 0 : sc.getBoundingClientRect().top);
+
+/** Where I am in the note: the block at the top of my screen and how far through it. Sent to others so they can follow my view. */
+const anchorOf = (root) => {
+  const top = topOf(scrollerOf(root)) + 8;
+  let hit = null;
+  let first = null;
+  root.querySelectorAll('.bn-editor .bn-block-outer').forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.height) return;
+    if (r.top <= top && top < r.bottom) hit = { el, r };
+    else if (!first && r.bottom > top) first = { el, r };
+  });
+  const h = hit || first;
+  if (!h) return null;
+  return { b: h.el.getAttribute('data-id'), f: Math.round(clamp((top - h.r.top) / h.r.height, 0, 1) * 1000) / 1000 };
+};
 
 /** The people in the note now. The same person in two tabs counts once. */
 export function usePeers(rt) {
@@ -32,7 +60,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -52,6 +80,8 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const [following, setFollowing] = useState(null); // keyOf(peer)
   const [tick, setTick] = useState(0);
   const [tip, setTip] = useState(null);
+  const [presenting, setPresenting] = useState(false);
+  const [dismissed, setDismissed] = useState({}); // keyOf(peer) -> true while the prompt is closed
   const followRef = useRef(null);
   followRef.current = following;
 
@@ -109,30 +139,93 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     return () => clearInterval(t);
   }, [anyTyping]);
 
-  // follow mode: keep the person's cursor in view
+  // my view: tell the others which block is at the top of my screen (so they can follow me), throttled
+  useEffect(() => {
+    const root = rootRef?.current;
+    if (!rt || !ready || !root) return undefined;
+    const aw = rt.provider.awareness;
+    let timer = null;
+    let lastSig = '';
+    const send = () => {
+      timer = null;
+      const a = anchorOf(root);
+      const sig = a ? `${a.b}|${a.f}` : '';
+      if (sig === lastSig) return;
+      lastSig = sig;
+      try { aw.setLocalStateField('view', a); } catch { /* gone */ }
+    };
+    const queue = () => { if (!timer) timer = setTimeout(send, 120); };
+    window.addEventListener('scroll', queue, true);
+    window.addEventListener('resize', queue);
+    queue();
+    return () => { clearTimeout(timer); window.removeEventListener('scroll', queue, true); window.removeEventListener('resize', queue); try { aw.setLocalStateField('view', null); } catch { /* gone */ } };
+  }, [rt, ready, rootRef]);
+
+  // presenting: everyone else is offered to follow me
+  useEffect(() => {
+    if (!rt || !ready) return undefined;
+    const aw = rt.provider.awareness;
+    try { aw.setLocalStateField('presenting', presenting); } catch { /* gone */ }
+    return () => { try { aw.setLocalStateField('presenting', false); } catch { /* gone */ } };
+  }, [rt, ready, presenting]);
+  useEffect(() => { // a prompt comes back the next time that person starts presenting
+    setDismissed((d) => {
+      const live = new Set(peers.filter((p) => p.presenting).map(keyOf));
+      const keep = Object.fromEntries(Object.entries(d).filter(([k]) => live.has(k)));
+      return Object.keys(keep).length === Object.keys(d).length ? d : keep;
+    });
+  }, [peers]);
+
+  // follow mode: keep the person's view on screen, smoothly, and let go the moment I scroll or type myself
+  const [freed, setFreed] = useState(null); // { name } after I take over
   useEffect(() => {
     if (!rt || !following) return undefined;
     const aw = rt.provider.awareness;
     const target = peers.find((p) => keyOf(p) === following);
     if (!target) { setFollowing(null); return undefined; }
-    let timer;
-    let last = 0;
-    const go = () => {
-      const root = rootRef?.current;
-      if (!root) return;
+    const root = rootRef?.current;
+    if (!root) return undefined;
+    let raf = 0;
+    let lastProg = 0;
+    const view = () => aw.getStates().get(target.id)?.view || null;
+    const step = () => {
+      raf = 0;
+      const v = view();
+      if (!v?.b) return;
+      let outer = null;
+      try { outer = root.querySelector(`.bn-block-outer[data-id="${CSS.escape(v.b)}"]`); } catch { /* odd id */ }
+      if (!outer) return;
+      const sc = scrollerOf(root);
+      const r = outer.getBoundingClientRect();
+      const delta = r.top + v.f * r.height - (topOf(sc) + 8);
+      if (Math.abs(delta) < 1.5) return;
+      const big = Math.abs(delta) > window.innerHeight * 2;
+      lastProg = Date.now();
+      sc.scrollTop += big ? delta : (Math.sign(delta) * Math.max(1, Math.abs(delta) * 0.2));
+      raf = requestAnimationFrame(step);
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(step); };
+    // the typing caret of someone with no view to follow (an older tab): bring it into view
+    const caret = () => {
+      if (view()) return;
       const els = [...root.querySelectorAll('.bn-collaboration-cursor__base')];
       const el = els.find((e) => (e.querySelector('.bn-collaboration-cursor__label')?.textContent || '').trim() === target.name);
       if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     };
-    const onChange = () => {
-      clearTimeout(timer);
-      const wait = Math.max(150, 450 - (Date.now() - last));
-      timer = setTimeout(() => { last = Date.now(); go(); }, wait);
+    const onChange = () => { kick(); caret(); };
+    const free = (e) => {
+      if (e.type === 'keydown' && !['PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End', ' '].includes(e.key)) return;
+      if (e.type === 'wheel' || e.type === 'touchmove' || e.type === 'keydown') { cancelAnimationFrame(raf); raf = 0; setFollowing(null); setFreed({ name: target.name }); }
     };
     aw.on('change', onChange);
-    go();
-    return () => { clearTimeout(timer); aw.off('change', onChange); };
+    window.addEventListener('wheel', free, { passive: true });
+    window.addEventListener('touchmove', free, { passive: true });
+    window.addEventListener('keydown', free);
+    kick();
+    return () => { cancelAnimationFrame(raf); aw.off('change', onChange); window.removeEventListener('wheel', free); window.removeEventListener('touchmove', free); window.removeEventListener('keydown', free); };
   }, [rt, following, peers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!freed) return undefined; const t = setTimeout(() => setFreed(null), 4000); return () => clearTimeout(t); }, [freed]);
+  useEffect(() => { if (following) setFreed(null); }, [following]);
 
   // "edited by" on hover
   useEffect(() => {
@@ -163,6 +256,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const hidden = peers.length - shown.length;
   const now = Date.now();
   const followed = following && peers.find((p) => keyOf(p) === following);
+  const presenters = others.filter((p) => p.presenting && keyOf(p) !== following && !dismissed[keyOf(p)]);
   void tick;
 
   return (
@@ -177,7 +271,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
                 <button
                   key={keyOf(p)}
                   type="button"
-                  className={`pb-avatar ${state}${followed && keyOf(p) === following ? ' following' : ''}`}
+                  className={`pb-avatar ${state}${followed && keyOf(p) === following ? ' following' : ''}${p.presenting ? ' presenting' : ''}`}
                   style={{ '--c': p.color }}
                   data-testid="presence-avatar"
                   data-state={state}
@@ -188,16 +282,26 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
                   onClick={() => setFollowing((f) => (f === keyOf(p) ? null : keyOf(p)))}
                 >
                   {initial(p.name)}
+                  {p.presenting && <span className="badge" aria-hidden="true"><Ic name="presentation" size={9} /></span>}
                   {typing && <span className="dots" aria-hidden="true">…</span>}
                 </button>
               );
             })}
             {hidden > 0 && <span className="pb-avatar more" aria-label={`${hidden} more`}>+{hidden}</span>}
+            <button type="button" className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => setPresenting((v) => !v)}><Ic name="presentation" size={15} /></button>
             <span className="pb-presence-count" aria-live="polite">{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</span>
           </div>
+          {presenting && <div className="pb-follow presenting" role="status" data-testid="presenting-banner"><Ic name="presentation" size={14} />You are presenting. Everyone here can follow your view.<button type="button" onClick={() => setPresenting(false)}>Stop</button></div>}
+          {presenters.map((p) => (
+            <div key={keyOf(p)} className="pb-follow offer" role="status" data-testid="present-offer"><Ic name="presentation" size={14} />{p.name} is presenting
+              <button type="button" data-testid="present-follow" onClick={() => setFollowing(keyOf(p))}>Follow</button>
+              <button type="button" className="quiet" onClick={() => setDismissed((d) => ({ ...d, [keyOf(p)]: true }))}>Not now</button>
+            </div>
+          ))}
+          {freed && <div className="pb-follow" role="status" data-testid="follow-freed">You stopped following {freed.name}</div>}
           {followed && (
             <div className="pb-follow" role="status" data-testid="follow-banner">
-              Following {followed.name}
+              <Ic name="follow" size={14} />Following {followed.name}
               <button type="button" onClick={() => setFollowing(null)}>Stop</button>
             </div>
           )}
@@ -222,6 +326,14 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
         .pb-avatar .dots { position: absolute; right: -4px; bottom: -6px; font-size: 14px; color: var(--c); }
         .pb-presence-count { margin-left: 4px; opacity: .75; white-space: nowrap; }
         .pb-follow { pointer-events: auto; margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: #111827; color: #fff; font-size: 12px; display: flex; gap: 10px; align-items: center; }
+        .pb-follow { max-width: 340px; }
+        .pb-follow.presenting { background: #7c3aed; }
+        .pb-follow.offer { background: #1f2937; }
+        .pb-follow button.quiet { opacity: .7; text-decoration: none; }
+        .pb-present { width: 26px; height: 26px; border-radius: 50%; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 2px; }
+        .pb-present:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+        .pb-present.on { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+        .pb-avatar .badge { position: absolute; right: -5px; top: -6px; width: 15px; height: 15px; border-radius: 50%; background: #7c3aed; color: #fff; display: grid; place-items: center; border: 1.5px solid var(--pb-bg, #fff); }
         .pb-follow button { background: transparent; border: 0; color: #fff; text-decoration: underline; cursor: pointer; font-size: 12px; }
         .pb-editedby { position: fixed; z-index: 1200; padding: 4px 9px; border-radius: 6px; background: #111827; color: #fff; font-size: 12px; pointer-events: none; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
         .pb-editedby i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }

@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Ic, icSvg, REACTIONS } from '../utils/icons';
 
 /*
- * Emoji reactions on blocks ("👍 2" under a paragraph). They live in the shared document as a flat map, one entry per
- * person per emoji per block, so two people reacting at once never overwrite each other and everyone sees it live.
+ * Reactions on blocks (an icon and a count under a paragraph; icons, never emoji). They live in the shared document as a flat map, one entry per
+ * person per reaction per block, so two people reacting at once never overwrite each other and everyone sees it live.
  */
 
-export const EMOJI = ['👍', '❤️', '🎉', '👀', '✅', '❓'];
+export const EMOJI = REACTIONS.map((r) => r.id); // ids: like, love, celebrate, look, done, question
+const labelOf = (id) => REACTIONS.find((r) => r.id === id)?.label || id;
 
 function summary(map) {
   const out = new Map(); // blockId -> Map(emoji -> names[])
@@ -63,8 +65,9 @@ export default function Reactions({ rt, editor, rootRef, ready, canReact, dark }
                   b.className = 'pb-react' + (names.includes(rt.user.name) ? ' mine' : '');
                   b.setAttribute('data-testid', 'reaction');
                   b.title = names.join(', ');
-                  b.setAttribute('aria-label', `${emoji} ${names.length}: ${names.join(', ')}`);
-                  b.textContent = `${emoji} ${names.length}`;
+                  b.setAttribute('aria-label', `${labelOf(emoji)} ${names.length}: ${names.join(', ')}`);
+                  b.setAttribute('data-reaction', emoji);
+                  b.innerHTML = `${icSvg(emoji, 14)}<span>${names.length}</span>`;
                   if (canReact) b.addEventListener('click', (e) => { e.preventDefault(); toggleRef.current(node.attrs.id, emoji); });
                   else b.disabled = true;
                   row.appendChild(b);
@@ -114,17 +117,17 @@ export default function Reactions({ rt, editor, rootRef, ready, canReact, dark }
         <div className="pb-reactadd" style={{ left: hover.x, top: hover.y, background: bg, color: dark ? '#e7e9ee' : '#1b1f2a' }} onMouseEnter={() => clearTimeout(hideTimer.current)} onMouseLeave={() => { hideTimer.current = setTimeout(() => { setHover(null); setPick(false); }, 450); }}>
           {pick ? (
             <div className="pick" role="menu" aria-label="Pick a reaction" data-testid="reaction-menu">
-              {EMOJI.map((e) => <button key={e} type="button" role="menuitem" onClick={() => { toggle(hover.id, e); setPick(false); }} data-testid={`react-${e}`}>{e}</button>)}
+              {EMOJI.map((e) => <button key={e} type="button" role="menuitem" onClick={() => { toggle(hover.id, e); setPick(false); }} data-testid={`react-${e}`} aria-label={labelOf(e)} title={labelOf(e)}><Ic name={e} size={16} /></button>)}
             </div>
           ) : (
-            <button type="button" aria-label="Add a reaction to this paragraph" title="React" onClick={() => setPick(true)} data-testid="reaction-add">☺</button>
+            <button type="button" aria-label="Add a reaction to this paragraph" title="React" onClick={() => setPick(true)} data-testid="reaction-add"><Ic name="addReaction" size={16} /></button>
           )}
         </div>,
         document.body,
       )}
       <style>{`
         .pb-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px 0; padding-left: 2px; user-select: none; }
-        .pb-react { border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: color-mix(in srgb, currentColor 6%, transparent); color: inherit; border-radius: 999px; padding: 1px 8px; font-size: 12.5px; cursor: pointer; line-height: 1.5; }
+        .pb-react { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: color-mix(in srgb, currentColor 6%, transparent); color: inherit; border-radius: 999px; padding: 1px 8px; font-size: 12.5px; cursor: pointer; line-height: 1.5; }
         .pb-react.mine { border-color: #2563eb; background: #2563eb22; }
         .pb-react:disabled { cursor: default; }
         .pb-reactadd { position: fixed; z-index: 1200; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,.14); padding: 1px; }

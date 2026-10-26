@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, Pencil, Printer, Sun, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Printer, Sun, Type, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
@@ -84,6 +84,24 @@ export default function SharedPage() {
   const timer = useRef(null);
   const toastTimer = useRef(null);
   const menuRef = useRef(null);
+  // how this person likes to read the page (kept in this browser only)
+  const [tocOpen, setTocOpen] = useState(() => { try { return localStorage.getItem('peblo-share-toc') !== 'closed'; } catch { return true; } });
+  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true }; } });
+  const [lookOpen, setLookOpen] = useState(false);
+  const lookRef = useRef(null);
+  const toggleToc = () => setTocOpen((open) => { const next = !open; try { localStorage.setItem('peblo-share-toc', next ? 'open' : 'closed'); } catch { /* not remembered */ } return next; });
+  const setLookPref = (patch) => setLook((cur) => {
+    const next = { ...cur, ...patch };
+    try { localStorage.setItem('peblo-share-look', JSON.stringify(next)); if ('pointers' in patch) { localStorage.setItem('peblo-pointers', next.pointers ? 'on' : 'off'); window.dispatchEvent(new Event('pb-pointers-pref')); } } catch { /* not remembered */ }
+    return next;
+  });
+  useEffect(() => {
+    if (!lookOpen) return undefined;
+    const out = (event) => { if (!lookRef.current?.contains(event.target)) setLookOpen(false); };
+    const esc = (event) => { if (event.key === 'Escape') setLookOpen(false); };
+    document.addEventListener('mousedown', out); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', out); document.removeEventListener('keydown', esc); };
+  }, [lookOpen]);
   const articleRef = useRef(null);
   const shareStateRef = useRef({ data, status });
   shareStateRef.current = { data, status };
@@ -589,7 +607,7 @@ export default function SharedPage() {
   };
 
   return (
-    <div className="pb-shared" data-theme={darkMode ? 'dark' : 'light'}>
+    <div className="pb-shared" data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
       <header className="top">
         <div className="top-in">
@@ -609,6 +627,18 @@ export default function SharedPage() {
             <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
           </button>}
           {data && <button className="btn copy-btn" type="button" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={17} /><span>Copy link</span></button>}
+          {data && <div className="menu-wrap" ref={lookRef}>
+            <button className="btn icon" type="button" data-testid="look-btn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded={lookOpen} title="Appearance" onClick={() => { setLookOpen((o) => !o); setMenuOpen(false); }}><Type size={18} /></button>
+            {lookOpen && <div className="menu look-menu" role="dialog" aria-label="Appearance" data-testid="look-menu">
+              <h4>Appearance</h4>
+              <div className="look-row"><span>Text size</span><div className="seg" role="group" aria-label="Text size">{[['s', 'A−'], ['m', 'A'], ['l', 'A+'], ['xl', 'A++']].map(([v, l]) => <button key={v} type="button" className={look.size === v ? 'on' : ''} aria-pressed={look.size === v} data-testid={`look-size-${v}`} onClick={() => setLookPref({ size: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Page width</span><div className="seg" role="group" aria-label="Page width">{[['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']].map(([v, l]) => <button key={v} type="button" className={look.width === v ? 'on' : ''} aria-pressed={look.width === v} data-testid={`look-width-${v}`} onClick={() => setLookPref({ width: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
+              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's mouse pointers</span></label>
+              <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>
+            </div>}
+          </div>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">
@@ -639,11 +669,13 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${panelOpen ? ' has-panel' : ''}`}>
-          {data.kind === 'note' && headings.length > 0 && <aside className="toc" aria-label="On this page">
-            <h2>On this page</h2>
+        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${panelOpen ? ' has-panel' : ''}${tocOpen ? '' : ' toc-collapsed'}`}>
+          {data.kind === 'note' && headings.length > 0 && <aside className={`toc${tocOpen ? '' : ' collapsed'}`} aria-label="On this page">
+            <div className="toc-head">{tocOpen && <h2>On this page</h2>}<button type="button" className="toc-toggle" data-testid="toc-toggle" aria-expanded={tocOpen} aria-label={tocOpen ? 'Hide outline' : 'Show outline'} title={tocOpen ? 'Hide outline' : 'Show outline'} onClick={toggleToc}>{tocOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}</button></div>
+            {tocOpen && <>
             {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>)}
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
+            </>}
           </aside>}
 
           <article ref={articleRef}>

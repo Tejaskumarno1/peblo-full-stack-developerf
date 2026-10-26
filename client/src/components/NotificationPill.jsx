@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Ic } from '../utils/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { ago } from '../utils/comments';
@@ -47,7 +48,7 @@ export default function NotificationPill() {
           <header>
             <b>What happened</b>
             <button type="button" onClick={() => { void markRead(); setOpen(false); }} data-testid="notif-read-all">Mark all read</button>
-            <button type="button" aria-label="Close" onClick={() => setOpen(false)}>×</button>
+            <button type="button" aria-label="Close" onClick={() => setOpen(false)}><Ic name="x" size={16} /></button>
           </header>
           <ul>
             {list.map((n) => (
@@ -64,7 +65,7 @@ export default function NotificationPill() {
         </div>
       )}
       <button type="button" className="pill" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`${unread} new notification${unread === 1 ? '' : 's'}`} data-testid="notif-pill">
-        <span aria-hidden="true">🔔</span> {unread} new
+        <Ic name="bell" size={14} style={{ marginRight: 6, verticalAlign: '-2px' }} />{unread} new
       </button>
       <style>{`
         .pb-notif { position: fixed; right: 18px; bottom: 18px; z-index: 1100; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font: 13px/1.4 system-ui, sans-serif; }
