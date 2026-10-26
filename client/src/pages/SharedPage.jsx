@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Printer, Sun, Type, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
@@ -115,7 +115,7 @@ export default function SharedPage() {
   const menuRef = useRef(null);
   // how this person likes to read the page (kept in this browser only)
   const [tocOpen, setTocOpen] = useState(() => { try { return localStorage.getItem('peblo-share-toc') !== 'closed'; } catch { return true; } });
-  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true }; } });
+  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false }; } });
   const [lookOpen, setLookOpen] = useState(false);
   const lookRef = useRef(null);
   const toggleToc = () => setTocOpen((open) => { const next = !open; try { localStorage.setItem('peblo-share-toc', next ? 'open' : 'closed'); } catch { /* not remembered */ } return next; });
@@ -132,6 +132,47 @@ export default function SharedPage() {
     return () => { document.removeEventListener('mousedown', out); document.removeEventListener('keydown', esc); };
   }, [lookOpen]);
   const articleRef = useRef(null);
+  // full screen, hidden tool bar, tucked-away top bar, shortcuts
+  const [fullscreen, setFullscreen] = useState(false);
+  const [barShown, setBarShown] = useState(false);
+  const [topHidden, setTopHidden] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const rootRef = useRef(null);
+  const barTimer = useRef(null);
+  const toggleFullscreen = useCallback(() => {
+    setFullscreen((on) => {
+      const next = !on;
+      try {
+        if (next && rootRef.current?.requestFullscreen && !document.fullscreenElement) rootRef.current.requestFullscreen().catch(() => {});
+        if (!next && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      } catch { /* the page still goes full screen without the browser API */ }
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    const onFs = () => { if (!document.fullscreenElement) setFullscreen(false); };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const showBar = () => { clearTimeout(barTimer.current); setBarShown(true); };
+  const hideBarSoon = () => { clearTimeout(barTimer.current); barTimer.current = setTimeout(() => setBarShown(false), 1400); };
+  useEffect(() => () => clearTimeout(barTimer.current), []);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Escape') { setKeysOpen(false); setBarShown(false); if (fullscreen) toggleFullscreen(); return; }
+      const t = event.target;
+      if (t?.closest?.('input, textarea, select, [contenteditable="true"], .bn-editor')) return;
+      if (event.key === '[') { event.preventDefault(); toggleToc(); }
+      else if (event.key === ']') { event.preventDefault(); setPanelOpen((o) => !o); }
+      else if (event.key === '/') { event.preventDefault(); setBarShown((o) => !o); }
+      else if (event.key === '?') { event.preventDefault(); setKeysOpen((o) => !o); }
+      else if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleFullscreen(); }
+      else if (event.key === '\\') { event.preventDefault(); toggleToc(); setPanelOpen((o) => !o); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fullscreen, toggleFullscreen]);
   const shareStateRef = useRef({ data, status });
   shareStateRef.current = { data, status };
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
@@ -599,8 +640,10 @@ export default function SharedPage() {
   };
 
   useEffect(() => {
+    let lastTop = 0;
     const updateProgress = () => {
       const scroller = articleRef.current;
+      if (scroller) { const y = scroller.scrollTop; if (y > lastTop + 6 && y > 120) setTopHidden(true); else if (y < lastTop - 6 || y < 60) setTopHidden(false); lastTop = y; }
       const range = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
       setScrollProgress(range > 0 ? Math.min(100, (scroller.scrollTop / range) * 100) : 0);
     };
@@ -654,7 +697,7 @@ export default function SharedPage() {
   };
 
   return (
-    <div className="pb-shared" data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
+    <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
       <header className="top">
         <div className="top-in">
@@ -674,6 +717,7 @@ export default function SharedPage() {
             <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
           </button>}
           {data && <button className="btn copy-btn" type="button" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={17} /><span>Copy link</span></button>}
+          {data && <button className="btn icon" type="button" data-testid="fs-btn" aria-label="Full screen" title="Full screen (F)" onClick={toggleFullscreen}><Maximize2 size={18} /></button>}
           {data && <div className="menu-wrap" ref={lookRef}>
             <button className="btn icon" type="button" data-testid="look-btn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded={lookOpen} title="Appearance" onClick={() => { setLookOpen((o) => !o); setMenuOpen(false); }}><Type size={18} /></button>
             {lookOpen && <div className="menu look-menu" role="dialog" aria-label="Appearance" data-testid="look-menu">
@@ -683,6 +727,8 @@ export default function SharedPage() {
               <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
               <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's mouse pointers</span></label>
+              <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no join or typing notices)</span></label>
+              <label className="look-check"><input type="checkbox" data-testid="look-pin" checked={look.pin} onChange={(event) => setLookPref({ pin: event.target.checked })} /><span>Keep the tool bar showing</span></label>
               <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>
             </div>}
           </div>}
@@ -787,14 +833,33 @@ export default function SharedPage() {
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
-      {data && typingText && <div className="typing-pill" role="status" aria-live="polite" data-testid="typing-pill">
+      {data && !look.quiet && typingText && <div className="typing-pill" role="status" aria-live="polite" data-testid="typing-pill">
         <span className="typing-av" aria-hidden="true">{initials(typers[0].name)}</span>
         <span className="typing-text">{typingText}</span>
         <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
       </div>}
-      {data && !previewMode && !typingText && (others.length > 0 || panelOpen || offline) && <CollabBar
+      {data && !previewMode && !look.quiet && !typingText && (others.length > 0 || panelOpen || offline) && <CollabBar
         viewers={viewers} open={panelOpen} offline={offline} toasts={recentEvents} onDismissToast={collab.dismiss} onToggle={() => setPanelOpen((open) => !open)}
       />}
+      {data && !error && <>
+        <div className="dk-edge" aria-hidden="true" onMouseEnter={showBar} />
+        {!(look.pin || barShown) && <button type="button" className="dh" data-testid="dock-handle" onClick={showBar} aria-label="Show tool bar"><Wrench size={14} /><span>Tools</span><kbd>/</kbd></button>}
+        {(look.pin || barShown) && <div className="dk" role="toolbar" aria-label="Page tools" data-testid="dock" onMouseEnter={showBar} onMouseLeave={() => { if (!look.pin) hideBarSoon(); }}>
+          {data.kind === 'note' && headings.length > 0 && <button type="button" className="d" aria-pressed={tocOpen} onClick={toggleToc} title="Outline ["><PanelLeftOpen size={17} /><span>Outline</span><kbd>[</kbd></button>}
+          <button type="button" className="d" aria-pressed={panelOpen} onClick={() => setPanelOpen((o) => !o)} title="People and comments ]"><PanelRight size={17} /><span>People</span><kbd>]</kbd></button>
+          <button type="button" className="d" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }} title="Look"><Type size={17} /><span>Look</span></button>
+          <button type="button" className="d" aria-pressed={fullscreen} onClick={toggleFullscreen} title="Full screen F">{fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}<span>Full screen</span><kbd>F</kbd></button>
+          <button type="button" className="d" onClick={() => setKeysOpen(true)} title="Shortcuts ?"><Keyboard size={17} /><span>Keys</span><kbd>?</kbd></button>
+          <button type="button" className="d main" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={17} /><span>{savedCopy ? 'Open' : 'Save'}</span></button>
+        </div>}
+        {fullscreen && <button type="button" className="fs-exit" data-testid="fs-exit" onClick={toggleFullscreen}><Minimize2 size={15} />Exit full screen<kbd>Esc</kbd></button>}
+      </>}
+      {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
+        <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
+          <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>
+          <ul>{[['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['F', 'Full screen'], ['Esc', 'Leave full screen or close'], ['?', 'This list']].map(([k, l]) => <li key={k}><kbd>{k}</kbd><span>{l}</span></li>)}</ul>
+        </section>
+      </div>}
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
         {data.kind === 'note' && headings.length > 0 && <button type="button" aria-label="Outline" onClick={() => setTocSheet(true)}><List size={20} /><span>Outline</span></button>}
         <button type="button" aria-label="People" aria-pressed={panelOpen} onClick={() => setPanelOpen((open) => !open)}><Users size={20} /><span>People{others.length ? ` ${others.length}` : ''}</span></button>

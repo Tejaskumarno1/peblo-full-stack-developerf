@@ -383,3 +383,31 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 /* presence pill and presenting tools float at the top right: leave them their own room above the first line */
 .pb-shared .pb-editor-full-page .bn-editor { padding-top: 46px; }
 .pb-shared .pb-editor-full-page:has(.pb-follow) .bn-editor { padding-top: 96px; }
+
+/* ---- Stage 1: full screen, hidden tool bar, tucked top bar, end space ---- */
+.pb-shared .top { transition: transform .25s ease, margin-bottom .25s ease; }
+.pb-shared.top-tucked .top { transform: translateY(-100%); margin-bottom: -66px; }
+.pb-shared.is-fs .top, .pb-shared.is-fs .totop { display: none; }
+.pb-shared.is-fs .stage { padding-top: 16px; }
+.pb-shared article::after { content: ''; display: block; height: 36vh; flex: none; }
+.pb-shared .dk-edge { position: fixed; left: 20%; right: 20%; bottom: 0; height: 14px; z-index: 44; }
+.pb-shared .dh { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 45; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); color: var(--fg3); font-size: 12px; font-weight: 700; opacity: .7; box-shadow: var(--soft-shadow); }
+.pb-shared .dh:hover { opacity: 1; }
+.pb-shared kbd { border-radius: 6px; padding: 1px 6px; background: color-mix(in srgb, currentColor 14%, transparent); font: 700 11px 'Figtree', system-ui, sans-serif; }
+.pb-shared .dk { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 46; display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 24px); padding: 6px; border-radius: 999px; background: #1d1a22; color: #f5f0f7; box-shadow: 0 14px 40px rgba(0,0,0,.35); animation: pb-dk-in .18s ease; }
+.pb-shared .dk .d { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 999px; padding: 8px 12px; background: transparent; color: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.pb-shared .dk .d:hover, .pb-shared .dk .d[aria-pressed="true"] { background: rgba(255,255,255,.14); }
+.pb-shared .dk .d.main { background: var(--accent); color: var(--on-accent); }
+.pb-shared .dk .d:disabled { opacity: .6; }
+@keyframes pb-dk-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.pb-shared .fs-exit { position: fixed; top: 14px; right: 14px; z-index: 46; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: var(--surface); color: var(--fg); font-size: 13px; font-weight: 700; box-shadow: var(--soft-shadow); }
+.pb-shared .keys-back { z-index: 80; }
+.pb-shared .keys-sheet { width: min(420px, calc(100vw - 32px)); margin: auto; border-radius: 22px; padding: 20px 22px; background: var(--surface); color: var(--fg); box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.pb-shared .keys-sheet header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pb-shared .keys-sheet h2 { margin: 0; font-size: 18px; }
+.pb-shared .keys-sheet header button { border: 0; background: transparent; }
+.pb-shared .keys-sheet ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pb-shared .keys-sheet li { display: flex; align-items: center; gap: 14px; color: var(--fg2); font-size: 14px; }
+.pb-shared .keys-sheet li kbd { min-width: 34px; text-align: center; padding: 3px 8px; background: var(--chip); color: var(--fg); }
+@media (max-width: 640px) { .pb-shared .dk, .pb-shared .dh, .pb-shared .dk-edge { display: none; } }
+@media (prefers-reduced-motion: reduce) { .pb-shared .top, .pb-shared .dk { transition: none; animation: none; } }
