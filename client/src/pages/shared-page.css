@@ -117,8 +117,8 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .toc .meta { margin-top: 22px; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--soft-shadow); color: var(--fg3); font-size: 13px; line-height: 1.7; }
 .pb-shared .toc .meta b { color: var(--fg); }
 .pb-shared article { min-width: 0; min-height: 0; height: auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-bottom: 24px; }
-.pb-shared .title { margin: 0 0 18px; color: var(--fg); font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; overflow-wrap: anywhere; }
-.pb-shared .title-in { width: 100%; margin: 0 0 18px; border: 0; padding: 0; background: transparent; color: var(--fg); outline: none; font: 800 clamp(36px, 5.4vw, 58px)/1.06 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; }
+.pb-shared .title { margin: 0 0 18px; color: var(--fg); font: 800 clamp(32px, 4.4vw, 46px)/1.08 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.pb-shared .title-in { display: block; width: 100%; margin: 0 0 18px; border: 0; padding: 0; background: transparent; color: var(--fg); outline: none; resize: none; overflow: hidden; overflow-wrap: anywhere; font: 800 clamp(32px, 4.4vw, 46px)/1.08 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.03em; }
 .pb-shared .title-in:focus { box-shadow: 0 3px var(--accent); }
 .pb-shared .by { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 30px; border-bottom: 1px solid var(--line); padding: 0 0 26px; color: var(--fg3); font-size: 14px; }
 .pb-shared .by b { color: var(--fg); }
@@ -377,3 +377,9 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .stage { padding-bottom: 96px; }
   .pb-shared .typing-pill { bottom: 84px; }
 }
+
+/* the title is the heading: a first heading that repeats it stays out of the way until you put the cursor in it */
+.pb-shared .block-editor-container[data-dup-title] .bn-editor > .bn-block-group > .bn-block-outer:first-child:not(:focus-within) { height: 0; overflow: hidden; opacity: 0; margin: 0; padding: 0; pointer-events: none; }
+/* presence pill and presenting tools float at the top right: leave them their own room above the first line */
+.pb-shared .pb-editor-full-page .bn-editor { padding-top: 46px; }
+.pb-shared .pb-editor-full-page:has(.pb-follow) .bn-editor { padding-top: 96px; }

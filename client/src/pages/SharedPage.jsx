@@ -32,6 +32,21 @@ const toHtml = (md) => {
 const when = (value) => (value ? new Date(value).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || 'P';
 
+// a note often starts with a heading that repeats its title; the page already shows the title large
+function withoutTitleHeading(html, title) {
+  if (!html || !title) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const first = doc.body.firstElementChild;
+  if (first && /^H[12]$/.test(first.tagName) && first.textContent.trim().toLowerCase() === title.trim().toLowerCase()) { first.remove(); return doc.body.innerHTML; }
+  return html;
+}
+// a title that wraps instead of being cut off at the edge of the card
+function fitTitle(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export default function SharedPage() {
   const { kind, token } = useParams();
   const navigate = useNavigate();
@@ -271,7 +286,25 @@ export default function SharedPage() {
     } catch { setStatus('error'); }
   };
 
-  const body = useMemo(() => (data?.kind === 'note' ? toHtml(data.content) : data?.note ? toHtml(data.note.content) : ''), [data]);
+  const body = useMemo(() => {
+    const html = data?.kind === 'note' ? toHtml(data.content) : data?.note ? toHtml(data.note.content) : '';
+    return data?.kind === 'note' ? withoutTitleHeading(html, data.title) : html;
+  }, [data]);
+  // the title is shown big at the top, so a first heading that says the same thing is hidden (still there for the editor)
+  useEffect(() => {
+    if (data?.kind !== 'note') return undefined;
+    const mark = () => {
+      const first = document.querySelector('.pb-shared .bn-editor .bn-block-outer');
+      if (!first) return;
+      const h = first.querySelector('.bn-block-content[data-content-type="heading"]');
+      const same = !!h && !!data.title && h.textContent.trim().toLowerCase() === data.title.trim().toLowerCase();
+      const box = first.closest('.block-editor-container');
+      if (box) { if (same) box.setAttribute('data-dup-title', '1'); else box.removeAttribute('data-dup-title'); }
+    };
+    mark();
+    const timer = window.setInterval(mark, 700);
+    return () => window.clearInterval(timer);
+  }, [data?.kind, data?.title, rev]);
   const headings = useMemo(() => {
     if (!body) return [];
     const parsed = new DOMParser().parseFromString(body, 'text/html');
@@ -695,7 +728,7 @@ export default function SharedPage() {
           <article ref={articleRef}>
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
-                ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; typedAt.current = Date.now(); queueSave(); }} />
+                ? <textarea className="title-in" rows={1} aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} ref={fitTitle} onInput={(event) => fitTitle(event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} onChange={(event) => { draft.current.title = event.target.value.replace(/\n/g, ' '); typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
               <div className="cover" data-testid="cover"><i aria-hidden="true" /><i aria-hidden="true" /><i aria-hidden="true" />
                 <ul className="cover-chips" aria-label="About this page">
