@@ -124,3 +124,18 @@ html.theme-dark .cp-bar-eye { background: #3a261e; }
 .cp-follow { margin-left: auto; height: 26px; padding: 0 11px; border: 1.5px solid var(--cp-line); border-radius: 999px; background: transparent; color: var(--cp-fg); font: 700 12px/1 inherit; cursor: pointer; }
 .cp-follow.on { background: var(--cp-accent); border-color: var(--cp-accent); color: #fff; }
 .cp-row .cp-badge + .cp-follow, .cp-row .cp-who + .cp-follow { margin-left: auto; }
+
+/* Live cursors and "edited by" hints are off until the person turns them on (html.pb-presence-off). */
+.pb-presence-off .bn-collaboration-cursor__base,
+.pb-presence-off .ProseMirror-yjs-cursor,
+.pb-presence-off .bn-collaboration-cursor__caret,
+.pb-presence-off .bn-collaboration-cursor__label { display: none !important; }
+.pb-presence-off .ProseMirror-yjs-selection { background: transparent !important; }
+.cp-presence { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0 4px; }
+.cp-presence span { display: flex; flex-direction: column; gap: 2px; }
+.cp-presence small { color: var(--cp-fg2); font-size: 12px; font-weight: 500; }
+
+/* Notifications sit in the bottom-right corner, level with the dock, joins and leaves stacked above the bar. */
+.cp-wrap { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; align-items: flex-end; bottom: max(18px, env(safe-area-inset-bottom, 0px)); }
+.pb-shared .cp-wrap { bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 640px) { .cp-wrap { right: 12px; left: 12px; align-items: stretch; bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 64px); } }

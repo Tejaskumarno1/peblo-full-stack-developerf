@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bell, ChevronDown, Clock, Eye, Link2, MoreHorizontal, Pencil, UserMinus, WifiOff, X, Zap } from 'lucide-react';
 import { peerColor } from '../utils/peerCursors';
+import { usePresence } from '../utils/presencePref';
 import ShareQr, { QR_CSS } from './ShareQr';
 import PollManager from './PollManager';
 import './collab.css';
@@ -62,7 +63,8 @@ export function useCollabEvents(viewers, enabled = true) {
 /** The small bar at the bottom: how many people are here. Opens the panel. */
 export function CollabBar({ viewers, open, onToggle, offline, toasts = [], onDismissToast, soon, expiresAt, waiting = 0 }) {
   const others = viewers.filter((v) => !v.self);
-  const typers = others.filter((v) => v.typing);
+  const [showPresence] = usePresence();
+  const typers = showPresence ? others.filter((v) => v.typing) : [];
   const text = offline ? 'Reconnecting…'
     : waiting > 0 ? `${waiting} waiting to join`
     : typers.length === 1 ? `${typers[0].name} is typing`
@@ -114,6 +116,7 @@ export function CollabPanel({
   const [menu, setMenu] = useState(null);
   const [tip, setTip] = useState(() => { try { return localStorage.getItem('peblo-collab-tip') !== '1'; } catch { return true; } });
   const [confirmOff, setConfirmOff] = useState(false);
+  const [showPresence, setShowPresence] = usePresence();
   const [bell, setBell] = useState(false);
   const [seenAt, setSeenAt] = useState(() => Date.now());
   const [, tick] = useState(0);
@@ -200,6 +203,7 @@ export function CollabPanel({
             </li>
           ))}
         </ul>
+        <label className="cp-mute cp-presence"><input type="checkbox" data-testid="presence-toggle" checked={showPresence} onChange={(e) => setShowPresence(e.target.checked)} /><span><b>Show live cursors</b><small>Other people's pointers, text cursors and who edited a line. Off keeps the page calm.</small></span></label>
         {mine && mode === 'guest' && !canEdit && <p className="cp-note">This link is view only. You can read, but not change it.</p>}
 
         {mode === 'owner' && (

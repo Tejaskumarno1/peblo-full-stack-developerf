@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ic } from '../utils/icons';
+import { usePresence } from '../utils/presencePref';
 import { AudienceActions, PRESENT_CSS, PresenterKit, PresentStart, RecapModal, RecapReceived, RoomNotices, useHost } from './PresentTools';
 
 /*
@@ -133,6 +134,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const [laser, setLaser] = useState(false);
   const [spot, setSpot] = useState(false);
   const host = useHost();
+  const [showPresence] = usePresence();
   const [startOpen, setStartOpen] = useState(false);
   const [mode, setMode] = useState('follow'); // follow | tour | point
   const [qOn, setQOn] = useState(true);
@@ -425,7 +427,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
         host,
       )}
       {others.length > 0 && <ReadingRail root={rootRef?.current} peers={peers} tick={tick} />}
-      {tip && createPortal(
+      {tip && showPresence && createPortal(
         <div className="pb-editedby" style={{ left: Math.min(tip.x + 12, window.innerWidth - 190), top: tip.y + 14 }} role="tooltip" data-testid="edited-by">
           <i style={{ background: tip.color }} />Edited by {tip.name} · {ago(tip.t)}
         </div>,

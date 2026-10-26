@@ -10,6 +10,7 @@ import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
 import { caretSelection, headingIndexes, peerColor, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
+import { presenceOn } from '../utils/presencePref';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import useShareReader from './useShareReader';
 import './shared-page.css';
@@ -133,7 +134,7 @@ export default function SharedPage() {
   const menuRef = useRef(null);
   // how this person likes to read the page (kept in this browser only)
   const [tocOpen, setTocOpen] = useState(() => { try { return localStorage.getItem('peblo-share-toc') !== 'closed'; } catch { return true; } });
-  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, style: 'follow', ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, style: 'follow' }; } });
+  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: false, quiet: false, pin: false, style: 'follow', ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')), pointers: presenceOn() }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: false, quiet: false, pin: false, style: 'follow' }; } });
   const [lookOpen, setLookOpen] = useState(false);
   const lookRef = useRef(null);
   const toggleToc = () => setTocOpen((open) => { const next = !open; try { localStorage.setItem('peblo-share-toc', next ? 'open' : 'closed'); } catch { /* not remembered */ } return next; });
@@ -800,7 +801,7 @@ export default function SharedPage() {
               <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Style</span><div className="seg" role="group" aria-label="Style">{[['follow', 'Owner'], ['soft', 'Soft'], ['river', 'River'], ['orbit', 'Orbit']].map(([v, l]) => <button key={v} type="button" className={(look.style || 'follow') === v ? 'on' : ''} aria-pressed={(look.style || 'follow') === v} data-testid={`look-style-${v}`} onClick={() => setLookPref({ style: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
-              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's mouse pointers</span></label>
+              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's pointers, cursors and who is editing</span></label>
               <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no join or typing notices)</span></label>
               <label className="look-check"><input type="checkbox" data-testid="look-pin" checked={look.pin} onChange={(event) => setLookPref({ pin: event.target.checked })} /><span>Keep the tool bar showing</span></label>
               <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>

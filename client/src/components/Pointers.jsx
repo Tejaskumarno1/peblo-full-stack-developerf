@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Ic } from '../utils/icons';
 import { createPortal } from 'react-dom';
+import { presenceOn } from '../utils/presencePref';
 
 /*
  * Live mouse pointers: where the other people's mouse is over the note, with their name.
@@ -35,7 +36,7 @@ const visibleBox = (el) => {
   }
   return { top, bottom, left, right };
 };
-const prefOn = () => { try { return localStorage.getItem('peblo-pointers') !== 'off'; } catch { return true; } };
+const prefOn = presenceOn;
 
 export default function Pointers({ rt, rootRef, ready }) {
   const [pts, setPts] = useState([]); // { key, name, color, b, x, y }

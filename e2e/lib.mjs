@@ -6,7 +6,7 @@ import { pathToFileURL } from 'url';
 import { chromium } from 'playwright-core';
 
 export const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
-export async function boot() {
+export async function boot(opts = {}) {
   // server/.env gives secrets; the database is forced to a local peblo_test so real data is never touched
   const envText = fs.readFileSync(path.join(REPO, 'server', '.env'), 'utf8');
   const parsed = dotenv.parse(envText);
@@ -29,8 +29,13 @@ export async function boot() {
     return res.json().catch(() => ({}));
   };
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: !process.env.HEADED, args: process.env.HEADED ? ['--window-position=-1366,0', '--window-size=1366,768'] : [] });
+  if (!opts.freshPresence) { // every context (guests too) starts with live cursors on, like the tests were written for
+    const mk = browser.newContext.bind(browser);
+    browser.newContext = async (o) => { const c = await mk(o); await c.addInitScript(() => { try { if (!localStorage.getItem('peblo-pointers')) localStorage.setItem('peblo-pointers', 'on'); } catch {} }); return c; };
+  }
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((t) => { try { if (!localStorage.getItem('peblo-token')) localStorage.setItem('peblo-token', t); } catch {} }, token);
+  // live cursors are off by default in the app; the older tests exercise them, so they start with them on
   if (process.env.STYLE) await ctx.addInitScript((st) => { try { localStorage.setItem('peblo-style', st); } catch {} }, process.env.STYLE);
   if (process.env.COLLAB_OFF) await ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch {} });
   const page = await ctx.newPage();
