@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ic } from '../utils/icons';
+import { AudienceActions, PRESENT_CSS, PresenterKit, PresentStart, RecapModal, RoomNotices, useHost } from './PresentTools';
 
 /*
  * Who is in this note, drawn from the live document's awareness (temporary, never stored):
@@ -60,7 +61,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, view: st.view || null, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -131,6 +132,17 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const [presenting, setPresenting] = useState(false);
   const [laser, setLaser] = useState(false);
   const [spot, setSpot] = useState(false);
+  const host = useHost();
+  const [startOpen, setStartOpen] = useState(false);
+  const [mode, setMode] = useState('follow'); // follow | tour | point
+  const [qOn, setQOn] = useState(true);
+  const [notesOn, setNotesOn] = useState(true);
+  const [recap, setRecap] = useState(null);
+  const [myHand, setMyHand] = useState(0);
+  const [myAsks, setMyAsks] = useState([]);
+  const [keep, setKeep] = useState(false);
+  const keepRef = useRef(false);
+  keepRef.current = keep;
   const [dismissed, setDismissed] = useState({}); // keyOf(peer) -> true while the prompt is closed
   const followRef = useRef(null);
   followRef.current = following;
@@ -215,10 +227,28 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   useEffect(() => {
     if (!rt || !ready) return undefined;
     const aw = rt.provider.awareness;
-    try { aw.setLocalStateField('presenting', presenting); } catch { /* gone */ }
+    try { aw.setLocalStateField('presenting', presenting); aw.setLocalStateField('mode', mode); aw.setLocalStateField('qOn', qOn); } catch { /* gone */ }
     if (!presenting) { setLaser(false); setSpot(false); }
-    return () => { try { aw.setLocalStateField('presenting', false); } catch { /* gone */ } };
-  }, [rt, ready, presenting]);
+    document.documentElement.classList.toggle('pb-presenting', presenting);
+    return () => { document.documentElement.classList.remove('pb-presenting'); try { aw.setLocalStateField('presenting', false); } catch { /* gone */ } };
+  }, [rt, ready, presenting, mode, qOn]);
+  // the audience: my hand, my questions, who I am following; a question the presenter has dealt with leaves my list
+  useEffect(() => {
+    if (!rt || !ready) return;
+    try { rt.provider.awareness.setLocalStateField('hand', myHand || null); rt.provider.awareness.setLocalStateField('asks', myAsks); } catch { /* gone */ }
+  }, [rt, ready, myHand, myAsks]);
+  useEffect(() => {
+    if (!rt || !ready) return;
+    const t = peers.find((p) => keyOf(p) === following);
+    try { rt.provider.awareness.setLocalStateField('follows', t ? keyOf(t) : null); } catch { /* gone */ }
+  }, [rt, ready, following, peers]);
+  useEffect(() => {
+    const gone = new Set(peers.filter((p) => !p.me && p.presenting).flatMap((p) => p.answered || []));
+    const me = peers.find((p) => p.me);
+    if (!me) return;
+    setMyAsks((list) => { const next = list.filter((a) => !gone.has(`${keyOf(me)}#${a.id}`)); return next.length === list.length ? list : next; });
+  }, [peers]);
+  useEffect(() => { if (!peers.some((p) => !p.me && p.presenting)) { setKeep(false); } }, [peers]);
   useEffect(() => {
     if (!rt || !ready) return undefined;
     const aw = rt.provider.awareness;
@@ -271,6 +301,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     };
     const onChange = () => { kick(); caret(); };
     const free = (e) => {
+      if (keepRef.current) return;
       if (e.type === 'keydown' && !['PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End', ' '].includes(e.key)) return;
       if (e.type === 'wheel' || e.type === 'touchmove' || e.type === 'keydown') { cancelAnimationFrame(raf); raf = 0; setFollowing(null); setFreed({ name: target.name, key: keyOf(target), presenting: !!target.presenting }); }
     };
@@ -318,7 +349,14 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const hidden = peers.length - shown.length;
   const now = Date.now();
   const followed = following && peers.find((p) => keyOf(p) === following);
-  const presenters = others.filter((p) => p.presenting && keyOf(p) !== following && !dismissed[keyOf(p)]);
+  const presenters = others.filter((p) => p.presenting && p.mode !== 'point' && keyOf(p) !== following && !dismissed[keyOf(p)]);
+  const livePresenters = others.filter((p) => p.presenting);
+  const talker = livePresenters.find((p) => p.qOn);
+  const myKey = me ? keyOf(me) : '';
+  const goToBlock = (b) => { try { rootRef?.current?.querySelector(`.bn-block-outer[data-id="${CSS.escape(b)}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch { /* odd id */ } };
+  const raise = () => setMyHand((h) => (h ? 0 : Date.now()));
+  const ask = (text) => setMyAsks((l) => [...l, { id: Math.random().toString(36).slice(2, 8), text, at: Date.now() }]);
+  const endSession = (r) => { setPresenting(false); setRecap(r); };
   void tick;
 
   return (
@@ -350,34 +388,33 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
               );
             })}
             {hidden > 0 && <span className="pb-avatar more" aria-label={`${hidden} more`}>+{hidden}</span>}
-            <button type="button" className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => setPresenting((v) => !v)}><Ic name="presentation" size={15} /></button>
+            <button type="button" className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => { if (presenting) { setPresenting(false); setStartOpen(false); } else setStartOpen((v) => !v); }}><Ic name="presentation" size={15} /></button>
             <span className="pb-presence-count" aria-live="polite">{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</span>
           </div>
-          {presenting && <div className="pb-follow presenting" role="status" data-testid="presenting-banner"><Ic name="presentation" size={14} />You are presenting
-            <span className="tools" role="group" aria-label="Presenter tools">
-              <button type="button" className={laser ? 'on' : ''} aria-pressed={laser} data-testid="tool-laser" title="Laser pointer: your pointer shows as a red dot" onClick={() => setLaser((v) => !v)}><Ic name="laser" size={15} /></button>
-              <button type="button" className={spot ? 'on' : ''} aria-pressed={spot} data-testid="tool-spot" title="Spotlight: dim everything except the block you point at" onClick={() => setSpot((v) => !v)}><Ic name="spotlight" size={15} /></button>
-              <span className="hint" title="Alt + click anywhere in the note to ping that spot for everyone"><Ic name="ping" size={15} />Alt+click</span>
-            </span>
-            <button type="button" onClick={() => setPresenting(false)}>Stop</button></div>}
+          {startOpen && !presenting && <PresentStart mode={mode} setMode={setMode} qOn={qOn} setQOn={setQOn} notesOn={notesOn} setNotesOn={setNotesOn} count={others.length} onStart={() => { setStartOpen(false); setPresenting(true); }} onCancel={() => setStartOpen(false)} />}
           {presenters.map((p) => (
             <div key={keyOf(p)} className="pb-follow offer" role="status" data-testid="present-offer"><Ic name="presentation" size={14} />{p.name} is presenting
               <button type="button" data-testid="present-follow" onClick={() => setFollowing(keyOf(p))}>Follow</button>
+              <button type="button" data-testid="present-keep" title={`Keep me with ${p.name}: scrolling will not let go`} onClick={() => { setFollowing(keyOf(p)); setKeep(true); }}>Keep me</button>
               <button type="button" className="quiet" onClick={() => setDismissed((d) => ({ ...d, [keyOf(p)]: true }))}>Not now</button>
             </div>
           ))}
           {freed && !freed.presenting && <div className="pb-follow" role="status" data-testid="follow-freed">You stopped following {freed.name}</div>}
           {followed && (
             <div className="pb-follow" role="status" data-testid="follow-banner">
-              <Ic name="follow" size={14} />Following {followed.name}
-              <button type="button" onClick={() => setFollowing(null)}>Stop</button>
+              <Ic name="follow" size={14} />Following {followed.name}{followed.tour ? ` · stop ${Math.max(0, followed.tour.i) + 1} of ${followed.tour.n}` : ''}
+              <button type="button" onClick={() => { setFollowing(null); setKeep(false); }}>Stop</button>
             </div>
           )}
         </div>
       )}
+      {others.length > 0 && talker && !presenting && <div className="pb-presence-wrap pb-aud-wrap" style={{ position: 'fixed', right: 82, bottom: 24, zIndex: 1100 }}><AudienceActions presenter={talker} hand={myHand} onHand={raise} onAsk={ask} sent={myAsks.length} /></div>}
+      {presenting && <PresenterKit aw={rt.provider.awareness} me={myKey} peers={peers} mode={mode} qOn={qOn} notesOn={notesOn} laser={laser} setLaser={setLaser} spot={spot} setSpot={setSpot} getAnchor={() => anchorOf(rootRef.current)} goToBlock={goToBlock} onEnd={endSession} />}
+      {!presenting && livePresenters.length > 0 && <RoomNotices presenters={livePresenters} myKey={myKey} onClearHand={() => setMyHand(0)} />}
+      {recap && <RecapModal recap={recap} onClose={() => setRecap(null)} />}
       {freed?.presenting && peers.some((p) => keyOf(p) === freed.key && p.presenting) && createPortal(
         <button type="button" className="pb-return" data-testid="return-presenter" onClick={() => { setFollowing(freed.key); setFreed(null); }}><Ic name="undo" size={15} />Return to {freed.name}</button>,
-        document.body,
+        host,
       )}
       {others.length > 0 && <ReadingRail root={rootRef?.current} peers={peers} tick={tick} />}
       {tip && createPortal(
@@ -386,6 +423,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
         </div>,
         document.body,
       )}
+      <style>{PRESENT_CSS}</style>
       <style>{`
         .pb-presence-wrap { position: relative; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         .pb-presence { pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; border-radius: 999px; background: color-mix(in srgb, var(--pb-bg, #fff) 92%, transparent); border: 1px solid color-mix(in srgb, currentColor 14%, transparent); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(0,0,0,.08); font-size: 12px; }
