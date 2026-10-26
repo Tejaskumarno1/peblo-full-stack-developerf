@@ -67,8 +67,11 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
     await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor), cleanCursor(req.query.selStart), cleanCursor(req.query.selEnd));
+    const style = String(req.query.style || '');
+    if (style === 'soft' || style === 'river' || style === 'orbit') await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, style) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET style = EXCLUDED.style', kind, row.shareToken, style).catch(() => {});
+    const ext = (await prisma.$queryRawUnsafe<{ extend_at: Date | null; extend_by: string | null }[]>('SELECT extend_at, extend_by FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken))[0];
     const viewers = await listViewers(kind, row.shareToken, session, !!row.shareEdit);
-    res.json({ shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers, approval: await approvalOn(kind, row.shareToken), waiting: await listWaiting(kind, row.shareToken) });
+    res.json({ extendRequest: ext?.extend_at ? { at: ext.extend_at, by: ext.extend_by || 'A guest' } : null, shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers, approval: await approvalOn(kind, row.shareToken), waiting: await listWaiting(kind, row.shareToken) });
   } catch (e) { next(e); }
 });
 
@@ -138,6 +141,88 @@ shareRoutes.post('/:kind/:id/viewers/:vid/role', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/share/:kind/:id/short -> a short link (/l/abc123) for the same page, made once and kept
+const CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const newCode = () => Array.from(crypto.randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+shareRoutes.get('/:kind/:id/short', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row || !row.shareToken) return res.status(404).json({ error: 'Not found.' });
+    const have = (await prisma.$queryRawUnsafe<{ short_code: string | null }[]>('SELECT short_code FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken))[0];
+    if (have?.short_code) return res.json({ code: have.short_code });
+    for (let i = 0; i < 5; i++) {
+      const code = newCode();
+      try {
+        await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, short_code) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET short_code = COALESCE(share_settings.short_code, EXCLUDED.short_code)', kind, row.shareToken, code);
+        const now = (await prisma.$queryRawUnsafe<{ short_code: string }[]>('SELECT short_code FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken))[0];
+        return res.json({ code: now.short_code });
+      } catch { /* a clash: try another code */ }
+    }
+    res.status(500).json({ error: 'Could not make a short link.' });
+  } catch (e) { next(e); }
+});
+
+// ---- polls written into a shared note ----
+type PollRow = { id: string; question: string; options: string[]; open: boolean; named: boolean };
+async function pollsFor(noteId: string, sid: string | null, owner: boolean) {
+  const polls = await prisma.$queryRawUnsafe<PollRow[]>('SELECT id, question, options, open, named FROM share_polls WHERE note_id = $1 ORDER BY at ASC LIMIT 10', noteId);
+  if (!polls.length) return [];
+  const ids = polls.map((p) => p.id);
+  const votes = await prisma.$queryRawUnsafe<{ poll_id: string; session_id: string; name: string; choice: number }[]>('SELECT poll_id, session_id, name, choice FROM share_poll_votes WHERE poll_id = ANY($1::text[])', ids);
+  return polls.map((p) => {
+    const mine = votes.filter((v) => v.poll_id === p.id);
+    const counts = p.options.map((_, i) => mine.filter((v) => v.choice === i).length);
+    return {
+      id: p.id, question: p.question, options: p.options, open: p.open, named: p.named, counts, total: mine.length,
+      mine: sid ? mine.find((v) => v.session_id === sid)?.choice ?? null : null,
+      ...(p.named || owner ? { voters: mine.map((v) => ({ name: v.name, choice: v.choice })) } : {}),
+    };
+  });
+}
+const cleanPoll = (b: any) => {
+  const question = typeof b?.question === 'string' ? b.question.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 140) : '';
+  const options = Array.isArray(b?.options) ? b.options.map((o: unknown) => (typeof o === 'string' ? o.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '')).filter(Boolean).slice(0, 4) : [];
+  return question && options.length >= 2 ? { question, options, named: b?.named === true } : null;
+};
+shareRoutes.get('/note/:id/polls', async (req, res, next) => {
+  try {
+    const row = await owned('note', req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    res.json({ polls: await pollsFor(row.id, null, true) });
+  } catch (e) { next(e); }
+});
+shareRoutes.post('/note/:id/polls', async (req, res, next) => {
+  try {
+    const row = await owned('note', req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    const p = cleanPoll(req.body);
+    if (!p) return res.status(400).json({ error: 'A poll needs a question and at least two options.' });
+    const n = (await prisma.$queryRawUnsafe<{ n: number }[]>('SELECT COUNT(*)::int AS n FROM share_polls WHERE note_id = $1', row.id))[0]?.n ?? 0;
+    if (n >= 5) return res.status(400).json({ error: 'A page can hold five polls.' });
+    const id = crypto.randomBytes(6).toString('hex');
+    await prisma.$executeRawUnsafe('INSERT INTO share_polls (id, note_id, question, options, named) VALUES ($1, $2, $3, $4::jsonb, $5)', id, row.id, p.question, JSON.stringify(p.options), p.named);
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+for (const verb of ['close', 'reopen', 'reset', 'remove'] as const) {
+  shareRoutes.post(`/note/:id/polls/:pid/${verb}`, async (req, res, next) => {
+    try {
+      const row = await owned('note', req.params.id, req.user!.id);
+      if (!row) return res.status(404).json({ error: 'Not found.' });
+      const has = await prisma.$queryRawUnsafe<{ id: string }[]>('SELECT id FROM share_polls WHERE id = $1 AND note_id = $2', req.params.pid, row.id);
+      if (!has.length) return res.status(404).json({ error: 'That poll is gone.' });
+      if (verb === 'close' || verb === 'reopen') await prisma.$executeRawUnsafe('UPDATE share_polls SET open = $2 WHERE id = $1', req.params.pid, verb === 'reopen');
+      else {
+        await prisma.$executeRawUnsafe('DELETE FROM share_poll_votes WHERE poll_id = $1', req.params.pid);
+        if (verb === 'remove') await prisma.$executeRawUnsafe('DELETE FROM share_polls WHERE id = $1', req.params.pid);
+      }
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+}
+
 // GET /api/share/note/:id/activity -> what happened on this note's link, newest first.
 shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
   try {
@@ -156,7 +241,11 @@ shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
       "SELECT (CURRENT_DATE - at::date)::int AS d, COUNT(*)::int AS n FROM share_activity WHERE note_id = $1 AND action = 'viewed' AND at >= CURRENT_DATE - 6 GROUP BY 1", row.id,
     );
     const perDay = Array.from({ length: 7 }, (_, i) => days.find((x) => x.d === 6 - i)?.n ?? 0);
-    res.json({ activity: rows, stats: { visits: sum[0]?.visits ?? 0, people: sum[0]?.people ?? 0, edits: sum[0]?.edits ?? 0, perDay } });
+    const rd = row.shareToken ? await prisma.$queryRawUnsafe<{ name: string; progress: number; secs: number; last_at: Date }[]>('SELECT name, progress, secs, last_at FROM share_reads WHERE kind = $1 AND share_token = $2 ORDER BY last_at DESC LIMIT 20', 'note', row.shareToken) : [];
+    const stops = Array.from({ length: 10 }, (_, i) => rd.filter((r) => Math.min(9, Math.floor(r.progress / 10)) === i).length);
+    const finished = rd.filter((r) => r.progress >= 90).length;
+    const readers = { count: rd.length, finishRate: rd.length ? Math.round((finished / rd.length) * 100) : 0, avgSecs: rd.length ? Math.round(rd.reduce((a, r) => a + r.secs, 0) / rd.length) : 0, stops, people: rd.map((r) => ({ name: r.name, progress: r.progress, secs: r.secs, lastAt: r.last_at })) };
+    res.json({ activity: rows, stats: { visits: sum[0]?.visits ?? 0, people: sum[0]?.people ?? 0, edits: sum[0]?.edits ?? 0, perDay, readers } });
   } catch (e) { next(e); }
 });
 
@@ -176,6 +265,7 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     if (days === null || days === 0) expiresAt = null;
     else if (typeof days === 'number' && days > 0 && days <= 3650) expiresAt = new Date(Date.now() + days * 86400000);
     await setToken(kind, row.id, token, edit, expiresAt);
+    await prisma.$executeRawUnsafe('UPDATE share_settings SET extend_at = NULL, extend_by = NULL WHERE kind = $1 AND share_token = $2', kind, token).catch(() => {});
     res.status(201).json({ token, edit, expiresAt });
   } catch (e) { next(e); }
 });
@@ -328,6 +418,10 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
     } else {
       const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor), cleanCursor(req.body?.selStart), cleanCursor(req.body?.selEnd));
       if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');
+      if (kind === 'note' && !owner) {
+        const progress = Math.max(0, Math.min(100, Math.round(Number(req.body?.progress) || 0)));
+        void prisma.$executeRawUnsafe('INSERT INTO share_reads (kind, share_token, session_id, name, progress) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET name = EXCLUDED.name, progress = GREATEST(share_reads.progress, EXCLUDED.progress), secs = share_reads.secs + LEAST(EXTRACT(EPOCH FROM (NOW() - share_reads.last_at))::int, 15), last_at = NOW()', kind, token, sessionId, name, progress).catch(() => {});
+      }
     }
     res.json({ viewers: await listViewers(kind, token, sessionId, !!record.shareEdit), canEdit: acc.canEdit });
   } catch (e) { next(e); }
@@ -354,6 +448,61 @@ publicRoutes.post('/:kind/:token/knock', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+publicRoutes.get('/note/:token/polls', async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
+    if (!acc.allowed) return res.json({ polls: [] });
+    const sid = typeof req.query.sid === 'string' && SESSION_RE.test(req.query.sid) ? req.query.sid : null;
+    res.json({ polls: await pollsFor(note.id, sid, false) });
+  } catch (e) { next(e); }
+});
+publicRoutes.post('/note/:token/polls/:pid/vote', async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const sid = req.body?.sessionId;
+    if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return res.status(400).json({ error: 'A valid viewer session is required.' });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (await isBlocked('note', req.params.token, sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
+    const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
+    if (!acc.allowed) return res.status(403).json({ error: 'Waiting for the owner to let you in.', waiting: acc.waiting || 'waiting' });
+    const poll = (await prisma.$queryRawUnsafe<PollRow[]>('SELECT id, question, options, open, named FROM share_polls WHERE id = $1 AND note_id = $2', req.params.pid, note.id))[0];
+    if (!poll) return res.status(404).json({ error: 'That poll is gone.' });
+    if (!poll.open) return res.status(409).json({ error: 'This poll is closed.' });
+    const choice = Number(req.body?.choice);
+    if (!Number.isInteger(choice) || choice < 0 || choice >= poll.options.length) return res.status(400).json({ error: 'Pick one of the options.' });
+    await prisma.$executeRawUnsafe('INSERT INTO share_poll_votes (poll_id, session_id, name, choice) VALUES ($1, $2, $3, $4) ON CONFLICT (poll_id, session_id) DO UPDATE SET choice = EXCLUDED.choice, name = EXCLUDED.name, at = NOW()', poll.id, sid, cleanName(req.body?.name), choice);
+    res.json({ ok: true, polls: await pollsFor(note.id, sid, false) });
+  } catch (e) { next(e); }
+});
+
+// POST /api/public/:kind/:token/extend-request { sessionId, name } -> "please keep this link going": the owner is told
+publicRoutes.post('/:kind/:token/extend-request', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    const { token } = req.params;
+    if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const live = kind === 'note' ? await prisma.note.count({ where: { shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
+    await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, extend_at, extend_by) VALUES ($1, $2, NOW(), $3) ON CONFLICT (kind, share_token) DO UPDATE SET extend_at = NOW(), extend_by = EXCLUDED.extend_by', kind, token, cleanName(req.body?.name));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+export async function shortRedirect(req: any, res: any, next: any) {
+  try {
+    const code = String(req.params.code || '');
+    if (!/^[a-z0-9]{4,12}$/.test(code)) return res.redirect(302, '/');
+    const r = (await prisma.$queryRawUnsafe<{ kind: string; share_token: string }[]>('SELECT kind, share_token FROM share_settings WHERE short_code = $1', code))[0];
+    if (!r || !validToken(r.share_token)) return res.redirect(302, '/');
+    res.redirect(302, `/s/${r.kind === 'todo' ? 'todo' : 'note'}/${r.share_token}`);
+  } catch (e) { next(e); }
+}
+
 async function ownerReq(req: any, kind: 'note' | 'todo', token: string) {
   const auth = String(req.headers.authorization || '');
   if (!auth.startsWith('Bearer ')) return false;
@@ -371,7 +520,8 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
     if (!acc.allowed) return res.json({ kind: 'note', waiting: acc.waiting || 'waiting' });
-    res.json({ kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
+    const st = (await prisma.$queryRawUnsafe<{ style: string | null }[]>('SELECT style FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0]?.style || null;
+    res.json({ ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
   } catch (e) { next(e); }
 });
 
