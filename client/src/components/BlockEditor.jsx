@@ -17,6 +17,7 @@ import { createCollab } from '../utils/collab';
 import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
 import Reactions from './Reactions';
+import Pointers from './Pointers';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
@@ -644,6 +645,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
           {rt && <PresenceBar rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} />}
         </CommentsDock>
       )}
+      {rt && <Pointers rt={rt} rootRef={rootRef} ready={live.ready && live.connected} />}
       {rt && <Reactions rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} canReact={editable} dark={dark} />}
       <CommentsOn.Provider value={!!target}>
       <BlockNoteView
