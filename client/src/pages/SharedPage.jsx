@@ -81,7 +81,7 @@ export default function SharedPage() {
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
   const [previewMode, setPreviewMode] = useState(false);
   const [viewers, setViewers] = useState([]);
-  const [panelOpen, setPanelOpen] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1200px)').matches);
+  const [panelOpen, setPanelOpen] = useState(false); // opens by itself only when other people are on the page
   const [sectionPeers, setSectionPeers] = useState({});
   const [offline, setOffline] = useState(false);
   const [synced, setSynced] = useState(false);
@@ -593,6 +593,15 @@ export default function SharedPage() {
     return () => window.clearInterval(t);
   }, [recentEvents.length]);
   const others = viewers.filter((viewer) => !viewer.self);
+  // The outline stands alone until someone else is here; then the live panel slides in (wide screens), and leaves with them.
+  const wasOthers = useRef(0);
+  useEffect(() => {
+    const n = others.length;
+    const wide = typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1200px)').matches;
+    if (wasOthers.current === 0 && n > 0 && wide) setPanelOpen(true);
+    if (wasOthers.current > 0 && n === 0) setPanelOpen(false);
+    wasOthers.current = n;
+  }, [others.length]);
   const typers = others.filter((viewer) => viewer.typing);
   const typingText = typers.length === 1 ? `${typers[0].name}${typers[0].owner ? ' (owner)' : ''} is typing`
     : typers.length === 2 ? `${typers[0].name} and ${typers[1].name} are typing`
