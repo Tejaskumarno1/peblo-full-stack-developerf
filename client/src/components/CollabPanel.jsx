@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock, Eye, Link2, MoreHorizontal, UserMinus, WifiOff, X, Zap } from 'lucide-react';
 import { peerColor } from '../utils/peerCursors';
+import ShareQr, { QR_CSS } from './ShareQr';
 import './collab.css';
 
 /** The people-on-the-link UI shared by the notes editor and the public share page. All data comes from the server's presence list. */
@@ -103,7 +104,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 
 export function CollabPanel({
   viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow,
+  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -181,6 +182,7 @@ export function CollabPanel({
               <button type="button" disabled={busy} onClick={() => onExtend?.(7)}>+7 days</button>
               <button type="button" disabled={busy} onClick={() => onExtend?.(null)}>Never</button>
             </div>
+            {link && <ShareQr link={link} />}
             {!confirmOff
               ? <button type="button" className="cp-off" onClick={() => setConfirmOff(true)}>Turn sharing off</button>
               : <div className="cp-confirm">Everyone loses access to this link.<span><button type="button" className="danger" disabled={busy} onClick={() => { setConfirmOff(false); onTurnOff?.(); }}>Turn off</button><button type="button" onClick={() => setConfirmOff(false)}>Keep</button></span></div>}
@@ -199,6 +201,7 @@ export function CollabPanel({
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
       </div>}
 
+      <style>{QR_CSS}</style>
       {tip && <div className="cp-tip"><Zap size={15} /><span><b>Collaboration makes ideas better</b>Everyone here sees changes as they are saved. Edits are merged, never overwritten.</span><button type="button" onClick={() => { setTip(false); try { localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } }}>Got it</button></div>}
     </aside>
   );

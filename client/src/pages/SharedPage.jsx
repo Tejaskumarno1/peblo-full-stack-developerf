@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
+import GuestTour from '../components/GuestTour';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
@@ -868,6 +869,7 @@ export default function SharedPage() {
         {reader.changes && <div className="rp" data-testid="changes-pill"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div><button type="button" data-testid="changes-toggle" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button><button type="button" aria-label="Dismiss" onClick={reader.dismissChanges}><X size={14} /></button></div>}
         {reader.place && !reader.changes && <div className="rp" data-testid="place-pill"><History size={16} /><div><b>You stopped at {reader.place.title}</b></div><button type="button" data-testid="place-jump" onClick={reader.jumpPlace}>Jump back</button><button type="button" aria-label="Dismiss" onClick={reader.dismissPlace}><X size={14} /></button></div>}
       </div>}
+      {data?.kind === 'note' && !fullscreen && <GuestTour ready={!!data && !error} />}
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>

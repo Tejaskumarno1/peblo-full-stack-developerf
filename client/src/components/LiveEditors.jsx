@@ -148,7 +148,7 @@ export default function LiveEditors() {
           events={collab.events} offline={live.offline} synced={synced}
           muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear}
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}
-          followId={followId} onFollow={setFollowId}
+          followId={followId} onFollow={setFollowId} link={live.token ? `${window.location.origin}/s/note/${live.token}` : ''}
           onClose={() => setLive({ open: false })}
         />
       </div>}
