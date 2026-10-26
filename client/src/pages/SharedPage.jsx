@@ -2,13 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
 import { exportDocs } from '../utils/exporters';
 import { caretSelection, headingIndexes, peerColor, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
+import useShareReader from './useShareReader';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -689,6 +690,8 @@ export default function SharedPage() {
     };
   }, [scrollToHeading, headings, data]);
 
+  const reader = useShareReader({ enabled: data?.kind === 'note' && !shareOff, scope: `${kindPath}:${token}`, articleRef, deps: rev });
+  const [bmOpen, setBmOpen] = useState(false);
   const handleHeadingClick = (event, id) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -697,7 +700,7 @@ export default function SharedPage() {
   };
 
   return (
-    <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
+    <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
       <header className="top">
         <div className="top-in">
@@ -849,15 +852,26 @@ export default function SharedPage() {
           <button type="button" className="d" aria-pressed={panelOpen} onClick={() => setPanelOpen((o) => !o)} title="People and comments ]"><PanelRight size={17} /><span>People</span><kbd>]</kbd></button>
           <button type="button" className="d" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }} title="Look"><Type size={17} /><span>Look</span></button>
           <button type="button" className="d" aria-pressed={fullscreen} onClick={toggleFullscreen} title="Full screen F">{fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}<span>Full screen</span><kbd>F</kbd></button>
+          {data.kind === 'note' && <button type="button" className="d" data-testid="dock-bookmarks" aria-pressed={bmOpen} onClick={() => setBmOpen((o) => !o)} title="Bookmarks (B bookmarks the line under the pointer)"><Bookmark size={17} /><span>Bookmarks</span>{reader.bookmarks.length > 0 && <kbd>{reader.bookmarks.length}</kbd>}</button>}
           <button type="button" className="d" onClick={() => setKeysOpen(true)} title="Shortcuts ?"><Keyboard size={17} /><span>Keys</span><kbd>?</kbd></button>
           <button type="button" className="d main" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={17} /><span>{savedCopy ? 'Open' : 'Save'}</span></button>
         </div>}
         {fullscreen && <button type="button" className="fs-exit" data-testid="fs-exit" onClick={toggleFullscreen}><Minimize2 size={15} />Exit full screen<kbd>Esc</kbd></button>}
       </>}
+      {data?.kind === 'note' && bmOpen && <aside className="bm-pop" data-testid="bookmarks" aria-label="My bookmarks">
+        <h3><Bookmark size={16} />My bookmarks<span className="n">{reader.bookmarks.length}</span><button type="button" aria-label="Close" onClick={() => setBmOpen(false)}><X size={15} /></button></h3>
+        {reader.bookmarks.length === 0 && <p className="bm-empty">Nothing yet. Point at a line and press B.</p>}
+        {reader.bookmarks.map((b) => <div className="bm-row" key={b.sig}><button type="button" className="bm-go" data-testid="bookmark-item" onClick={() => { reader.goBookmark(b.sig); setBmOpen(false); }}><Bookmark size={14} /><span>{b.title}</span></button><button type="button" aria-label="Remove bookmark" onClick={() => reader.removeBookmark(b.sig)}><X size={13} /></button></div>)}
+        <button type="button" className="bm-add" data-testid="bookmark-add" onClick={() => { if (!reader.toggleBookmark()) showToast('Scroll to a line first'); }}>Bookmark the line at the top</button>
+      </aside>}
+      {data?.kind === 'note' && !fullscreen && (reader.changes || reader.place) && <div className="reader-pills">
+        {reader.changes && <div className="rp" data-testid="changes-pill"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div><button type="button" data-testid="changes-toggle" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button><button type="button" aria-label="Dismiss" onClick={reader.dismissChanges}><X size={14} /></button></div>}
+        {reader.place && !reader.changes && <div className="rp" data-testid="place-pill"><History size={16} /><div><b>You stopped at {reader.place.title}</b></div><button type="button" data-testid="place-jump" onClick={reader.jumpPlace}>Jump back</button><button type="button" aria-label="Dismiss" onClick={reader.dismissPlace}><X size={14} /></button></div>}
+      </div>}
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>
-          <ul>{[['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['F', 'Full screen'], ['Esc', 'Leave full screen or close'], ['?', 'This list']].map(([k, l]) => <li key={k}><kbd>{k}</kbd><span>{l}</span></li>)}</ul>
+          <ul>{[['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['B', 'Bookmark the line under the pointer'], ['F', 'Full screen'], ['Esc', 'Leave full screen or close'], ['?', 'This list']].map(([k, l]) => <li key={k}><kbd>{k}</kbd><span>{l}</span></li>)}</ul>
         </section>
       </div>}
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
