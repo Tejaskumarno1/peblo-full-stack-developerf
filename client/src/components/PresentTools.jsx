@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus } from 'lucide-react';
+import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus, GripVertical, Minimize2, Maximize2 } from 'lucide-react';
 import { Ic } from '../utils/icons';
 import api from '../api/client';
 import { getToken } from '../api/token';
@@ -66,6 +66,49 @@ export function PresentStart({ mode, setMode, qOn, setQOn, notesOn, setNotesOn, 
 export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLaser, spot, setSpot, getAnchor, goToBlock, onEnd }) {
   const host = useHost();
   const [panel, setPanel] = useState(null); // 'room' | 'notes' | 'q' | 'tour'
+  // the dock can be dragged anywhere, snaps to the screen edges (vertical on the left and right), and folds down to a small pill
+  const dockRef = useRef(null);
+  const [dock, setDock] = useState(() => { try { const d = JSON.parse(localStorage.getItem('peblo-dock') || 'null'); return d && typeof d.x === 'number' ? d : { x: null, y: null, v: false, c: false }; } catch { return { x: null, y: null, v: false, c: false }; } });
+  const saveDock = (d) => { setDock(d); try { localStorage.setItem('peblo-dock', JSON.stringify(d)); } catch { /* not kept */ } };
+  const dragging = useRef(null);
+  const fit = (d) => {
+    const el = dockRef.current; if (!el || d.x === null) return d;
+    const r = el.getBoundingClientRect();
+    return { ...d, x: Math.min(Math.max(8, d.x), Math.max(8, window.innerWidth - r.width - 8)), y: Math.min(Math.max(8, d.y), Math.max(8, window.innerHeight - r.height - 8)) };
+  };
+  useEffect(() => { const f = () => setDock((d) => fit(d)); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const gripDown = (e) => {
+    if (e.button !== 0) return;
+    const el = dockRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    dragging.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  };
+  const gripMove = (e) => {
+    const g = dragging.current; if (!g) return;
+    g.moved = true;
+    setDock((d) => fit({ ...d, x: e.clientX - g.dx, y: e.clientY - g.dy }));
+  };
+  const gripUp = (e) => {
+    const g = dragging.current; dragging.current = null;
+    if (!g?.moved) return;
+    const el = dockRef.current; if (!el) return;
+    const r = el.getBoundingClientRect(); const EDGE = 28;
+    const px = e?.clientX ?? r.left; // the side edges are judged by where the pointer was let go, so a wide toolbar is not turned on its side just by being clamped
+    const side = px < EDGE + 20 || window.innerWidth - px < EDGE + 20;
+    let { x, y, v } = { x: r.left, y: r.top, v: side ? true : false };
+    saveDock({ ...dock, x, y, v });
+    requestAnimationFrame(() => {
+      const el2 = dockRef.current; if (!el2) return;
+      const r2 = el2.getBoundingClientRect(); let nx = r2.left; let ny = r2.top;
+      if (side) { if (px < window.innerWidth / 2) nx = 12; else nx = window.innerWidth - r2.width - 12; }
+      if (ny < EDGE) ny = 12; else if (window.innerHeight - (ny + r2.height) < EDGE) ny = window.innerHeight - r2.height - 12;
+      saveDock(fit({ ...dock, x: nx, y: ny, v }));
+    });
+  };
+  const resetDock = () => saveDock({ x: null, y: null, v: false, c: dock.c });
+  const onRight = dock.x !== null && dock.v && dock.x > window.innerWidth / 2;
   const [clock, setClock] = useState({ acc: 0, since: Date.now() });
   const [, tick] = useState(0);
   const [plan, setPlan] = useState(20);
@@ -177,7 +220,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
   });
 
   const Btn = ({ id, icon, label, on, onClick, badge, tid, hint }) => (
-    <button type="button" className={`pd-b${on ? ' on' : ''}`} data-testid={tid} aria-pressed={on} title={hint || label} onClick={onClick}>{icon}<span>{label}</span>{badge > 0 && <i className="pd-n">{badge}</i>}</button>
+    <button type="button" className={`pd-t pd-b${on ? ' on' : ''}`} data-testid={tid} aria-pressed={on} title={hint || label} onClick={onClick}>{icon}<span>{label}</span>{badge > 0 && <i className="pd-n">{badge}</i>}</button>
   );
 
   const timerRow = (
@@ -191,7 +234,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
   return createPortal(
     <>
       {panel && (
-        <aside className="pb-ppanel" data-testid={`panel-${panel}`} aria-label="Presenter panel">
+        <aside className="pb-ppanel" style={onRight ? { right: 88 } : undefined} data-testid={`panel-${panel}`} aria-label="Presenter panel">
           <header><h3>{{ room: 'Audience', notes: 'Notes', q: 'Questions', tour: 'Tour', poll: 'Poll' }[panel]}</h3><button type="button" aria-label="Close panel" onClick={() => setPanel(null)}><X size={16} /></button></header>
           {panel === 'room' && <div className="pp-body">
             <div className="pp-sub">{others.length} here, {following} following</div>
@@ -250,21 +293,23 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
           </div>}
         </aside>
       )}
-      <div className="pb-pdock" role="toolbar" aria-label="Presenter tools" data-testid="presenting-banner">
-        <span className="pd-pill"><Presentation size={14} />Presenting · {mmss(elapsed)} · {following} following</span>
+      <div ref={dockRef} className={`pb-pdock${dock.v ? ' v' : ''}${dock.c ? ' c' : ''}${dock.x !== null ? ' free' : ''}`} style={dock.x !== null ? { left: dock.x, top: dock.y, bottom: 'auto', transform: 'none' } : undefined} role="toolbar" aria-label="Presenter tools" data-testid="presenting-banner">
+        <button type="button" className="pd-grip" data-testid="dock-grip" aria-label="Drag the toolbar. Double-click to put it back" title="Drag to move. Double-click to reset" onPointerDown={gripDown} onPointerMove={gripMove} onPointerUp={gripUp} onPointerCancel={gripUp} onDoubleClick={resetDock}><GripVertical size={16} /></button>
+        <span className="pd-pill" title={`${following} following`}><Presentation size={14} />{dock.v ? mmss(elapsed) : `Presenting · ${mmss(elapsed)} · ${following} following`}</span>
+        <button type="button" className="pd-b pd-fold" data-testid="dock-fold" aria-label={dock.c ? 'Show all tools' : 'Fold the toolbar'} title={dock.c ? 'Show all tools' : 'Fold the toolbar'} onClick={() => saveDock({ ...dock, c: !dock.c })}>{dock.c ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
         <span className="pd-sep" />
-        <button type="button" className={`pd-b${laser ? ' on' : ''}`} aria-pressed={laser} data-testid="tool-laser" title="Laser pointer: your pointer shows as a red dot" onClick={() => setLaser((v) => !v)}><Ic name="laser" size={16} /><span>Laser</span></button>
-        <button type="button" className={`pd-b${spot ? ' on' : ''}`} aria-pressed={spot} data-testid="tool-spot" title="Spotlight: dim everything except the block you point at" onClick={() => setSpot((v) => !v)}><Ic name="spotlight" size={16} /><span>Spotlight</span></button>
-        <span className="pd-hint" title="Alt + click anywhere in the note to ping that spot for everyone"><Ic name="ping" size={15} />Alt+click</span>
-        <span className="pd-sep" />
-        {reactSum > 0 && <span className="pd-react" data-testid="react-counts" title="Reactions from the room"><ThumbsUp size={13} />{reactTotals.up}<Lightbulb size={13} />{reactTotals.idea}<Heart size={13} />{reactTotals.heart}</span>}
+        <button type="button" className={`pd-t pd-b${laser ? ' on' : ''}`} aria-pressed={laser} data-testid="tool-laser" title="Laser pointer: your pointer shows as a red dot" onClick={() => setLaser((v) => !v)}><Ic name="laser" size={16} /><span>Laser</span></button>
+        <button type="button" className={`pd-t pd-b${spot ? ' on' : ''}`} aria-pressed={spot} data-testid="tool-spot" title="Spotlight: dim everything except the block you point at" onClick={() => setSpot((v) => !v)}><Ic name="spotlight" size={16} /><span>Spotlight</span></button>
+        <span className="pd-t pd-hint" title="Alt + click anywhere in the note to ping that spot for everyone"><Ic name="ping" size={15} />Alt+click</span>
+        <span className="pd-t pd-sep" />
+        {reactSum > 0 && <span className="pd-t pd-react" data-testid="react-counts" title="Reactions from the room"><ThumbsUp size={13} />{reactTotals.up}<Lightbulb size={13} />{reactTotals.idea}<Heart size={13} />{reactTotals.heart}</span>}
         <Btn tid="dock-poll" icon={<ListChecks size={16} />} label="Poll" on={panel === 'poll'} onClick={() => setPanel((p) => (p === 'poll' ? null : 'poll'))} badge={poll && poll.open ? votes.length : 0} hint="Poll (P)" />
         <Btn tid="dock-room" icon={<Users size={16} />} label="Audience" on={panel === 'room'} onClick={() => setPanel((p) => (p === 'room' ? null : 'room'))} badge={0} />
         {notesOn && <Btn tid="dock-notes" icon={<StickyNote size={16} />} label="Notes" on={panel === 'notes'} onClick={() => setPanel((p) => (p === 'notes' ? null : 'notes'))} hint="Notes (N)" />}
         {qOn && <Btn tid="dock-q" icon={<CircleHelp size={16} />} label="Questions" on={panel === 'q'} onClick={() => setPanel((p) => (p === 'q' ? null : 'q'))} badge={open.length + hands.length} hint="Questions (Q)" />}
         {mode === 'tour' && <Btn tid="dock-tour" icon={<Route size={16} />} label={stops.length ? `Stop ${Math.max(0, stopI) + 1} of ${stops.length}` : 'Tour'} on={panel === 'tour'} onClick={() => setPanel((p) => (p === 'tour' ? null : 'tour'))} hint="Tour (T)" />}
-        {stops.length > 0 && <button type="button" className="pd-b" data-testid="next-stop" title="Next stop (Space)" onClick={nextStop}><SkipForward size={16} /><span>Next</span></button>}
-        <span className="pd-sep" />
+        {stops.length > 0 && <button type="button" className="pd-t pd-b" data-testid="next-stop" title="Next stop (Space)" onClick={nextStop}><SkipForward size={16} /><span>Next</span></button>}
+        <span className="pd-t pd-sep" />
         <button type="button" className="pd-b end" data-testid="present-end" onClick={end}><X size={16} /><span>End</span></button>
       </div>
     </>,
@@ -407,6 +452,19 @@ export const PRESENT_CSS = `
 .pb-pdock .pd-b { position: relative; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
 .pb-pdock .pd-b:hover { background: rgba(255,255,255,.12); }
 .pb-pdock .pd-b.on { background: #fff; color: #5b21b6; }
+.pb-pdock { touch-action: none; }
+.pb-pdock .pd-grip { display: inline-grid; place-items: center; width: 26px; height: 34px; border: 0; border-radius: 999px; background: transparent; color: rgba(255,255,255,.65); cursor: grab; flex: none; padding: 0; }
+.pb-pdock .pd-grip:hover { background: rgba(255,255,255,.12); color: #fff; }
+.pb-pdock .pd-grip:active { cursor: grabbing; }
+.pb-pdock.free { transition: none; }
+.pb-pdock.c .pd-t { display: none; }
+.pb-pdock.v { flex-direction: column; align-items: stretch; border-radius: 26px; max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; width: 68px; }
+.pb-pdock.v .pd-sep { width: auto; height: 1px; margin: 4px 8px; align-self: auto; }
+.pb-pdock.v .pd-b { flex-direction: column; gap: 2px; padding: 8px 4px; border-radius: 14px; font-size: 10.5px; justify-content: center; }
+.pb-pdock.v .pd-pill { flex-direction: column; gap: 2px; padding: 8px 4px; border-radius: 16px; font-size: 11px; justify-content: center; }
+.pb-pdock.v .pd-grip { width: 100%; height: 26px; }
+.pb-pdock.v .pd-hint, .pb-pdock.v .pd-react { display: none; }
+.pb-pdock.v .pd-n { position: absolute; top: 2px; right: 6px; }
 .pb-pdock .pd-b.end { background: #ff6b4a; color: #1b0f0b; }
 .pb-pdock .pd-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #ff6b4a; color: #1b0f0b; font: 800 11px/18px 'Figtree', system-ui, sans-serif; text-align: center; font-style: normal; }
 .pb-ppanel { position: fixed; right: 16px; bottom: 76px; top: 76px; width: min(330px, calc(100vw - 24px)); z-index: 1155; display: flex; flex-direction: column; border-radius: 22px; background: #2b1458; color: #f3ecff; box-shadow: 0 18px 50px rgba(30,10,70,.5); font: 500 13px 'Figtree', system-ui, sans-serif; overflow: hidden; }

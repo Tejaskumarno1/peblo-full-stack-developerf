@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
  * on the top or bottom edge; click it to scroll to them. Turn pointers off with localStorage
  * peblo-pointers = off (the share page's Appearance menu does this).
  */
-const SEND_MS = 40;
+const SEND_MS = 16; // about one frame: pointers are sent as fast as the screen redraws
 const FADE_MS = 6000;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -94,8 +94,10 @@ export default function Pointers({ rt, rootRef, ready }) {
         dx: Math.round(e.clientX - er.left), dy: Math.round(e.clientY - br.top), w: Math.round(er.width), h: Math.round(br.height),
       };
     };
+    let lastEv = null; // the mouse's last known spot, so a scroll under a still mouse is sent too
     const move = (e) => {
       if (e.pointerType === 'touch') return;
+      lastEv = { clientX: e.clientX, clientY: e.clientY };
       const w = where(e);
       if (!w) { if (shown || pending !== undefined) queue(null); return; }
       queue(w);
@@ -112,11 +114,20 @@ export default function Pointers({ rt, rootRef, ready }) {
     window.addEventListener('pointerdown', ping, true);
     const gone = () => queue(null);
     const out = (e) => { if (!e.relatedTarget) queue(null); };
+    // the page scrolled under a mouse that did not move: the words under it changed, so tell everyone right away
+    let scrollRaf = 0;
+    const onScroll = () => {
+      if (!lastEv || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; if (lastEv) { const w = where(lastEv); queue(w); } });
+    };
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('pointermove', move, { passive: true });
     window.addEventListener('blur', gone);
     document.addEventListener('mouseout', out);
     return () => {
       window.removeEventListener('pointermove', move);
+      window.removeEventListener('scroll', onScroll, true);
+      cancelAnimationFrame(scrollRaf);
       window.removeEventListener('pointerdown', ping, true);
       window.removeEventListener('blur', gone);
       document.removeEventListener('mouseout', out);
@@ -189,7 +200,7 @@ export default function Pointers({ rt, rootRef, ready }) {
         if (!c || el.getAttribute('data-snap') === '1') { c = { x: tx, y: ty }; el.setAttribute('data-snap', '0'); }
         else {
           const dx = tx - c.x; const dy = ty - c.y;
-          c = Math.abs(dx) + Math.abs(dy) > 900 ? { x: tx, y: ty } : { x: Math.abs(dx) < 0.3 ? tx : c.x + dx * 0.32, y: Math.abs(dy) < 0.3 ? ty : c.y + dy * 0.32 };
+          c = Math.abs(dx) + Math.abs(dy) > 260 ? { x: tx, y: ty } : { x: Math.abs(dx) < 0.4 ? tx : c.x + dx * 0.6, y: Math.abs(dy) < 0.4 ? ty : c.y + dy * 0.6 };
         }
         cur.current.set(k, c);
         el.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;

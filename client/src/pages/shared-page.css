@@ -463,5 +463,5 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 @media (max-width: 640px) { .pb-shared .pb-presence-wrap:not(.pb-aud-wrap) { left: 12px; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); } }
 
 /* while presenting, the presenter dock owns the bottom edge: lift the people pill above it */
-.pb-presenting .pb-shared .pb-presence-wrap:not(.pb-aud-wrap) { bottom: 84px; }
+.pb-presenting .pb-shared .pb-presence-wrap:not(.pb-aud-wrap) { bottom: 84px; left: 96px; }
 .pb-presenting .gt { display: none; }
