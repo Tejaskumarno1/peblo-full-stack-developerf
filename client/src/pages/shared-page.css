@@ -342,3 +342,38 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared[data-width="wide"] article { padding-inline: 24px; }
   .pb-shared[data-width="wide"] .stage, .pb-shared[data-width="wide"] .top-in { width: min(1760px, 100%); }
 }
+
+/* welcome, colour, cover, phone bar */
+.pb-shared .welcome { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 6px 0 14px; }
+.pb-shared .welcome-note { flex: 1 0 100%; display: flex; gap: 10px; align-items: center; margin: 0; padding: 11px 16px; border-radius: 16px; background: var(--lilac); color: var(--fg); font: 600 14px/1.4 'Figtree', system-ui, sans-serif; }
+.pb-shared .welcome .guest-name { margin: 0; }
+.pb-shared .swatches { display: inline-flex; gap: 7px; align-items: center; }
+.pb-shared .swatches button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid var(--surface); border-radius: 50%; color: #fff; cursor: pointer; box-shadow: 0 0 0 1px var(--line); transition: transform .12s; }
+.pb-shared .swatches button:hover { transform: scale(1.15); }
+.pb-shared .swatches button.on { box-shadow: 0 0 0 2px var(--fg); }
+.pb-shared .cover { position: relative; overflow: hidden; height: 112px; margin: -4px 0 18px; border-radius: 22px; background: linear-gradient(120deg, var(--peach), var(--lilac) 58%, var(--mint)); }
+.pb-shared .cover i { position: absolute; border-radius: 50%; filter: blur(2px); opacity: .55; }
+.pb-shared .cover i:nth-child(1) { width: 150px; height: 150px; left: -30px; top: -60px; background: var(--butter); }
+.pb-shared .cover i:nth-child(2) { width: 110px; height: 110px; right: 12%; top: -40px; background: var(--surface); }
+.pb-shared .cover i:nth-child(3) { width: 90px; height: 90px; right: -20px; bottom: -34px; background: var(--accent); opacity: .25; }
+.pb-shared .cover-chips { position: absolute; left: 16px; right: 16px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pb-shared .cover-chips li { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--fg2); font: 700 12.5px/1 'Figtree', system-ui, sans-serif; backdrop-filter: blur(6px); }
+.pb-shared .mbar { display: none; }
+.pb-shared .sheet-back { position: fixed; inset: 0; z-index: 90; background: rgba(15, 12, 24, .45); display: flex; align-items: flex-end; }
+.pb-shared .sheet { width: 100%; max-height: 70dvh; overflow-y: auto; border-radius: 24px 24px 0 0; padding: 14px 18px calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--surface); color: var(--fg); box-shadow: 0 -12px 40px rgba(0,0,0,.25); }
+.pb-shared .sheet header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pb-shared .sheet h2 { margin: 0; font: 800 17px 'Bricolage Grotesque', system-ui, sans-serif; }
+.pb-shared .sheet header button { border: 0; background: var(--chip); color: var(--fg); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.pb-shared .sheet a { display: block; padding: 12px 4px; border-top: 1px solid var(--line); color: var(--fg2); text-decoration: none; font: 700 15px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sheet a.sub { padding-left: 18px; font-weight: 600; }
+@media (max-width: 640px) {
+  .pb-shared .cover { height: 92px; border-radius: 18px; }
+  .pb-shared .top-in .copy-btn, .pb-shared .top-in .save-btn, .pb-shared .top-in .preview-btn { display: none; }
+  .pb-shared .mbar { position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); bottom: max(10px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; gap: 4px; padding: 6px; border-radius: 22px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 10px 34px rgba(30, 20, 50, .28); backdrop-filter: blur(10px); }
+  .pb-shared .mbar button { flex: 1; display: grid; justify-items: center; gap: 3px; padding: 7px 2px; border: 0; border-radius: 16px; background: transparent; color: var(--fg2); font: 700 11px 'Figtree', system-ui, sans-serif; cursor: pointer; }
+  .pb-shared .mbar button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+  .pb-shared .mbar button.main { background: var(--accent); color: #fff; }
+  .pb-shared .mbar button:disabled { opacity: .6; }
+  .pb-shared .stage { padding-bottom: 96px; }
+  .pb-shared .typing-pill { bottom: 84px; }
+}

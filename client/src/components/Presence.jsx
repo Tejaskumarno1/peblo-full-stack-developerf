@@ -60,7 +60,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, view: st.view || null, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -75,12 +75,62 @@ export function usePeers(rt) {
   return peers;
 }
 
+/** A thin map of the whole note on the right edge: where everyone is reading, and where I am. Click a dot to go there. */
+function ReadingRail({ root, peers, tick }) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const again = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => bump((n) => n + 1)); };
+    window.addEventListener('scroll', again, true);
+    window.addEventListener('resize', again);
+    const t = setInterval(again, 1200);
+    return () => { cancelAnimationFrame(raf); clearInterval(t); window.removeEventListener('scroll', again, true); window.removeEventListener('resize', again); };
+  }, []);
+  void tick;
+  if (!root) return null;
+  const blocks = [...root.querySelectorAll('.bn-editor .bn-block-outer')];
+  if (blocks.length < 8) return null;
+  const sc = scrollerOf(root);
+  const isDoc = sc === document.scrollingElement || sc === document.documentElement;
+  const box = isDoc ? { top: 70, bottom: window.innerHeight - 16 } : (() => { const r = sc.getBoundingClientRect(); return { top: r.top + 12, bottom: r.bottom - 12 }; })();
+  const index = new Map(blocks.map((el, i) => [el.getAttribute('data-id'), i]));
+  const at = (v) => (v && index.has(v.b) ? (index.get(v.b) + (v.f || 0)) / blocks.length : null);
+  const others = peers.filter((p) => !p.me);
+  const mine = at(anchorOf(root));
+  const goTo = (frac) => {
+    const i = clamp(Math.floor(frac * blocks.length), 0, blocks.length - 1);
+    blocks[i].scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  const span = Math.max(40, box.bottom - box.top);
+  const thumb = isDoc ? sc.clientHeight / sc.scrollHeight : sc.clientHeight / sc.scrollHeight;
+  return createPortal(
+    <div className="pb-rail" data-testid="reading-rail" style={{ top: box.top, height: span }} aria-label="Where everyone is reading">
+      {mine !== null && <i className="me" title="You" style={{ top: `${mine * 100}%`, height: `${clamp(thumb, 0.04, 1) * 100}%` }} />}
+      {others.map((p) => {
+        const f = at(p.view);
+        if (f === null) return null;
+        return <button key={keyOf(p)} type="button" className="dot" data-testid="rail-dot" data-name={p.name} title={`${p.name} is here. Click to go there`} style={{ top: `${f * 100}%`, '--c': p.color }} onClick={() => goTo(f)}><span>{initial(p.name)}</span></button>;
+      })}
+      <style>{`
+        .pb-rail { position: fixed; right: 5px; width: 10px; z-index: 1050; border-radius: 6px; background: color-mix(in srgb, currentColor 8%, transparent); }
+        .pb-rail .me { position: absolute; left: 1px; right: 1px; border-radius: 5px; background: color-mix(in srgb, currentColor 28%, transparent); pointer-events: none; min-height: 6px; }
+        .pb-rail .dot { position: absolute; left: -9px; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; border: 2px solid #fff; background: var(--c); color: #fff; font: 700 10px/1 system-ui, sans-serif; display: grid; place-items: center; cursor: pointer; padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: top .3s ease; }
+        .pb-rail .dot:hover { transform: scale(1.18); }
+        @media (max-width: 640px) { .pb-rail { display: none; } }
+      `}</style>
+    </div>,
+    document.body,
+  );
+}
+
 export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const peers = usePeers(rt);
   const [following, setFollowing] = useState(null); // keyOf(peer)
   const [tick, setTick] = useState(0);
   const [tip, setTip] = useState(null);
   const [presenting, setPresenting] = useState(false);
+  const [laser, setLaser] = useState(false);
+  const [spot, setSpot] = useState(false);
   const [dismissed, setDismissed] = useState({}); // keyOf(peer) -> true while the prompt is closed
   const followRef = useRef(null);
   followRef.current = following;
@@ -166,8 +216,15 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     if (!rt || !ready) return undefined;
     const aw = rt.provider.awareness;
     try { aw.setLocalStateField('presenting', presenting); } catch { /* gone */ }
+    if (!presenting) { setLaser(false); setSpot(false); }
     return () => { try { aw.setLocalStateField('presenting', false); } catch { /* gone */ } };
   }, [rt, ready, presenting]);
+  useEffect(() => {
+    if (!rt || !ready) return undefined;
+    const aw = rt.provider.awareness;
+    try { aw.setLocalStateField('laser', presenting && laser); aw.setLocalStateField('spot', presenting && spot); } catch { /* gone */ }
+    return () => { try { aw.setLocalStateField('laser', false); aw.setLocalStateField('spot', false); } catch { /* gone */ } };
+  }, [rt, ready, presenting, laser, spot]);
   useEffect(() => { // a prompt comes back the next time that person starts presenting
     setDismissed((d) => {
       const live = new Set(peers.filter((p) => p.presenting).map(keyOf));
@@ -215,7 +272,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     const onChange = () => { kick(); caret(); };
     const free = (e) => {
       if (e.type === 'keydown' && !['PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End', ' '].includes(e.key)) return;
-      if (e.type === 'wheel' || e.type === 'touchmove' || e.type === 'keydown') { cancelAnimationFrame(raf); raf = 0; setFollowing(null); setFreed({ name: target.name }); }
+      if (e.type === 'wheel' || e.type === 'touchmove' || e.type === 'keydown') { cancelAnimationFrame(raf); raf = 0; setFollowing(null); setFreed({ name: target.name, key: keyOf(target), presenting: !!target.presenting }); }
     };
     aw.on('change', onChange);
     window.addEventListener('wheel', free, { passive: true });
@@ -224,7 +281,12 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     kick();
     return () => { cancelAnimationFrame(raf); aw.off('change', onChange); window.removeEventListener('wheel', free); window.removeEventListener('touchmove', free); window.removeEventListener('keydown', free); };
   }, [rt, following, peers.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!freed) return undefined; const t = setTimeout(() => setFreed(null), 4000); return () => clearTimeout(t); }, [freed]);
+  useEffect(() => { // the notice fades, unless they are presenting: then the way back stays until they stop
+    if (!freed) return undefined;
+    if (freed.presenting && peers.some((p) => keyOf(p) === freed.key && p.presenting)) return undefined;
+    const t = setTimeout(() => setFreed(null), freed.presenting ? 0 : 4000);
+    return () => clearTimeout(t);
+  }, [freed, peers]);
   useEffect(() => { if (following) setFreed(null); }, [following]);
 
   // "edited by" on hover
@@ -291,14 +353,20 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
             <button type="button" className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => setPresenting((v) => !v)}><Ic name="presentation" size={15} /></button>
             <span className="pb-presence-count" aria-live="polite">{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</span>
           </div>
-          {presenting && <div className="pb-follow presenting" role="status" data-testid="presenting-banner"><Ic name="presentation" size={14} />You are presenting. Everyone here can follow your view.<button type="button" onClick={() => setPresenting(false)}>Stop</button></div>}
+          {presenting && <div className="pb-follow presenting" role="status" data-testid="presenting-banner"><Ic name="presentation" size={14} />You are presenting
+            <span className="tools" role="group" aria-label="Presenter tools">
+              <button type="button" className={laser ? 'on' : ''} aria-pressed={laser} data-testid="tool-laser" title="Laser pointer: your pointer shows as a red dot" onClick={() => setLaser((v) => !v)}><Ic name="laser" size={15} /></button>
+              <button type="button" className={spot ? 'on' : ''} aria-pressed={spot} data-testid="tool-spot" title="Spotlight: dim everything except the block you point at" onClick={() => setSpot((v) => !v)}><Ic name="spotlight" size={15} /></button>
+              <span className="hint" title="Alt + click anywhere in the note to ping that spot for everyone"><Ic name="ping" size={15} />Alt+click</span>
+            </span>
+            <button type="button" onClick={() => setPresenting(false)}>Stop</button></div>}
           {presenters.map((p) => (
             <div key={keyOf(p)} className="pb-follow offer" role="status" data-testid="present-offer"><Ic name="presentation" size={14} />{p.name} is presenting
               <button type="button" data-testid="present-follow" onClick={() => setFollowing(keyOf(p))}>Follow</button>
               <button type="button" className="quiet" onClick={() => setDismissed((d) => ({ ...d, [keyOf(p)]: true }))}>Not now</button>
             </div>
           ))}
-          {freed && <div className="pb-follow" role="status" data-testid="follow-freed">You stopped following {freed.name}</div>}
+          {freed && !freed.presenting && <div className="pb-follow" role="status" data-testid="follow-freed">You stopped following {freed.name}</div>}
           {followed && (
             <div className="pb-follow" role="status" data-testid="follow-banner">
               <Ic name="follow" size={14} />Following {followed.name}
@@ -307,6 +375,11 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
           )}
         </div>
       )}
+      {freed?.presenting && peers.some((p) => keyOf(p) === freed.key && p.presenting) && createPortal(
+        <button type="button" className="pb-return" data-testid="return-presenter" onClick={() => { setFollowing(freed.key); setFreed(null); }}><Ic name="undo" size={15} />Return to {freed.name}</button>,
+        document.body,
+      )}
+      {others.length > 0 && <ReadingRail root={rootRef?.current} peers={peers} tick={tick} />}
       {tip && createPortal(
         <div className="pb-editedby" style={{ left: Math.min(tip.x + 12, window.innerWidth - 190), top: tip.y + 14 }} role="tooltip" data-testid="edited-by">
           <i style={{ background: tip.color }} />Edited by {tip.name} · {ago(tip.t)}
@@ -330,6 +403,12 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
         .pb-follow.presenting { background: #7c3aed; }
         .pb-follow.offer { background: #1f2937; }
         .pb-follow button.quiet { opacity: .7; text-decoration: none; }
+        .pb-follow .tools { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; }
+        .pb-follow .tools button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(255,255,255,.14); text-decoration: none; }
+        .pb-follow .tools button.on { background: #fff; color: #7c3aed; }
+        .pb-follow .tools .hint { display: inline-flex; gap: 4px; align-items: center; font-size: 11px; opacity: .85; padding: 0 4px; }
+        .pb-return { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 1150; display: inline-flex; gap: 8px; align-items: center; border: 0; border-radius: 999px; padding: 10px 16px; background: #7c3aed; color: #fff; font: 700 13px 'Figtree', system-ui, sans-serif; box-shadow: 0 8px 24px rgba(60, 20, 120, .35); cursor: pointer; animation: pbRise .25s ease-out; }
+        @keyframes pbRise { from { transform: translate(-50%, 12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .pb-present { width: 26px; height: 26px; border-radius: 50%; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 2px; }
         .pb-present:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
         .pb-present.on { background: #7c3aed; border-color: #7c3aed; color: #fff; }

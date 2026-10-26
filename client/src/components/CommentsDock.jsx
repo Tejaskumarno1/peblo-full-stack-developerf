@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Ic } from '../utils/icons';
+import { Ic, icSvg } from '../utils/icons';
 import { createPortal } from 'react-dom';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -112,11 +112,43 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
       props: {
         decorations(state) {
           const out = [];
+          const perBlock = new Map(); // block position -> { n threads, replies, first thread id, suggestion? }
           for (const c of ref.current) {
             if (c.parentId || c.status !== 'open' || !c.quote) continue;
             const hit = findQuote(state.doc, c.quote);
-            if (hit) out.push(Decoration.inline(hit.from, hit.to, { class: `pb-commented${c.kind === 'suggestion' ? ' sug' : ''}`, 'data-cid': c.id }));
+            if (!hit) continue;
+            out.push(Decoration.inline(hit.from, hit.to, { class: `pb-commented${c.kind === 'suggestion' ? ' sug' : ''}`, 'data-cid': c.id }));
+            // the block the words sit in, for the count badge in the margin
+            const $p = state.doc.resolve(hit.from);
+            for (let d = $p.depth; d > 0; d -= 1) {
+              if ($p.node(d).type.name === 'blockContainer') {
+                const start = $p.before(d);
+                const node = $p.node(d);
+                const e = perBlock.get(start) || { node, n: 0, replies: 0, id: c.id, sug: false };
+                e.n += 1; e.sug = e.sug || c.kind === 'suggestion';
+                e.replies += ref.current.filter((r) => r.parentId === c.id).length;
+                perBlock.set(start, e);
+                break;
+              }
+            }
           }
+          perBlock.forEach((e, start) => {
+            if (!e.node.firstChild) return;
+            const total = e.n + e.replies;
+            out.push(Decoration.widget(start + 1 + e.node.firstChild.nodeSize, () => {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'pb-mbadge' + (e.sug ? ' sug' : '');
+              b.contentEditable = 'false';
+              b.setAttribute('data-testid', 'margin-badge');
+              b.title = `${e.n} ${e.n === 1 ? 'thread' : 'threads'} on this paragraph. Open`;
+              b.setAttribute('aria-label', b.title);
+              b.innerHTML = `${icSvg(e.sug ? 'suggest' : 'comment', 13)}<span>${total}</span>`;
+              b.addEventListener('mousedown', (ev) => ev.preventDefault());
+              b.addEventListener('click', (ev) => { ev.preventDefault(); window.dispatchEvent(new CustomEvent('pb-focus-thread', { detail: { id: e.id } })); });
+              return b;
+            }, { side: 1, key: `mb-${start}-${total}-${e.sug ? 's' : 'c'}-${e.id}`, stopEvent: () => true, ignoreSelection: true }));
+          });
           return DecorationSet.create(state.doc, out);
         },
       },
@@ -130,6 +162,8 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
   useEffect(() => {
     const start = (e) => { setDraft({ quote: e.detail?.quote || '', mode: e.detail?.mode === 'suggest' ? 'suggest' : 'comment' }); setOpen(true); setFresh(false); setErr(''); };
     window.addEventListener('pb-comment-start', start);
+    const focus = (e) => { setFocusId(e.detail?.id || null); setTab('open'); setOpen(true); setFresh(false); };
+    window.addEventListener('pb-focus-thread', focus);
     const root = rootRef?.current;
     const click = (e) => {
       const m = e.target?.closest?.('.pb-commented');
@@ -137,7 +171,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
       setFocusId(m.getAttribute('data-cid')); setTab('open'); setOpen(true); setFresh(false);
     };
     root?.addEventListener('click', click);
-    return () => { window.removeEventListener('pb-comment-start', start); root?.removeEventListener('click', click); };
+    return () => { window.removeEventListener('pb-comment-start', start); window.removeEventListener('pb-focus-thread', focus); root?.removeEventListener('click', click); };
   }, [rootRef]);
   useEffect(() => {
     if (!open || !focusId) return;
@@ -248,6 +282,11 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         document.body,
       )}
       <style>{`
+        .bn-editor .bn-block { position: relative; }
+        .pb-mbadge { position: absolute; right: -46px; top: 3px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); background: color-mix(in srgb, var(--pb-bg, #fff) 94%, transparent); color: #b45309; border-radius: 999px; padding: 2px 8px 2px 6px; font: 700 11.5px/1.4 'Figtree', system-ui, sans-serif; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.1); user-select: none; z-index: 2; }
+        .pb-mbadge.sug { color: #2563eb; }
+        .pb-mbadge:hover { background: color-mix(in srgb, currentColor 12%, var(--pb-bg, #fff)); }
+        @media (max-width: 900px) { .pb-mbadge { right: -6px; top: -9px; } }
         .pb-dock { position: sticky; top: 6px; height: 0; z-index: 20; display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; pointer-events: none; }
         .pb-dock > * { pointer-events: auto; }
         .pb-cbtn { height: 34px; min-width: 34px; padding: 0 9px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 16%, transparent); background: color-mix(in srgb, var(--pb-bg, #fff) 92%, transparent); backdrop-filter: blur(6px); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-size: 14px; color: inherit; box-shadow: 0 2px 10px rgba(0,0,0,.08); }

@@ -43,7 +43,7 @@ function serverUrl() {
 }
 
 /**
- * @param {{ noteId?: string, share?: string, sid?: string, name?: string }} opts
+ * @param {{ noteId?: string, share?: string, sid?: string, name?: string, color?: string }} opts
  *   the owner passes noteId (their sign-in is used); a person on a share link passes share (and a session id)
  */
 export function createCollab(opts) {
@@ -55,13 +55,13 @@ export function createCollab(opts) {
   // the server's offer: "this document is empty, fill it from the saved text"
   provider.messageHandlers[MSG_SEED] = (_enc, dec, p) => { p.emit('seed', [decoding.readVarString(dec)]); };
   const name = (opts.name || 'Someone').slice(0, 40);
-  provider.awareness.setLocalStateField('user', { name, color: colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) });
+  provider.awareness.setLocalStateField('user', { name, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) });
 
   let destroyTimer = null;
   return {
     doc,
     provider,
-    user: { name, color: colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) },
+    user: { name, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) },
     connect() { clearTimeout(destroyTimer); provider.connect(); },
     /** Tell the server which Markdown text this editor is about to save. */
     announce(markdown) {

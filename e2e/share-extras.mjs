@@ -28,6 +28,7 @@ try {
 
   // 2. a guest gives a name; the link's end date is visible to them
   const gctx = await ctx.browser().newContext({ viewport: { width: 1280, height: 800 } });
+  await gctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   await gctx.addInitScript(() => { try { localStorage.setItem('peblo-debug', '1'); } catch { /* ignore */ } });
   const g = await gctx.newPage();
   await g.goto(`${base}/s/note/${tok}`);

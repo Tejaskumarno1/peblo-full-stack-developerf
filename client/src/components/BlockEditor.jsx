@@ -219,6 +219,18 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   // Live co-editing (Yjs): when `collab` is given, the document is shared with everyone else on this note.
   // The room is created once per mount; the page remounts the editor (key) to switch notes.
   const [rt] = useState(() => (collab ? createCollab(collab) : null));
+  // a share-link guest changed their name or colour: tell the others straight away, no reload
+  useEffect(() => {
+    if (!rt) return undefined;
+    const on = (e) => {
+      const { name, color } = e.detail || {};
+      if (name) rt.user.name = String(name).slice(0, 40);
+      if (/^#[0-9a-f]{6}$/i.test(color || '')) rt.user.color = color;
+      try { rt.provider.awareness.setLocalStateField('user', { name: rt.user.name, color: rt.user.color }); } catch { /* gone */ }
+    };
+    window.addEventListener('pb-identity', on);
+    return () => window.removeEventListener('pb-identity', on);
+  }, [rt]);
   const [live, setLive] = useState({ connected: false, ready: false });
   const editor = useCreateBlockNote({
     uploadFile,

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Printer, Sun, Type, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Printer, Sun, Type, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
@@ -79,7 +79,21 @@ export default function SharedPage() {
     const clean = value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
     setGuestName(clean);
     try { if (clean) localStorage.setItem('peblo-guest-name', clean); else localStorage.removeItem('peblo-guest-name'); } catch { /* the name just is not remembered */ }
+    if (clean) { markJoined(); window.dispatchEvent(new CustomEvent('pb-identity', { detail: { name: clean } })); }
   };
+  // how I show up for the others: a colour next to the name (kept in this browser, applied live)
+  const GUEST_COLORS = ['#e11d48', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777'];
+  const [guestColor, setGuestColor] = useState(() => { try { return localStorage.getItem('peblo-guest-color') || ''; } catch { return ''; } });
+  const colorRef = useRef(guestColor);
+  colorRef.current = guestColor;
+  const [joined, setJoined] = useState(() => { try { return localStorage.getItem('peblo-guest-joined') === '1' || !!localStorage.getItem('peblo-guest-name'); } catch { return false; } });
+  const markJoined = () => { setJoined(true); try { localStorage.setItem('peblo-guest-joined', '1'); } catch { /* not remembered */ } };
+  const pickColor = (color) => {
+    setGuestColor(color); markJoined();
+    try { localStorage.setItem('peblo-guest-color', color); } catch { /* not remembered */ }
+    window.dispatchEvent(new CustomEvent('pb-identity', { detail: { color } }));
+  };
+  const [tocSheet, setTocSheet] = useState(false);
   const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -683,6 +697,14 @@ export default function SharedPage() {
               {data.canEdit && !previewMode
                 ? <input className="title-in" aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} onChange={(event) => { draft.current.title = event.target.value; typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
+              <div className="cover" data-testid="cover"><i aria-hidden="true" /><i aria-hidden="true" /><i aria-hidden="true" />
+                <ul className="cover-chips" aria-label="About this page">
+                  <li><Clock size={14} />{Math.max(1, Math.ceil(wordCount / 200))} min read</li>
+                  <li><FileText size={14} />{wordCount} words</li>
+                  <li><Users size={14} />{others.length + 1} here now</li>
+                  <li>{data.canEdit ? <Pencil size={14} /> : <Eye size={14} />}{data.canEdit ? 'Can edit' : 'View only'}</li>
+                </ul>
+              </div>
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
                 <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
@@ -690,14 +712,18 @@ export default function SharedPage() {
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span></>}
               </div>
-              {data.canEdit && !user && !previewMode && <label className="guest-name"><span>You are editing as</span>
-                <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
-                <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>}
+              {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
+                {!joined && <p className="welcome-note" data-testid="welcome-note"><Users size={16} /><span>Welcome. Pick a name and a colour so the others here can tell who you are.{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</span></p>}
+                <label className="guest-name"><span>You are editing as</span>
+                  <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
+                  <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
+                <span className="swatches" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={guestColor === c} aria-label={`Colour ${c}`} data-testid="guest-color" className={guestColor === c ? 'on' : ''} style={{ background: c }} onClick={() => pickColor(c)}>{guestColor === c && <Check size={12} />}</button>)}</span>
+              </div>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
-                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest' }}
-                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; typedAt.current = Date.now(); queueSave(); }} /></Suspense>
+                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
+                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
             </>}
 
@@ -736,6 +762,19 @@ export default function SharedPage() {
       {data && !previewMode && !typingText && (others.length > 0 || panelOpen || offline) && <CollabBar
         viewers={viewers} open={panelOpen} offline={offline} toasts={recentEvents} onDismissToast={collab.dismiss} onToggle={() => setPanelOpen((open) => !open)}
       />}
+      {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
+        {data.kind === 'note' && headings.length > 0 && <button type="button" aria-label="Outline" onClick={() => setTocSheet(true)}><List size={20} /><span>Outline</span></button>}
+        <button type="button" aria-label="People" aria-pressed={panelOpen} onClick={() => setPanelOpen((open) => !open)}><Users size={20} /><span>People{others.length ? ` ${others.length}` : ''}</span></button>
+        <button type="button" aria-label="Appearance" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={20} /><span>Look</span></button>
+        <button type="button" aria-label="Copy link" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={20} /><span>Link</span></button>
+        <button type="button" className="main" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={20} /><span>Save</span></button>
+      </nav>}
+      {tocSheet && <div className="sheet-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTocSheet(false); }}>
+        <section className="sheet" role="dialog" aria-modal="true" aria-label="On this page" data-testid="toc-sheet">
+          <header><h2>On this page</h2><button type="button" aria-label="Close" onClick={() => setTocSheet(false)}><X size={18} /></button></header>
+          {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} className={level === 3 ? 'sub' : ''} onClick={(event) => { handleHeadingClick(event, id); setTocSheet(false); }}>{title}</a>)}
+        </section>
+      </div>}
       {toast && <div className="toast" role="status" aria-live="polite"><Check size={16} />{toast}</div>}
       {authOpen && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !authBusy) setAuthOpen(false); }}>
         <section className="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-auth-title">

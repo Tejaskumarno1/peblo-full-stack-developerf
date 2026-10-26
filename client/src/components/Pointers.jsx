@@ -39,6 +39,9 @@ const prefOn = () => { try { return localStorage.getItem('peblo-pointers') !== '
 
 export default function Pointers({ rt, rootRef, ready }) {
   const [pts, setPts] = useState([]); // { key, name, color, b, x, y }
+  const [spot, setSpot] = useState(null); // block id someone is spotlighting
+  const [rings, setRings] = useState([]); // pings on show
+  const pinged = useRef(new Set());
   const [, bump] = useState(0);
   const [on, setOn] = useState(prefOn);
   const seen = useRef(new Map()); // key -> { sig, at } last time its pointer moved
@@ -68,29 +71,45 @@ export default function Pointers({ rt, rootRef, ready }) {
       const wait = SEND_MS - (Date.now() - last);
       if (wait <= 0) flush(); else if (!timer) timer = setTimeout(flush, wait);
     };
-    const move = (e) => {
-      if (e.pointerType === 'touch') return;
+    /** Where the mouse is, as "this block, this far across, this far down"; null outside the note. */
+    const where = (e) => {
       const ed = root.querySelector('.bn-editor');
-      if (!ed) return;
+      if (!ed) return null;
       const er = ed.getBoundingClientRect();
       const rr = root.getBoundingClientRect();
       const inside = er.width > 0 && e.clientX >= er.left - 80 && e.clientX <= er.right + 80 && e.clientY >= Math.max(rr.top, 0) && e.clientY <= Math.min(rr.bottom, window.innerHeight);
-      if (!inside) { if (shown || pending !== undefined) queue(null); return; }
+      if (!inside) return null;
       // the block under the mouse (or beside it, in the margins), whatever floats above it
       const px = clamp(e.clientX, er.left + 4, er.right - 4);
       const hit = document.elementsFromPoint(px, e.clientY).find((el) => el.closest?.('.bn-editor') === ed && el.closest('.bn-block-outer'));
       const outer = hit?.closest('.bn-block-outer');
       const id = outer?.getAttribute('data-id');
-      if (!outer || !id) { queue(null); return; }
+      if (!outer || !id) return null;
       const br = outer.getBoundingClientRect();
-      queue({
+      return {
         b: id,
         x: Math.round(((e.clientX - er.left) / er.width) * 1000) / 1000,
         y: br.height ? Math.round(clamp((e.clientY - br.top) / br.height, 0, 1) * 1000) / 1000 : 0,
         // exact pixels, used by anyone whose column and block are the same size as mine (the same layout), so it is pixel-true there
         dx: Math.round(e.clientX - er.left), dy: Math.round(e.clientY - br.top), w: Math.round(er.width), h: Math.round(br.height),
-      });
+      };
     };
+    const move = (e) => {
+      if (e.pointerType === 'touch') return;
+      const w = where(e);
+      if (!w) { if (shown || pending !== undefined) queue(null); return; }
+      queue(w);
+    };
+    // Alt + click pings that spot for everyone: a ripple that says "look here"
+    const ping = (e) => {
+      if (!e.altKey || e.button !== 0) return;
+      const w = where(e);
+      if (!w) return;
+      e.preventDefault();
+      try { aw.setLocalStateField('ping', { ...w, n: Date.now() }); } catch { /* gone */ }
+      window.dispatchEvent(new CustomEvent('pb-ping', { detail: { ...w, color: rt.user.color, name: rt.user.name } }));
+    };
+    window.addEventListener('pointerdown', ping, true);
     const gone = () => queue(null);
     const out = (e) => { if (!e.relatedTarget) queue(null); };
     window.addEventListener('pointermove', move, { passive: true });
@@ -98,12 +117,24 @@ export default function Pointers({ rt, rootRef, ready }) {
     document.addEventListener('mouseout', out);
     return () => {
       window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerdown', ping, true);
       window.removeEventListener('blur', gone);
       document.removeEventListener('mouseout', out);
       clearTimeout(timer);
       send(null);
     };
   }, [rt, ready, rootRef]);
+
+  const addRing = (r) => {
+    const id = `${r.n || Date.now()}-${Math.random()}`;
+    setRings((cur) => [...cur.slice(-4), { ...r, id }]);
+    setTimeout(() => setRings((cur) => cur.filter((x) => x.id !== id)), 1700);
+  };
+  useEffect(() => {
+    const f = (e) => addRing(e.detail);
+    window.addEventListener('pb-ping', f);
+    return () => window.removeEventListener('pb-ping', f);
+  }, []);
 
   // read everyone else's
   useEffect(() => {
@@ -112,15 +143,22 @@ export default function Pointers({ rt, rootRef, ready }) {
     const read = () => {
       const out = [];
       const live = new Set();
+      let spotted = null;
       aw.getStates().forEach((st, id) => {
+        if (st?.spot && st.pointer?.b) spotted = st.pointer.b;
+        if (id !== aw.clientID && st?.ping?.n && !pinged.current.has(`${id}:${st.ping.n}`) && Date.now() - st.ping.n < 4000) {
+          pinged.current.add(`${id}:${st.ping.n}`);
+          addRing({ ...st.ping, color: st.user?.color || '#2563eb', name: st.user?.name || '' });
+        }
         if (id === aw.clientID || !st?.user || !st.pointer || typeof st.pointer.x !== 'number' || !st.pointer.b) return;
         live.add(id);
         const prev = seen.current.get(id);
         const sig = `${st.pointer.b}|${st.pointer.dx ?? st.pointer.x}|${st.pointer.dy ?? st.pointer.y}`;
         if (!prev || prev.sig !== sig) seen.current.set(id, { sig, at: Date.now() });
-        out.push({ key: id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', b: st.pointer.b, x: st.pointer.x, y: st.pointer.y, dx: st.pointer.dx, dy: st.pointer.dy, w: st.pointer.w, h: st.pointer.h, presenting: !!st.presenting });
+        out.push({ key: id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', b: st.pointer.b, x: st.pointer.x, y: st.pointer.y, dx: st.pointer.dx, dy: st.pointer.dy, w: st.pointer.w, h: st.pointer.h, presenting: !!st.presenting, laser: !!st.laser });
       });
       [...seen.current.keys()].forEach((k) => { if (!live.has(k)) seen.current.delete(k); });
+      setSpot(spotted);
       setPts(out);
     };
     read();
@@ -165,13 +203,20 @@ export default function Pointers({ rt, rootRef, ready }) {
 
   const root = rootRef?.current;
   const ed = root?.querySelector('.bn-editor');
-  if (!on || !ed || !pts.length) return null;
+  if (!ed || (!pts.length && !spot && !rings.length)) return null;
   const er = ed.getBoundingClientRect();
   const vis = visibleBox(root);
   const now = Date.now();
   const marks = [];
   const edges = [];
-  pts.forEach((p) => {
+  const placeOf = (p) => {
+    let outer = null;
+    try { outer = ed.querySelector(`.bn-block-outer[data-id="${CSS.escape(p.b)}"]`); } catch { /* odd id */ }
+    if (!outer) return null;
+    const br = outer.getBoundingClientRect();
+    return { outer, br, left: er.left + (p.dx != null && Math.abs(er.width - p.w) <= 8 ? p.dx : p.x * er.width), top: br.top + (p.dy != null && Math.abs(br.height - p.h) <= 6 ? p.dy : p.y * br.height) };
+  };
+  (on ? pts : []).forEach((p) => {
     let outer = null;
     try { outer = ed.querySelector(`.bn-block-outer[data-id="${CSS.escape(p.b)}"]`); } catch { /* odd id */ }
     if (!outer) return;
@@ -187,12 +232,25 @@ export default function Pointers({ rt, rootRef, ready }) {
       marks.push({ ...p, left, top, idle, ink });
     }
   });
-  if (!marks.length && !edges.length) return null;
+  const spotBox = (() => {
+    if (!spot) return null;
+    let outer = null;
+    try { outer = ed.querySelector(`.bn-block-outer[data-id="${CSS.escape(spot)}"]`); } catch { /* odd id */ }
+    if (!outer) return null;
+    const r = (outer.querySelector('.bn-block-content') || outer).getBoundingClientRect();
+    if (r.bottom < vis.top || r.top > vis.bottom) return null;
+    return { left: r.left - 12, top: r.top - 6, width: r.width + 24, height: r.height + 12 };
+  })();
+  const ringPlaces = rings.map((g) => ({ g, at: placeOf(g) })).filter((x) => x.at && x.at.top > vis.top && x.at.top < vis.bottom);
+  if (!marks.length && !edges.length && !spotBox && !ringPlaces.length) return null;
   const goTo = (outer) => { try { outer.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { /* gone */ } };
   return createPortal(
     <div className="pb-pointers" aria-hidden="true">
+      {spotBox && <div className="pb-spot" data-testid="spotlight" style={spotBox} />}
+      {ringPlaces.map(({ g, at }) => <div key={g.id} className="pb-ping" data-testid="ping-ring" style={{ left: at.left, top: at.top, '--c': g.color }}><i /><i /><i /></div>)}
       {marks.map((p) => (
-        <div key={p.key} className={`pb-pointer${p.idle ? ' idle' : ''}${p.presenting ? ' presenter' : ''}`} data-testid="peer-pointer" data-name={p.name} ref={(el) => { if (el && !el.style.transform) el.style.transform = `translate3d(${p.left}px, ${p.top}px, 0)`; }} data-key={p.key} data-tx={p.left} data-ty={p.top} data-snap={snap.current ? '1' : '0'} style={{ '--c': p.color, '--ink': p.ink }}>
+        <div key={p.key} className={`pb-pointer${p.idle ? ' idle' : ''}${p.presenting ? ' presenter' : ''}${p.laser ? ' laser' : ''}`} data-testid="peer-pointer" data-name={p.name} ref={(el) => { if (el && !el.style.transform) el.style.transform = `translate3d(${p.left}px, ${p.top}px, 0)`; }} data-key={p.key} data-tx={p.left} data-ty={p.top} data-snap={snap.current ? '1' : '0'} style={{ '--c': p.color, '--ink': p.ink }}>
+          {p.laser && <i className="dot" />}
           <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><path d="M3 2.2l13.2 10.4-5.7 1.1 3.6 7.1-3 1.5-3.6-7.2L3 19.2z" fill="var(--c)" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" /></svg>
           <span className="tag">{p.presenting && <Ic name="presentation" size={12} style={{ marginRight: 5, verticalAlign: '-2px' }} />}{p.name}</span>
         </div>
@@ -209,6 +267,14 @@ export default function Pointers({ rt, rootRef, ready }) {
         .pb-pointer svg { display: block; filter: drop-shadow(0 2px 3px rgba(20,20,30,.28)); margin: -2px 0 0 -3px; }
         .pb-pointer .tag { position: absolute; left: 15px; top: 19px; background: var(--c); color: var(--ink); font: 700 11.5px/1 'Figtree', system-ui, sans-serif; letter-spacing: .01em; padding: 4px 9px 5px; border-radius: 4px 11px 11px 11px; white-space: nowrap; box-shadow: 0 2px 8px rgba(20,20,30,.22), 0 0 0 1.5px rgba(255,255,255,.85); }
         .pb-pointer-edge { position: absolute; pointer-events: auto; cursor: pointer; border: 0; background: var(--c); color: var(--ink); font: 700 11.5px/1 'Figtree', system-ui, sans-serif; padding: 6px 11px; border-radius: 999px; box-shadow: 0 3px 12px rgba(20,20,30,.28), 0 0 0 1.5px rgba(255,255,255,.85); display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+        .pb-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 200vmax rgba(12, 12, 24, .52); outline: 2px solid rgba(255,255,255,.55); transition: left .18s ease, top .18s ease, width .18s ease, height .18s ease; z-index: 0; }
+        .pb-ping { position: fixed; width: 0; height: 0; pointer-events: none; }
+        .pb-ping i { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--c); opacity: 0; animation: pbRing 1.4s ease-out infinite; }
+        .pb-ping i:nth-child(2) { animation-delay: .25s; } .pb-ping i:nth-child(3) { animation-delay: .5s; }
+        @keyframes pbRing { 0% { transform: scale(.2); opacity: .95; } 100% { transform: scale(2.4); opacity: 0; } }
+        .pb-pointer.laser svg { display: none; }
+        .pb-pointer.laser .dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle, #fff 0 22%, #ff2d55 24% 60%, rgba(255,45,85,.0) 72%); box-shadow: 0 0 14px 6px rgba(255,45,85,.55); }
+        .pb-pointer.laser .tag { left: 12px; top: 10px; }
         .pb-pointer.presenter svg { transform: scale(1.35); transform-origin: 3px 2px; }
         .pb-pointer.presenter::before { content: ''; position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 38%, transparent) 0%, transparent 70%); animation: pbHalo 1.8s ease-in-out infinite; }
         @keyframes pbHalo { 0%,100% { transform: scale(.8); opacity: .9; } 50% { transform: scale(1.25); opacity: .45; } }

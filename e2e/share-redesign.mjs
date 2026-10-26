@@ -12,6 +12,7 @@ try {
   await page.locator('.bn-editor').waitFor({ timeout: 15000 });
 
   const gctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+  await gctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   const g = await gctx.newPage();
   await g.goto(`${base}/s/note/${tok}`);
   await g.locator('.bn-editor').waitFor({ timeout: 15000 });
@@ -58,6 +59,7 @@ try {
 
   // two people on the same words: their flags stack instead of overlapping
   const g2ctx = await ctx.browser().newContext({ viewport: { width: 1280, height: 800 } });
+  await g2ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   const g2 = await g2ctx.newPage();
   await g2.goto(`${base}/s/note/${tok}`);
   await g2.locator('.bn-editor').waitFor({ timeout: 15000 });
@@ -105,6 +107,7 @@ try {
 
   // phone: bottom bar, page card, no horizontal scroll
   const mctx = await ctx.browser().newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await mctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   const m = await mctx.newPage();
   await m.goto(`${base}/s/note/${tok}`);
   await m.locator('.bn-editor').waitFor({ timeout: 15000 });
@@ -122,6 +125,7 @@ try {
   const todoId = (todo.todo || todo).id;
   const ttok = (await api('POST', `/api/share/todo/${todoId}`, { edit: true })).token;
   const tctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 860 } });
+  await tctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   const t = await tctx.newPage();
   await t.goto(`${base}/s/todo/${ttok}`);
   await t.getByLabel('Task').waitFor({ timeout: 15000 });
