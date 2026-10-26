@@ -98,7 +98,15 @@ shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
     const rows = await prisma.$queryRawUnsafe<{ actor: string; action: string; at: Date }[]>(
       'SELECT actor, action, at FROM share_activity WHERE note_id = $1 ORDER BY at DESC LIMIT 30', row.id,
     );
-    res.json({ activity: rows });
+    // numbers for the owner: visits, different people, edits, and visits per day for the last 7 days
+    const sum = await prisma.$queryRawUnsafe<{ visits: number; people: number; edits: number }[]>(
+      "SELECT COUNT(*) FILTER (WHERE action = 'viewed')::int AS visits, COUNT(DISTINCT actor) FILTER (WHERE action IN ('viewed','edited'))::int AS people, COUNT(*) FILTER (WHERE action = 'edited')::int AS edits FROM share_activity WHERE note_id = $1", row.id,
+    );
+    const days = await prisma.$queryRawUnsafe<{ d: number; n: number }[]>(
+      "SELECT (CURRENT_DATE - at::date)::int AS d, COUNT(*)::int AS n FROM share_activity WHERE note_id = $1 AND action = 'viewed' AND at >= CURRENT_DATE - 6 GROUP BY 1", row.id,
+    );
+    const perDay = Array.from({ length: 7 }, (_, i) => days.find((x) => x.d === 6 - i)?.n ?? 0);
+    res.json({ activity: rows, stats: { visits: sum[0]?.visits ?? 0, people: sum[0]?.people ?? 0, edits: sum[0]?.edits ?? 0, perDay } });
   } catch (e) { next(e); }
 });
 

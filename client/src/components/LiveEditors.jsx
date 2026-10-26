@@ -17,6 +17,7 @@ export default function LiveEditors() {
   const noteId = matchPath('/notes/:id', pathname)?.params.id || null;
   const live = useLive();
   const [activity, setActivity] = useState([]);
+  const [stats, setStats] = useState(null);
   const [busy, setBusy] = useState(false);
   const [synced, setSynced] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -107,7 +108,7 @@ export default function LiveEditors() {
   }, [live.viewers]);
 
   const loadActivity = useCallback(async () => {
-    try { const { data } = await api.get(`/share/note/${noteId}/activity`); setActivity(data.activity || []); } catch { /* shown empty */ }
+    try { const { data } = await api.get(`/share/note/${noteId}/activity`); setActivity(data.activity || []); setStats(data.stats || null); } catch { /* shown empty */ }
   }, [noteId]);
   useEffect(() => {
     if (!live.open || !noteId) return undefined;
@@ -144,7 +145,7 @@ export default function LiveEditors() {
     <>
       {live.open && <div className="cp-drawer">
         <CollabPanel
-          mode="owner" viewers={live.viewers} canEdit={live.canEdit} expiresAt={live.expiresAt} activity={activity}
+          mode="owner" viewers={live.viewers} canEdit={live.canEdit} expiresAt={live.expiresAt} activity={activity} stats={stats}
           events={collab.events} offline={live.offline} synced={synced}
           muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear}
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}

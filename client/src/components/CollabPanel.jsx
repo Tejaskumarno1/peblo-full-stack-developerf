@@ -104,7 +104,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 
 export function CollabPanel({
   viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link,
+  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -191,6 +191,12 @@ export function CollabPanel({
       </div>}
 
       {tab === 'activity' && <div className="cp-body" role="tabpanel">
+        {stats && <div className="cp-stats" data-testid="link-stats">
+          <div><b>{stats.visits}</b><small>Visits</small></div>
+          <div><b>{stats.people}</b><small>People</small></div>
+          <div><b>{stats.edits}</b><small>Edits</small></div>
+          <svg viewBox="0 0 70 26" aria-label="Visits in the last 7 days" role="img">{(() => { const mx = Math.max(1, ...stats.perDay); return stats.perDay.map((n, i) => <rect key={i} x={i * 10 + 1} y={24 - Math.round((n / mx) * 22) - 1} width="8" height={Math.max(2, Math.round((n / mx) * 22))} rx="2" fill="currentColor" opacity={n ? 0.85 : 0.25} />); })()}</svg>
+        </div>}
         <h3 className="cp-h">Recent activity {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
         {log.length === 0 && <p className="cp-empty">Nothing yet.</p>}
         <ul className="cp-log" data-testid="live-activity">
@@ -201,7 +207,7 @@ export function CollabPanel({
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
       </div>}
 
-      <style>{QR_CSS}</style>
+      <style>{QR_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}'}</style>
       {tip && <div className="cp-tip"><Zap size={15} /><span><b>Collaboration makes ideas better</b>Everyone here sees changes as they are saved. Edits are merged, never overwritten.</span><button type="button" onClick={() => { setTip(false); try { localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } }}>Got it</button></div>}
     </aside>
   );
