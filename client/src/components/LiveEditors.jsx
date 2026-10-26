@@ -27,6 +27,9 @@ export default function LiveEditors() {
   const sharedRef = useRef(false);
   const fails = useRef(0);
   const collab = useCollabEvents(live.viewers, live.shared);
+  const noteRef = useRef(collab.note);
+  noteRef.current = collab.note;
+  const knocked = useRef(null);
 
   // Follow: keep the view on another person until you scroll, press Escape, or they leave
   const [followId, setFollowId] = useState(null);
@@ -68,11 +71,16 @@ export default function LiveEditors() {
     if (cursorRef.current !== null) { params.cursor = cursorRef.current; if (selRef.current) { params.selStart = selRef.current.start; params.selEnd = selRef.current.end; } }
     const { data } = await api.get(`/share/note/${id}/live`, { params });
     sharedRef.current = !!data.shared;
-    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [] });
+    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [] });
+    // someone new at the door: say so once
+    const ids = new Set((data.waiting || []).map((w) => w.id));
+    if (knocked.current) (data.waiting || []).forEach((w) => { if (!knocked.current.has(w.id)) noteRef.current('knock', w.name); });
+    knocked.current = ids;
   }, []);
 
   useEffect(() => {
-    setLive({ noteId, shared: false, token: null, viewers: [], expiresAt: null, open: false, offline: false });
+    setLive({ noteId, shared: false, token: null, viewers: [], expiresAt: null, open: false, offline: false, approval: false, waiting: [] });
+    knocked.current = null;
     sharedRef.current = false;
     fails.current = 0;
     if (!noteId || noteId === '__draft__') return undefined;
@@ -127,6 +135,10 @@ export default function LiveEditors() {
 
   const guarded = async (fn) => { setBusy(true); try { await fn(); await poll(noteId); } catch { /* the next poll shows the truth */ } finally { setBusy(false); } };
   const extend = (days) => guarded(() => api.post(`/share/note/${noteId}`, { expiresInDays: days }));
+  const setApproval = (on) => { setLive({ approval: on }); return guarded(() => api.post(`/share/note/${noteId}/approval`, { on })); };
+  const admit = (id) => guarded(() => api.post(`/share/note/${noteId}/guests/${id}/admit`));
+  const decline = (id) => guarded(() => api.post(`/share/note/${noteId}/guests/${id}/decline`));
+  const setRole = (id, role) => guarded(() => api.post(`/share/note/${noteId}/viewers/${id}/role`, { role }));
   const removeViewer = (id) => guarded(() => api.post(`/share/note/${noteId}/viewers/${id}/remove`));
   const turnOff = async () => {
     setBusy(true);
@@ -140,7 +152,7 @@ export default function LiveEditors() {
   const others = live.viewers.filter((v) => !v.self);
   const soon = !!live.expiresAt && new Date(live.expiresAt).getTime() - Date.now() < SOON;
   if (!noteId || !live.shared) return null;
-  const showBar = others.length > 0 || soon || live.open || live.offline;
+  const showBar = others.length > 0 || soon || live.open || live.offline || live.waiting.length > 0;
   return (
     <>
       {live.open && <div className="cp-drawer">
@@ -149,13 +161,14 @@ export default function LiveEditors() {
           events={collab.events} offline={live.offline} synced={synced}
           muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear}
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}
+          waiting={live.waiting} approval={live.approval} onApproval={setApproval} onAdmit={admit} onDecline={decline} onRole={setRole}
           followId={followId} onFollow={setFollowId} link={live.token ? `${window.location.origin}/s/note/${live.token}` : ''}
           onClose={() => setLive({ open: false })}
         />
       </div>}
       {showBar && <CollabBar
-        viewers={live.viewers} open={live.open} offline={live.offline} soon={soon} expiresAt={live.expiresAt}
-        toasts={collab.muted ? [] : recent.filter((e) => e.kind === 'joined' || e.kind === 'left').slice(0, 2)}
+        viewers={live.viewers} open={live.open} offline={live.offline} soon={soon} expiresAt={live.expiresAt} waiting={live.waiting.length}
+        toasts={collab.muted ? recent.filter((e) => e.kind === 'knock').slice(0, 2) : recent.filter((e) => e.kind === 'joined' || e.kind === 'left' || e.kind === 'knock').slice(0, 2)}
         onDismissToast={collab.dismiss} onToggle={() => setLive({ open: !live.open })}
       />}
     </>

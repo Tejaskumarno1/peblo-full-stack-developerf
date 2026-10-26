@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ic } from '../utils/icons';
-import { AudienceActions, PRESENT_CSS, PresenterKit, PresentStart, RecapModal, RoomNotices, useHost } from './PresentTools';
+import { AudienceActions, PRESENT_CSS, PresenterKit, PresentStart, RecapModal, RecapReceived, RoomNotices, useHost } from './PresentTools';
 
 /*
  * Who is in this note, drawn from the live document's awareness (temporary, never stored):
@@ -61,7 +61,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, reacts: st.reacts || null, poll: st.poll || null, vote: st.vote || null, recapMd: st.recapMd || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -140,6 +140,10 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const [recap, setRecap] = useState(null);
   const [myHand, setMyHand] = useState(0);
   const [myAsks, setMyAsks] = useState([]);
+  const [myReacts, setMyReacts] = useState({ up: 0, idea: 0, heart: 0 });
+  const [myVote, setMyVote] = useState(null);
+  const [recapSent, setRecapSent] = useState(false);
+  const [rxGone, setRxGone] = useState(0);
   const [keep, setKeep] = useState(false);
   const keepRef = useRef(false);
   keepRef.current = keep;
@@ -235,8 +239,8 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   // the audience: my hand, my questions, who I am following; a question the presenter has dealt with leaves my list
   useEffect(() => {
     if (!rt || !ready) return;
-    try { rt.provider.awareness.setLocalStateField('hand', myHand || null); rt.provider.awareness.setLocalStateField('asks', myAsks); } catch { /* gone */ }
-  }, [rt, ready, myHand, myAsks]);
+    try { rt.provider.awareness.setLocalStateField('hand', myHand || null); rt.provider.awareness.setLocalStateField('asks', myAsks); rt.provider.awareness.setLocalStateField('reacts', myReacts.up + myReacts.idea + myReacts.heart ? myReacts : null); rt.provider.awareness.setLocalStateField('vote', myVote); } catch { /* gone */ }
+  }, [rt, ready, myHand, myAsks, myReacts, myVote]);
   useEffect(() => {
     if (!rt || !ready) return;
     const t = peers.find((p) => keyOf(p) === following);
@@ -356,7 +360,10 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const goToBlock = (b) => { try { rootRef?.current?.querySelector(`.bn-block-outer[data-id="${CSS.escape(b)}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch { /* odd id */ } };
   const raise = () => setMyHand((h) => (h ? 0 : Date.now()));
   const ask = (text) => setMyAsks((l) => [...l, { id: Math.random().toString(36).slice(2, 8), text, at: Date.now() }]);
-  const endSession = (r) => { setPresenting(false); setRecap(r); };
+  const endSession = (r) => { setPresenting(false); setRecapSent(false); setRecap(r); };
+  const react = (k) => setMyReacts((r) => ({ ...r, [k]: (r[k] || 0) + 1 }));
+  const sendRecap = (payload) => { try { rt.provider.awareness.setLocalStateField('recapMd', payload); setRecapSent(true); } catch { /* gone */ } };
+  const rxPeer = peers.find((p) => !p.me && p.recapMd && p.recapMd.at > rxGone && Date.now() - p.recapMd.at < 30 * 60000);
   void tick;
 
   return (
@@ -408,10 +415,11 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
           )}
         </div>
       )}
-      {others.length > 0 && talker && !presenting && <div className="pb-presence-wrap pb-aud-wrap" style={{ position: 'fixed', right: 82, bottom: 24, zIndex: 1100 }}><AudienceActions presenter={talker} hand={myHand} onHand={raise} onAsk={ask} sent={myAsks.length} /></div>}
+      {others.length > 0 && livePresenters.length > 0 && !presenting && <div className="pb-presence-wrap pb-aud-wrap" style={{ position: 'fixed', right: 82, bottom: 24, zIndex: 1100 }}><AudienceActions presenter={talker || livePresenters[0]} qOn={!!talker} hand={myHand} onHand={raise} onAsk={ask} sent={myAsks.length} reacts={myReacts} onReact={react} /></div>}
       {presenting && <PresenterKit aw={rt.provider.awareness} me={myKey} peers={peers} mode={mode} qOn={qOn} notesOn={notesOn} laser={laser} setLaser={setLaser} spot={spot} setSpot={setSpot} getAnchor={() => anchorOf(rootRef.current)} goToBlock={goToBlock} onEnd={endSession} />}
-      {!presenting && livePresenters.length > 0 && <RoomNotices presenters={livePresenters} myKey={myKey} onClearHand={() => setMyHand(0)} />}
-      {recap && <RecapModal recap={recap} onClose={() => setRecap(null)} />}
+      {!presenting && livePresenters.length > 0 && <RoomNotices presenters={livePresenters} myKey={myKey} onClearHand={() => setMyHand(0)} myVote={myVote} onVote={(id, i) => setMyVote({ id, i })} />}
+      {recap && <RecapModal recap={recap} sent={recapSent} onSend={sendRecap} onClose={() => setRecap(null)} />}
+      {!recap && !presenting && rxPeer && <RecapReceived from={rxPeer.name} rx={rxPeer.recapMd} onClose={() => setRxGone(rxPeer.recapMd.at)} />}
       {freed?.presenting && peers.some((p) => keyOf(p) === freed.key && p.presenting) && createPortal(
         <button type="button" className="pb-return" data-testid="return-presenter" onClick={() => { setFollowing(freed.key); setFreed(null); }}><Ic name="undo" size={15} />Return to {freed.name}</button>,
         host,

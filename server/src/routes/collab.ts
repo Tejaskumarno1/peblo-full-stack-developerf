@@ -1,3 +1,4 @@
+import { accessFor } from '../services/shareAccess.js';
 import { Router } from 'express';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
@@ -88,10 +89,12 @@ async function guestNote(req: any) {
   const sid = String(req.query?.sid || req.body?.sid || '');
   if (!SHARE.test(token) || !SESSION.test(sid)) return null;
   const note = await prisma.note.findFirst({
-    where: { shareToken: token, isDeleted: false, shareEdit: true, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] },
-    select: { id: true, title: true, userId: true },
+    where: { shareToken: token, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] },
+    select: { id: true, title: true, userId: true, shareEdit: true },
   });
   if (!note) return null;
+  const acc = await accessFor('note', token, sid, !!note.shareEdit);
+  if (!acc.allowed || !acc.canEdit) return null;
   const blocked = await prisma.$queryRawUnsafe<{ n: number }[]>('SELECT 1 AS n FROM share_blocked WHERE kind = \'note\' AND share_token = $1 AND session_id = $2', token, sid);
   if (blocked.length) return null;
   return { note, sid, name: String(req.query?.name || req.body?.name || 'Guest').trim().slice(0, 40) || 'Guest' };

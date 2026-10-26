@@ -1,3 +1,4 @@
+import { accessFor } from './shareAccess.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
 import type { Duplex } from 'stream';
@@ -276,7 +277,8 @@ class Room {
         if (c.userId === note.userId) continue; // the owner
         const okShare = !!note.shareToken && c.share === note.shareToken && live && !(c.session && blocked.has(c.session));
         if (!okShare) { c.ws.close(CLOSE_GONE, 'access ended'); continue; }
-        if (!c.readOnly && !note.shareEdit) { c.ws.close(CLOSE_GONE, 'access ended'); }
+        const acc = await accessFor('note', note.shareToken ?? '', c.session, !!note.shareEdit);
+        if (!acc.allowed || (!c.readOnly && !acc.canEdit)) { c.ws.close(CLOSE_GONE, 'access ended'); }
       }
       const h = fingerprint(note.content);
       if (DEBUG) console.log('[collab] tick', this.id.slice(0, 6), 'db', h, 'room', this.mdHash, 'known', this.known.has(h), 'conns', this.conns.size);
@@ -337,13 +339,17 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
     if (!validShare.test(share)) return null;
     const note = await prisma.note.findFirst({ where: { shareToken: share, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] }, select: { id: true, shareEdit: true } });
     if (!note) return null;
+    let canEdit = !!note.shareEdit;
     if (session) {
       if (!validSession.test(session)) return null;
       const blocked = await prisma.$queryRawUnsafe<{ n: number }[]>('SELECT 1 AS n FROM share_blocked WHERE kind = \'note\' AND share_token = $1 AND session_id = $2', share, session);
       if (blocked.length) return null;
     }
+    const acc = await accessFor('note', share, session, !!note.shareEdit);
+    if (!acc.allowed) return null;
+    canEdit = acc.canEdit;
     // a signed-in owner opening their own link still counts as the owner
-    return { noteId: note.id, readOnly: !note.shareEdit, userId: null, share, session };
+    return { noteId: note.id, readOnly: !canEdit, userId: null, share, session };
   }
   if (!token || !noteParam || !/^[A-Za-z0-9-]{8,64}$/.test(noteParam)) return null;
   const user = await verifyToken(token);

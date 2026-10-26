@@ -49,6 +49,15 @@ function fitTitle(el) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
+const viewerSid = (kindPath, token) => {
+  const key = `peblo-share-viewer:${kindPath}:${token}`;
+  try {
+    let id = sessionStorage.getItem(key);
+    if (!id) { id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; sessionStorage.setItem(key, id); }
+    return id;
+  } catch { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+};
+
 export default function SharedPage() {
   const { kind, token } = useParams();
   const navigate = useNavigate();
@@ -58,6 +67,8 @@ export default function SharedPage() {
   const [status, setStatus] = useState('saved');
   const [conflict, setConflict] = useState(null);
   const [rev, setRev] = useState(0);
+  const [wait, setWait] = useState(null);
+  const [waitName, setWaitName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -72,6 +83,8 @@ export default function SharedPage() {
   const [synced, setSynced] = useState(false);
   const [now, setNow] = useState(Date.now());
   const sessionIdRef = useRef(null);
+  const canEditRef = useRef(false);
+  canEditRef.current = !!data?.canEdit;
   const missed = useRef(0);
   const [isOwner, setIsOwner] = useState(false);
   const [shareOff, setShareOff] = useState(false);
@@ -179,6 +192,7 @@ export default function SharedPage() {
   shareStateRef.current = { data, status };
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
+  const readUrl = `${url}?sid=${encodeURIComponent(viewerSid(kindPath, token))}`;
 
   useLayoutEffect(() => {
     document.documentElement.classList.add('pb-public-share');
@@ -224,24 +238,44 @@ export default function SharedPage() {
 
   useEffect(() => {
     let live = true;
-    fetch(url)
+    fetch(readUrl, { headers: authHeaders() })
       .then(async (response) => { const json = await response.json().catch(() => ({})); if (!response.ok) throw new Error(json.error || 'This link is not shared any more.'); return json; })
       .then((json) => {
         if (!live) return;
+        if (json.waiting) { setWait(json.waiting); setData(null); return; }
+        setWait(null);
         draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt, baseContent: json.content || '' };
         if (json.kind === 'todo') taskSavedText.current = json.text;
         setConflict(null); setStatus('saved'); setData(json);
       })
       .catch((cause) => { if (live) setError(cause.message); });
     return () => { live = false; };
-  }, [url, rev]);
+  }, [readUrl, rev]);
+
+  // waiting at the door: knock every 3 seconds with my name; the page opens by itself once the owner lets me in
+  useEffect(() => {
+    if (wait !== 'waiting') return undefined;
+    let live = true;
+    const knock = () => fetch(`/api/public/${kindPath}/${encodeURIComponent(token)}/knock`, {
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ sessionId: viewerSid(kindPath, token), name: nameRef.current || user?.name || undefined }),
+    }).then(async (r) => {
+      const b = await r.json().catch(() => ({}));
+      if (!live) return;
+      if (r.status === 403 || r.status === 404) { setWait(null); setError(b.error || 'This link is not shared any more.'); return; }
+      if (b.status === 'admitted') { setWait(null); setRev((n) => n + 1); } else if (b.status === 'declined') setWait('declined');
+    }).catch(() => { /* try again on the next beat */ });
+    void knock();
+    const t = window.setInterval(knock, 3000);
+    return () => { live = false; window.clearInterval(t); };
+  }, [wait, kindPath, token, user?.name]);
 
   useEffect(() => {
     if (!data || shareOff) return undefined;
     let live = true;
     const refresh = async () => {
       try {
-        const response = await fetch(url, { cache: 'no-store' });
+        const response = await fetch(readUrl, { cache: 'no-store', headers: authHeaders() });
         if (!live) return;
         if (response.status === 404) {
           setData(null);
@@ -252,7 +286,9 @@ export default function SharedPage() {
         if (!response.ok) return;
         if (collabState.current !== 'off') return; // the live room keeps this editor current
         const latest = await response.json();
+        if (latest.waiting) { setData(null); setWait(latest.waiting); return; }
         const current = shareStateRef.current;
+        if (live && typeof latest.canEdit === 'boolean' && latest.canEdit !== current.data?.canEdit) setData((c) => (c ? { ...c, canEdit: latest.canEdit } : c)); // the owner changed my role
         if (!live || latest.updatedAt === current.data?.updatedAt || current.status !== 'saved') return;
         // someone else saved and this editor has nothing unsaved: show their version (a pending local edit is merged by the server on save)
         if (timer.current) return;
@@ -263,10 +299,10 @@ export default function SharedPage() {
     };
     const interval = window.setInterval(() => { void refresh(); }, 5000);
     return () => { live = false; window.clearInterval(interval); };
-  }, [data?.kind, shareOff, url]);
+  }, [data?.kind, shareOff, readUrl]);
 
   const put = useCallback(async (payload) => {
-    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), ...payload }) });
     return { status: response.status, body: await response.json().catch(() => ({})) };
   }, [url]);
 
@@ -279,6 +315,14 @@ export default function SharedPage() {
     return () => window.removeEventListener('pb-collab-closed', on);
   }, [token]);
 
+  // a save was refused with 403: the owner may have changed my role or taken the page back, which is not an error page
+  const denied = (body) => {
+    if (body?.waiting) { setData(null); setWait(body.waiting); return; }
+    if (body?.removed) { setData(null); setError(body.error || 'The owner removed you from this page.'); return; }
+    setData((c) => (c ? { ...c, canEdit: false } : c));
+    setStatus('saved');
+    showToast('The owner changed your access. You can view this page now.');
+  };
   const saving = useRef(false);
   const again = useRef(false);
   const saveNote = useCallback(async (force = false, keepBoth = false) => {
@@ -293,7 +337,8 @@ export default function SharedPage() {
     try {
       const response = await put({ ...sent, sessionId: sessionIdRef.current || undefined, name: nameRef.current || undefined, baseUpdatedAt: draft.current.base, baseContent: draft.current.baseContent, force, keepBoth, ...(collabState.current === 'live' ? { collab: true } : {}) });
       if (response.status === 409) { setConflict(response.body.latest); setStatus('conflict'); return; }
-      if (response.status === 404 || response.status === 403) { setError(response.body.error || 'This link is not available.'); return; }
+      if (response.status === 403) { denied(response.body); return; }
+      if (response.status === 404) { setError(response.body.error || 'This link is not available.'); return; }
       if (response.status !== 200) throw new Error(response.body.error || 'Could not save.');
       const typedMore = draft.current.content !== sent.content;
       if (response.body.status && response.body.status !== 'saved' && typeof response.body.content === 'string') {
@@ -324,6 +369,7 @@ export default function SharedPage() {
     try {
       const response = await put(patch);
       if (response.status === 200) { if (patch.text !== undefined) taskSavedText.current = patch.text; setData((current) => ({ ...current, ...patch, updatedAt: response.body.updatedAt })); setStatus('saved'); }
+      else if (response.status === 403) denied(response.body);
       else if (response.status === 404) { setData(null); setShareOff(true); setError(response.body.error || 'This share link is no longer available.'); }
       else { setStatus(response.status === 409 ? 'conflict' : 'error'); }
     } catch { setStatus('error'); }
@@ -438,11 +484,13 @@ export default function SharedPage() {
         return null;
       }
       if (response.status === 403 && live) {
-        // the owner took this person off the link
-        setData(null);
-        setViewers([]);
-        setError('The owner removed you from this page.');
-        return null;
+        return response.json().catch(() => ({})).then((b) => {
+          setData(null);
+          setViewers([]);
+          if (b.waiting) setWait(b.waiting);
+          else setError('The owner removed you from this page.'); // the owner took this person off the link
+          return null;
+        });
       }
       if (!response.ok) throw new Error('presence');
       return response.json();
@@ -453,20 +501,24 @@ export default function SharedPage() {
         missed.current = 0;
         setOffline(false);
         setViewers(json.viewers);
+        if (typeof json.canEdit === 'boolean') setData((c) => (c && c.canEdit !== json.canEdit ? { ...c, canEdit: json.canEdit } : c));
       })
       .catch(() => { missed.current += 1; if (live && missed.current >= 2) setOffline(true); });
     void beat();
     // an editable link checks every 3 s so "someone is typing" feels live; a read-only link only needs to be counted
-    const interval = window.setInterval(() => { void beat(); }, data?.canEdit ? 3000 : 12_000);
+    // (the beat does not restart when my role changes: restarting sent a "left" that could land after the "here")
+    let beatTimer;
+    const loop = () => { beatTimer = window.setTimeout(() => { void beat(); loop(); }, canEditRef.current ? 3000 : 6000); };
+    loop();
     const leave = () => { void beat(false, true); };
     window.addEventListener('pagehide', leave);
     return () => {
       live = false;
-      window.clearInterval(interval);
+      window.clearTimeout(beatTimer);
       window.removeEventListener('pagehide', leave);
       void beat(false, true);
     };
-  }, [data?.kind, data?.canEdit, kindPath, token, user?.id, shareOff]);
+  }, [data?.kind, kindPath, token, user?.id, shareOff]);
 
   // where my cursor is (reported to others) and where theirs are (marked in the text)
   useEffect(() => {
@@ -761,7 +813,13 @@ export default function SharedPage() {
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
-      {error ? (
+      {wait && !data && !error ? (
+        <main className="stage"><section className="gone wait-room" role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span><Clock size={30} /></span></div>
+          <h1>{wait === 'declined' ? 'The owner did not let you in' : 'Waiting to be let in'}</h1>
+          <p>{wait === 'declined' ? 'You can ask them to send the link again.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
+          {wait !== 'declined' && <label className="wait-name">Your name<input aria-label="Your name" data-testid="wait-name" value={waitName} maxLength={40} placeholder="Guest" onChange={(e) => { setWaitName(e.target.value); setGuestName(e.target.value.trim().slice(0, 40)); }} onBlur={(e) => saveGuestName(e.target.value)} /></label>}
+        </section></main>
+      ) : error ? (
         <main className="stage"><section className="gone" role="alert"><div className="orb" aria-hidden="true"><span><X size={30} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /** What the notes editor knows about the open note's share link (written by LiveEditors, read by the header chips). */
-let state = { noteId: null, shared: false, token: null, canEdit: false, expiresAt: null, viewers: [], open: false, offline: false };
+let state = { noteId: null, shared: false, token: null, canEdit: false, expiresAt: null, viewers: [], open: false, offline: false, approval: false, waiting: [] };
 const subs = new Set();
 export const getLive = () => state;
 export const setLive = (patch) => { state = { ...state, ...patch }; subs.forEach((fn) => fn()); };
