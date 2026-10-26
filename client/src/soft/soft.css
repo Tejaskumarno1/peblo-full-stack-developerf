@@ -907,3 +907,20 @@
 .soft .s-note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; flex-shrink: 0; }
 .soft .s-note-meta .s-note-stats { margin: 0; }
 .soft .s-note-body { margin: 0 -40px; padding: 0 40px 24px; padding-top: 2px; }
+
+/* Live-collaboration chips and drawer take the Soft palette, so they read in light and dark. */
+.soft .cp, .soft .cp-wrap, .soft .cp-chips, .soft .cp-drawer {
+  --cp-surface: var(--s-surface);
+  --cp-fg: var(--s-fg);
+  --cp-fg2: var(--s-fg2);
+  --cp-line: var(--s-line);
+  --cp-chip: var(--s-chip-solid);
+  --cp-accent: var(--s-accent);
+}
+.theme-dark .soft .cp-chip.ok, .theme-dark .soft .cp-banner.ok { background: #18302A; color: #8EE8B4; }
+.theme-dark .soft .cp-banner.off { background: #332B13; color: #F2CF7A; }
+/* Pictures stay inside the note column, never cut off or sideways-scrolling. */
+.soft .s-note-body .bn-block-content[data-content-type="image"],
+.soft .s-note-body .bn-visual-media-wrapper { max-width: 100%; }
+.soft .s-note-body .bn-visual-media { max-width: 100%; height: auto; object-fit: contain; }
+.soft .s-note-body .bn-editor { overflow-x: hidden; }

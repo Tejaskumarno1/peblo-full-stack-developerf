@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -55,6 +55,7 @@ export default function SoftNotes() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [question, setQuestion] = useState('');
+  const pillRef = useRef(null);
   const [pill, setPill] = useState(null); // selection toolbar {x, y, text}
   const [toast, setToast] = useState('');
   const [q, setQ] = useState(''); // the search box
@@ -501,6 +502,34 @@ export default function SoftNotes() {
   const words = useMemo(() => plainText.trim().split(/\s+/).filter(Boolean).length, [plainText]);
   const chars = useMemo(() => plainText.replace(/\s+/g, ' ').trim().length, [plainText]);
 
+  // Keep the Explain / Make a task pill clear of the formatting toolbar, wherever that one opens.
+  useLayoutEffect(() => {
+    const el = pillRef.current;
+    const box = bodyRef.current;
+    if (!pill || !el || !box) return;
+    const place = () => {
+    const tb = document.querySelector('.bn-toolbar');
+    const b = box.getBoundingClientRect();
+    let top = pill.y;
+    if (tb) {
+      const t = tb.getBoundingClientRect();
+      const h = el.offsetHeight || 44;
+      const mine = { top: b.top + top - box.scrollTop, bottom: b.top + top - box.scrollTop + h };
+      if (t.bottom + 6 > mine.top && t.top - 6 < mine.bottom) {
+        // overlap: slip below the toolbar if there is room, otherwise above it
+        const below = t.bottom + 8 - b.top + box.scrollTop;
+        const above = t.top - 8 - h - b.top + box.scrollTop;
+        top = (t.bottom + 8 + h < window.innerHeight) ? below : above;
+      }
+    }
+    el.style.top = Math.max(top, 0) + 'px';
+    };
+    place();
+    const t1 = window.setTimeout(place, 120);
+    const t2 = window.setTimeout(place, 400);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+  }, [pill]);
+
   // ---------- selection toolbar ----------
   useEffect(() => {
     const onSel = () => {
@@ -746,7 +775,7 @@ export default function SoftNotes() {
                 formattingToolbar
               />
               {pill && !preview && (
-                <div className="s-sel-pill" style={{ left: pill.x, top: Math.max(pill.y, 0) }} onMouseDown={(e) => e.preventDefault()}>
+                <div className="s-sel-pill" ref={pillRef} style={{ left: pill.x, top: Math.max(pill.y, 0) }} onMouseDown={(e) => e.preventDefault()}>
                   <button type="button" className="on" onClick={() => pillAction('explain')}>Explain</button>
                   <button type="button" onClick={() => pillAction('task')}>Make a task</button>
                   <button type="button" onClick={() => pillAction('quiz')}>Quiz me</button>
