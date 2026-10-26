@@ -122,7 +122,21 @@ try {
   await c.locator('[data-testid="look-pointers"]').check();
   check('21 turning them on brings them back', await until(async () => (await ptr(c, 'Anna').count()) + (await edge(c, 'Anna').count()) >= 1));
 
-  check('22 no crash', errors.length === 0, errors.join(' | '));
+  // same-size windows: the pointer lands on the very same pixel
+  const d = await mk('Dee', 1700, 800);
+  const e2 = await mk('Eli', 1700, 800);
+  await wait(1200);
+  for (const p of [e2, d]) await blockOf(p, 'Second part').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await wait(500);
+  const cb = await blockOf(e2, 'Second part').boundingBox();
+  const tx = cb.x + 137; const ty = cb.y + 9;
+  await e2.mouse.move(tx - 30, ty - 20);
+  await e2.mouse.move(tx, ty, { steps: 5 });
+  await wait(700);
+  const seenAt = await ptr(d, 'Eli').first().boundingBox().catch(() => null);
+  check('22 in an identical window the pointer lands on the same pixel', !!seenAt && Math.abs(seenAt.x - tx) <= 4 && Math.abs(seenAt.y - ty) <= 4, JSON.stringify({ seenAt, tx, ty }));
+
+  check('23 no crash', errors.length === 0, errors.join(' | '));
 } catch (e) {
   check('no crash', false, String(e && e.stack || e).slice(0, 700));
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Ic } from '../utils/icons';
 import { createPortal } from 'react-dom';
 
@@ -42,6 +42,8 @@ export default function Pointers({ rt, rootRef, ready }) {
   const [, bump] = useState(0);
   const [on, setOn] = useState(prefOn);
   const seen = useRef(new Map()); // key -> { sig, at } last time its pointer moved
+  const snap = useRef(false); // set while the page scrolls: pointers move with the page instead of gliding
+  const cur = useRef(new Map()); // key -> { x, y } where the pointer is drawn right now
 
   useEffect(() => {
     const f = () => setOn(prefOn());
@@ -85,6 +87,8 @@ export default function Pointers({ rt, rootRef, ready }) {
         b: id,
         x: Math.round(((e.clientX - er.left) / er.width) * 1000) / 1000,
         y: br.height ? Math.round(clamp((e.clientY - br.top) / br.height, 0, 1) * 1000) / 1000 : 0,
+        // exact pixels, used by anyone whose column and block are the same size as mine (the same layout), so it is pixel-true there
+        dx: Math.round(e.clientX - er.left), dy: Math.round(e.clientY - br.top), w: Math.round(er.width), h: Math.round(br.height),
       });
     };
     const gone = () => queue(null);
@@ -112,9 +116,9 @@ export default function Pointers({ rt, rootRef, ready }) {
         if (id === aw.clientID || !st?.user || !st.pointer || typeof st.pointer.x !== 'number' || !st.pointer.b) return;
         live.add(id);
         const prev = seen.current.get(id);
-        const sig = `${st.pointer.b}|${st.pointer.x}|${st.pointer.y}`;
+        const sig = `${st.pointer.b}|${st.pointer.dx ?? st.pointer.x}|${st.pointer.dy ?? st.pointer.y}`;
         if (!prev || prev.sig !== sig) seen.current.set(id, { sig, at: Date.now() });
-        out.push({ key: id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', b: st.pointer.b, x: st.pointer.x, y: st.pointer.y, presenting: !!st.presenting });
+        out.push({ key: id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', b: st.pointer.b, x: st.pointer.x, y: st.pointer.y, dx: st.pointer.dx, dy: st.pointer.dy, w: st.pointer.w, h: st.pointer.h, presenting: !!st.presenting });
       });
       [...seen.current.keys()].forEach((k) => { if (!live.has(k)) seen.current.delete(k); });
       setPts(out);
@@ -128,12 +132,36 @@ export default function Pointers({ rt, rootRef, ready }) {
   useEffect(() => {
     if (!pts.length) return undefined;
     let raf = 0;
-    const again = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => bump((n) => n + 1)); };
+    const again = () => { snap.current = true; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => bump((n) => n + 1)); };
     window.addEventListener('scroll', again, true);
     window.addEventListener('resize', again);
     const t = setInterval(again, 1500);
     return () => { cancelAnimationFrame(raf); clearInterval(t); window.removeEventListener('scroll', again, true); window.removeEventListener('resize', again); };
   }, [pts.length]);
+
+  // glide: every frame each pointer moves a share of the way to where it should be, so network gaps never show as jumps
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      document.querySelectorAll('.pb-pointer[data-key]').forEach((el) => {
+        const k = el.getAttribute('data-key');
+        const tx = Number(el.getAttribute('data-tx'));
+        const ty = Number(el.getAttribute('data-ty'));
+        let c = cur.current.get(k);
+        if (!c || el.getAttribute('data-snap') === '1') { c = { x: tx, y: ty }; el.setAttribute('data-snap', '0'); }
+        else {
+          const dx = tx - c.x; const dy = ty - c.y;
+          c = Math.abs(dx) + Math.abs(dy) > 900 ? { x: tx, y: ty } : { x: Math.abs(dx) < 0.3 ? tx : c.x + dx * 0.32, y: Math.abs(dy) < 0.3 ? ty : c.y + dy * 0.32 };
+        }
+        cur.current.set(k, c);
+        el.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  useLayoutEffect(() => { snap.current = false; });
 
   const root = rootRef?.current;
   const ed = root?.querySelector('.bn-editor');
@@ -148,8 +176,9 @@ export default function Pointers({ rt, rootRef, ready }) {
     try { outer = ed.querySelector(`.bn-block-outer[data-id="${CSS.escape(p.b)}"]`); } catch { /* odd id */ }
     if (!outer) return;
     const br = outer.getBoundingClientRect();
-    const left = er.left + p.x * er.width;
-    const top = br.top + p.y * br.height;
+    // same-size layout: exact pixels; different layout: the same share of the column and of the block
+    const left = er.left + (p.dx != null && Math.abs(er.width - p.w) <= 8 ? p.dx : p.x * er.width);
+    const top = br.top + (p.dy != null && Math.abs(br.height - p.h) <= 6 ? p.dy : p.y * br.height);
     const idle = now - (seen.current.get(p.key)?.at || now) > FADE_MS;
     const ink = inkOn(p.color);
     if (top < vis.top + 6 || top > vis.bottom - 14 || left < vis.left - 10 || left > vis.right + 10) {
@@ -163,7 +192,7 @@ export default function Pointers({ rt, rootRef, ready }) {
   return createPortal(
     <div className="pb-pointers" aria-hidden="true">
       {marks.map((p) => (
-        <div key={p.key} className={`pb-pointer${p.idle ? ' idle' : ''}${p.presenting ? ' presenter' : ''}`} data-testid="peer-pointer" data-name={p.name} style={{ transform: `translate3d(${p.left}px, ${p.top}px, 0)`, '--c': p.color, '--ink': p.ink }}>
+        <div key={p.key} className={`pb-pointer${p.idle ? ' idle' : ''}${p.presenting ? ' presenter' : ''}`} data-testid="peer-pointer" data-name={p.name} ref={(el) => { if (el && !el.style.transform) el.style.transform = `translate3d(${p.left}px, ${p.top}px, 0)`; }} data-key={p.key} data-tx={p.left} data-ty={p.top} data-snap={snap.current ? '1' : '0'} style={{ '--c': p.color, '--ink': p.ink }}>
           <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><path d="M3 2.2l13.2 10.4-5.7 1.1 3.6 7.1-3 1.5-3.6-7.2L3 19.2z" fill="var(--c)" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" /></svg>
           <span className="tag">{p.presenting && <Ic name="presentation" size={12} style={{ marginRight: 5, verticalAlign: '-2px' }} />}{p.name}</span>
         </div>
@@ -175,7 +204,7 @@ export default function Pointers({ rt, rootRef, ready }) {
       ))}
       <style>{`
         .pb-pointers { position: fixed; inset: 0; pointer-events: none; z-index: 1100; overflow: hidden; }
-        .pb-pointer { position: absolute; left: 0; top: 0; transition: transform .11s cubic-bezier(.2,.7,.3,1), opacity .4s; will-change: transform; animation: pbPtrIn .18s ease-out; }
+        .pb-pointer { position: absolute; left: 0; top: 0; transition: opacity .4s; will-change: transform; animation: pbPtrIn .18s ease-out; }
         .pb-pointer.idle { opacity: .45; }
         .pb-pointer svg { display: block; filter: drop-shadow(0 2px 3px rgba(20,20,30,.28)); margin: -2px 0 0 -3px; }
         .pb-pointer .tag { position: absolute; left: 15px; top: 19px; background: var(--c); color: var(--ink); font: 700 11.5px/1 'Figtree', system-ui, sans-serif; letter-spacing: .01em; padding: 4px 9px 5px; border-radius: 4px 11px 11px 11px; white-space: nowrap; box-shadow: 0 2px 8px rgba(20,20,30,.22), 0 0 0 1.5px rgba(255,255,255,.85); }
