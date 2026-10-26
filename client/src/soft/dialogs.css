@@ -103,3 +103,4 @@
 .s-share-exp label { font-weight: 700; font-size: 13px; }
 .s-share-exp select { border: 1.5px solid #eadfce; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; background: #f4ede2; color: #2a1f17; }
 .s-share-exp small { flex-basis: 100%; color: #6b5b4e; font-size: 12.5px; font-weight: 600; }
+.s-share-go.ghost { background: #f4eee5; color: #241f1a; }

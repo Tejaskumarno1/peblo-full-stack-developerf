@@ -32,6 +32,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
 import { apiLimiter } from './middleware/rateLimit.js';
+import { agentNote, origin as reqOrigin } from './services/agentView.js';
 import { protectExistingKeys, migrateLegacyKeys } from './services/profile.js';
 
 export interface StartOptions {
@@ -117,6 +118,7 @@ app.use('/api/tokens', tokensRoutes);
 app.use('/api/media', mediaRoutes);
 app.get('/l/:code', shortRedirect);
 app.use('/api/share', shareRoutes);
+app.get('/s/note/:tok', agentNote); // bots and programs get Markdown or JSON from the same link
 app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);
 app.use('/api/public', publicRoutes);
@@ -135,9 +137,18 @@ app.use('/api/public', publicRoutes);
     app.use(express.static(staticDir, { index: false }));
     // Single-page app: every other non-API route returns index.html. It must never be cached, because it names the
     // current build's files.
-    app.get(/^(?!\/api\/).*/, (_req, res) => {
+    const indexHtml = path.join(staticDir, 'index.html');
+    app.get(/^(?!\/api\/).*/, async (req, res) => {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-      res.sendFile(path.join(staticDir, 'index.html'));
+      const sh = /^\/s\/note\/([A-Za-z0-9_-]{20,40})\/?$/.exec(req.path);
+      if (!sh) { res.sendFile(indexHtml); return; }
+      // A shared note: tell crawlers and agents where the plain-text version is.
+      try {
+        const { readFile } = await import('fs/promises');
+        const base = reqOrigin(req);
+        const tags = '<link rel="alternate" type="text/markdown" href="' + base + '/s/note/' + sh[1] + '.md"><link rel="alternate" type="application/json" href="' + base + '/s/note/' + sh[1] + '.json">';
+        res.type('html').send((await readFile(indexHtml, 'utf8')).replace('</head>', tags + '</head>'));
+      } catch { res.sendFile(indexHtml); }
     });
   }
 

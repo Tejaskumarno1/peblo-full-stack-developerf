@@ -1248,3 +1248,21 @@ export async function meetingBrief(userId: string, meeting: string, when: string
       .map((p) => ({ text: p.text.trim(), cite: Array.isArray(p.cite) ? p.cite.filter((n: any) => Number.isInteger(n)).slice(0, 3) : [] })),
   };
 }
+
+/** What a picture shows, in words, plus any text written in it. Uses the person's Gemini key (or the server's); the picture goes nowhere else. */
+export async function describeImage(userId: string, base64: string, mime: string): Promise<string> {
+  const user: any = await getUserSettings(userId);
+  const connKey = decryptSecret((user?.aiConnections || []).find((c: any) => c.provider === 'gemini' && c.enabled)?.apiKey)?.trim();
+  const g = getGeminiInstance(user) || (connKey && !aiIsOff(user) ? new GoogleGenerativeAI(connKey) : null);
+  if (!g) {
+    const e: any = new Error('Describing pictures needs a Google Gemini key. Paste one in AI Hub → Connections, or turn the AI off.');
+    e.status = 400;
+    throw e;
+  }
+  const model = g.getGenerativeModel({ model: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL });
+  const out = await model.generateContent([
+    { inlineData: { mimeType: mime, data: base64 } },
+    { text: 'Describe this picture for someone who cannot see it, in at most 6 short sentences: what kind of picture it is (screenshot, photo, diagram), the main parts and where they are, and any problems visible such as overlapping or cut-off elements. Then, after the line "Text in the picture:", copy every readable piece of text exactly as written (skip this part if there is none). Plain text only.' },
+  ]);
+  return out.response.text().trim().slice(0, 4000);
+}

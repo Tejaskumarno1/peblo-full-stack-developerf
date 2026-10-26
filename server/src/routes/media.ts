@@ -1,6 +1,7 @@
 import { Router, raw } from 'express';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
+import { describeImage } from '../services/aiService.js';
 
 // Pictures for notes. Reading is public (the address is a long random id, like a share link) so a picture shows in
 // shared pages, exports and the desktop app without any sign-in. Writing needs the person to be signed in.
@@ -22,6 +23,30 @@ router.get('/:id', async (req, res, next) => {
     });
     res.send(Buffer.from(rows[0].data));
   } catch (e) { next(e); }
+});
+
+// The words that go with a picture (what it shows, and any text in it). Public like the picture itself.
+router.get('/:id/text', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();
+    const rows: any[] = await prisma.$queryRaw`SELECT description FROM media WHERE id = ${id}`;
+    if (!rows.length) return res.status(404).end();
+    res.json({ id, description: rows[0].description || null });
+  } catch (e) { next(e); }
+});
+
+// Make (or redo) the words for one of your pictures with your AI.
+router.post('/:id/describe', authenticate, async (req: any, res, next) => {
+  try {
+    const id = String(req.params.id);
+    if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();
+    const rows: any[] = await prisma.$queryRaw`SELECT mime, data FROM media WHERE id = ${id} AND user_id = ${req.user.id}`;
+    if (!rows.length) return res.status(404).json({ error: 'Picture not found.' });
+    const description = await describeImage(req.user.id, Buffer.from(rows[0].data).toString('base64'), rows[0].mime);
+    await prisma.$executeRaw`UPDATE media SET description = ${description}, described_at = now() WHERE id = ${id}`;
+    res.json({ id, description });
+  } catch (e: any) { if (e?.status) return res.status(e.status).json({ error: e.message }); next(e); }
 });
 
 router.post('/', authenticate, raw({ type: 'image/*', limit: MAX }), async (req: any, res, next) => {

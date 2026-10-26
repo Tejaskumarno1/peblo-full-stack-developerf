@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Link2, Copy, Check } from 'lucide-react';
+import { X, Link2, Copy, Check, Bot } from 'lucide-react';
 import api from '../api/client';
 import { usePublicUrl } from '../api/publicUrl';
 
@@ -15,6 +15,7 @@ export default function ShareDialog({ kind, id, title, onClose }) {
   const [token, setToken] = useState(undefined); // undefined = loading, null = not shared
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [botCopied, setBotCopied] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -50,6 +51,11 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   };
 
+  const copyBot = async () => {
+    try { await navigator.clipboard.writeText(url + '.md'); } catch { /* selectable below */ }
+    setBotCopied(true); setTimeout(() => setBotCopied(false), 1800);
+  };
+
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="s-share" role="dialog" aria-label={`Share this ${kind === 'note' ? 'note' : 'task'}`}>
@@ -74,6 +80,8 @@ export default function ShareDialog({ kind, id, title, onClose }) {
               <input readOnly aria-label="Share link" value={url} onFocus={(e) => e.target.select()} />
               <button type="button" className="s-share-go" onClick={copy}>{copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy</>}</button>
             </div>
+            {kind === 'note' && <div className="s-share-row bot"><input readOnly aria-label="Plain-text link for bots" value={url + '.md'} onFocus={(e) => e.target.select()} /><button type="button" className="s-share-go ghost" onClick={copyBot}>{botCopied ? <><Check size={15} /> Copied</> : <><Bot size={15} /> For bots</>}</button></div>}
+            {kind === 'note' && <p className="s-share-msg">Bots and AI agents that open the normal link get this plain-text version automatically, with a text description of each picture.</p>}
             {local && <p className="s-share-msg warn">This link points to your own computer, so other people cannot open it yet. It will work for everyone once Peblo is hosted online.</p>}
             <button type="button" className="s-share-off" onClick={turnOff} disabled={busy}>Stop sharing</button>
           </>
