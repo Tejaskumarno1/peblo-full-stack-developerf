@@ -30,8 +30,15 @@ jobs:
         # --publish never: the "release" job below is the only thing that publishes (no double upload).
         run: npm run dist -- --publish never
         env:
-          # Unsigned builds; add signing certificates later if needed.
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # macOS: signed + notarized when the five secrets below exist (Apple Developer ID, see README);
+          # without them the build stays unsigned and macOS shows "Peblo Not Opened".
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
+          # Windows and Linux builds are unsigned.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK != '') && 'true' || 'false' }}
 
       - uses: actions/upload-artifact@v4
         with:

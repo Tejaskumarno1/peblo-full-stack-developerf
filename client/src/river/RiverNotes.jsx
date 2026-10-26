@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Check, Loader2, X } from 'lucide-react';
+import { Undo2, Archive, Copy, FileDown, FileText, History, Layers, ListChecks, Pin, Share2, Sparkles, Trash2, ChevronLeft, Check, Loader2, X } from 'lucide-react';
 import { notesAPI, todosAPI, riverAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
@@ -258,34 +258,34 @@ function RiverNote({ note }) {
                 <button type="button" className="r-btn ghost small" aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
                 {menu && (
                   <div className="r-pop right" role="menu" style={{ width: 210, letterSpacing: 0, textTransform: 'none' }}>
-                    {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
+                    {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}><Undo2 size={15} />Restore</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>}
                     {!doc.isDraft && !doc.isDeleted && <button type="button" role="menuitem" onClick={async () => {
               setMenu(false);
               const next = !doc.meta?.pinned;
               const pinnedCount = (note.allNotes || []).filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
               if (next && pinnedCount >= 3) { setToast('You can pin up to 3 notes. Unpin one first.'); return; }
               try { await notesAPI.update(doc.id, { meta: { pinned: next } }); note.patch({ meta: { ...(doc.meta || {}), pinned: next || undefined } }); qc2.invalidateQueries({ queryKey: ['notes'] }); setToast(next ? 'Pinned to Home' : 'Unpinned'); } catch { setToast('Could not pin it'); }
-            }}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+            }}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
             {!doc.isDraft && !doc.isDeleted && <button type="button" role="menuitem" onClick={async () => {
               setMenu(false);
               try { note.forceSave?.(); const { data } = await notesAPI.create({ title: 'Copy of ' + (doc.title || 'Untitled'), content: doc.content || '', tags: doc.tags || [] }); qc2.invalidateQueries({ queryKey: ['notes'] }); navigate2('/notes/' + data.note.id); } catch { setToast('Could not duplicate the note'); }
-            }}>Duplicate</button>}
+            }}><Copy size={15} />Duplicate</button>}
             {!doc.isDraft && !doc.isDeleted && (
               <>
                 <span className="r-pop-h">History and AI</span>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave?.(); setHistOpen(true); }}>Version history</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Summarise this note in a few short bullet points.'); }}>Summarise with AI</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Make 8 flashcards (question and answer) from this note.'); }}>Flashcards from this note</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('List the tasks and to-dos hidden in this note.'); }}>Find tasks in this note</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave?.(); setHistOpen(true); }}><History size={15} />Version history</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Summarise this note in a few short bullet points.'); }}><Sparkles size={15} />Summarise with AI</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('Make 8 flashcards (question and answer) from this note.'); }}><Layers size={15} />Flashcards from this note</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); askAbout('List the tasks and to-dos hidden in this note.'); }}><ListChecks size={15} />Find tasks in this note</button>
               </>
             )}
             <span className="r-pop-h">Download</span>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportMarkdown(doc).then(() => setToast('Downloaded as Markdown')); }}>Markdown (.md)</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportWord(doc).then(() => setToast('Downloaded as Word')); }}>Word (.doc)</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); setToast('Making the PDF'); exportPdf(doc).then(() => setToast('Downloaded as PDF')).catch(() => setToast('Could not make the PDF')); }}>PDF (.pdf)</button>
-                    <button type="button" role="menuitem" style={{ color: 'var(--r-now-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportMarkdown(doc).then(() => setToast('Downloaded as Markdown')); }}><FileText size={15} />Markdown (.md)</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); exportWord(doc).then(() => setToast('Downloaded as Word')); }}><FileText size={15} />Word (.doc)</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); setToast('Making the PDF'); exportPdf(doc).then(() => setToast('Downloaded as PDF')).catch(() => setToast('Could not make the PDF')); }}><FileDown size={15} />PDF (.pdf)</button>
+                    <button type="button" role="menuitem" style={{ color: 'var(--r-now-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
               </div>

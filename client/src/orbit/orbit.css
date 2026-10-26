@@ -799,3 +799,5 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 @media (max-height: 640px) {
   .orbit .o-checklist { display: none; }
 }
+
+.o-pop > button > svg, .o-pop > a > svg { flex: none; opacity: 0.75; }

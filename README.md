@@ -96,7 +96,7 @@ npm run dist:mac     # macOS dmg (build on a Mac)
 npm run dist:linux   # AppImage and deb (build on Linux)
 ```
 
-Each OS is built on that OS (Prisma ships a native engine). The GitHub workflow **Build desktop app** does all three; push a tag like `v1.0.0` to publish a release. Builds are **not code-signed** yet: Windows SmartScreen shows "Windows protected your PC" (More info → Run anyway); on macOS right-click the app and choose Open the first time.
+Each OS is built on that OS (Prisma ships a native engine). The GitHub workflow **Build desktop app** does all three; push a tag like `v1.0.0` to publish a release. Builds are **not code-signed** yet: Windows SmartScreen shows "Windows protected your PC" (More info → Run anyway); on macOS you see "Peblo Not Opened" (Apple cannot check unsigned apps): open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Peblo, or run `xattr -cr /Applications/Peblo.app` in Terminal once. To remove the warning for everyone, add an Apple Developer ID certificate and set the repo secrets `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`; the workflow then signs and notarizes the Mac build.
 
 ## Security notes
 

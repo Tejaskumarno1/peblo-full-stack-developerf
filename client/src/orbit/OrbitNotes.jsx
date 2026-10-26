@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Loader2, X, Network, Star, Maximize2 } from 'lucide-react';
+import { Archive, Copy, FileDown, FileText, History, Link2, Lock, Printer, Replace, Share2, Trash2, Undo2, ChevronRight, Loader2, X, Network, Star, Maximize2 } from 'lucide-react';
 import { notesAPI, todosAPI, hubAPI, studyAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
@@ -210,19 +210,19 @@ function OrbitNote({ note }) {
             <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
             {menu && (
               <div className="o-pop right" role="menu" style={{ width: 210 }}>
-                {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}>Restore</button>}
-                {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); setMeta({ locked: locked ? null : true }); }}>{locked ? 'Unlock (allow editing)' : 'Lock (read only)'}</button>}
-                {!readOnly && <button type="button" role="menuitem" onClick={() => { setMenu(false); setFindOpen(true); }}>Find and replace</button>}
-                {!doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave(); setHistoryOpen(true); }}>Version history</button>}
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}>Duplicate</button>
-                {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}>Share link…</button>}
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>Copy link</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}>Export as Markdown</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}>Download as PDF</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => console.error('Word export failed', e)); }}>Download as Word</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'print').catch((e) => console.error('Print failed', e)); }}>Print</button>
-                <button type="button" role="menuitem" style={{ color: 'var(--o-weak-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
+                {doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.restore(); }}><Undo2 size={15} />Restore</button>}
+                {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.archive('/'); }}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                {!doc.isDeleted && <button type="button" role="menuitem" onClick={() => { setMenu(false); setMeta({ locked: locked ? null : true }); }}><Lock size={15} />{locked ? 'Unlock (allow editing)' : 'Lock (read only)'}</button>}
+                {!readOnly && <button type="button" role="menuitem" onClick={() => { setMenu(false); setFindOpen(true); }}><Replace size={15} />Find and replace</button>}
+                {!doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); note.forceSave(); setHistoryOpen(true); }}><History size={15} />Version history</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); duplicate(); }}><Copy size={15} />Duplicate</button>
+                {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>}
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}><Link2 size={15} />Copy link</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}><FileText size={15} />Export as Markdown</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}><FileDown size={15} />Download as PDF</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => console.error('Word export failed', e)); }}><FileDown size={15} />Download as Word</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'print').catch((e) => console.error('Print failed', e)); }}><Printer size={15} />Print</button>
+                <button type="button" role="menuitem" style={{ color: 'var(--o-weak-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
               </div>
             )}
           </div>

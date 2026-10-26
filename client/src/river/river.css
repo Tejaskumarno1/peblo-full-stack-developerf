@@ -845,3 +845,5 @@ html.pb-canvas-capture[data-style="river"] .river.river-window { height: auto; m
 .r-tl-row:hover .r-tl-x, .r-tl-x:focus-visible { opacity: 1; }
 .r-tl-x:hover { color: #b3261e; background: var(--r-surface); }
 .r-btn.on { background: var(--r-ink); color: var(--r-on-ink); }
+
+.r-pop > button > svg, .r-pop > a > svg { flex: none; opacity: 0.75; }
