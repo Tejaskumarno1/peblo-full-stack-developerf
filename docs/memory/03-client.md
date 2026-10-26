@@ -330,6 +330,13 @@ Opened from Sidebar/Console/Soft (and via `peblo:open-settings` from River/Orbit
 
 ---
 
+### 5.15 Settings page rework (soft/SoftSettings.jsx, soft/settings/*)
+- Shared by Soft, River and Orbit (`skin`). Sections: Profile, Account & sign-in, Appearance, Notes, Notifications, Calendars, AI & models, Connect apps, Shared links, Your data, About, and (desktop only, `window.pebloDesktop`) On this computer. Every nav link has an icon.
+- Settings save as you go (SaveCtx); header search (INDEX in SoftSettings.jsx) finds single settings; failed loads show a retry.
+- EmailCard (sections1.jsx) shows confirmed/unconfirmed, resend, pending change + cancel; page `/verify-email` (pages/VerifyEmailPage.jsx) consumes the link.
+- AI connections have a Test button. Desktop-only settings (tray, start with Windows, capture shortcut) use `electron/main.cjs` IPC `peblo:system:get/set` (only syntax-checked, not run in the real app).
+- Mobile (<=860px) rules in soft2.css use `html:root:root:root` selectors because settingsSkins.css loads later.
+
 ## 6. Keyboard shortcuts found
 
 | Shortcut | Where | Effect | Source |

@@ -551,6 +551,14 @@ An unknown or hallucinated `taskId` throws P2025 (404) after the earlier actions
 
 ---
 
+## 9b. Email verification (migration 019)
+- Table `email_tokens` (kind `verify` | `change`, only the sha256 of a random 32-byte token, 24h expiry, single use; a newer link of the same kind replaces the older). `users.emailVerifiedAt` marks a confirmed address.
+- Routes (routes/auth.ts): `POST /api/auth/send-verification`, `POST /api/auth/verify-email`, `POST /api/auth/cancel-email-change`. Signup also sends the link.
+- services/emailAccount.ts = token logic; services/mailer.ts sends mail with no extra package: SMTP over implicit TLS (465, AUTH LOGIN), Resend HTTPS, or `MAIL_OUTBOX=<file>` for tests.
+- Env: `SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS` (Gmail: App Password) or `RESEND_API_KEY`; `MAIL_FROM`; `PUBLIC_URL`. No mail configured: the app says so and an email change applies immediately (unconfirmed). Mail configured: a change waits for the link sent to the new address and the old address gets a notice.
+- `GET /api/profile` adds `emailVerified`, `pendingEmail`, `mailReady`.
+- Test: `scripts/account-test.mjs` (29 checks incl. a fake TLS SMTP server), part of `npm test`.
+
 ## 10. Bugs, security risks, performance issues, dead code (most severe first)
 
 ### Critical / High

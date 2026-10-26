@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import { KEY_FIELDS, loadProfile, saveKeys } from '../services/profile.js';
 import { validZone } from '../utils/userTime.js';
 import { ollamaUrlProblem } from '../utils/ollamaPolicy.js';
+import { mailConfigured } from '../services/mailer.js';
+import { sendChange } from '../services/emailAccount.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,6 +33,7 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     if (settings !== undefined && (typeof settings !== 'object' || settings === null || Array.isArray(settings) || JSON.stringify(settings).length > 20_000)) return bad('Settings must be an object of at most 20 KB.');
 
     let newEmail: string | undefined;
+    let emailChangePending: string | null = null;
     if (email !== undefined) {
       newEmail = String(email).trim().toLowerCase();
       if (!EMAIL_RE.test(newEmail)) return res.status(400).json({ error: 'Enter a valid email address.' });
@@ -42,6 +45,14 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
       }
       const taken = await prisma.user.findFirst({ where: { email: newEmail, NOT: { id: userId } }, select: { id: true } });
       if (taken) return res.status(409).json({ error: 'That email is already used by another account.' });
+      // When this server can send mail, the move to a new address waits until the new address is confirmed.
+      // (Without mail, the change is immediate and the address counts as not yet confirmed.)
+      if (me && me.email.toLowerCase() !== newEmail && mailConfigured()) {
+        if (!(await sendChange(req, userId, newEmail))) return res.status(502).json({ error: 'Could not send the confirmation email. Your address was not changed.' });
+        emailChangePending = newEmail;
+        newEmail = undefined;
+      }
+      if (me && newEmail && me.email.toLowerCase() === newEmail) newEmail = undefined; // same address: nothing to change, keep it confirmed
     }
 
     if (settings && typeof settings === 'object' && 'ollamaUrl' in settings) {
@@ -63,7 +74,7 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
       where: { id: userId },
       data: {
         ...(name && { name: String(name).trim().slice(0, 80) }),
-        ...(newEmail !== undefined && { email: newEmail }),
+        ...(newEmail !== undefined && { email: newEmail, emailVerifiedAt: null }),
         ...(jobTitle !== undefined && { jobTitle }),
         ...(bio !== undefined && { bio }),
         ...(avatar !== undefined && { avatar: avatar || null }),
@@ -74,7 +85,7 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
 
     if (settings && typeof settings === 'object') await saveKeys(userId, settings);
 
-    res.json({ message: 'Profile updated', user: await loadProfile(userId) });
+    res.json({ message: emailChangePending ? `We sent a link to ${emailChangePending}. Your email changes when you open it.` : 'Profile updated', emailChangePending, user: await loadProfile(userId) });
   } catch (error) {
     next(error);
   }

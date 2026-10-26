@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('pebloDesktop', {
   /** Try a new accelerator such as "CommandOrControl+Alt+N"; resolves { ok, shortcut, error? }. */
   setCaptureShortcut: (accelerator) => ipcRenderer.invoke('peblo:capture-shortcut:set', String(accelerator)),
   resetCaptureShortcut: () => ipcRenderer.invoke('peblo:capture-shortcut:reset'),
+  /** { openAtLogin, keepInTray, platform } - Settings > This computer. */
+  getSystemSettings: () => ipcRenderer.invoke('peblo:system:get'),
+  /** { openAtLogin?, keepInTray? } -> { ok, openAtLogin, keepInTray, error? } */
+  setSystemSettings: (patch) => ipcRenderer.invoke('peblo:system:set', patch || {}),
   /** { available, version, dataDir, reason } - whether this copy can uninstall itself. */
   getUninstallInfo: () => ipcRenderer.invoke('peblo:uninstall:info'),
   /** { removeData, backup } -> { ok, backupDir?, cancelled?, error? }. On ok the app closes and removes itself. */

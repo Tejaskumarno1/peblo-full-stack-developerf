@@ -5,7 +5,10 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   changePassword: (data) => api.post('/auth/change-password', data),
   logoutAll: () => api.post('/auth/logout-all'),
-  deleteAccount: (data) => api.post('/auth/delete-account', data)
+  deleteAccount: (data) => api.post('/auth/delete-account', data),
+  sendVerification: () => api.post('/auth/send-verification'),
+  verifyEmail: (token) => api.post('/auth/verify-email', { token }),
+  cancelEmailChange: () => api.post('/auth/cancel-email-change')
 };
 
 export const profileAPI = {
@@ -26,11 +29,11 @@ export const notesAPI = {
   getBackups: (id) => api.get(`/notes/${id}/backups`),
   getBackup: (id, backupId) => api.get(`/notes/${id}/backups/${backupId}`),
   revertBackup: (id, backupId) => api.post(`/notes/${id}/backups/${backupId}/revert`),
+  nameVersion: (id, label) => api.post(`/notes/${id}/versions`, { label }),
+  renameBackup: (id, backupId, label) => api.patch(`/notes/${id}/backups/${backupId}`, { label }),
   mentions: (id) => api.get(`/notes/${id}/mentions`),
   linkMention: (id, otherId) => api.post(`/notes/${id}/mentions/${otherId}/link`)
 };
-  nameVersion: (id, label) => api.post(`/notes/${id}/versions`, { label }),
-  renameBackup: (id, backupId, label) => api.patch(`/notes/${id}/backups/${backupId}`, { label }),
 
 export const aiAPI = {
   localStatus: () => api.get('/ai/local/status'),

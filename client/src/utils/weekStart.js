@@ -1,8 +1,8 @@
 // The first day of the week is one account setting (Settings -> Preferences), used by every screen and style.
-// 'mon' (default) or 'sun'. It is read from the settings kept on this device (they mirror the account).
+// 'mon' (default), 'sat' or 'sun'. It is read from the settings kept on this device (they mirror the account).
 
 export function weekStartDay() {
-  try { return JSON.parse(localStorage.getItem('peblo-settings') || '{}').weekStart === 'sun' ? 0 : 1; } catch { return 1; }
+  try { const w = JSON.parse(localStorage.getItem('peblo-settings') || '{}').weekStart; return w === 'sun' ? 0 : w === 'sat' ? 6 : 1; } catch { return 1; }
 }
 
 /** Midnight on the first day of the week that contains d. */

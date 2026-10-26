@@ -100,6 +100,16 @@ export function AuthProvider({ children }) {
     document.documentElement.setAttribute('data-compact', settings?.compact ? '1' : '0');
   }, [settings?.compact]);
 
+  // Spell checking in notes (Settings -> Notes and calendar): on unless switched off. Editors come and go, so watch for them.
+  useEffect(() => {
+    const on = settings?.spellcheck !== false;
+    const apply = (root) => root.querySelectorAll?.('[contenteditable="true"]').forEach((el) => { if (el.getAttribute('spellcheck') !== String(on)) el.setAttribute('spellcheck', String(on)); });
+    apply(document);
+    const mo = new MutationObserver(() => apply(document));
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [settings?.spellcheck]);
+
   // Editor text size (Settings -> Preferences): small / medium (the style's own size) / large
   useEffect(() => {
     document.documentElement.setAttribute('data-editor-font', settings?.fontSize || 'medium');
@@ -176,6 +186,11 @@ export function AuthProvider({ children }) {
 
   const retryConnect = useCallback(() => setReloadKey(k => k + 1), []);
 
+  // Reload the account from the server (after an email link, an address change...), without the loading screen.
+  const refreshUser = useCallback(async () => {
+    try { const res = await profileAPI.me(); setUser(res.data.user); return res.data.user; } catch { return null; }
+  }, []);
+
   // WebSockets for Real-Time Device Syncing
   useEffect(() => {
     if (!user) return;
@@ -193,6 +208,10 @@ export function AuthProvider({ children }) {
       window.dispatchEvent(new Event('todo-updated'));
     });
 
+    socket.on('notifications_changed', () => {
+      window.dispatchEvent(new Event('pb-notifications-changed'));
+    });
+
     socket.on('notes_changed', () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     });
@@ -208,10 +227,6 @@ export function AuthProvider({ children }) {
     setUser((prev) => { previous = prev; return { ...prev, ...updatedUser }; });
     try {
       await profileAPI.updateProfile(updatedUser);
-    socket.on('notifications_changed', () => {
-      window.dispatchEvent(new Event('pb-notifications-changed'));
-    });
-
       if ('avatar' in updatedUser) rememberAccount({ ...(previous || {}), ...updatedUser });
       return true;
     } catch (err) {
@@ -316,6 +331,7 @@ export function AuthProvider({ children }) {
       signIn,
       logout,
       retryConnect,
+      refreshUser,
       updateProfile,
       theme,
       setTheme,

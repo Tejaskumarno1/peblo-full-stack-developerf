@@ -121,6 +121,27 @@ ipcMain.handle('peblo:capture-shortcut:reset', (event) => {
   return applyCaptureShortcut(DEFAULT_CAPTURE_SHORTCUT);
 });
 
+// Settings > This computer: start with Windows (or at login), and whether closing the window keeps Peblo in the tray.
+function systemSettings() {
+  let openAtLogin = false;
+  try { openAtLogin = !!app.getLoginItemSettings().openAtLogin; } catch { /* not supported here (some Linux desktops) */ }
+  return { openAtLogin, keepInTray: readDesktopSettings().keepInTray !== false, platform: process.platform };
+}
+ipcMain.handle('peblo:system:get', (event) => (trustedSender(event) ? systemSettings() : null));
+ipcMain.handle('peblo:system:set', (event, patch) => {
+  if (!trustedSender(event)) return { ok: false, error: 'Not allowed.' };
+  try {
+    if (patch && typeof patch.openAtLogin === 'boolean') {
+      if (!app.isPackaged) return { ok: false, error: 'Start-at-login only works in the installed app, not in a development run.', ...systemSettings() };
+      app.setLoginItemSettings({ openAtLogin: patch.openAtLogin });
+    }
+    if (patch && typeof patch.keepInTray === 'boolean') writeDesktopSettings({ keepInTray: patch.keepInTray });
+    return { ok: true, ...systemSettings() };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err), ...systemSettings() };
+  }
+});
+
 // Settings > About > Uninstall Peblo (see uninstall.cjs).
 uninstaller.register({ trusted: trustedSender, getWindow: () => mainWindow, beforeQuit: () => { isQuitting = true; } });
 
@@ -310,7 +331,7 @@ function createWindow() {
 
   // Closing the window keeps Peblo running in the tray so quick capture keeps working.
   mainWindow.on('close', (event) => {
-    if (isQuitting || !tray) return;
+    if (isQuitting || !tray || readDesktopSettings().keepInTray === false) return;
     event.preventDefault();
     mainWindow.hide();
     if (!trayHintShown && Notification.isSupported()) {
@@ -555,7 +576,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // With a tray icon Peblo keeps running in the background; without one, quit as usual.
-  if (process.platform !== 'darwin' && !tray) app.quit();
+  if (process.platform !== 'darwin' && (!tray || readDesktopSettings().keepInTray === false)) app.quit();
 });
 
 // Design canvas check (npm run check:canvas). Only runs when the check starts the app.

@@ -9,6 +9,7 @@ import HelpDialog from './components/HelpDialog';
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SharedPage = lazy(() => import('./pages/SharedPage'));
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const OAuthConsent = lazy(() => import('./pages/OAuthConsent'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -47,8 +48,8 @@ const GoHome = () => <Navigate to="/" replace />;
 // Global helpers that live beside every screen
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const LiveEditors = lazy(() => import('./components/LiveEditors'));
-
 const NotificationPill = lazy(() => import('./components/NotificationPill'));
+
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
 /** Picks the screen for the current style (Soft, River or Orbit each have their own). */
@@ -88,8 +89,8 @@ function ShellLayout() {
         <CommandPalette />
         <HelpDialog />
         <LiveEditors />
-      </Suspense>
         <NotificationPill />
+      </Suspense>
     </AppShell>
   );
 }
@@ -128,6 +129,7 @@ export default function App() {
         </Route>
         <Route path="/quick-capture" element={<CaptureGate />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/oauth/consent" element={<OAuthConsent />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />
         <Route path="/todolist" element={<Navigate to="/tasks" replace />} />

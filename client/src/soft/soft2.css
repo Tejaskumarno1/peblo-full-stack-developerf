@@ -460,3 +460,69 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-pips { display: inline-flex; flex: none; margin-left: auto; }
 .soft .s-pips i { width: 11px; height: 11px; margin-left: -3px; border: 2px solid var(--s-butter); border-radius: 50%; box-shadow: 0 0 0 1px rgba(36, 31, 26, .18); }
 .soft .s-pips i:first-child { margin-left: 0; }
+
+/* Settings: inline field status, password eye and strength, email row, status line, bullets */
+.soft .s-set-field { display: inline-flex; flex-direction: column; gap: 4px; align-items: flex-start; max-width: 100%; }
+.soft .s-set-row.stack .s-set-field { display: flex; align-items: stretch; width: 100%; }
+.soft .s-set-fieldst { min-height: 16px; font-size: 12.5px; color: var(--s-fg3); display: flex; justify-content: space-between; gap: 10px; }
+.soft .s-set-fieldst.ok { color: var(--s-local); font-weight: 700; }
+.soft .s-set-fieldst.bad { color: #b3261e; font-weight: 700; }
+.soft .s-set-fieldst .count { margin-left: auto; color: var(--s-fg3); font-weight: 600; }
+.soft .s-set-input[aria-invalid="true"] { border-color: #b3261e; }
+.soft .s-set-pw { position: relative; display: inline-flex; align-items: center; }
+.soft .s-set-pw .s-set-input { padding-right: 40px; }
+.soft .s-set-pw .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 6px; display: inline-flex; color: var(--s-fg3); }
+.soft .s-set-meter { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.soft .s-set-meter i { width: 34px; height: 5px; border-radius: 3px; background: var(--s-line); }
+.soft .s-set-meter.l1 i:nth-child(1) { background: #d9534f; }
+.soft .s-set-meter.l2 i:nth-child(-n+2) { background: #e0a030; }
+.soft .s-set-meter.l3 i { background: #2f8f4e; }
+.soft .s-set-meter em { font-style: normal; font-size: 12.5px; color: var(--s-fg3); margin-left: 6px; }
+.soft .s-set-emailrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.soft .s-set-pill.ok { background: var(--s-mint); }
+.soft .s-set-pill.warn { background: var(--s-butter); }
+.soft .s-set-status-line { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--s-fg); }
+.soft .s-set-status-line i { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; background: var(--s-fg3); }
+.soft .s-set-status-line.ok i { background: #2f8f4e; }
+.soft .s-set-status-line.warn i { background: #e0a030; }
+.soft .s-set-status-line.bad i { background: #d9534f; }
+.soft .s-set-bullets { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--s-fg2); line-height: 1.5; }
+.soft .s-set-confirm { flex-wrap: wrap; }
+.soft .s-set-link .ico { width: 28px; height: 28px; }
+
+/* Settings > AI: the embedded connections block must grow with its content, or the cards after it sit on top of it */
+.soft .s-set-main > .s-conn.s-conn-embedded { overflow: visible; min-height: max-content; }
+.soft .s-set-main > .s-conn-embedded .s-conn-cards { flex: 0 0 auto; }
+/* A block of cards that must stack in natural order and height (the grid above sized the connections block too short) */
+.soft .s-set-main > .s-set-stack { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.soft .s-set-stack > .s-set-card { margin: 0; }
+/* "Where each feature runs": the three-way choice moves under its label when the card is narrow, instead of spilling out of its pill */
+.soft .s-set-feats li { flex-wrap: wrap; row-gap: 10px; }
+.soft .s-set-feats li > div { flex: 1 1 200px; min-width: 0; }
+.soft .s-set-feats .s-sg { flex: 0 0 auto; flex-wrap: nowrap; max-width: 100%; }
+
+.soft .s-set-chips { display: contents; }
+
+/* Phones and narrow windows: the section list becomes a scrolling row of chips above the page, and everything is one column.
+   (The earlier 860px rule was overridden by later column rules, so the content was squeezed out of view.) */
+@media (max-width: 860px) {
+  html:root:root:root .s-set-body { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; }
+  html:root:root:root .s-set-nav { flex-direction: column; flex-wrap: nowrap; height: auto; max-height: none; gap: 8px; overflow: visible; padding: 0; flex-shrink: 0; }
+  html:root:root:root .s-set-find { height: 42px; flex: 0 0 auto; }
+  html:root:root:root .s-set-nav .s-set-groups, html:root:root:root .s-set-nav { min-width: 0; }
+  html:root:root:root .s-set-h1 { font-size: 26px; margin: 0; }
+  html:root:root:root .s-set-find { width: 100%; box-sizing: border-box; margin: 0; }
+  html:root:root:root .s-set-nav > .s-set-group { display: contents; }
+  html:root:root:root .s-set-group > span { display: none; }
+  html:root:root:root .s-set-chips { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
+  html:root:root:root .s-set-link { white-space: nowrap; padding: 7px 12px 7px 8px; border-radius: 999px; background: var(--s-chip-solid); flex: 0 0 auto; }
+  html:root:root:root .s-set-main { overflow: visible; display: flex; flex-direction: column; gap: 14px; padding: 0 0 100px; }
+  html:root:root:root .s-set-main > * { width: 100%; box-sizing: border-box; }
+  html:root:root:root .s-set-row { flex-wrap: wrap; }
+  html:root:root:root .s-set-row .s-set-input, html:root:root:root .s-set-input { width: 100%; max-width: 100%; }
+  html:root:root:root .s-set-field { width: 100%; }
+  html:root:root:root .s-set-row-ctl { width: 100%; }
+  html:root:root:root .s-set-card, html:root:root:root .s-set-card > * { max-width: 100%; }
+  html:root:root:root .s-conn-cards { grid-template-columns: minmax(0, 1fr); }
+  html:root:root:root .s-set-head { flex-wrap: wrap; gap: 8px; }
+}

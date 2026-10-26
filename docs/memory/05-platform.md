@@ -183,6 +183,8 @@ Root runtime deps: `@google/generative-ai` (deprecated SDK), `@prisma/client` 6,
 
 MySQL 8 (8.0.13+ needed for expression defaults on TEXT/JSON). Prisma `prisma-client-js` with output `server/generated/prisma` and no `binaryTargets`. All tables use `utf8mb4_unicode_ci`, so comparisons are case-insensitive, including unique email and tag names. IDs are UUID strings in `VARCHAR(191)`. Every FK is `ON UPDATE CASCADE`.
 
+**Email (migration 019):** `users.emailVerifiedAt`; table `email_tokens` (id, userId, kind verify|change, tokenHash sha256, newEmail for change, expiresAt, createdAt; a used token is deleted). Mail env vars are listed in README "Email".
+
 ### 4.1 Models
 **User -> `users`**
 | Field | Column / type | Notes |

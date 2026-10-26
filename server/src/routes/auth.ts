@@ -4,6 +4,8 @@ import prisma from '../db.js';
 import { authenticate, signToken } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { loadProfile } from '../services/profile.js';
+import { cancelChange, consumeToken, sendVerification } from '../services/emailAccount.js';
+import { mailConfigured } from '../services/mailer.js';
 
 /*
  * Real accounts: anyone can sign up, and their notes/tasks/quizzes are theirs alone.
@@ -25,6 +27,9 @@ const DUMMY_HASH = bcrypt.hashSync('peblo-timing-placeholder', 12);
 const signupLimit = rateLimit({ windowMs: 60 * 60_000, max: Number(process.env.SIGNUP_RATE_MAX) || 10, message: 'Too many sign-ups from this address. Try again later.' });
 const passwordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, message: 'Too many attempts. Wait a few minutes and try again.' });
 
+const mailLimit = rateLimit({ windowMs: 15 * 60_000, max: 6, message: 'Too many emails requested. Wait a few minutes and try again.' });
+const linkLimit = rateLimit({ windowMs: 15 * 60_000, max: 30, message: 'Too many attempts. Wait a few minutes and try again.' });
+
 router.post('/signup', signupLimit, async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -41,6 +46,7 @@ router.post('/signup', signupLimit, async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({ data: { email, name, passwordHash, settings: {} } });
 
+    void sendVerification(req, user.id, user.email).catch(() => {}); // best effort: signing up never fails because of mail
     const token = signToken(user);
     res.status(201).json({ token, user: await loadProfile(user.id) });
   } catch (error) {
@@ -59,6 +65,42 @@ router.post('/login', ...loginLimit, async (req, res, next) => {
     if (!ok) return res.status(401).json({ error: 'Incorrect email or password.' });
 
     res.json({ token: signToken(user!), user: await loadProfile(user!.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Mail the signed-in person a "confirm this address" link.
+router.post('/send-verification', authenticate, mailLimit, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { id: true, email: true, emailVerifiedAt: true } });
+    if (!user) return res.status(404).json({ error: 'Account not found.' });
+    if (user.emailVerifiedAt) return res.json({ alreadyVerified: true });
+    if (!mailConfigured()) return res.status(503).json({ error: 'Email sending is not set up on this server yet, so Peblo cannot send the link.', mailConfigured: false });
+    const sent = await sendVerification(req, user.id, user.email);
+    if (!sent) return res.status(502).json({ error: 'The email could not be sent. Try again in a few minutes.' });
+    res.json({ sent: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Open a link from an email (confirm an address, or finish an address change). No sign-in needed: the secret is the proof.
+router.post('/verify-email', linkLimit, async (req, res, next) => {
+  try {
+    const result = await consumeToken(String(req.body?.token || ''));
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ ok: true, kind: result.kind, email: result.email });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Drop a pending address change.
+router.post('/cancel-email-change', authenticate, async (req, res, next) => {
+  try {
+    await cancelChange(req.user!.id);
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }

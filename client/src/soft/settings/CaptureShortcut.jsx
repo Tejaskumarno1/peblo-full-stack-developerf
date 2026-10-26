@@ -45,7 +45,7 @@ export default function CaptureShortcut() {
   };
 
   const where = api.desktop
-    ? 'Press this anywhere in Windows to jot down a note or task, even when Peblo is in the tray.'
+    ? `Press this anywhere on your ${api.platform === 'win32' ? 'Windows PC' : api.platform === 'darwin' ? 'Mac' : 'computer'} to jot down a note or task, even when Peblo is in the tray.`
     : 'Press this anywhere in Peblo to jot down a note or task. A web page cannot listen outside its tab; the desktop app can.';
 
   return (

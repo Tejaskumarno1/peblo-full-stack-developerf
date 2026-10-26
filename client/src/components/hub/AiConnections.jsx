@@ -21,6 +21,15 @@ function ModelSelect({ c, onPick }) {
 /** One saved connection: which company, which model, on/off, its place in the order, remove. */
 function Row({ c, first, last, onChange, onMove, onRemove, busy }) {
   const [sure, setSure] = useState(false);
+  const [test, setTest] = useState(null); // null | 'busy' | { ok, text }
+  // Asks the company for this key's models right now: if that works, the key works.
+  const runTest = async () => {
+    setTest('busy');
+    try {
+      const { data } = await aiConnectionsAPI.models(c.id);
+      setTest(data.error ? { ok: false, text: data.error } : { ok: true, text: `Working. ${data.models?.length || 0} model${data.models?.length === 1 ? '' : 's'} available.` });
+    } catch (e) { setTest({ ok: false, text: errText(e, 'Could not test it. Check your connection.') }); }
+  };
   return (
     <li className={`ac-row${c.enabled ? '' : ' off'}`}>
       <div className="ac-row-main">
@@ -28,6 +37,8 @@ function Row({ c, first, last, onChange, onMove, onRemove, busy }) {
         <span className="ac-sub">{c.provider === 'custom' ? c.baseUrl : 'Key saved'}{c.unreadable ? ' · the saved key cannot be read here: add it again' : ''}</span>
       </div>
       <ModelSelect c={c} onPick={onChange} />
+      <button type="button" className="ac-btn" onClick={runTest} disabled={test === 'busy'} aria-label={`Test ${c.label}`}>{test === 'busy' ? 'Testing…' : 'Test'}</button>
+      {test && test !== 'busy' && <span className={`ac-test ${test.ok ? 'ok' : 'bad'}`} role={test.ok ? 'status' : 'alert'}>{test.text}</span>}
       <label className="ac-switch"><input type="checkbox" checked={c.enabled} disabled={busy} onChange={(e) => onChange(c.id, { enabled: e.target.checked })} /> On</label>
       <span className="ac-move">
         <button type="button" aria-label={`Move ${c.label} up`} disabled={first || busy} onClick={() => onMove(c.id, -1)}><ChevronUp size={15} /></button>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { todosAPI } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { startOfDay, addDays, isMeeting, momentOf, clockRange, endOf } from './riverUtils';
 import './river.css';
 
@@ -16,23 +17,29 @@ const providerOf = (l) => (/meet\.google/i.test(l) ? 'Google Meet' : /teams\./i.
  * Works while Peblo is running (it stays in the tray when the window is closed).
  */
 export default function MeetingReminders() {
+  const { settings } = useAuth();
+  const remindersOn = settings?.meetingReminders !== false; // Settings -> Reminders
+  const popups = settings?.desktopNotify !== false;
+  const defaultLead = Number.isFinite(settings?.meetingLead) ? settings.meetingLead : 5; // minutes for a meeting with a link and no reminder of its own
   const { data: todos = [] } = useQuery({
     queryKey: ['todos', 'range', 'reminders'],
     queryFn: () => todosAPI.getRange(startOfDay().toISOString(), addDays(startOfDay(), 2).toISOString()).then((r) => r.data.todos || []),
     refetchInterval: 60000,
     staleTime: 30000,
+    enabled: remindersOn,
   });
   const [cards, setCards] = useState([]);
   const fired = useRef(null);
   if (fired.current === null) fired.current = new Set(readFired());
 
   useEffect(() => {
+    if (!remindersOn) return undefined;
     const tick = () => {
       const now = Date.now();
       for (const t of todos) {
         if (!isMeeting(t) || t.completed) continue;
         const s = momentOf(t).getTime();
-        const lead = (t.meta?.remindMin || (t.meta?.link ? 5 : 0)) * 60000;
+        const lead = (t.meta?.remindMin || (t.meta?.link ? defaultLead : 0)) * 60000;
         if (!lead) continue;
         const key = t.id + ':' + s;
         if (fired.current.has(key) || now < s - lead || now > s + 5 * 60000) continue;
@@ -41,7 +48,7 @@ export default function MeetingReminders() {
         const mins = Math.max(0, Math.round((s - now) / 60000));
         setCards((c) => [...c, { key, t, s, mins }]);
         try {
-          if (typeof Notification !== 'undefined') {
+          if (popups && typeof Notification !== 'undefined') {
             if (Notification.permission === 'default') Notification.requestPermission();
             if (Notification.permission === 'granted') {
               const e = endOf(t) || new Date(s + 3600000);
@@ -55,9 +62,9 @@ export default function MeetingReminders() {
     tick();
     const id = setInterval(tick, 20000);
     return () => clearInterval(id);
-  }, [todos]);
+  }, [todos, remindersOn, popups, defaultLead]);
 
-  if (!cards.length) return null;
+  if (!remindersOn || !cards.length) return null;
   return (
     <div className="r-remind" role="region" aria-label="Meeting reminders">
       {cards.map((c) => (

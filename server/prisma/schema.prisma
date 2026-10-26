@@ -20,6 +20,7 @@ model User {
   email        String   @unique @db.Citext
   passwordHash String   @map("password_hash")
   tokenVersion Int      @default(0) @map("token_version")
+  emailVerifiedAt DateTime? @map("email_verified_at")
 
   // Profile & Settings
   jobTitle     String?  @map("job_title")
@@ -42,6 +43,7 @@ model User {
   mastery       TopicMastery[]
   apiTokens     ApiToken[]
   oauthCodes   OauthCode[]
+  emailTokens  EmailToken[]
 
   @@map("users")
 }
@@ -209,6 +211,22 @@ model UserApiKeys {
   @@map("user_api_keys")
 }
 
+
+// One-time email links (migration 019): confirm an address, or move the account to a new one. Only the hash is stored.
+model EmailToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  kind      String
+  newEmail  String?  @map("new_email")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+  @@map("email_tokens")
+}
 
 // Any number of OpenAI-compatible AI providers per person (migration 015). The key is stored encrypted (secrets.ts).
 model AiConnection {

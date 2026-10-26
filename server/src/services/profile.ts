@@ -2,6 +2,7 @@ import prisma from '../db.js';
 import { decryptSecret, encryptSecret, isUnreadable } from '../secrets.js';
 import { openAiModelOf, geminiModelOf } from './aiService.js';
 import { providerById } from './aiProviders.js';
+import { mailConfigured } from './mailer.js';
 
 export const KEY_FIELDS = ['openAiKey', 'geminiKey', 'groqKey', 'huggingFaceKey'] as const;
 
@@ -19,10 +20,11 @@ export function maskKey(plain: string): string {
 export async function loadProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, jobTitle: true, bio: true, avatar: true, timezone: true, settings: true, apiKeys: true },
+    select: { id: true, name: true, email: true, emailVerifiedAt: true, jobTitle: true, bio: true, avatar: true, timezone: true, settings: true, apiKeys: true },
   });
   if (!user) return null;
-  const { apiKeys, settings, ...rest } = user;
+  const { apiKeys, settings, emailVerifiedAt, ...rest } = user;
+  const pending = await prisma.emailToken.findFirst({ where: { userId, kind: 'change', expiresAt: { gt: new Date() } }, select: { newEmail: true } });
   const merged: any = { ...((settings as any) || {}) };
   const unreadableKeys: string[] = [];
   for (const k of KEY_FIELDS) {
@@ -34,7 +36,7 @@ export async function loadProfile(userId: string) {
     if (isUnreadable(stored)) unreadableKeys.push(k);
   }
   if (unreadableKeys.length) merged.unreadableKeys = unreadableKeys; else delete merged.unreadableKeys;
-  return { ...rest, settings: merged };
+  return { ...rest, emailVerified: !!emailVerifiedAt, pendingEmail: pending?.newEmail || null, mailReady: mailConfigured(), settings: merged };
 }
 
 export async function saveKeys(userId: string, incoming: Record<string, any>) {

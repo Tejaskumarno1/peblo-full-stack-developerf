@@ -105,3 +105,6 @@ Passwords are hashed with bcrypt; sessions are JWTs that can be revoked by signi
 ## More documentation
 
 Start with `docs/memory/01-overview.md`. Product documents are in `docs/`; older planning files are kept in `docs/archive/` where marked as out of date.
+
+## Email (confirm address)
+Peblo sends a confirmation link when someone signs up or changes email. Set on the server: `SMTP_HOST`, `SMTP_PORT` (465), `SMTP_USER`, `SMTP_PASS` (for Gmail use an App Password) or `RESEND_API_KEY`; optionally `MAIL_FROM` and `PUBLIC_URL`. Without these the app says email sending is not set up and changes apply immediately.
