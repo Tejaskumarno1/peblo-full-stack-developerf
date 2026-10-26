@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus } from 'lucide-react';
 import { Ic } from '../utils/icons';
+import api from '../api/client';
+import { getToken } from '../api/token';
 
 /*
  * Everything a presenter and their audience get on top of "follow me": a dark dock, an audience list,
@@ -330,6 +332,15 @@ export function RecapModal({ recap, onClose, onSend, sent }) {
     const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
     const a = document.createElement('a'); a.href = url; a.download = 'session-recap.md'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
+  const [saved, setSaved] = useState('');
+  const saveNote = async () => {
+    setSaved('busy');
+    try {
+      const md = `${recapMarkdown(recap)}\n## Private notes\n${recap.notes.length ? recap.notes.map((n) => `- ${n.t}`).join('\n') : '- none'}\n`;
+      const { data } = await api.post('/notes', { title: `Session recap, ${new Date().toLocaleDateString()}`, content: md, tags: [] });
+      setSaved(data?.note?.id || 'done');
+    } catch { setSaved('fail'); }
+  };
   const answered = recap.questions.filter((q) => q.state === 'answered').length;
   const stillOpen = recap.questions.filter((q) => q.state === 'open');
   const rs = recap.reacts || { up: 0, idea: 0, heart: 0 };
@@ -350,7 +361,7 @@ export function RecapModal({ recap, onClose, onSend, sent }) {
           <div><h5>Polls</h5>{(recap.polls || []).length === 0 ? <p className="pp-empty">No polls.</p> : recap.polls.map((p, i) => <div className="pp-q" key={i}><b>{p.q}</b>{p.opts.map((o, j) => <div key={j}>{o}: {p.counts[j] || 0}</div>)}</div>)}</div>
           <div><h5>Reactions</h5><div className="pp-q" data-testid="recap-reacts">Like {rs.up}, Got it {rs.idea}, Love it {rs.heart}</div></div>
         </div>}
-        <div className="row">{onSend && <button type="button" onClick={send} disabled={sent} data-testid="recap-send"><Send size={15} />{sent ? 'Sent to everyone' : 'Send to everyone'}</button>}<button type="button" onClick={download} data-testid="recap-download"><Download size={15} />Download notes</button><button type="button" className="go" data-testid="recap-done" onClick={onClose}>Done</button></div>
+        <div className="row">{onSend && <button type="button" onClick={send} disabled={sent} data-testid="recap-send"><Send size={15} />{sent ? 'Sent to everyone' : 'Send to everyone'}</button>}{getToken() && <button type="button" onClick={saveNote} disabled={saved === 'busy' || (saved !== '' && saved !== 'fail')} data-testid="recap-save"><StickyNote size={15} />{saved === 'busy' ? 'Saving' : saved === 'fail' ? 'Try again' : saved ? 'Saved to your notes' : 'Save as a note'}</button>}<button type="button" onClick={download} data-testid="recap-download"><Download size={15} />Download notes</button><button type="button" className="go" data-testid="recap-done" onClick={onClose}>Done</button></div>
       </section>
     </div>,
     host,

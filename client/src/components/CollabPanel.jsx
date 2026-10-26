@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock, Eye, Link2, MoreHorizontal, Pencil, UserMinus, WifiOff, X, Zap } from 'lucide-react';
 import { peerColor } from '../utils/peerCursors';
 import ShareQr, { QR_CSS } from './ShareQr';
+import PollManager from './PollManager';
 import './collab.css';
 
 /** The people-on-the-link UI shared by the notes editor and the public share page. All data comes from the server's presence list. */
@@ -22,9 +23,10 @@ export const left = (iso) => {
   const h = ms / 3600000;
   return h < 1 ? `${Math.max(1, Math.round(ms / 60000))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
 };
+const fmtSecs = (s) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`);
 export const STATUS = { editing: 'Editing', viewing: 'Viewing', reading: 'Reading', idle: 'Idle' };
 const WORDS = { viewed: 'opened the note', edited: 'edited the note', merged: 'edited (merged with other changes)', clash: 'edited (both versions kept)' };
-const EVENT_WORDS = { joined: 'joined', left: 'left', back: 'reconnected', knock: 'is asking to join' };
+const EVENT_WORDS = { joined: 'joined', left: 'left', back: 'reconnected', knock: 'is asking to join', extend: 'asked to keep the link going' };
 
 /** Round person badge: a colour of their own (the same one as their cursor), their initials, and a status dot. */
 export function Avatar({ v, size = 36 }) {
@@ -106,7 +108,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 
 export function CollabPanel({
   viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole,
+  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -194,13 +196,16 @@ export function CollabPanel({
             <h3 className="cp-h">Access</h3>
             <div className="cp-line"><Eye size={14} />{canEdit ? 'Anyone with the link can view and edit' : 'Anyone with the link can view'}</div>
             <div className={`cp-line${soon ? ' soon' : ''}`} data-testid="live-expiry"><Clock size={14} />{expiresAt ? `Link ends in ${left(expiresAt)}` : 'Link never ends'}</div>
+            {extendRequest && <div className="cp-extreq" data-testid="extend-request"><span><b>{extendRequest.by}</b> asked to keep this link going</span><span><button type="button" data-testid="extend-req-1" disabled={busy} onClick={() => onExtend?.(1)}>+1 day</button><button type="button" disabled={busy} onClick={() => onExtend?.(7)}>+7 days</button></span></div>}
             <div className="cp-ext">
               <button type="button" disabled={busy} onClick={() => onExtend?.(1)}>+1 day</button>
               <button type="button" disabled={busy} onClick={() => onExtend?.(7)}>+7 days</button>
               <button type="button" disabled={busy} onClick={() => onExtend?.(null)}>Never</button>
             </div>
             {onApproval && <label className="cp-appr"><input type="checkbox" data-testid="approval-toggle" checked={!!approval} onChange={(e) => onApproval(e.target.checked)} /><span><b>Let people in one by one</b><small>New visitors wait until you admit them.</small></span></label>}
-            {link && <ShareQr link={link} />}
+            {shortLink && <div className="cp-short" data-testid="short-link"><span>Short link</span><code>{shortLink.replace(/^https?:\/\//, '')}</code><button type="button" onClick={() => navigator.clipboard?.writeText(shortLink).catch(() => {})}>Copy</button></div>}
+            {link && <ShareQr link={shortLink || link} />}
+            {noteId && <PollManager noteId={noteId} />}
             {!confirmOff
               ? <button type="button" className="cp-off" onClick={() => setConfirmOff(true)}>Turn sharing off</button>
               : <div className="cp-confirm">Everyone loses access to this link.<span><button type="button" className="danger" disabled={busy} onClick={() => { setConfirmOff(false); onTurnOff?.(); }}>Turn off</button><button type="button" onClick={() => setConfirmOff(false)}>Keep</button></span></div>}
@@ -215,6 +220,12 @@ export function CollabPanel({
           <div><b>{stats.edits}</b><small>Edits</small></div>
           <svg viewBox="0 0 70 26" aria-label="Visits in the last 7 days" role="img">{(() => { const mx = Math.max(1, ...stats.perDay); return stats.perDay.map((n, i) => <rect key={i} x={i * 10 + 1} y={24 - Math.round((n / mx) * 22) - 1} width="8" height={Math.max(2, Math.round((n / mx) * 22))} rx="2" fill="currentColor" opacity={n ? 0.85 : 0.25} />); })()}</svg>
         </div>}
+        {stats?.readers?.count > 0 && <div className="cp-readers" data-testid="reader-stats">
+          <div className="cp-rhead"><div><b data-testid="reader-finish">{stats.readers.finishRate}%</b><small>Read to the end</small></div><div><b>{fmtSecs(stats.readers.avgSecs)}</b><small>Average time</small></div><div><b>{stats.readers.count}</b><small>Readers</small></div></div>
+          <div className="cp-stops" role="img" aria-label="Where readers stop">{(() => { const mx = Math.max(1, ...stats.readers.stops); return stats.readers.stops.map((n, i) => <i key={i} title={`${i * 10}% to ${i * 10 + 10}%: ${n}`} style={{ height: `${Math.max(3, Math.round((n / mx) * 34))}px`, opacity: n ? 0.85 : 0.25 }} />); })()}</div>
+          <small className="cp-stopl">Where readers stop, top to bottom of the page</small>
+          <ul className="cp-rlist">{stats.readers.people.slice(0, 6).map((r, i) => <li key={i}><span>{r.name}</span><em>{r.progress}% · {fmtSecs(r.secs)}</em></li>)}</ul>
+        </div>}
         <h3 className="cp-h">Recent activity {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
         {log.length === 0 && <p className="cp-empty">Nothing yet.</p>}
         <ul className="cp-log" data-testid="live-activity">
@@ -225,7 +236,7 @@ export function CollabPanel({
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
       </div>}
 
-      <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}'}</style>
+      <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}.cp-readers{padding:6px 0 10px;border-top:1px solid rgba(127,127,127,.25)}.cp-rhead{display:flex;gap:18px}.cp-rhead div{display:flex;flex-direction:column}.cp-rhead b{font-size:17px}.cp-rhead small,.cp-stopl{opacity:.65;font-size:11.5px}.cp-stops{display:flex;align-items:flex-end;gap:3px;height:36px;margin:8px 0 2px}.cp-stops i{flex:1;background:currentColor;border-radius:2px}.cp-rlist{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cp-rlist li{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.cp-rlist em{opacity:.65;font-style:normal}.cp-extreq{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(226,80,26,.1);font-size:12.5px}.cp-extreq button{margin-left:6px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}.cp-short{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}.cp-short span{opacity:.65}.cp-short code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.cp-short button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}'}</style>
       {tip && <div className="cp-tip"><Zap size={15} /><span><b>Collaboration makes ideas better</b>Everyone here sees changes as they are saved. Edits are merged, never overwritten.</span><button type="button" onClick={() => { setTip(false); try { localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } }}>Got it</button></div>}
     </aside>
   );

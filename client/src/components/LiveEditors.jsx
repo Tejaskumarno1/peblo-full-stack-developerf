@@ -4,6 +4,7 @@ import api from '../api/client';
 import { caretSelection, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
 import { setLive, useLive } from '../utils/liveStore';
 import { CollabBar, CollabPanel, useCollabEvents } from './CollabPanel';
+import { useAuth } from '../context/AuthContext';
 
 const SOON = 48 * 3600 * 1000;
 
@@ -16,6 +17,10 @@ export default function LiveEditors() {
   const { pathname } = useLocation();
   const noteId = matchPath('/notes/:id', pathname)?.params.id || null;
   const live = useLive();
+  const { uiStyle } = useAuth();
+  const styleRef = useRef(uiStyle);
+  styleRef.current = uiStyle;
+  const askedExt = useRef(null);
   const [activity, setActivity] = useState([]);
   const [stats, setStats] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -67,11 +72,14 @@ export default function LiveEditors() {
 
   const poll = useCallback(async (id) => {
     const params = {};
+    if (['soft', 'river', 'orbit'].includes(styleRef.current)) params.style = styleRef.current;
     if (Date.now() - typedAt.current < 3000) params.typing = 1;
     if (cursorRef.current !== null) { params.cursor = cursorRef.current; if (selRef.current) { params.selStart = selRef.current.start; params.selEnd = selRef.current.end; } }
     const { data } = await api.get(`/share/note/${id}/live`, { params });
     sharedRef.current = !!data.shared;
-    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [] });
+    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [], extendRequest: data.extendRequest || null });
+    const exAt = data.extendRequest?.at || null;
+    if (exAt && askedExt.current !== exAt) { if (askedExt.current !== null) noteRef.current('extend', data.extendRequest.by); askedExt.current = exAt; } else if (!exAt) askedExt.current = '';
     // someone new at the door: say so once
     const ids = new Set((data.waiting || []).map((w) => w.id));
     if (knocked.current) (data.waiting || []).forEach((w) => { if (!knocked.current.has(w.id)) noteRef.current('knock', w.name); });
@@ -79,8 +87,9 @@ export default function LiveEditors() {
   }, []);
 
   useEffect(() => {
-    setLive({ noteId, shared: false, token: null, viewers: [], expiresAt: null, open: false, offline: false, approval: false, waiting: [] });
+    setLive({ noteId, shared: false, token: null, viewers: [], expiresAt: null, open: false, offline: false, approval: false, waiting: [], extendRequest: null, short: '' });
     knocked.current = null;
+    askedExt.current = null;
     sharedRef.current = false;
     fails.current = 0;
     if (!noteId || noteId === '__draft__') return undefined;
@@ -114,6 +123,13 @@ export default function LiveEditors() {
     const t = window.setInterval(draw, 1000);
     return () => window.clearInterval(t);
   }, [live.viewers]);
+
+  useEffect(() => {
+    if (!live.open || !noteId || !live.token || live.short) return undefined;
+    let gone = false;
+    api.get(`/share/note/${noteId}/short`).then(({ data }) => { if (!gone && data.code) setLive({ short: data.code }); }).catch(() => {});
+    return () => { gone = true; };
+  }, [live.open, noteId, live.token, live.short]);
 
   const loadActivity = useCallback(async () => {
     try { const { data } = await api.get(`/share/note/${noteId}/activity`); setActivity(data.activity || []); setStats(data.stats || null); } catch { /* shown empty */ }
@@ -163,6 +179,7 @@ export default function LiveEditors() {
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}
           waiting={live.waiting} approval={live.approval} onApproval={setApproval} onAdmit={admit} onDecline={decline} onRole={setRole}
           followId={followId} onFollow={setFollowId} link={live.token ? `${window.location.origin}/s/note/${live.token}` : ''}
+          shortLink={live.short ? `${window.location.origin}/l/${live.short}` : ''} noteId={noteId} extendRequest={live.extendRequest}
           onClose={() => setLive({ open: false })}
         />
       </div>}

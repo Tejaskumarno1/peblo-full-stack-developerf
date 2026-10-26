@@ -33,6 +33,7 @@ export default function ShareQr({ link }) {
       <button type="button" className="sq-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="qr-toggle"><QrCode size={14} />{open ? 'Hide QR code' : 'Show QR code'}</button>
       {open && <div className="sq-card">
         {small ? <img src={small} alt="QR code for the share link" width={168} height={168} data-testid="qr-img" /> : <span className="sq-wait" />}
+        <small className="sq-url" data-testid="qr-small-url">{shown}</small>
         <button type="button" className="sq-big" onClick={() => setBig(true)} data-testid="qr-big"><Maximize2 size={13} />Show big for a room</button>
       </div>}
       {big && <div className="sq-full" role="dialog" aria-label="Scan to open this note" data-testid="qr-full" onClick={() => setBig(false)}>
@@ -53,6 +54,7 @@ export const QR_CSS = `
 .sq-toggle:hover,.sq-big:hover{background:rgba(127,127,127,.12)}
 .sq-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:8px}
 .sq-card img{background:#fff;padding:6px;border-radius:10px;border:1px solid var(--line,#ddd)}
+.sq-url{font-size:12px;opacity:.75;word-break:break-all}
 .sq-wait{display:block;width:168px;height:168px;border-radius:10px;background:rgba(127,127,127,.15)}
 .sq-full{position:fixed;inset:0;z-index:2147483000;background:rgba(10,10,14,.92);display:flex;align-items:center;justify-content:center;padding:24px}
 .sq-panel{background:#fff;color:#111;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;align-items:center;gap:14px;max-width:min(92vw,720px)}

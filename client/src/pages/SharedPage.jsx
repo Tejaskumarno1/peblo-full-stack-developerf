@@ -1,3 +1,4 @@
+import PagePolls from '../components/PagePolls';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
@@ -72,6 +73,8 @@ export default function SharedPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [scrollProgress, setScrollProgress] = useState(0);
+  const progressRef = useRef(0);
+  const [extAsked, setExtAsked] = useState(false);
   const [exporting, setExporting] = useState('');
   const [activeHeading, setActiveHeading] = useState('');
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
@@ -130,7 +133,7 @@ export default function SharedPage() {
   const menuRef = useRef(null);
   // how this person likes to read the page (kept in this browser only)
   const [tocOpen, setTocOpen] = useState(() => { try { return localStorage.getItem('peblo-share-toc') !== 'closed'; } catch { return true; } });
-  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false }; } });
+  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, style: 'follow', ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')) }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: true, quiet: false, pin: false, style: 'follow' }; } });
   const [lookOpen, setLookOpen] = useState(false);
   const lookRef = useRef(null);
   const toggleToc = () => setTocOpen((open) => { const next = !open; try { localStorage.setItem('peblo-share-toc', next ? 'open' : 'closed'); } catch { /* not remembered */ } return next; });
@@ -146,6 +149,11 @@ export default function SharedPage() {
     document.addEventListener('mousedown', out); document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', out); document.removeEventListener('keydown', esc); };
   }, [lookOpen]);
+  const effStyle = !look.style || look.style === 'follow' ? (data?.ownerStyle || 'soft') : look.style;
+  useEffect(() => {
+    document.documentElement.dataset.shareStyle = effStyle;
+    return () => { delete document.documentElement.dataset.shareStyle; };
+  }, [effStyle]);
   const articleRef = useRef(null);
   // full screen, hidden tool bar, tucked-away top bar, shortcuts
   const [fullscreen, setFullscreen] = useState(false);
@@ -473,7 +481,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end }),
+      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end, progress: Math.round(progressRef.current) }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -584,6 +592,12 @@ export default function SharedPage() {
     : typers.length === 2 ? `${typers[0].name} and ${typers[1].name} are typing`
       : typers.length > 2 ? `${typers.length} people are typing` : '';
 
+  const askExtend = async () => {
+    try {
+      const r = await fetch(`/api/public/${kindPath}/${encodeURIComponent(token)}/extend-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), name: nameRef.current || user?.name || undefined }) });
+      if (r.ok) { setExtAsked(true); showToast('Asked the owner to keep this link going'); } else showToast('Could not ask the owner');
+    } catch { showToast('Could not reach the owner'); }
+  };
   const showToast = (message) => {
     setToast(message);
     clearTimeout(toastTimer.current);
@@ -700,6 +714,7 @@ export default function SharedPage() {
       if (scroller) { const y = scroller.scrollTop; if (y > lastTop + 6 && y > 120) setTopHidden(true); else if (y < lastTop - 6 || y < 60) setTopHidden(false); lastTop = y; }
       const range = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
       setScrollProgress(range > 0 ? Math.min(100, (scroller.scrollTop / range) * 100) : 0);
+      progressRef.current = range > 0 ? Math.min(100, (scroller.scrollTop / range) * 100) : 100;
     };
     window.addEventListener('resize', updateProgress);
     const scroller = articleRef.current;
@@ -764,6 +779,7 @@ export default function SharedPage() {
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
           </button>}
+          {data?.canEdit && previewMode && <div className="seg preview-roles" role="group" aria-label="Preview as" data-testid="preview-roles"><button type="button" className="on" aria-pressed="true">View only</button><button type="button" data-testid="preview-as-edit" aria-pressed="false" onClick={() => setPreviewMode(false)}>Can edit</button></div>}
           {data && viewers.length > 0 && <button type="button" className="avatars" aria-label={`${viewers.length} people viewing this page. Open live collaboration`} aria-expanded={panelOpen} title={`${viewers.length} viewing now`} onClick={() => setPanelOpen((open) => !open)}>
             {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}${viewer.typing && !viewer.self ? ' typing' : ''}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}${viewer.typing && !viewer.self ? ' · typing' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
             {viewers.length > 3 && <span className="av avatar-extra">+{viewers.length - 3}</span>}
@@ -781,6 +797,7 @@ export default function SharedPage() {
               <div className="look-row"><span>Text size</span><div className="seg" role="group" aria-label="Text size">{[['s', 'A−'], ['m', 'A'], ['l', 'A+'], ['xl', 'A++']].map(([v, l]) => <button key={v} type="button" className={look.size === v ? 'on' : ''} aria-pressed={look.size === v} data-testid={`look-size-${v}`} onClick={() => setLookPref({ size: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Page width</span><div className="seg" role="group" aria-label="Page width">{[['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']].map(([v, l]) => <button key={v} type="button" className={look.width === v ? 'on' : ''} aria-pressed={look.width === v} data-testid={`look-width-${v}`} onClick={() => setLookPref({ width: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Style</span><div className="seg" role="group" aria-label="Style">{[['follow', 'Owner'], ['soft', 'Soft'], ['river', 'River'], ['orbit', 'Orbit']].map(([v, l]) => <button key={v} type="button" className={(look.style || 'follow') === v ? 'on' : ''} aria-pressed={(look.style || 'follow') === v} data-testid={`look-style-${v}`} onClick={() => setLookPref({ style: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
               <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's mouse pointers</span></label>
               <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no join or typing notices)</span></label>
@@ -851,7 +868,7 @@ export default function SharedPage() {
                 <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
                 <span>Updated {when(data.updatedAt)}</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
-                {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span></>}
+                {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
               {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
                 {!joined && <p className="welcome-note" data-testid="welcome-note"><Users size={16} /><span>Welcome. Pick a name and a colour so the others here can tell who you are.{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</span></p>}
@@ -866,6 +883,7 @@ export default function SharedPage() {
                     collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
                     onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
+              <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}
 
             {data.kind === 'todo' && <>

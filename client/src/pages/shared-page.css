@@ -437,3 +437,11 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 /* Stage 4: waiting room */
 .pb-shared .wait-name { display: inline-flex; flex-direction: column; gap: 6px; margin-top: 18px; font-size: 13px; text-align: left; }
 .pb-shared .wait-name input { min-width: 240px; border: 1px solid var(--line, #d9d4cc); border-radius: 10px; padding: 10px 12px; font: inherit; background: transparent; color: inherit; }
+
+/* Stage 5: extend ask, owner style */
+.pb-shared .ext-ask { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; cursor: pointer; opacity: .85; }
+.pb-shared .ext-asked { font-size: 12px; opacity: .7; }
+[data-share-style="river"] .pb-shared .cover, [data-share-style="river"] .pb-shared .taskcard, [data-share-style="river"] .pb-shared .menu, [data-share-style="river"] .page-polls .pp { border-radius: 4px; box-shadow: none; }
+[data-share-style="river"] .pb-shared article h1, [data-share-style="river"] .pb-shared article h2 { letter-spacing: -.01em; font-weight: 600; }
+[data-share-style="orbit"] .pb-shared .by, [data-share-style="orbit"] .pb-shared .cover-chips, [data-share-style="orbit"] .pb-shared .toc a, [data-share-style="orbit"] .pb-shared .meta { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+[data-share-style="orbit"] .pb-shared .cover, [data-share-style="orbit"] .pb-shared .taskcard { border-radius: 6px; }

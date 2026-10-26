@@ -27,7 +27,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-testid="qr-full"] img'), null, { timeout: 5000 });
   const w = await full.locator('img').evaluate((i) => i.getBoundingClientRect().width);
   check('big QR is large', w >= 400, String(w));
-  check('big view shows the link text', (await page.getByTestId('qr-url').innerText()).includes(`/s/note/${tok}`));
+  check('big view shows the link text', (await page.getByTestId('qr-url').innerText()).match(new RegExp(`/s/note/${tok}|/l/[a-z0-9]{6}`)));
   await page.screenshot({ path: `${SHOTS}/qr-2-big.png` });
   await page.keyboard.press('Escape');
   check('Esc closes only the big view', (await full.count()) === 0 && await page.getByTestId('live-panel').isVisible());
