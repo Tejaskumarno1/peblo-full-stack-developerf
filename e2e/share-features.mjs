@@ -22,7 +22,7 @@ try {
   g.on('pageerror', (e) => errors.push(e.message));
   await g.goto(`${base}/s/note/${tok}`);
   await ready(g);
-  check('1 cover header with chips', await g.locator('[data-testid="cover"] li').count() >= 2);
+  check('1 the page shows its read time and word count, with no banner', /min read/.test(await g.getByTestId('by-stats').innerText()) && (await g.locator('[data-testid="cover"]').count()) === 0);
   check('2 welcome note for a new guest', await g.locator('[data-testid="welcome-note"]').isVisible());
   await g.getByLabel('Your name').fill('Mia');
   await g.getByLabel('Your name').blur();
@@ -71,7 +71,7 @@ try {
   await g.locator('[data-testid="comment-send"]').click();
   check('14 margin badge appears on the commented block', await until(async () => (await g.locator('[data-testid="margin-badge"]').count()) >= 1, 8000));
   check('14b the owner sees it too', await until(async () => (await page.locator('[data-testid="margin-badge"]').count()) >= 1, 8000));
-  if (await g.locator('[data-testid="comments-panel"]').count()) await g.locator('[data-testid="comments-button"]').click();
+  if (await g.locator('[data-testid="comments-panel"]').count()) await g.getByLabel('Close comments').click();
   await g.locator('[data-testid="margin-badge"]').first().click();
   check('14c clicking the badge opens the thread', await until(async () => (await g.locator('[data-testid="comments-panel"]').count()) === 1));
 

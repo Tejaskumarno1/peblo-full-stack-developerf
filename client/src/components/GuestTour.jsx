@@ -31,14 +31,15 @@ export default function GuestTour({ ready }) {
         <button type="button" data-testid="tour-next" onClick={() => (last ? done() : setI(i + 1))}>{last ? 'Got it' : 'Next'}</button>
       </div>
       <style>{`
-.gt{position:fixed;left:16px;bottom:18px;z-index:60;width:272px;background:#1b1b22;color:#f4f4f6;border-radius:14px;padding:14px 16px 12px;box-shadow:0 14px 40px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:4px;font-size:13px}
+.gt{position:fixed;left:16px;bottom:72px;z-index:1090;width:272px;background:#1b1b22;color:#f4f4f6;border-radius:14px;padding:14px 16px 12px;box-shadow:0 14px 40px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:4px;font-size:13px}
 .gt small{opacity:.6;font-size:11.5px}
 .gt b{font-size:14.5px}
 .gt p{margin:0;line-height:1.45;opacity:.9}
+@media(max-width:640px){.gt{bottom:calc(140px + env(safe-area-inset-bottom,0px));left:12px}}
 .gt-row{display:flex;justify-content:flex-end;margin-top:6px}
 .gt-row button{border:0;border-radius:8px;background:#fff;color:#111;font:inherit;font-weight:600;padding:6px 14px;cursor:pointer}
 .gt-x{position:absolute;top:8px;right:8px;border:0;background:transparent;color:inherit;opacity:.7;cursor:pointer;display:grid;place-items:center}
-@media (max-width:760px){.gt{left:12px;right:12px;width:auto;bottom:78px}}
+@media (max-width:760px){.gt{left:12px;right:12px;width:auto;bottom:calc(140px + env(safe-area-inset-bottom,0px))}}
       `}</style>
     </div>
   );

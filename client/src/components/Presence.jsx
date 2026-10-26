@@ -93,7 +93,7 @@ function ReadingRail({ root, peers, tick }) {
   if (blocks.length < 8) return null;
   const sc = scrollerOf(root);
   const isDoc = sc === document.scrollingElement || sc === document.documentElement;
-  const box = isDoc ? { top: 70, bottom: window.innerHeight - 16 } : (() => { const r = sc.getBoundingClientRect(); return { top: r.top + 12, bottom: r.bottom - 12 }; })();
+  const box = isDoc ? { top: 70, bottom: window.innerHeight - 16, right: 5 } : (() => { const r = sc.getBoundingClientRect(); return { top: r.top + 12, bottom: r.bottom - 12, right: Math.max(2, Math.round(window.innerWidth - r.right + 3)) }; })();
   const index = new Map(blocks.map((el, i) => [el.getAttribute('data-id'), i]));
   const at = (v) => (v && index.has(v.b) ? (index.get(v.b) + (v.f || 0)) / blocks.length : null);
   const others = peers.filter((p) => !p.me);
@@ -105,7 +105,7 @@ function ReadingRail({ root, peers, tick }) {
   const span = Math.max(40, box.bottom - box.top);
   const thumb = isDoc ? sc.clientHeight / sc.scrollHeight : sc.clientHeight / sc.scrollHeight;
   return createPortal(
-    <div className="pb-rail" data-testid="reading-rail" style={{ top: box.top, height: span }} aria-label="Where everyone is reading">
+    <div className="pb-rail" data-testid="reading-rail" style={{ top: box.top, height: span, right: box.right }} aria-label="Where everyone is reading">
       {mine !== null && <i className="me" title="You" style={{ top: `${mine * 100}%`, height: `${clamp(thumb, 0.04, 1) * 100}%` }} />}
       {others.map((p) => {
         const f = at(p.view);
@@ -396,7 +396,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
             })}
             {hidden > 0 && <span className="pb-avatar more" aria-label={`${hidden} more`}>+{hidden}</span>}
             <button type="button" className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => { if (presenting) { setPresenting(false); setStartOpen(false); } else setStartOpen((v) => !v); }}><Ic name="presentation" size={15} /></button>
-            <span className="pb-presence-count" aria-live="polite">{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</span>
+            <button type="button" className="pb-presence-count" data-testid="open-collab" title="Who is here" aria-label="Open live collaboration" aria-live="polite" onClick={() => window.dispatchEvent(new Event('pb-open-collab'))}>{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</button>
           </div>
           {startOpen && !presenting && <PresentStart mode={mode} setMode={setMode} qOn={qOn} setQOn={setQOn} notesOn={notesOn} setNotesOn={setNotesOn} count={others.length} onStart={() => { setStartOpen(false); setPresenting(true); }} onCancel={() => setStartOpen(false)} />}
           {presenters.map((p) => (
@@ -433,6 +433,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
       )}
       <style>{PRESENT_CSS}</style>
       <style>{`
+        .pb-presence-count { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0 4px; }
         .pb-presence-wrap { position: relative; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
         .pb-presence { pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; border-radius: 999px; background: color-mix(in srgb, var(--pb-bg, #fff) 92%, transparent); border: 1px solid color-mix(in srgb, currentColor 14%, transparent); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(0,0,0,.08); font-size: 12px; }
         .pb-avatar { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--c); background: var(--c); color: #fff; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; position: relative; padding: 0; cursor: pointer; line-height: 1; }

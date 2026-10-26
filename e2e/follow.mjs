@@ -25,7 +25,7 @@ try {
   await page.goto(base + '/notes/' + note.id);
   await ready(page);
   const gc = await ctx.browser().newContext({ viewport: { width: 900, height: 700 } });
-  await gc.addInitScript(() => { try { localStorage.setItem('peblo-guest-name', 'Gia'); } catch { /* ignore */ } });
+  await gc.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); localStorage.setItem('peblo-guest-name', 'Gia'); } catch { /* ignore */ } });
   const g = await gc.newPage();
   const errors = [];
   g.on('pageerror', (e) => errors.push(e.message));

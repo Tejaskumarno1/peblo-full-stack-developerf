@@ -154,6 +154,11 @@ export default function SharedPage() {
     document.documentElement.dataset.shareStyle = effStyle;
     return () => { delete document.documentElement.dataset.shareStyle; };
   }, [effStyle]);
+  useEffect(() => {
+    const toggle = () => setPanelOpen((open) => !open);
+    window.addEventListener('pb-open-collab', toggle);
+    return () => window.removeEventListener('pb-open-collab', toggle);
+  }, []);
   const articleRef = useRef(null);
   // full screen, hidden tool bar, tucked-away top bar, shortcuts
   const [fullscreen, setFullscreen] = useState(false);
@@ -780,10 +785,6 @@ export default function SharedPage() {
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
           </button>}
           {data?.canEdit && previewMode && <div className="seg preview-roles" role="group" aria-label="Preview as" data-testid="preview-roles"><button type="button" className="on" aria-pressed="true">View only</button><button type="button" data-testid="preview-as-edit" aria-pressed="false" onClick={() => setPreviewMode(false)}>Can edit</button></div>}
-          {data && viewers.length > 0 && <button type="button" className="avatars" aria-label={`${viewers.length} people viewing this page. Open live collaboration`} aria-expanded={panelOpen} title={`${viewers.length} viewing now`} onClick={() => setPanelOpen((open) => !open)}>
-            {viewers.slice(0, 3).map((viewer, index) => <span key={viewer.id} className={`av viewer-avatar avatar-${index}${viewer.typing && !viewer.self ? ' typing' : ''}`} title={`${viewer.name}${viewer.self ? ' (you)' : ''}${viewer.typing && !viewer.self ? ' · typing' : ''}`} aria-label={`${viewer.name}${viewer.self ? ' (you)' : ''}`}>{initials(viewer.name)}</span>)}
-            {viewers.length > 3 && <span className="av avatar-extra">+{viewers.length - 3}</span>}
-          </button>}
           {data && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
             {saveBusy ? <LoaderCircle className="spin" size={16} /> : savedCopy ? <Check size={16} /> : <Clipboard size={16} />}
             <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
@@ -855,18 +856,11 @@ export default function SharedPage() {
               {data.canEdit && !previewMode
                 ? <textarea className="title-in" rows={1} aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} ref={fitTitle} onInput={(event) => fitTitle(event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} onChange={(event) => { draft.current.title = event.target.value.replace(/\n/g, ' '); typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
-              <div className="cover" data-testid="cover"><i aria-hidden="true" /><i aria-hidden="true" /><i aria-hidden="true" />
-                <ul className="cover-chips" aria-label="About this page">
-                  <li><Clock size={14} />{Math.max(1, Math.ceil(wordCount / 200))} min read</li>
-                  <li><FileText size={14} />{wordCount} words</li>
-                  <li><Users size={14} />{others.length + 1} here now</li>
-                  <li>{data.canEdit ? <Pencil size={14} /> : <Eye size={14} />}{data.canEdit ? 'Can edit' : 'View only'}</li>
-                </ul>
-              </div>
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
                 <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
                 <span>Updated {when(data.updatedAt)}</span>
+                <span className="dotsep">·</span><span data-testid="by-stats">{Math.max(1, Math.ceil(wordCount / 200))} min read · {wordCount} words</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>

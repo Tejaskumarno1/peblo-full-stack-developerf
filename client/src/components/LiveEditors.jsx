@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { caretSelection, scrollToPeerBlock, showPeers } from '../utils/peerCursors';
-import { setLive, useLive } from '../utils/liveStore';
+import { getLive, setLive, useLive } from '../utils/liveStore';
 import { CollabBar, CollabPanel, useCollabEvents } from './CollabPanel';
 import { useAuth } from '../context/AuthContext';
 
@@ -130,6 +130,12 @@ export default function LiveEditors() {
     api.get(`/share/note/${noteId}/short`).then(({ data }) => { if (!gone && data.code) setLive({ short: data.code }); }).catch(() => {});
     return () => { gone = true; };
   }, [live.open, noteId, live.token, live.short]);
+
+  useEffect(() => {
+    const toggle = () => setLive({ open: !getLive().open });
+    window.addEventListener('pb-open-collab', toggle);
+    return () => window.removeEventListener('pb-open-collab', toggle);
+  }, []);
 
   const loadActivity = useCallback(async () => {
     try { const { data } = await api.get(`/share/note/${noteId}/activity`); setActivity(data.activity || []); setStats(data.stats || null); } catch { /* shown empty */ }

@@ -43,7 +43,7 @@ try {
   await g.getByTestId('typing-pill').waitFor({ timeout: 8000 });
   const pill = await g.getByTestId('typing-pill').innerText();
   check('guest sees the owner typing', /is typing/.test(pill), pill);
-  check('typing avatar pulses in the header', (await g.locator('.av.typing').count()) >= 1);
+  check('typing avatar pulses in the people pill', (await g.locator('.pb-avatar.typing').count()) >= 1);
   await g.screenshot({ path: `${SHOTS}/live-3-guest-sees-owner-typing.png` });
   await ownerTyping;
 
