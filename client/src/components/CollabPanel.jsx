@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Clock, Eye, Link2, MoreHorizontal, Pencil, UserMinus, WifiOff, X, Zap } from 'lucide-react';
+import { Bell, ChevronDown, Clock, Eye, Link2, MoreHorizontal, Pencil, UserMinus, WifiOff, X, Zap } from 'lucide-react';
 import { peerColor } from '../utils/peerCursors';
 import ShareQr, { QR_CSS } from './ShareQr';
 import PollManager from './PollManager';
@@ -114,6 +114,8 @@ export function CollabPanel({
   const [menu, setMenu] = useState(null);
   const [tip, setTip] = useState(() => { try { return localStorage.getItem('peblo-collab-tip') !== '1'; } catch { return true; } });
   const [confirmOff, setConfirmOff] = useState(false);
+  const [bell, setBell] = useState(false);
+  const [seenAt, setSeenAt] = useState(() => Date.now());
   const [, tick] = useState(0);
   useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 5000); return () => window.clearInterval(t); }, []);
   const ref = useRef(null);
@@ -137,10 +139,19 @@ export function CollabPanel({
     ...activity.map((a, i) => ({ key: `${a.at}-${i}`, who: a.actor, text: WORDS[a.action] || a.action, at: new Date(a.at).getTime() })),
   ].sort((a, b) => b.at - a.at).slice(0, 40);
 
+  const unread = waiting.length + (extendRequest ? 1 : 0) + events.filter((e) => e.kind === 'joined' && e.at > seenAt).length;
   return (
     <aside className="cp" role="dialog" aria-label="Live collaboration" data-testid="live-panel" ref={ref}>
       <div className="cp-head">
         <span className="cp-title"><i className={offline ? 'off' : ''} />Live collaboration</span>
+        {mode === 'owner' && <span className="cp-bell-wrap"><button type="button" className="cp-bell" data-testid="notif-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={bell} onClick={() => { setBell((v) => !v); setSeenAt(Date.now()); }}><Bell size={15} />{unread > 0 && <i data-testid="notif-count">{unread}</i>}</button>
+          {bell && <div className="cp-notifs" data-testid="notif-list" role="menu">
+            {waiting.map((w) => <div className="cp-n" key={w.id}><b>{w.name}</b> is asking to join<span><button type="button" onClick={() => onAdmit?.(w.id)}>Let in</button></span></div>)}
+            {extendRequest && <div className="cp-n"><b>{extendRequest.by}</b> asked to keep the link going<span><button type="button" onClick={() => onExtend?.(1)}>+1 day</button></span></div>}
+            {log.filter((a) => !(extendRequest && a.text === EVENT_WORDS.extend) && !(waiting.length && a.text === EVENT_WORDS.knock)).slice(0, 5).map((a) => <div className="cp-n" key={a.key}><b>{a.who}</b> {a.text}<small>{ago(a.at)}</small></div>)}
+            {log.length === 0 && waiting.length === 0 && !extendRequest && <p className="cp-empty">Nothing yet.</p>}
+            <button type="button" className="cp-link" onClick={() => { setTab('activity'); setBell(false); }}>See all activity</button>
+          </div>}</span>}
         {mode === 'owner' && onCopy && <button type="button" className="cp-share" onClick={onCopy}><Link2 size={14} />Share</button>}
         <button type="button" className="cp-x" aria-label="Close" onClick={onClose}><X size={16} /></button>
       </div>
@@ -236,7 +247,7 @@ export function CollabPanel({
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
       </div>}
 
-      <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}.cp-readers{padding:6px 0 10px;border-top:1px solid rgba(127,127,127,.25)}.cp-rhead{display:flex;gap:18px}.cp-rhead div{display:flex;flex-direction:column}.cp-rhead b{font-size:17px}.cp-rhead small,.cp-stopl{opacity:.65;font-size:11.5px}.cp-stops{display:flex;align-items:flex-end;gap:3px;height:36px;margin:8px 0 2px}.cp-stops i{flex:1;background:currentColor;border-radius:2px}.cp-rlist{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cp-rlist li{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.cp-rlist em{opacity:.65;font-style:normal}.cp-extreq{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(226,80,26,.1);font-size:12.5px}.cp-extreq button{margin-left:6px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}.cp-short{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}.cp-short span{opacity:.65}.cp-short code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.cp-short button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}'}</style>
+      <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}.cp{position:relative}.cp-bell-wrap{margin-left:auto}.cp-bell{position:relative;border:0;background:transparent;color:inherit;border-radius:8px;padding:5px;cursor:pointer;display:inline-flex}.cp-bell i{position:absolute;top:-2px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:#e2501a;color:#fff;font-size:10px;font-style:normal;display:grid;place-items:center;padding:0 3px}.cp-notifs{position:absolute;left:12px;right:12px;top:54px;z-index:5;max-height:320px;overflow:auto;background:var(--cp-surface,#fff);color:inherit;border:1px solid rgba(127,127,127,.3);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:8px}.cp-n{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 4px;font-size:12.5px;border-bottom:1px solid rgba(127,127,127,.15)}.cp-n span{margin-left:auto}.cp-n small{opacity:.6;margin-left:auto}.cp-n button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:2px 8px;font:inherit;cursor:pointer}.cp-readers{padding:6px 0 10px;border-top:1px solid rgba(127,127,127,.25)}.cp-rhead{display:flex;gap:18px}.cp-rhead div{display:flex;flex-direction:column}.cp-rhead b{font-size:17px}.cp-rhead small,.cp-stopl{opacity:.65;font-size:11.5px}.cp-stops{display:flex;align-items:flex-end;gap:3px;height:36px;margin:8px 0 2px}.cp-stops i{flex:1;background:currentColor;border-radius:2px}.cp-rlist{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cp-rlist li{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.cp-rlist em{opacity:.65;font-style:normal}.cp-extreq{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(226,80,26,.1);font-size:12.5px}.cp-extreq button{margin-left:6px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}.cp-short{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}.cp-short span{opacity:.65}.cp-short code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.cp-short button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}'}</style>
       {tip && <div className="cp-tip"><Zap size={15} /><span><b>Collaboration makes ideas better</b>Everyone here sees changes as they are saved. Edits are merged, never overwritten.</span><button type="button" onClick={() => { setTip(false); try { localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } }}>Got it</button></div>}
     </aside>
   );

@@ -38,6 +38,7 @@ export async function boot() {
   const logs = [];
   page.on('pageerror', (e) => logs.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') logs.push('console: ' + m.text()); });
+  if (process.env.E2E_LOG_STATUS) page.on('response', async (r) => { if (String(r.status()) === process.env.E2E_LOG_STATUS) logs.push(`response ${r.status()} ${r.request().method()} ${r.url()} body=${String(r.request().postData()).slice(0, 300)} ${(await r.text().catch(() => '')).slice(0, 200)}`); });
   let failures = 0;
   const check = (name, ok, extra) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) { failures++; if (extra !== undefined) console.log('      ', String(extra).slice(0, 300)); } };
   const finish = async () => {

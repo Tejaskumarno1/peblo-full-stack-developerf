@@ -204,7 +204,11 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
     setDraft({ quote, mode }); setErr('');
   };
 
-  const shown = roots.filter((c) => (tab === 'open' ? c.status === 'open' : c.status !== 'open')).slice().reverse();
+  const [order, setOrder] = useState('new');
+  const nOpen = roots.filter((c) => c.status === 'open').length;
+  const nDone = roots.length - nOpen;
+  const picked = roots.filter((c) => (tab === 'open' ? c.status === 'open' : c.status !== 'open')).slice();
+  const shown = order === 'new' ? picked.reverse() : picked;
   const col = dark ? { bg: '#1f2430', fg: '#e7e9ee', line: '#333a49', soft: '#2a3040' } : { bg: '#ffffff', fg: '#1b1f2a', line: '#dfe3ea', soft: '#f3f5f9' };
 
   const renderCard = (c) => {
@@ -255,8 +259,8 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
           <header>
             <h3>Comments</h3>
             <div className="tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open</button>
-              <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Done</button>
+              <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open{nOpen > 0 ? ` ${nOpen}` : ''}</button>
+              <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Done{nDone > 0 ? ` ${nDone}` : ''}</button>
             </div>
             <button type="button" className="x" aria-label="Close comments" onClick={() => setOpen(false)}><Ic name="x" size={15} /></button>
           </header>
@@ -273,6 +277,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
               </div>
             )}
             {err && <p role="alert" className="pb-cerr">{err === 'moved' ? 'Those words changed, so this suggestion cannot be applied any more.' : err}</p>}
+            {shown.length > 1 && <div className="pb-csort"><button type="button" data-testid="comment-sort" onClick={() => setOrder((o) => (o === 'new' ? 'old' : 'new'))}>{order === 'new' ? 'Newest first' : 'Oldest first'}</button></div>}
             <ul>
               {shown.map((c) => renderCard(c))}
               {shown.length === 0 && <li className="hint">{tab === 'open' ? 'No open comments. Select some words and press Comment.' : 'Nothing finished yet.'}</li>}
@@ -294,6 +299,8 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         .pb-cbtn.on { outline: 2px solid #f59e0b; }
         .pb-cbtn.fresh { animation: pb-cfresh 1.2s ease-in-out infinite; }
         @keyframes pb-cfresh { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.6); } 50% { box-shadow: 0 0 0 7px rgba(245,158,11,0); } }
+        .pb-csort { display: flex; justify-content: flex-end; padding: 0 2px 6px; }
+        .pb-csort button { border: 0; background: transparent; color: inherit; opacity: .7; font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
         .pb-commented { background: rgba(250, 204, 21, .32); border-bottom: 2px solid #f59e0b; border-radius: 2px; cursor: pointer; }
         .pb-commented.sug { background: rgba(59, 130, 246, .22); border-bottom-color: #3b82f6; }
         .pb-cpanel { position: fixed; z-index: 1200; top: 64px; right: 14px; bottom: 14px; width: min(360px, calc(100vw - 28px)); border: 1px solid; border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.28); display: flex; flex-direction: column; font-size: 13.5px; }

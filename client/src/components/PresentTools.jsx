@@ -478,6 +478,7 @@ html.pb-presenting .pb-shared .dk, html.pb-presenting .pb-shared .dh, html.pb-pr
 .pb-reacts { display: inline-flex; gap: 4px; }
 .pb-aud .pb-reacts > button { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 999px; padding: 6px 9px; background: #2b1458; color: #fff; cursor: pointer; font: 700 11px 'Figtree', system-ui, sans-serif; }
 .pb-aud .pb-reacts i { font-style: normal; }
+@media (max-width: 640px) { .pb-aud-wrap { left: 12px !important; right: 12px !important; bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important; } .pb-aud > button, .pb-aud .pb-reacts > button { min-height: 40px; min-width: 40px; padding: 8px 14px; justify-content: center; } .pb-aud .pb-reacts { display: inline-flex; gap: 6px; } }
 .pb-rx { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 1200; width: min(360px, calc(100vw - 24px)); display: grid; gap: 4px; padding: 16px 18px; border-radius: 18px; background: #2b1458; color: #fff; box-shadow: 0 14px 40px rgba(30,10,70,.45); font: 600 14px 'Figtree', system-ui, sans-serif; }
 .pb-rx small { opacity: .75; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; } .pb-rx p { margin: 0; opacity: .85; font-weight: 500; }
 .pb-rx .rx-x { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; opacity: .8; }

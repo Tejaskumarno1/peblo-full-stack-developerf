@@ -52,7 +52,8 @@ export type SaveResult =
 /** `where` must pin the note (id, and userId for the owner; a share token for guests). */
 export async function saveNoteMerged(where: Record<string, unknown>, input: SaveInput): Promise<SaveResult> {
   const baseTime = input.baseUpdatedAt ? new Date(input.baseUpdatedAt).getTime() : null;
-  for (let attempt = 0; attempt < (input.force || input.collab ? 8 : 4); attempt++) {
+  for (let attempt = 0; attempt < (input.force || input.collab || input.keepBoth ? 8 : 4); attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 15 + Math.random() * 45)); // lost a race: let the other writer finish, so two savers stop beating each other
     const cur = await prisma.note.findFirst({ where: where as any, select: { id: true, title: true, content: true, updatedAt: true } });
     if (!cur) return { status: 'missing' };
 
@@ -94,6 +95,21 @@ export async function saveNoteMerged(where: Record<string, unknown>, input: Save
     if (!input.collab && input.content !== last.content) invalidateNote(last.id, input.content);
     const fresh = await prisma.note.findUnique({ where: { id: last.id }, select: { updatedAt: true } });
     return { status: 'saved', content: input.content, updatedAt: fresh?.updatedAt ?? new Date() };
+  }
+  if (input.keepBoth) {
+    // An editor that asked to keep both sides never gets an error after losing races: fold the latest text and ours together and write that.
+    const baseTime2 = input.baseUpdatedAt ? new Date(input.baseUpdatedAt).getTime() : null;
+    let next = input.content;
+    let status: 'saved' | 'merged' | 'clash' = 'saved';
+    if (baseTime2 !== null && baseTime2 < last.updatedAt.getTime() && last.content !== input.content) {
+      const merged = typeof input.baseContent === 'string' ? mergeText(input.baseContent, last.content, input.content) : { ok: false, text: last.content };
+      if (merged.ok) { next = merged.text; status = 'merged'; } else { next = last.content + KEEP_BOTH_DIVIDER + input.content; status = 'clash'; }
+    }
+    const titleChanged2 = typeof input.title === 'string' && input.title.slice(0, 300) !== last.title;
+    await prisma.note.updateMany({ where: { id: last.id }, data: { content: next, ...(titleChanged2 ? { title: (input.title as string).slice(0, 300) || 'Untitled' } : {}) } });
+    if (next !== last.content) { invalidateNote(last.id, next); await saveVersion(last.id, last.content, { force: status !== 'saved', by: input.by }).catch(() => {}); }
+    const fresh2 = await prisma.note.findUnique({ where: { id: last.id }, select: { updatedAt: true } });
+    return { status, content: next, updatedAt: fresh2?.updatedAt ?? new Date() };
   }
   return { status: 'conflict', latest: last };
 }

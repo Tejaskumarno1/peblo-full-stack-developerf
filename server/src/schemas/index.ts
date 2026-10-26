@@ -23,7 +23,9 @@ export const noteSchemas = {
       baseUpdatedAt: z.string().nullable().optional(),
       baseContent: z.string().nullable().optional(),
       force: z.boolean().optional(),
-      keepBoth: z.boolean().optional()
+      keepBoth: z.boolean().optional(),
+      // the save comes from an editor in a live room that already holds everyone's merged text
+      collab: z.boolean().optional()
     })
   }
 };

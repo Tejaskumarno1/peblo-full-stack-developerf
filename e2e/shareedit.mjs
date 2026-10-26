@@ -36,16 +36,15 @@ try {
   const after = (await api('GET', `/api/notes/${note.id}`)).note;
   check('guest edit reached the owner note', /guest was here/.test(after.content), after.content);
 
-  // owner changes it meanwhile -> guest gets a conflict instead of overwriting
+  // owner changes it meanwhile -> in the live room the guest's typing merges with it, nothing is lost
   await api('PATCH', `/api/notes/${note.id}`, { content: 'Owner rewrote everything' });
   await ed.click();
   await g.keyboard.press('Control+End');
   await g.keyboard.type(' more');
-  await g.getByRole('alert').filter({ hasText: 'Someone else changed' }).waitFor({ timeout: 8000 });
-  check('conflict is shown, nothing overwritten', (await api('GET', `/api/notes/${note.id}`)).note.content === 'Owner rewrote everything');
-  await g.getByRole('button', { name: 'Keep mine' }).click();
-  await g.getByRole('status').filter({ hasText: 'Saved' }).waitFor({ timeout: 8000 });
-  check('Keep mine saves the guest copy', /more/.test((await api('GET', `/api/notes/${note.id}`)).note.content));
+  let merged = '';
+  for (let i = 0; i < 60 && !/more/.test(merged); i++) { await new Promise((r) => setTimeout(r, 250)); merged = (await api('GET', `/api/notes/${note.id}`)).note.content; }
+  check('guest typing after an owner rewrite is kept', /more/.test(merged), merged);
+  check('and the owner rewrite is not lost', /Owner rewrote everything/.test(merged), merged);
 
   // view only: a guest cannot save
   await api('POST', `/api/share/note/${note.id}`, { edit: false });
