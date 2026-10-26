@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import VersionDiff from './VersionDiff';
-import FolderDialog from './FolderDialog';
+import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
+import { colorOf, withLegacy, inFolder, smartMatch } from './folders';
+import { useAuth } from '../context/AuthContext';
+import './notespanel.css';
 import TagManager from './TagManager';
 import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
-import NotesToolbar from './NotesToolbar';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
@@ -36,9 +38,6 @@ export default function SoftNotes() {
   const [filter, setFilter] = useState(() => (new URLSearchParams(window.location.search).get('filter') === 'trash' ? 'trash' : 'all'));
   const [selTags, setSelTags] = useState(() => (params.get('tag') ? [params.get('tag')] : []));
   const [tagMatch, setTagMatch] = useState('any');
-  const [sort, setSortState] = useState(() => store('peblo-notes-sort', 'updated'));
-  const [group, setGroupState] = useState(() => store('peblo-notes-group', 'date'));
-  const setSort = (v) => { setSortState(v); try { localStorage.setItem('peblo-notes-sort', v); } catch { /* ignore */ } };
   const [collapsed, setCollapsed] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
   const toggleGroup = (k) => setCollapsed((c) => {
     const n = { ...c, [k]: !c[k] };
@@ -46,7 +45,6 @@ export default function SoftNotes() {
     try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ }
     return n;
   });
-  const setGroup = (v) => { setGroupState(v); try { localStorage.setItem('peblo-notes-group', v); } catch { /* ignore */ } };
   const [focus, setFocus] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
@@ -66,27 +64,27 @@ export default function SoftNotes() {
   const [font, setFont] = useState(() => store('peblo-note-font', 'm')); // s, m, l, xl
   const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
   const keep = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
-  // folders, filters and bulk actions
-  const [folderSel, setFolderSel] = useState('');
-  const [folderOpen, setFolderOpen] = useState(false);
+  // folders, view options and bulk actions (Notes panel)
+  const { settings: acct, updateSettings } = useAuth();
+  const [view, setViewState] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem('peblo-notes-view') || 'null'); if (v && typeof v === 'object') return { ...DEFAULT_VIEW, ...v }; } catch { /* ignore */ }
+    const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', 'date') };
+    return { ...DEFAULT_VIEW, sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : 'date' };
+  });
+  const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-notes-view', JSON.stringify(v)); } catch { /* ignore */ } };
+  const sort = view.sort;
+  const group = view.group;
+  const [viewOpen, setViewOpen] = useState(false);
+  const [fSel, setFSel] = useState(null); // { kind: 'folder' | 'smart', id }
+  const [sheet, setSheet] = useState(null); // 'move' | 'tag' | 'folder'
+  const [folderEdit, setFolderEdit] = useState(null); // the folder being edited (or {} for a new one)
+  const [smartPage, setSmartPage] = useState(null); // { initial, startName }
+  const [moveAfter, setMoveAfter] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState([]);
-  const [onlyTasks, setOnlyTasks] = useState(false);
-  const [onlyPics, setOnlyPics] = useState(false);
-  const [onlyPinned, setOnlyPinned] = useState(false);
-  const [showF, setShowF] = useState(false); // the extra filters are folded away so the list gets the room
-  const [edited, setEdited] = useState(0);
-  const passes = (n) => {
-    if (folderSel && (n.meta?.folder || '') !== (folderSel === '__none' ? '' : folderSel)) return false;
-    if (onlyTasks && !(n.taskCount > 0)) return false;
-    if (onlyPics && !/!\[|<figure>/.test(n.content || '')) return false;
-    if (onlyPinned && !n.meta?.pinned) return false;
-    if (edited && Date.now() - new Date(n.updatedAt || 0).getTime() > edited * 86400000) return false;
-    return true;
-  };
-  const anyFilter = !!(folderSel || onlyTasks || onlyPics || onlyPinned || edited);
+  const defs = Array.isArray(acct?.noteFolders) ? acct.noteFolders : [];
   const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
   const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
   const FONTS = ['s', 'm', 'l', 'xl'];
@@ -128,30 +126,45 @@ export default function SoftNotes() {
   }, [allNotes]);
   const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
   const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
+  const allDefs = useMemo(() => withLegacy(defs, allNotes), [defs, allNotes]);
+  const normalDefs = useMemo(() => allDefs.filter((d) => !d.smart), [allDefs]);
+  const smartDefs = useMemo(() => allDefs.filter((d) => d.smart), [allDefs]);
+  const selDef = fSel ? allDefs.find((d) => d.id === fSel.id) : null;
+  const folders = useMemo(() => normalDefs.map((d) => d.name), [normalDefs]);
+  const passes = (n) => {
+    if (!selDef) return true;
+    return selDef.smart ? smartMatch(n, selDef.smart) : inFolder(n, selDef, allDefs, view.subs);
+  };
+  const folderCount = (d) => allNotes.filter((n) => (d.smart ? smartMatch(n, d.smart) : inFolder(n, d, allDefs, view.subs))).length;
   const groups = useMemo(() => {
     if (dq) return [{ key: 'found', label: '', notes: found.filter(passes) }]; // best match first, as the server ranked them
-    let base = (filter === 'all' ? allNotes : listed).filter(passes);
+    let base = (filter === 'all' || filter === 'inbox' ? allNotes : listed).filter(passes);
+    if (filter === 'inbox') base = base.filter((n) => (n.tags || []).includes('inbox'));
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
     }
     const isPin = (n) => !!n.meta?.pinned;
     const time = (n, k) => new Date(n[k] || 0).getTime();
     const cmp = (a, b) => {
+      if (view.pinFirst && group === 'none' && isPin(a) !== isPin(b)) return isPin(b) ? 1 : -1;
       if (sort === 'title') return (a.title || '').localeCompare(b.title || '');
       if (sort === 'created') return time(b, 'createdAt') - time(a, 'createdAt');
-      if (sort === 'pinned') return (isPin(b) ? 1 : 0) - (isPin(a) ? 1 : 0) || time(b, 'updatedAt') - time(a, 'updatedAt');
       return time(b, 'updatedAt') - time(a, 'updatedAt');
     };
     const sorted = [...base].sort(cmp);
     if (filter === 'archive' || filter === 'trash' || group === 'none') return [{ key: 'all', label: '', notes: sorted }];
     const out = [];
-    const pins = sorted.filter(isPin);
-    if (pins.length) out.push({ key: 'pin', label: `Pinned · ${pins.length} of 3`, notes: pins });
-    const rest = sorted.filter((n) => !isPin(n));
+    const pins = view.pinFirst ? sorted.filter(isPin) : [];
+    if (pins.length) out.push({ key: 'pin', label: 'Pinned', notes: pins });
+    const rest = view.pinFirst ? sorted.filter((n) => !isPin(n)) : sorted;
     if (group === 'tag') {
       const m = new Map();
       for (const n of rest) { const t = (n.tags || []).find((x) => x !== 'inbox') || 'untagged'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
-      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: `#${t} · ${notes.length}`, notes });
+      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: `#${t}`, notes });
+    } else if (group === 'folder') {
+      const m = new Map();
+      for (const n of rest) { const t = n.meta?.folder || 'No folder'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
+      for (const [t, notes] of [...m.entries()].sort((a, b) => (a[0] === 'No folder') - (b[0] === 'No folder') || a[0].localeCompare(b[0]))) out.push({ key: `f-${t}`, label: t, notes });
     } else {
       const start = new Date(); start.setHours(0, 0, 0, 0);
       const week = start.getTime() - 6 * 86400000;
@@ -160,8 +173,7 @@ export default function SoftNotes() {
       for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
     }
     return out;
-  }, [allNotes, listed, filter, selTags, tagMatch, sort, group, dq, found, folderSel, onlyTasks, onlyPics, onlyPinned, edited]);
-  const folders = useMemo(() => [...new Set(allNotes.map((n) => n.meta?.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [allNotes]);
+  }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
     queryKey: ['todos', 'open-unlinked'],
@@ -359,7 +371,7 @@ export default function SoftNotes() {
   };
 
   const moveTo = async (name) => {
-    setFolderOpen(false);
+    setSheet(null);
     const ids = selectMode && picked.length ? picked : doc ? [doc.id] : [];
     try {
       await Promise.all(ids.map((id) => notesAPI.update(id, { meta: { folder: name || '' } })));
@@ -369,15 +381,66 @@ export default function SoftNotes() {
     } catch { flash('Could not move'); }
     setPicked([]); setSelectMode(false);
   };
+  const saveDefs = (next) => updateSettings({ noteFolders: next });
+  const saveFolder = async (def) => {
+    const old = defs.find((d) => d.id === def.id);
+    const legacyOld = !old ? allDefs.find((d) => d.id === def.id) : null; // an older folder that had no definition yet
+    const next = old || legacyOld ? [...defs.filter((d) => d.id !== def.id), { ...(old || {}), ...def }] : [...defs, def];
+    const was = (old || legacyOld)?.name;
+    setSheet(null); setFolderEdit(null); setSmartPage(null);
+    await saveDefs(next);
+    if (was && !def.smart && was !== def.name) {
+      try { await Promise.all(allNotes.filter((n) => n.meta?.folder === was).map((n) => notesAPI.update(n.id, { meta: { folder: def.name } }))); refreshLists(); } catch { flash('Could not rename the folder on every note'); }
+    }
+    if (moveAfter && !def.smart) { setMoveAfter(false); await moveTo(def.name); return; }
+    setFSel({ kind: def.smart ? 'smart' : 'folder', id: def.id });
+    setFilter('all');
+    flash(old ? 'Folder saved' : def.smart ? 'Smart folder created' : 'Folder created');
+  };
+  const deleteFolder = async (def) => {
+    const count = def.smart ? 0 : allNotes.filter((n) => n.meta?.folder === def.name).length;
+    if (!window.confirm(def.smart ? `Delete the smart folder "${def.name}"? Your notes are not touched.` : `Delete the folder "${def.name}"?${count ? ` Its ${count} note${count === 1 ? '' : 's'} stay, just out of the folder.` : ''}`)) return;
+    setSheet(null); setFolderEdit(null); setSmartPage(null);
+    await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)));
+    if (count) { try { await Promise.all(allNotes.filter((n) => n.meta?.folder === def.name).map((n) => notesAPI.update(n.id, { meta: { folder: '' } }))); refreshLists(); } catch { flash('Could not take every note out'); } }
+    if (fSel?.id === def.id) setFSel(null);
+  };
+  const openEdit = (d) => { if (d.smart) setSmartPage({ initial: d }); else { setFolderEdit(d); setSheet('folder'); } };
+  const openNew = (andMove = false) => { setMoveAfter(andMove); setFolderEdit({}); setSheet('folder'); };
+  const outsideMenu = useRef(null);
+  const outsideHist = useRef(null);
+  useOutside(outsideMenu, menuOpen, () => setMenuOpen(false));
+  useOutside(outsideHist, historyOpen, () => setHistoryOpen(false));
   const bulk = async (kind) => {
     if (!picked.length) return;
     if (kind === 'trash' && !window.confirm(`Move ${picked.length} note(s) to the Trash?`)) return;
     try {
-      await Promise.all(picked.map((id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true }))));
-      refreshLists();
-      flash(kind === 'trash' ? 'Moved to the Trash' : 'Archived');
-      if (picked.includes(routeId)) navigate('/notes');
+      if (kind === 'pin') {
+        const sel = allNotes.filter((n) => picked.includes(n.id));
+        const unpin = sel.every((n) => n.meta?.pinned);
+        const room = 3 - pinnedCount;
+        const todo = unpin ? sel : sel.filter((n) => !n.meta?.pinned).slice(0, Math.max(room, 0));
+        if (!unpin && todo.length < sel.filter((n) => !n.meta?.pinned).length) flash('You can pin up to 3 notes.');
+        await Promise.all(todo.map((n) => notesAPI.update(n.id, { meta: { pinned: !unpin } })));
+        refreshLists();
+        if (!unpin && todo.length === 0) { return; }
+        flash(unpin ? 'Unpinned' : 'Pinned to Home');
+      } else {
+        await Promise.all(picked.map((id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true }))));
+        refreshLists();
+        flash(kind === 'trash' ? 'Moved to the Trash' : 'Archived');
+        if (picked.includes(routeId)) navigate('/notes');
+      }
     } catch { flash('Something went wrong'); }
+    setPicked([]); setSelectMode(false);
+  };
+  const tagPicked = async (tag) => {
+    setSheet(null);
+    try {
+      await Promise.all(allNotes.filter((n) => picked.includes(n.id)).map((n) => ((n.tags || []).includes(tag) ? null : notesAPI.update(n.id, { tags: [...(n.tags || []), tag] }))));
+      refreshLists();
+      flash(`Tagged #${tag}`);
+    } catch { flash('Could not add the tag'); }
     setPicked([]); setSelectMode(false);
   };
   const duplicate = async () => {
@@ -486,55 +549,87 @@ export default function SoftNotes() {
       {diffV && doc && <VersionDiff doc={doc} version={diffV} onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await restoreVersion(v); }} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
-      <aside className="s-notes-list" aria-label="Notes">
-        <div className="s-tile-head">
-          <h1 className="s-notes-h1">{listTitle}</h1>
-          <button type="button" className="s-new" aria-label="New note" title="New note" onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>
-        </div>
-        <label className="s-nsearch"><Search size={14} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
-        {savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
-        <NotesToolbar allNotes={allNotes} filter={filter} setFilter={setFilter} inboxCount={inboxCount} selTags={selTags} setSelTags={setSelTags} tagMatch={tagMatch} setTagMatch={setTagMatch} sort={sort} setSort={setSort} group={group} setGroup={setGroup} resultCount={shownList.length} />
-        <div className="s-filters" aria-label="Filters">
-          <button type="button" className={`s-filters-toggle${showF || anyFilter ? ' open' : ''}`} aria-expanded={showF} onClick={() => setShowF((v) => !v)}>Filters{anyFilter ? ' ·' : ''} <span aria-hidden="true">{showF ? '▴' : '▾'}</span></button>
-          <button type="button" className={selectMode ? 'on' : ''} onClick={() => { setSelectMode((v) => !v); setPicked([]); }}>{selectMode ? 'Done' : 'Select'}</button>
-          {showF && <>
-          <select aria-label="Folder" value={folderSel} onChange={(e) => setFolderSel(e.target.value)}><option value="">All folders</option>{folders.map((f) => <option key={f} value={f}>{f}</option>)}<option value="__none">No folder</option></select>
-          <button type="button" className={onlyTasks ? 'on' : ''} aria-pressed={onlyTasks} onClick={() => setOnlyTasks((v) => !v)}>With tasks</button>
-          <button type="button" className={onlyPics ? 'on' : ''} aria-pressed={onlyPics} onClick={() => setOnlyPics((v) => !v)}>With pictures</button>
-          <button type="button" className={onlyPinned ? 'on' : ''} aria-pressed={onlyPinned} onClick={() => setOnlyPinned((v) => !v)}>Pinned</button>
-          <select aria-label="Edited" value={edited} onChange={(e) => setEdited(Number(e.target.value))}><option value={0}>Any time</option><option value={1}>Today</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select>
-          {anyFilter && <button type="button" className="clr" onClick={() => { setFolderSel(''); setOnlyTasks(false); setOnlyPics(false); setOnlyPinned(false); setEdited(0); }}>Clear</button>}
-          </>}
-        </div>
-        {selectMode && <div className="s-bulk" role="toolbar" aria-label="Bulk actions"><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(shownList.map((n) => n.id))}>All</button><button type="button" disabled={!picked.length} onClick={() => setFolderOpen(true)}>Folder</button><button type="button" disabled={!picked.length} onClick={() => bulk('archive')}>Archive</button><button type="button" disabled={!picked.length} onClick={() => bulk('trash')}>Trash</button></div>}
+      <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
+        {selectMode ? (
+          <div className="np-selhead"><button type="button" onClick={() => { setSelectMode(false); setPicked([]); setSheet(null); }}>Cancel</button><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(picked.length === shownList.length ? [] : shownList.map((n) => n.id))}>{picked.length && picked.length === shownList.length ? 'Clear' : 'Select all'}</button></div>
+        ) : (
+          <div className="np-head">
+            <h1 className="s-notes-h1">{listTitle}</h1>
+            <div className="np-hb">
+              <button type="button" className="np-ib" aria-label="Select notes" title="Select notes" aria-pressed={selectMode} onClick={() => { setSelectMode(true); setPicked([]); }}><SquareCheck size={18} strokeWidth={1.8} /></button>
+              <button type="button" className="s-new" aria-label="New note" title="New note" onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>
+            </div>
+          </div>
+        )}
+        {!selectMode && (
+          <div className="np-bar">
+            <label className="s-nsearch"><Search size={18} strokeWidth={1.8} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
+            <button type="button" className="np-view" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />View</button>
+          </div>
+        )}
+        {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
+        {filter !== 'archive' && filter !== 'trash' && (
+          <div className="np-row" role="tablist" aria-label="Folders">
+            <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); }}>All <i>{allNotes.length}</i></button>
+            <button type="button" role="tab" aria-selected={filter === 'inbox'} className={`np-chip${filter === 'inbox' ? ' on' : ''}`} onClick={() => { setFilter('inbox'); setFSel(null); }}><span className="np-dot" style={{ background: '#FFB48C' }} />Inbox <i>{inboxCount}</i></button>
+            {normalDefs.filter((d) => !d.parent).map((d) => (
+              <Fragment key={d.id}>
+                <button type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><span className="np-dot" style={{ background: colorOf(d.color)[2] }} />{d.name} <i>{folderCount(d)}</i></button>
+                {(fSel?.id === d.id || normalDefs.some((k) => k.parent === d.id && fSel?.id === k.id)) && normalDefs.filter((k) => k.parent === d.id).map((k) => (
+                  <button key={k.id} type="button" role="tab" aria-selected={fSel?.id === k.id} className={`np-chip kid${fSel?.id === k.id ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: k.id }); }} onDoubleClick={() => openEdit(k)} onContextMenu={(e) => { e.preventDefault(); openEdit(k); }}><span className="np-dot" style={{ background: colorOf(k.color)[2] }} />{k.name} <i>{folderCount(k)}</i></button>
+                ))}
+              </Fragment>
+            ))}
+            {smartDefs.map((d) => (
+              <button key={d.id} type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip sm${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'smart', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><Zap size={14} strokeWidth={1.8} />{d.name} <i>{folderCount(d)}</i></button>
+            ))}
+            <button type="button" className="np-chip new" aria-label="New folder" title="New folder" onClick={() => openNew(false)}><Plus size={15} strokeWidth={1.8} /></button>
+          </div>
+        )}
+        {!selectMode && filter !== 'archive' && filter !== 'trash' && (viewOpen || sort !== 'updated' || group !== 'date' || selTags.length > 0) && (
+          <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
+        )}
         <div className="s-notes-rows">
-          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : 'No notes here yet.'}</p>}
-          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><span className="chev" aria-hidden="true">{collapsed[`${group}:${g.key}`] ? '▸' : '▾'}</span>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
-            const tone = toneVar(toneOf(n.tags?.[0]));
+          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
             const on = doc?.id === n.id;
+            const fdef = n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null;
+            const w = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
+            const sel = selectMode && picked.includes(n.id);
             return (
-              <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on ? ' on' : ''}`} style={on ? { background: tone } : undefined} onClick={(e) => { if (selectMode) { e.preventDefault(); setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id])); } else forceSave(); }}>
-                {selectMode ? <input type="checkbox" className="s-pick" aria-label={`Select ${n.title || 'Untitled'}`} checked={picked.includes(n.id)} readOnly /> : <span className="dot" style={{ background: tone }} aria-hidden="true" />}
+              <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id])); } else forceSave(); }}>
+                {selectMode && <span className={`np-ck${sel ? ' on' : ''}`} role="checkbox" aria-checked={sel} aria-label={`Select ${n.title || 'Untitled'}`}>{sel && <Check size={14} strokeWidth={2.6} />}</span>}
                 <span className="txt">
-                  <span className="t"><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} style={{ marginRight: 4 }} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
-                  <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>
-                  <span className="m">{n.meta?.folder ? `${n.meta.folder} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{(() => { const w = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; return w >= 30 ? ` · ${w} words` : ''; })()}</span>
+                  <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
+                  {!selectMode && view.preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>}
+                  <span className="m">{view.labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
                 </span>
               </Link>
             );
           })}</div>))}
         </div>
-        <div className="s-notes-foot">
-          <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => setFilter(filter === 'archive' ? 'all' : 'archive')}>Archive</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}>Trash</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" onClick={() => setTagsOpen(true)}>Manage tags</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" onClick={() => setGalleryOpen(true)}>Pictures</button>
-          {filter === 'trash' && shownList.length > 0 && <><span aria-hidden="true">·</span><button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}>Empty Trash</button></>}
-        </div>
-        {folderOpen && <FolderDialog folders={folders} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} onPick={moveTo} onClose={() => setFolderOpen(false)} />}
+        {selectMode ? (
+          <div className="np-actions" role="toolbar" aria-label="Bulk actions">
+            <button type="button" className={sheet === 'move' ? 'on' : ''} disabled={!picked.length} onClick={() => setSheet(sheet === 'move' ? null : 'move')}><Folder size={18} strokeWidth={1.8} />Move</button>
+            <button type="button" className={sheet === 'tag' ? 'on' : ''} disabled={!picked.length} onClick={() => setSheet(sheet === 'tag' ? null : 'tag')}><TagIcon size={18} strokeWidth={1.8} />Tag</button>
+            <button type="button" disabled={!picked.length} onClick={() => bulk('pin')}><Pin size={18} strokeWidth={1.8} />Pin</button>
+            <button type="button" disabled={!picked.length} onClick={() => bulk('archive')}><Archive size={18} strokeWidth={1.8} />Archive</button>
+            <button type="button" disabled={!picked.length} onClick={() => bulk('trash')}><Trash2 size={18} strokeWidth={1.8} />Delete</button>
+          </div>
+        ) : (
+          <div className="s-notes-foot">
+            <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => setFilter(filter === 'archive' ? 'all' : 'archive')}><Archive size={18} strokeWidth={1.8} />Archive</button>
+            <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
+            <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
+            <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
+            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
+          </div>
+        )}
+        {viewOpen && <><div className="np-dim" style={{ background: 'rgba(58,42,26,.18)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
+        {sheet === 'move' && <MoveSheet folders={normalDefs} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} bare={selectMode} onMove={moveTo} onNew={() => openNew(true)} onClose={() => setSheet(null)} />}
+        {sheet === 'tag' && <TagSheet tags={tagCounts} count={picked.length} bare onApply={tagPicked} onClose={() => setSheet(null)} />}
+        {sheet === 'folder' && folderEdit && <NewFolderSheet defs={allDefs} notes={allNotes} initial={folderEdit} onSave={saveFolder} onSmart={(nm) => { setSheet(null); setFolderEdit(null); setSmartPage({ startName: nm }); }} onDelete={() => deleteFolder(folderEdit)} onClose={() => { setSheet(null); setFolderEdit(null); setMoveAfter(false); }} />}
+        {smartPage && <SmartFolderPage defs={allDefs} notes={allNotes} tags={tagCounts} folderNames={folders} initial={smartPage.initial} startName={smartPage.startName} onSave={saveFolder} onKind={(nm) => { setSmartPage(null); setFolderEdit({ name: nm || '' }); setSheet('folder'); }} onDelete={() => deleteFolder(smartPage.initial)} onClose={() => setSmartPage(null)} />}
         {galleryOpen && <Gallery notes={allNotes} onClose={() => setGalleryOpen(false)} onOpen={(id) => { setGalleryOpen(false); navigate(`/notes/${id}`); }} />}
         {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} onChanged={() => refreshLists()} />}
       </aside>
@@ -567,7 +662,7 @@ export default function SoftNotes() {
               <button type="button" className="s-outline" onClick={() => setFocus((v) => !v)} aria-pressed={focus} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
                 {focus ? <><Minimize2 size={14} /> Exit</> : <><Maximize2 size={14} /> Full screen</>}
               </button>
-              <div className="s-menu-wrap">
+              <div className="s-menu-wrap" ref={outsideMenu}>
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
@@ -577,7 +672,7 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setFolderOpen(true); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
@@ -728,7 +823,7 @@ export default function SoftNotes() {
         </section>
 
         {noteId && (
-          <div className="s-menu-wrap">
+          <div className="s-menu-wrap" ref={outsideHist}>
             <button type="button" className="s-versions" onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
               <History size={15} strokeWidth={2.2} /> {versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'} kept` : 'No earlier versions'}
             </button>

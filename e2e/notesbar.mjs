@@ -1,4 +1,4 @@
-// Soft notes: Tags menu (multi select, any/all), Sort, Group, link-a-task card, full screen.
+// Soft notes: View menu (sort, group), link-a-task card, full screen.
 import { boot } from './lib.mjs';
 
 const { base, api, page, check, finish } = await boot();
@@ -10,38 +10,21 @@ try {
   await mk('Zeta', ['dbms']);
   await api('POST', '/api/todos', { text: 'Sched practice', priority: 'medium' });
   await page.goto(base + '/notes');
-  await page.locator('.s-nt').waitFor({ timeout: 15000 });
+  await page.locator('.s-notes-list.np').waitFor({ timeout: 15000 });
   const rows = async () => (await page.locator('.s-note-row .t').allTextContents()).map((x) => x.trim());
 
-  // multi select, any / all
-  await page.getByRole('button', { name: /^Tags/ }).click();
-  await page.getByRole('menuitemcheckbox', { name: /#os/ }).click();
-  await page.getByRole('menuitemcheckbox', { name: /#exams/ }).click();
+  // sort and group now live in the one View menu
+  await page.locator('.np-view').click();
+  const pop = page.getByRole('dialog', { name: 'View options' });
+  await pop.getByRole('radio', { name: 'Title' }).click();
   await page.waitForTimeout(300);
   let r = await rows();
-  check('any: notes with #os or #exams', r.length === 3 && !r.includes('Zeta'), r.join('|'));
-  await page.getByRole('button', { name: 'all', exact: true }).click();
-  await page.waitForTimeout(300);
-  r = await rows();
-  check('all: only notes with both tags', r.length === 1 && r[0] === 'Alpha', r.join('|'));
-  await page.keyboard.press('Escape');
-  const clear = page.locator('.s-nt-chosen .clear');
-  check('Clear shows the number of notes', /1 note/.test((await clear.textContent()) || ''));
-  await clear.click();
-  await page.waitForTimeout(300);
-  check('clearing shows all notes again', (await rows()).length >= 4);
-
-  // sort and group
-  await page.getByRole('button', { name: /^Sort/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Title A to Z' }).click();
-  await page.waitForTimeout(300);
-  r = await rows();
   check('sort by title', r.join('|') === [...r].sort((x, y) => x.localeCompare(y)).join('|'), r.join('|'));
-  await page.getByRole('button', { name: /^Group/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Tag' }).click();
+  await pop.getByRole('radio', { name: 'Tag' }).click();
   await page.waitForTimeout(300);
   const heads = await page.locator('.s-grp-h').allTextContents();
   check('group by tag shows headings', heads.some((h) => /#exams/.test(h)), heads.join('|'));
+  await page.keyboard.press('Escape');
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/notesbar.png' });
 
   // link-a-task card

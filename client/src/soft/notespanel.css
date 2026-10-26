@@ -1,0 +1,143 @@
+/* Notes panel: folder chips, one View menu, select and move, folders and smart folders (mockups M1 to M5). */
+.soft .s-notes-list.np { position: relative; padding: 20px 16px 12px; gap: 12px; }
+.soft .np .np-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.soft .np .np-head .s-notes-h1 { font-size: 26px; line-height: 1; }
+.soft .np .np-hb { display: flex; gap: 8px; }
+.soft .np .np-ib { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--s-chip-solid); color: var(--s-fg); display: grid; place-items: center; cursor: pointer; }
+.soft .np .np-ib[aria-pressed="true"] { background: var(--s-fg); color: var(--s-bg); }
+.soft .np .s-new { width: 40px; height: 40px; }
+.soft .np .np-bar { display: flex; gap: 8px; position: relative; }
+.soft .np .np-bar .s-nsearch { flex: 1; height: 40px; box-sizing: border-box; padding: 0 14px; border: 1px solid var(--s-line); background: transparent; margin: 0; font-weight: 500; }
+.soft .np .np-view { height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--s-fg); color: var(--s-bg); display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.soft .np .np-view[aria-expanded="true"] { background: var(--s-accent); color: var(--s-on-accent); }
+.soft .np .np-row { display: flex; gap: 6px; overflow-x: auto; padding: 0 2px; scrollbar-width: none; flex: none; }
+.soft .np .np-row::-webkit-scrollbar { display: none; }
+.soft .np .np-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-weight: 700; font-size: 13px; white-space: nowrap; cursor: pointer; flex: none; }
+.soft .np .np-chip i { font-style: normal; font-size: 11.5px; color: var(--s-fg2); }
+.soft .np .np-chip.on { background: var(--s-fg); color: var(--s-bg); }
+.soft .np .np-chip.on i { color: var(--s-dock-fg); }
+.soft .np .np-chip.sm { background: var(--s-lilac); color: #241F1A; }
+.soft .np .np-chip.sm.on { box-shadow: inset 0 0 0 2px #241F1A; }
+.soft .np .np-chip.kid { height: 28px; font-size: 12.5px; }
+.soft .np .np-chip.new { background: transparent; border: 1.5px dashed var(--s-dash); padding: 0 10px; }
+.soft .np .np-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.soft .np .np-sum { display: flex; gap: 6px; padding: 0 2px; }
+.soft .np .np-sum span { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--s-butter); color: #241F1A; font-weight: 700; font-size: 12px; }
+.soft .np .np-sum span + span { background: var(--s-chip-solid); color: var(--s-fg); }
+.soft .np .s-notes-rows { display: flex; flex-direction: column; gap: 4px; }
+.soft .np .s-grp { gap: 4px; }
+.soft .np .s-grp-h { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--s-fg3); padding: 2px 6px 0; }
+.soft .np .s-grp-toggle .chev { display: none; }
+.soft .np .s-grp-toggle .cnt { margin-left: 0; background: var(--s-chip-solid); letter-spacing: 0; padding: 2px 8px; font-size: 10.5px; }
+.soft .np .s-note-row { display: block; padding: 10px 12px; border-radius: 20px; background: transparent; }
+.soft .np .s-note-row:hover { background: var(--s-col); }
+.soft .np .s-note-row.on { background: var(--s-butter); color: #241F1A; }
+.soft .np .s-note-row .txt { gap: 3px; }
+.soft .np .s-note-row .t { font-size: 15px; display: flex; align-items: center; gap: 4px; }
+.soft .np .s-note-row .t.pin { color: var(--s-accent-ink); }
+.soft .np .s-note-row .s { font-size: 13px; color: var(--s-fg2); }
+.soft .np .s-note-row .m { font-size: 12px; color: var(--s-fg3); display: flex; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; overflow: hidden; }
+.soft .np .s-note-row.on .s, .soft .np .s-note-row.on .m { color: #564D43; }
+.soft .np .np-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px 1px 6px; background: #fff; border: 1px solid var(--s-line); color: #564D43; flex: none; }
+.soft .np.compact .s-note-row { padding: 6px 12px; }
+.soft .np.compact .s-note-row .s { display: none; }
+.soft .np .s-note-row.pick { display: flex; align-items: center; gap: 12px; padding: 9px 12px; }
+.soft .np .s-note-row.pick.sel { background: var(--s-butter); color: #241F1A; }
+.soft .np .np-ck { width: 22px; height: 22px; border-radius: 8px; border: 2px solid #B9AD9B; display: grid; place-items: center; flex: none; color: #fff; box-sizing: border-box; }
+.soft .np .np-ck.on { background: var(--s-fg); border-color: var(--s-fg); color: var(--s-bg); }
+.soft .np .np-selhead { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.soft .np .np-selhead b { font-family: var(--s-display); font-weight: 800; font-size: 20px; letter-spacing: -.03em; }
+.soft .np .np-selhead button { border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 13.5px; color: var(--s-accent-ink); cursor: pointer; }
+.soft .np .np-selhead button:first-child { color: var(--s-fg2); }
+.soft .np.selecting .np-chip { height: 30px; font-size: 12.5px; }
+.soft .np .s-notes-foot { margin-top: auto; justify-content: space-around; gap: 0; border-top: 1px solid var(--s-line); padding-top: 10px; font-size: 11.5px; }
+.soft .np .s-notes-foot button { display: grid; justify-items: center; gap: 3px; background: transparent; color: var(--s-fg2); font-weight: 700; font-size: 11.5px; padding: 0 6px; border-radius: 12px; }
+.soft .np .s-notes-foot button.on { background: var(--s-fg); color: var(--s-bg); }
+.soft .np .s-notes-foot button.danger { color: var(--s-accent-ink); }
+.soft .np .np-actions { margin: auto -16px -12px; display: flex; justify-content: space-around; border-top: 1px solid var(--s-line); padding: 8px 16px 12px; height: 62px; box-sizing: border-box; position: relative; z-index: 55; background: var(--s-surface); border-radius: 0 0 32px 32px; }
+.soft .np .np-actions button { display: grid; justify-items: center; gap: 3px; border: 0; background: transparent; color: var(--s-fg2); font: inherit; font-weight: 700; font-size: 11.5px; cursor: pointer; }
+.soft .np .np-actions button.on { color: var(--s-accent); }
+.soft .np .np-actions button:disabled { opacity: .4; cursor: default; }
+/* dim, popover, sheets, page */
+.soft .np .np-dim { position: absolute; inset: 0; background: var(--s-backdrop); z-index: 40; border-radius: inherit; }
+.soft .np .np-pop { position: absolute; right: 14px; top: 106px; width: 276px; max-width: calc(100% - 28px); box-sizing: border-box; background: var(--s-surface); border: 1px solid var(--s-line); border-radius: 24px; box-shadow: 0 18px 40px rgba(70,45,20,.22); padding: 14px; display: grid; gap: 11px; z-index: 50; }
+.soft .np .np-pop h4, .soft .np .np-lab { margin: 0; font-weight: 800; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--s-fg3); }
+.soft .np .np-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--s-chip-solid); border-radius: 999px; padding: 3px; gap: 3px; margin-top: 6px; }
+.soft .np .np-seg button { height: 30px; border: 0; border-radius: 999px; background: transparent; font: inherit; font-weight: 700; font-size: 12.5px; color: var(--s-fg2); cursor: pointer; }
+.soft .np .np-seg button.on { background: var(--s-surface); color: var(--s-fg); box-shadow: 0 2px 6px rgba(70,45,20,.12); }
+.soft .np .np-tg { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; border: 0; background: transparent; padding: 0; font: inherit; font-weight: 700; font-size: 13.5px; color: var(--s-fg); cursor: pointer; text-align: left; }
+.soft .np .np-tg.big { font-size: 14px; }
+.soft .np .np-tg small { display: block; font-weight: 500; font-size: 12px; color: var(--s-fg3); margin-top: 2px; }
+.soft .np .np-sw { width: 38px; height: 22px; border-radius: 999px; background: #E1D6C6; position: relative; flex: none; }
+.soft .np .np-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.soft .np .np-sw.on { background: var(--s-local); }
+.soft .np .np-sw.on::after { left: 19px; }
+.soft .np .np-sw.big { width: 42px; height: 24px; }
+.soft .np .np-sw.big::after { width: 18px; height: 18px; }
+.soft .np .np-sw.big.on::after { left: 21px; }
+.soft .np .np-reset { border: 0; background: transparent; border-top: 1px solid var(--s-line); padding: 10px 0 0; font: inherit; font-weight: 700; font-size: 12.5px; color: var(--s-accent-ink); cursor: pointer; }
+.soft .np .np-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--s-surface); border-radius: 28px 28px 0 0; box-shadow: 0 -14px 40px rgba(70,45,20,.25); padding: 10px 18px 18px; display: grid; gap: 14px; max-height: 92%; overflow-y: auto; box-sizing: border-box; }
+.soft .np .np-sheet.move { gap: 7px; padding: 10px 16px 12px; border-top: 1px solid var(--s-line); }
+.soft .np .np-grab { width: 40px; height: 4px; border-radius: 2px; background: #D9CDBB; margin: 0 auto; }
+.soft .np .np-h4 { margin: 0; font-family: var(--s-display); font-weight: 800; font-size: 20px; letter-spacing: -.02em; }
+.soft .np .np-sh { margin: 0; font-family: var(--s-display); font-weight: 800; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+.soft .np .np-sh small { font-family: var(--s-body); font-weight: 600; font-size: 12px; color: var(--s-fg3); }
+.soft .np .np-fl { display: grid; gap: 7px; max-height: 200px; overflow-y: auto; }
+.soft .np .np-fo { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; font: inherit; font-weight: 700; font-size: 14px; color: var(--s-fg); cursor: pointer; text-align: left; flex: none; }
+.soft .np .np-fo.on { background: var(--s-chip-solid); }
+.soft .np .np-fo .sw { width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; flex: none; }
+.soft .np .np-fo .sw.dashed { border: 1.5px dashed var(--s-accent-ink); }
+.soft .np .np-fo.new { color: var(--s-accent-ink); }
+.soft .np .np-fo .r { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #B9AD9B; box-sizing: border-box; }
+.soft .np .np-fo.on .r { border: 6px solid var(--s-fg); }
+.soft .np .np-go { height: 44px; border: 0; border-radius: 999px; background: var(--s-accent); color: var(--s-on-accent); font: inherit; font-weight: 800; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.soft .np .np-go:disabled { opacity: .45; cursor: default; }
+.soft .np .np-go.small { height: 40px; padding: 0 18px; font-size: 13.5px; }
+.soft .np .np-add { display: flex; gap: 8px; }
+.soft .np .np-add input, .soft .np .np-inp input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-weight: 700; font-size: 15px; color: var(--s-fg); }
+.soft .np .np-add input { border: 1.5px solid var(--s-line); border-radius: 14px; padding: 0 12px; height: 40px; }
+.soft .np .np-inp { display: flex; align-items: center; gap: 10px; height: 46px; border: 1.5px solid var(--s-fg); border-radius: 16px; padding: 0 12px; box-sizing: border-box; margin-top: 6px; }
+.soft .np .np-swt { width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center; flex: none; color: #241F1A; }
+.soft .np .np-kind { display: grid; grid-template-columns: 1fr 1fr; background: var(--s-chip-solid); border-radius: 999px; padding: 3px; gap: 3px; }
+.soft .np .np-kind button { height: 36px; border: 0; border-radius: 999px; background: transparent; display: flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-weight: 700; font-size: 13.5px; color: var(--s-fg2); cursor: pointer; }
+.soft .np .np-kind button.on { background: var(--s-surface); color: var(--s-fg); box-shadow: 0 2px 6px rgba(70,45,20,.12); }
+.soft .np .np-lab { display: block; margin-bottom: 0; }
+.soft .np .np-cols { display: flex; gap: 10px; margin-top: 8px; padding: 3px; }
+.soft .np .np-cols button { width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; }
+.soft .np .np-cols button.on { outline: 2.5px solid var(--s-fg); outline-offset: 2px; }
+.soft .np .np-where { display: flex; align-items: center; gap: 8px; height: 38px; border-radius: 14px; background: var(--s-chip-solid); padding: 0 12px; font-weight: 700; font-size: 13.5px; margin-top: 6px; }
+.soft .np .np-where button { margin-left: auto; border: 0; background: transparent; color: var(--s-fg3); font: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+.soft .np .np-parents { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.soft .np .np-parents button { border: 0; border-radius: 999px; height: 30px; padding: 0 12px; background: var(--s-chip-solid); font: inherit; font-weight: 700; font-size: 12.5px; color: var(--s-fg); cursor: pointer; }
+.soft .np .np-parents button.on { background: var(--s-fg); color: var(--s-bg); }
+.soft .np .np-btns { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+.soft .np .np-btns button { height: 46px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-weight: 800; font-size: 14.5px; cursor: pointer; }
+.soft .np .np-btns button.go { background: var(--s-accent); color: var(--s-on-accent); }
+.soft .np .np-btns button:disabled { opacity: .45; cursor: default; }
+.soft .np .np-del { border: 0; background: transparent; color: var(--s-accent-ink); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; padding: 0; }
+.soft .np .np-err, .soft .np .np-hint { margin: 6px 4px 0; font-size: 12.5px; color: var(--s-accent-ink); }
+.soft .np .np-hint { color: var(--s-fg3); }
+.soft .np .np-page { position: absolute; inset: 0; z-index: 60; background: var(--s-surface); border-radius: inherit; padding: 20px 16px 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-sizing: border-box; }
+.soft .np .np-ph { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.soft .np .np-ph b { flex: 1; font-family: var(--s-display); font-weight: 800; font-size: 22px; letter-spacing: -.03em; }
+.soft .np .np-back { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--s-chip-solid); color: var(--s-fg); display: grid; place-items: center; cursor: pointer; }
+.soft .np .np-lab.p { padding: 0 4px; }
+.soft .np .np-rulewrap { display: grid; gap: 6px; }
+.soft .np .np-rule { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px; border-radius: 18px; background: var(--s-col); }
+.soft .np .np-rule .op { height: 32px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--s-surface); border: 1px solid var(--s-line); font-weight: 700; font-size: 13px; color: #564D43; }
+.soft .np .np-pick { height: 32px; border-radius: 999px; padding: 0 12px; background: var(--s-surface); border: 1px solid var(--s-line); font: inherit; font-weight: 700; font-size: 13px; color: #564D43; cursor: pointer; max-width: 150px; }
+.soft .np .np-pick.v { background: var(--s-lilac); border-color: var(--s-lilac); color: #241F1A; }
+.soft .np .np-rule .x { margin-left: auto; width: 28px; height: 28px; border: 0; background: transparent; color: var(--s-fg3); display: grid; place-items: center; cursor: pointer; }
+.soft .np .np-rule .x:disabled { opacity: .35; cursor: default; }
+.soft .np .np-and { font-weight: 800; font-size: 10.5px; letter-spacing: .1em; color: var(--s-fg3); padding-left: 12px; }
+.soft .np .np-addrule { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; padding: 0 4px; font: inherit; font-weight: 700; font-size: 13px; color: var(--s-accent-ink); cursor: pointer; align-self: flex-start; }
+.soft .np .np-pv { border: 1px solid var(--s-line); border-radius: 20px; padding: 8px; display: grid; gap: 2px; }
+.soft .np .np-pv header { display: flex; justify-content: space-between; align-items: center; padding: 2px 6px 6px; font-weight: 800; font-size: 13px; }
+.soft .np .np-pv header small { font-weight: 600; color: var(--s-local); font-size: 12px; }
+.soft .np .np-pv div { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px; border-radius: 12px; font-size: 13.5px; font-weight: 600; }
+.soft .np .np-pv div svg { color: var(--s-fg3); }
+.soft .np .np-pv div small { margin-left: auto; font-weight: 500; color: var(--s-fg3); font-size: 11.5px; }
+.soft .np .np-note { margin: 0; padding: 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--s-fg2); }
+.soft .np .np-page .np-btns { margin-top: auto; }
+
+.soft .np.selecting .np-sheet.move { bottom: 62px; border-radius: 28px 28px 0 0; box-shadow: 0 -10px 30px rgba(70,45,20,.16); }

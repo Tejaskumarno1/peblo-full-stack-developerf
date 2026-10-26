@@ -129,6 +129,7 @@ export function AuthProvider({ children }) {
       setSettings(prev => {
         const merged = { ...u.settings, ...prev };
         if (u.settings.weekStart) merged.weekStart = u.settings.weekStart; // account wins
+        if (u.settings.noteFolders) merged.noteFolders = u.settings.noteFolders; // folders follow the account
         try { localStorage.setItem('peblo-settings', JSON.stringify(merged)); } catch { /* ignore */ }
         return merged;
       });

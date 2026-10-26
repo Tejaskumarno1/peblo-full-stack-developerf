@@ -31,15 +31,14 @@ try {
   await page.waitForSelector('.s-toast', { timeout: 4000 }).catch(() => {});
   check('a 4th pin is refused', /up to 3/.test((await page.locator('.s-toast').textContent().catch(() => '')) || ''));
 
-  // Tag chips: all tags shown, click filters
-  await page.getByRole('button', { name: /^Tags/ }).click();
-  const tagOpts = await page.locator('.s-nt-opt .nm').allTextContents();
-  check('the Tags menu lists every tag', ['#physics', '#chem', '#bio'].every((c) => tagOpts.includes(c)), tagOpts.join('|'));
-  await page.getByRole('menuitemcheckbox', { name: /#chem/ }).click();
-  await page.keyboard.press('Escape');
+  // A tag link (?tag=) filters the list
+  await page.goto(base + '/notes?tag=chem');
+  await page.waitForSelector('.s-note-row', { timeout: 15000 });
   await page.waitForTimeout(700);
   const rows = await page.locator('.s-note-row .t').allTextContents();
-  check('clicking a tag filters the list', rows.length === 2 && rows.every((r) => /Beta|Gamma/.test(r)), rows.join('|'));
+  check('a tag link filters the list', rows.length === 2 && rows.every((r) => /Beta|Gamma/.test(r)), rows.join('|'));
+  await page.locator('.s-note-row').first().click();
+  await page.locator('#s-note-title').waitFor();
 
   // Export menu
   await page.getByRole('button', { name: 'More' }).click();
