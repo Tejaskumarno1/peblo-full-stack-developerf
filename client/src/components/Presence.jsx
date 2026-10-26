@@ -113,9 +113,9 @@ function ReadingRail({ root, peers, tick }) {
         return <button key={keyOf(p)} type="button" className="dot" data-testid="rail-dot" data-name={p.name} title={`${p.name} is here. Click to go there`} style={{ top: `${f * 100}%`, '--c': p.color }} onClick={() => goTo(f)}><span>{initial(p.name)}</span></button>;
       })}
       <style>{`
-        .pb-rail { position: fixed; right: 5px; width: 10px; z-index: 1050; border-radius: 6px; background: color-mix(in srgb, currentColor 8%, transparent); }
-        .pb-rail .me { position: absolute; left: 1px; right: 1px; border-radius: 5px; background: color-mix(in srgb, currentColor 28%, transparent); pointer-events: none; min-height: 6px; }
-        .pb-rail .dot { position: absolute; left: -9px; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; border: 2px solid #fff; background: var(--c); color: #fff; font: 700 10px/1 system-ui, sans-serif; display: grid; place-items: center; cursor: pointer; padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: top .3s ease; }
+        .pb-rail { position: fixed; right: 5px; width: 10px; z-index: 1050; border-radius: 6px; background: transparent; pointer-events: none; }
+        .pb-rail .me { display: none; position: absolute; left: 1px; right: 1px; border-radius: 5px; background: color-mix(in srgb, currentColor 28%, transparent); pointer-events: none; min-height: 6px; }
+        .pb-rail .dot { position: absolute; left: -9px; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; border: 2px solid #fff; background: var(--c); color: #fff; font: 700 10px/1 system-ui, sans-serif; display: grid; place-items: center; cursor: pointer; pointer-events: auto; padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: top .3s ease; }
         .pb-rail .dot:hover { transform: scale(1.18); }
         @media (max-width: 640px) { .pb-rail { display: none; } }
       `}</style>

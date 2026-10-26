@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -571,21 +571,21 @@ export default function SoftNotes() {
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}>{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}>{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}>Find in note  (Ctrl+F)</button>
-                    <button type="button" role="menuitem" onClick={duplicate}>Duplicate note</button>
-          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}>Copy as Markdown</button>
-          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}>Copy link to note</button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setFolderOpen(true); }}>{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}>Text size: {FONT_NAME[font]}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}>Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}>Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}>Share link…</button>
-                    <button type="button" role="menuitem" onClick={exportPdf}>Export as PDF</button>
-                    <button type="button" role="menuitem" onClick={exportWord}>Export as Word</button>
-                    <button type="button" role="menuitem" onClick={exportMd}>Export as Markdown</button>
-                    <button type="button" role="menuitem" className="danger" onClick={trash}>{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
+                    <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setFolderOpen(true); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
+                    <button type="button" role="menuitem" onClick={exportPdf}><FileDown size={15} />Export as PDF</button>
+                    <button type="button" role="menuitem" onClick={exportWord}><FileDown size={15} />Export as Word</button>
+                    <button type="button" role="menuitem" onClick={exportMd}><FileDown size={15} />Export as Markdown</button>
+                    <button type="button" role="menuitem" className="danger" onClick={trash}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
               </div>
@@ -613,6 +613,7 @@ export default function SoftNotes() {
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
               disabled={doc.isDeleted}
             />
+            <div className="s-note-meta">
             <div className="s-note-tags">
               {doc.tags.map((t) => (
                 <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
@@ -637,6 +638,7 @@ export default function SoftNotes() {
             </div>
 
             {!doc.isDraft && <div className="s-note-stats" aria-label="Length of this note">{words} word{words === 1 ? '' : 's'} · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</div>}
+            </div>
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
           mentions={false}

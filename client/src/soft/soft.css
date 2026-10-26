@@ -467,7 +467,7 @@
 .soft .s-menu-wrap { position: relative; }
 .soft .s-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; min-width: 190px; padding: 6px; border-radius: 20px; background: var(--s-surface); border: 1px solid var(--s-line); box-shadow: var(--s-shadow); display: flex; flex-direction: column; }
 .soft .s-menu.up { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; }
-.soft .s-menu button { padding: 10px 12px; border: none; border-radius: 14px; background: transparent; color: var(--s-fg); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap; }
+.soft .s-menu button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; border-radius: 14px; background: transparent; color: var(--s-fg); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap; }
 .soft .s-menu button:hover { background: var(--s-bg); }
 .soft .s-menu button.danger { color: var(--s-accent-ink); }
 
@@ -897,3 +897,13 @@
 .soft .s-link-list button { border: none; background: transparent; text-align: left; font: inherit; font-size: 13.5px; padding: 7px 8px; border-radius: 9px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--s-fg); }
 .soft .s-link-list button:hover { background: rgba(255,255,255,.9); }
 .soft .s-side-task .t.s-linked-open { flex: 1; min-width: 0; }
+
+.soft .s-menu button > svg { flex: none; opacity: 0.75; }
+
+/* Stage 7: tighter note header, tags and length share one row */
+.soft .s-note-main { padding: 18px 40px 0; gap: 6px; }
+.soft .s-note-title { margin-top: 2px; font-size: 38px; line-height: 40px; height: 40px; }
+.soft textarea.s-note-title { min-height: 40px; }
+.soft .s-note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; flex-shrink: 0; }
+.soft .s-note-meta .s-note-stats { margin: 0; }
+.soft .s-note-body { margin: 0 -40px; padding: 0 40px 24px; padding-top: 2px; }
