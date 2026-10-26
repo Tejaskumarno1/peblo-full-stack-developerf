@@ -5,7 +5,7 @@ generator client {
   output   = "../generated/prisma"
   // One engine per kind of computer we ship to: the installers are built on one machine for all of them (PEB-71).
   // electron/engine.cjs picks the matching file at start-up.
-  binaryTargets = ["native", "windows", "darwin", "darwin-arm64", "debian-openssl-3.0.x"]
+  binaryTargets = ["native", "windows", "darwin", "darwin-arm64", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {

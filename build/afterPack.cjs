@@ -11,7 +11,7 @@ function unwanted(files, platform, arch) {
   const keep = (f) => {
     if (platform === 'win32') return /windows/.test(f);
     if (platform === 'darwin') return arch === 'arm64' ? /darwin-arm64/.test(f) : /darwin(?!-arm64)/.test(f);
-    if (platform === 'linux') return /debian-openssl-3|openssl-3|\.so\.node$/.test(f) && !/musl/.test(f);
+    if (platform === 'linux') return arch === 'arm64' ? /linux-arm64-openssl-3/.test(f) : /debian-openssl-3/.test(f) && !/musl|arm64/.test(f);
     return true;
   };
   return engines.filter((f) => !keep(f));
