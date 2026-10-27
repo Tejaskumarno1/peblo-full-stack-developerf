@@ -28,7 +28,11 @@ jobs:
 
       - name: Build installers
         # --publish never: the "release" job below is the only thing that publishes (no double upload).
-        run: npm run dist -- --publish never
+        # Without the Apple secrets the CSC_* variables arrive as empty strings, which electron-builder reads as "a certificate at path ''"; remove them so the build is simply unsigned.
+        shell: bash
+        run: |
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
+          npm run dist -- --publish never
         env:
           # macOS: signed + notarized when the five secrets below exist (Apple Developer ID, see README);
           # without them the build stays unsigned and macOS shows "Peblo Not Opened".
@@ -55,7 +59,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # publish whatever was built, even when one platform failed, so the Windows installer is never held back by the Mac build
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
