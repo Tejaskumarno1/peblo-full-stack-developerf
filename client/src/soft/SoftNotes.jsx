@@ -3,7 +3,7 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon , MousePointer2 } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -21,6 +21,7 @@ import { useAutoSave } from '../hooks';
 import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import ShareChips from '../components/ShareChips';
+import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/presencePref';
 import { useLive } from '../utils/liveStore';
 import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
@@ -47,6 +48,14 @@ export default function SoftNotes() {
     return n;
   });
   const [focus, setFocus] = useState(false);
+  const [cursorsOn, setCursors] = usePresence();
+  // in full screen people's live cursors are on by themselves; leaving it puts the earlier choice back (off unless it was turned on)
+  useEffect(() => {
+    if (!focus) return undefined;
+    const prev = appPref();
+    setPresence(true);
+    return () => restoreAppPresence(prev);
+  }, [focus]);
   const [shareOpen, setShareOpen] = useState(false);
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
@@ -683,6 +692,9 @@ export default function SoftNotes() {
                 <button type="button" className="s-outline" onClick={restore}>Restore</button>
               ) : (
                 <button type="button" className="s-outline round s-ico" onClick={() => setPreview((v) => !v)} aria-pressed={preview} aria-label={preview ? 'Edit' : 'Preview'} title={preview ? 'Edit' : 'Preview'}>{preview ? <Pencil size={15} /> : <Eye size={15} />}</button>
+              )}
+              {focus && (
+                <button type="button" className="s-outline s-cursors" data-testid="focus-cursors" aria-pressed={cursorsOn} title="Show other people's cursors and selections" onClick={() => setCursors(!cursorsOn)}><MousePointer2 size={14} />Live cursors<span className="s-sw" aria-hidden="true" /></button>
               )}
               {focus && (
                 <select className="s-outline s-focus-width" aria-label="Writing width" value={wide} onChange={(e) => { setWide(e.target.value); try { localStorage.setItem('peblo-focus-width', e.target.value); } catch { /* ignore */ } }}>

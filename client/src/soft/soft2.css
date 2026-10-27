@@ -583,3 +583,20 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-notes.focus .s-note-head { max-width: var(--fw); width: 100%; }
 .soft .s-notes.focus .s-note-head .s-note-title { width: auto; max-width: 46%; font-size: 40px; line-height: 46px; height: 46px; min-height: 46px; }
 @media (max-width: 800px) { .soft .s-note-head { flex-wrap: wrap; } .soft .s-note-head .s-note-title { max-width: 100%; flex: 1 1 100%; } }
+
+/* ---- full screen: the title gets the first row with the controls at its right end; everything about the note sits on one row under it ---- */
+.soft .s-notes.focus .s-note-head { flex-wrap: wrap; row-gap: 8px; align-items: center; }
+.soft .s-notes.focus .s-note-head .s-note-title { order: 1; flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
+.soft .s-notes.focus .s-note-head > .grow { display: none; }
+.soft .s-notes.focus .s-note-head > .s-outline, .soft .s-notes.focus .s-note-head > .s-menu-wrap { order: 2; flex: none; }
+.soft .s-notes.focus .s-note-head::before { content: ''; order: 3; flex: 0 0 100%; height: 0; }
+.soft .s-notes.focus .s-note-head > :not(.s-note-title):not(.s-outline):not(.s-menu-wrap):not(.grow) { order: 4; }
+.soft .s-notes.focus .s-note-head .cp-chips { flex-wrap: nowrap; }
+.soft .s-notes.focus .s-note-head .s-note-tags { flex: none; width: auto; max-width: none; }
+.soft .s-cursors { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.soft .s-cursors .s-sw { width: 8px; height: 8px; border-radius: 50%; background: #b7ab9c; }
+.soft .s-cursors[aria-pressed="true"] { border-color: var(--s-accent); color: var(--s-accent); }
+.soft .s-cursors[aria-pressed="true"] .s-sw { background: #2f9e62; }
+@media (max-width: 800px) { .soft .s-cursors { display: none; } }
+/* checkboxes in a note are the same orange as on the share page */
+.soft .s-notes .bn-block-content[data-content-type="checkListItem"] input[type="checkbox"] { accent-color: var(--s-accent); }
