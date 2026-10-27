@@ -125,9 +125,9 @@ try {
   await cmp.waitFor({ timeout: 5000 }).catch(() => {});
   check('the version list offers Compare', await cmp.isVisible().catch(() => false));
   await cmp.click().catch(() => {});
-  await page.locator('.s-vd').waitFor({ timeout: 5000 }).catch(() => {});
+  await page.locator('[data-testid="compare-box"]').waitFor({ timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(600);
-  const adds = await page.locator('.s-vd-cell.add').count();
+  const adds = await page.locator('[data-testid="cb-now"] .cb-add').count();
   check('the comparison shows what was added', adds > 0, adds);
   await shot('notes1-diff');
   await page.keyboard.press('Escape');

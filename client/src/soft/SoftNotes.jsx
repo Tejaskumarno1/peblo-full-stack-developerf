@@ -7,7 +7,7 @@ import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHori
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
-import VersionDiff from './VersionDiff';
+import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
 import { colorOf, withLegacy, inFolder, smartMatch } from './folders';
 import { useAuth } from '../context/AuthContext';
@@ -361,6 +361,16 @@ export default function SoftNotes() {
     await todosAPI.update(t.id, { noteId: null });
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
+  const loadVersionText = useCallback((v) => notesAPI.getBackup(doc.id, v.id).then((r) => r.data?.backup?.content ?? ''), [doc?.id]);
+  const keepAsNote = async ({ title, content }) => {
+    try {
+      const { data } = await notesAPI.create({ title, content, tags: doc.tags || [] });
+      refreshLists();
+      setDiffV(null);
+      flash('Saved as its own note');
+      return data.note;
+    } catch { flash('Could not save a separate note'); return null; }
+  };
   const restoreVersion = async (v) => {
     await notesAPI.revertBackup(doc.id, v.id);
     const { data } = await notesAPI.get(doc.id);
@@ -528,7 +538,8 @@ export default function SoftNotes() {
 
   return (
     <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
-      {diffV && doc && <VersionDiff doc={doc} version={diffV} onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await restoreVersion(v); }} />}
+      {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
+        onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await restoreVersion(v); }} onKeep={keepAsNote} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
       <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
