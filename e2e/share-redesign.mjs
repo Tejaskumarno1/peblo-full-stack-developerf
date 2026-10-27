@@ -23,8 +23,8 @@ try {
   const top = await g.evaluate(() => { const t = document.querySelector('.pb-shared .top'); const s = getComputedStyle(t); return { bg: s.backgroundColor, border: s.borderBottomWidth, filter: s.backdropFilter }; });
   check('header has no white bar behind it', /rgba\(0, 0, 0, 0\)|transparent/.test(top.bg) && top.border === '0px', JSON.stringify(top));
   await g.getByTestId('live-panel').waitFor({ timeout: 8000 });
-  const box = await g.evaluate(() => { const a = document.querySelector('.pb-shared article').getBoundingClientRect(); const p = document.querySelector('.pb-shared .cp-drawer').getBoundingClientRect(); return { aRight: a.right, pLeft: p.left, pRight: p.right, vw: innerWidth }; });
-  check('the live panel is docked beside the page, not floating over it', box.pLeft >= box.aRight - 1 && box.pRight <= box.vw, JSON.stringify(box));
+  const box = await g.evaluate(() => { const a = document.querySelector('.pb-shared article').getBoundingClientRect(); const p = document.querySelector('.pb-shared .cp-drawer').getBoundingClientRect(); const r = document.querySelector('.pb-shared .srail').getBoundingClientRect(); return { aRight: a.right, rRight: r.right, pLeft: p.left, pRight: p.right, vw: innerWidth }; });
+  check('the live panel opens as a flyout beside the left rail', box.pLeft >= box.rRight && box.pRight <= box.vw, JSON.stringify(box));
   const cardBg = await g.evaluate(() => getComputedStyle(document.querySelector('.pb-shared article')).backgroundColor);
   check('the page is a white card', /255, 255, 255/.test(cardBg), cardBg);
 

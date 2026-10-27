@@ -2,7 +2,7 @@
 // margin comment badges, reading rail dots, cover header, phone action bar.
 import { boot } from './lib.mjs';
 
-const { base, api, page, ctx, check, finish } = await boot();
+const { base, api, page, ctx, check, finish } = await boot({ freshGuest: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (await fn()) return true; } catch { /* retry */ } await wait(150); } return false; };
 const ready = async (p) => { await p.locator('.bn-editor').waitFor({ timeout: 20000 }); await p.locator('[data-testid="collab-status"]').waitFor({ state: 'detached', timeout: 20000 }).catch(() => {}); };
@@ -23,10 +23,10 @@ try {
   await g.goto(`${base}/s/note/${tok}`);
   await ready(g);
   check('1 the page shows its read time and word count, with no banner', /min read/.test(await g.getByTestId('by-stats').innerText()) && (await g.locator('[data-testid="cover"]').count()) === 0);
-  check('2 welcome note for a new guest', await g.locator('[data-testid="welcome-note"]').isVisible());
-  await g.getByLabel('Your name').fill('Mia');
-  await g.getByLabel('Your name').blur();
-  check('3 welcome note goes once named', await until(async () => (await g.locator('[data-testid="welcome-note"]').count()) === 0));
+  check('2 join card for a new guest', await g.locator('[data-testid="join-card"]').isVisible());
+  await g.locator('[data-testid="join-card"]').getByLabel('Your name').fill('Mia');
+  await g.locator('[data-testid="join-submit"]').click();
+  check('3 the card goes once joined', await until(async () => (await g.locator('[data-testid="join-card"]').count()) === 0) && (await g.getByLabel('Your name').inputValue()) === 'Mia');
   const swatches = g.locator('[data-testid="guest-color"]');
   check('4 colour swatches offered', (await swatches.count()) >= 5);
   await swatches.nth(3).click();

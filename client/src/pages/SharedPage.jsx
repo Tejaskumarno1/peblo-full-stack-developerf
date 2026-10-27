@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, MessageSquare, File as FileIcon } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
@@ -31,8 +31,42 @@ const toHtml = (md) => {
     ids.set(base, count + 1);
     heading.id = count ? `${base}-${count + 1}` : base;
   });
+  groupPictures(parsed);
   return parsed.body.innerHTML;
 };
+
+// Pictures the owner laid out as a grid or a row are kept in the picture address ("#gl=grid&gc=3"); show them that way here too.
+const layoutOf = (img) => {
+  const hash = (img.getAttribute('src') || '').split('#')[1];
+  if (!hash) return null;
+  const p = new URLSearchParams(hash);
+  const k = p.get('gl');
+  return k === 'grid' || k === 'row' ? { k, c: Math.min(4, Math.max(2, Number(p.get('gc')) || 3)) } : null;
+};
+const onlyPictures = (el) => {
+  if (!['P', 'FIGURE'].includes(el.tagName) || !el.querySelector('img')) return false;
+  const copy = el.cloneNode(true);
+  copy.querySelectorAll('img, figcaption, br').forEach((n) => n.remove());
+  return !copy.textContent.trim();
+};
+function groupPictures(doc) {
+  let run = null;
+  const wrap = (k, c, nodes, before) => {
+    const w = doc.createElement('div');
+    w.className = 'pic-group'; w.setAttribute('data-gl', k); w.setAttribute('data-gc', String(k === 'grid' ? c : Math.min(nodes.length, 6)));
+    before.before(w); nodes.forEach((n) => w.appendChild(n));
+  };
+  const flush = () => { if (run && run.items.length > 1) wrap(run.k, run.c, run.items, run.items[0]); run = null; };
+  [...doc.body.children].forEach((el) => {
+    const imgs = el.tagName === 'IMG' ? [el] : onlyPictures(el) ? [...el.querySelectorAll('img')] : [];
+    const g = imgs.length ? layoutOf(imgs[0]) : null;
+    if (!g) { flush(); return; }
+    if (imgs.length > 1) { flush(); wrap(g.k, g.c, imgs, el); el.remove(); return; }
+    if (run && run.k === g.k && (g.k === 'row' || run.c === g.c)) run.items.push(el);
+    else { flush(); run = { ...g, items: [el] }; }
+  });
+  flush();
+}
 
 const when = (value) => (value ? new Date(value).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || 'P';
@@ -790,6 +824,10 @@ export default function SharedPage() {
 
   const reader = useShareReader({ enabled: data?.kind === 'note' && !shareOff, scope: `${kindPath}:${token}`, articleRef, deps: rev });
   const [bmOpen, setBmOpen] = useState(false);
+  const showJoin = !!(data?.canEdit && !user && !previewMode && !joined && !error);
+  const [cardName, setCardName] = useState('');
+  const [cardColor, setCardColor] = useState(GUEST_COLORS[5]);
+  const joinNow = (anon) => { if (!anon) { saveGuestName(cardName); pickColor(cardColor); } markJoined(); };
   const [fly, setFly] = useState(null); // 'outline' | 'history' | 'file' (people uses panelOpen)
   const [wideScreen, setWideScreen] = useState(() => window.innerWidth > 1280);
   useEffect(() => { const on = () => setWideScreen(window.innerWidth > 1280); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
@@ -806,8 +844,8 @@ export default function SharedPage() {
     if (!shownFly) return undefined;
     const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
     const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
-    document.addEventListener('keydown', esc); document.addEventListener('pointerdown', away);
-    return () => { document.removeEventListener('keydown', esc); document.removeEventListener('pointerdown', away); };
+    document.addEventListener('keydown', esc); document.addEventListener('click', away);
+    return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);
   const tocLinks = headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>);
   const commentsBtn = () => document.querySelector('.pb-shared .pb-cbtn');
@@ -874,6 +912,13 @@ export default function SharedPage() {
         </div>
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
+      {showJoin && <div className="join-back" data-testid="join-back"><div className="join-card" role="dialog" aria-modal="true" aria-label="Join this page" data-testid="join-card" onKeyDown={(event) => { if (event.key === 'Escape') joinNow(true); }}>
+        <div className="join-prev"><span className="join-big" style={{ background: cardColor, boxShadow: `0 0 0 5px ${cardColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
+        <label className="join-lbl">Your name<input aria-label="Your name" autoFocus maxLength={40} placeholder="Guest" value={cardName} onChange={(event) => setCardName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') joinNow(false); }} /></label>
+        <div><div className="join-lbl">Your colour</div><div className="join-sws" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={cardColor === c} aria-label={`Colour ${c}`} className={cardColor === c ? 'on' : ''} style={{ background: c }} onClick={() => setCardColor(c)} />)}</div></div>
+        <div className="join-mem"><Lock size={14} />Remembered in this browser only. Others see your name and colour on your cursor.</div>
+        <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}>{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Just read, stay anonymous</button></div>
+      </div></div>}
       {data && !error && <nav className="srail" aria-label="Page panels" data-testid="srail">
         {hasToc && <button type="button" className={pinnedToc || shownFly === 'outline' ? 'on' : ''} data-testid="rail-outline" aria-label="Outline" aria-pressed={pinnedToc || shownFly === 'outline'} title="Outline [" onClick={() => openFly('outline')}><List size={19} /></button>}
         <button type="button" className={shownFly === 'people' ? 'on' : ''} data-testid="rail-people" aria-label="People" aria-pressed={shownFly === 'people'} title="People ]" onClick={() => openFly('people')}><Users size={19} />{others.length > 0 && <i className="srail-n">{others.length}</i>}</button>
@@ -927,7 +972,7 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}`}>
+        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
           {pinnedToc && <aside className="toc" aria-label="On this page">
             <div className="toc-head"><h2>On this page</h2><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-pressed="true" aria-label="Unpin outline" title="Unpin outline" onClick={toggleToc}><Pin size={17} /></button></div>
             {tocLinks}
@@ -948,7 +993,6 @@ export default function SharedPage() {
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
               {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
-                {!joined && <p className="welcome-note" data-testid="welcome-note"><Users size={16} /><span>Welcome. Pick a name and a colour so the others here can tell who you are.{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</span></p>}
                 <label className="guest-name"><span>You are editing as</span>
                   <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
                   <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
@@ -1017,7 +1061,7 @@ export default function SharedPage() {
         {reader.changes && <div className="rp" data-testid="changes-pill"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div><button type="button" data-testid="changes-toggle" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button><button type="button" aria-label="Dismiss" onClick={reader.dismissChanges}><X size={14} /></button></div>}
         {reader.place && !reader.changes && <div className="rp" data-testid="place-pill"><History size={16} /><div><b>You stopped at {reader.place.title}</b></div><button type="button" data-testid="place-jump" onClick={reader.jumpPlace}>Jump back</button><button type="button" aria-label="Dismiss" onClick={reader.dismissPlace}><X size={14} /></button></div>}
       </div>}
-      {data?.kind === 'note' && !fullscreen && <GuestTour ready={!!data && !error} />}
+      {data?.kind === 'note' && !fullscreen && <GuestTour ready={!!data && !error && !showJoin} />}
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>

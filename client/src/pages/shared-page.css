@@ -497,3 +497,30 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 @media (min-width: 1200px) { .pb-shared .stage.no-toc { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 700px) { .pb-shared .srail, .pb-shared .srail-fly:not(.people) { display: none; } .pb-shared .srail-fly.people { left: 8px; right: 8px; width: auto; top: 70px; } }
 @media (min-width: 701px) { .pb-shared .stage { padding-left: 84px; } }
+
+/* ---- join card for a new editing guest (mockup N1a) ---- */
+.pb-shared .join-back { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: rgba(58, 42, 26, .3); backdrop-filter: blur(2px); }
+.pb-shared .join-card { width: min(420px, 100%); display: grid; gap: 16px; padding: 26px; border-radius: 32px; background: var(--surface); color: var(--fg); box-shadow: 0 24px 60px rgba(30, 20, 50, .3); text-align: left; }
+.pb-shared .join-prev { display: flex; align-items: center; gap: 14px; }
+.pb-shared .join-big { flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 800 26px 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; }
+.pb-shared .join-card h3 { margin: 0; font: 800 26px/1.05 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; }
+.pb-shared .join-card p { margin: 4px 0 0; color: var(--fg2); font-size: 13.5px; }
+.pb-shared .join-lbl { display: grid; gap: 6px; font: 700 12px 'Figtree', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--fg3); }
+.pb-shared .join-lbl input { height: 48px; padding: 0 14px; border: 1.5px solid var(--fg); border-radius: 16px; background: transparent; color: var(--fg); font: 700 16px 'Figtree', system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.pb-shared .join-sws { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.pb-shared .join-sws button { width: 32px; height: 32px; border: 0; border-radius: 50%; cursor: pointer; }
+.pb-shared .join-sws button.on { outline: 3px solid var(--fg); outline-offset: 2px; }
+.pb-shared .join-mem { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg3); font-weight: 600; }
+.pb-shared .join-btns { display: grid; gap: 8px; }
+.pb-shared .join-btns .btn { height: 48px; justify-content: center; font-size: 15px; }
+
+/* picture groups in the reader (grid / row), matching the editor */
+.pb-shared .doc .pic-group { display: grid; gap: 8px; margin: 20px 0; }
+.pb-shared .doc .pic-group[data-gl="grid"][data-gc="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pb-shared .doc .pic-group[data-gl="grid"][data-gc="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pb-shared .doc .pic-group[data-gl="grid"][data-gc="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pb-shared .doc .pic-group[data-gl="row"] { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.pb-shared .doc .pic-group figure { margin: 0; }
+.pb-shared .doc .pic-group img { width: 100%; height: 100%; margin: 0; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 14px; }
+@media (max-width: 640px) { .pb-shared .doc .pic-group[data-gl="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1281px) { .pb-shared .stage.people-pinned { padding-left: 424px; } }
