@@ -544,14 +544,14 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 
 /* ---- note tabs (mockup B4) ---- */
 .soft .s-tabs { display: flex; align-items: flex-end; gap: 6px; margin: -4px 0 0; position: relative; flex: none; min-width: 0; }
-.soft .s-tab-nav { width: 30px; height: 30px; margin-bottom: 4px; border-radius: 10px; display: grid; place-items: center; background: var(--s-chip, rgba(0,0,0,.05)); color: var(--s-fg2); flex: none; }
+.soft .s-tab-nav { border: 0; padding: 0; box-shadow: none; width: 30px; height: 30px; margin-bottom: 4px; border-radius: 10px; display: grid; place-items: center; background: var(--s-chip, rgba(0,0,0,.05)); color: var(--s-fg2); flex: none; }
 .soft .s-tab-nav:disabled { opacity: .35; cursor: default; }
 .soft .s-tab-row { display: flex; align-items: flex-end; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.soft .s-tab { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px; border-radius: 14px 14px 0 0; font-size: 13px; color: var(--s-fg2); cursor: pointer; flex: 0 1 170px; min-width: 70px; border-bottom: 3px solid transparent; }
+.soft .s-tab { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px; border-radius: 14px 14px 0 0; font-size: 13px; color: var(--s-fg2); cursor: pointer; flex: 0 0 auto; max-width: 170px; min-width: 112px; border-bottom: 3px solid transparent; }
 .soft .s-tab b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .soft .s-tab.on { background: var(--s-surface); color: var(--s-fg); border-bottom-color: var(--s-accent); box-shadow: var(--s-shadow); }
 .soft .s-tab:not(.on):hover { background: rgba(0,0,0,.04); }
-.soft .s-tab-x { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: transparent; color: inherit; flex: none; }
+.soft .s-tab-x { border: 0; padding: 0; box-shadow: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: transparent; color: inherit; flex: none; }
 .soft .s-tab-x:hover { background: rgba(0,0,0,.08); }
 .soft .s-tab-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--s-accent); flex: none; }
 .soft .s-tab-menu { position: fixed; z-index: 80; width: 250px; padding: 8px; border-radius: 20px; background: var(--s-surface); box-shadow: var(--s-shadow-lg, 0 18px 40px rgba(0,0,0,.2)); display: grid; gap: 2px; }
