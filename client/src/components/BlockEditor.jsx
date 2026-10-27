@@ -69,6 +69,14 @@ const withLayout = (p) => {
   if (ar) q.push(`ar=${ar[1]}`);
   const g = groupOf(p.url);
   if (g.gl === 'grid') q.push('gl=grid', `gc=${g.gc}`); else if (g.gl === 'row') q.push('gl=row');
+  // the width of the column the size was chosen in ("rc") lets other screens keep the same proportions; "rp" is the size it was chosen at
+  const had = new URLSearchParams(String(p.url).split('#').slice(1).join('#'));
+  if (p.previewWidth) {
+    const col = document.querySelector('.bn-editor > .bn-block-group')?.clientWidth || document.querySelector('.bn-editor')?.clientWidth || 0;
+    const same = Number(had.get('rp')) === Math.round(p.previewWidth) && Number(had.get('rc')) > 0;
+    const rc = same ? Number(had.get('rc')) : col;
+    if (rc > 0) q.push(`rc=${Math.round(rc)}`, `rp=${Math.round(p.previewWidth)}`);
+  }
   const base = String(p.url).split('#')[0];
   return q.length ? `${base}#${q.join('&')}` : base;
 };
@@ -111,14 +119,17 @@ function fromStorage(blocks) {
       return { type: 'file', props: { url, name }, children };
     }
     if (b.type === 'image' && /^https?:\/\/\S+\.(?:mp4|webm|ogv|mov|m4v)(?:[?#]|$)/i.test(b.props?.url || '')) return { type: 'video', props: { url: b.props.url.split('#')[0], name: b.props.caption || b.props.name || 'video', showPreview: true }, children };
-    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar|gl|gc)=/.test(b.props.url)) {
+    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar|gl|gc|rc|rp)=/.test(b.props.url)) {
       const [u, ...h] = b.props.url.split('#');
       const q = new URLSearchParams(h.join('#'));
       const pw = Number(q.get('pw'));
       const ta = q.get('ta');
       const ar = Number(q.get('ar'));
       const gl = q.get('gl');
-      const keep = gl === 'grid' ? `#gl=grid&gc=${Math.min(4, Math.max(2, Number(q.get('gc')) || 2))}` : gl === 'row' ? '#gl=row' : '';
+      const kp = [];
+      if (gl === 'grid') kp.push('gl=grid', `gc=${Math.min(4, Math.max(2, Number(q.get('gc')) || 2))}`); else if (gl === 'row') kp.push('gl=row');
+      if (Number(q.get('rc')) > 0 && Number(q.get('rp')) > 0) kp.push(`rc=${Math.round(Number(q.get('rc')))}`, `rp=${Math.round(Number(q.get('rp')))}`);
+      const keep = kp.length ? `#${kp.join('&')}` : '';
       return { ...b, props: { ...b.props, url: u + keep, ...(ar > 0 ? { name: `crop=${ar}`, caption: b.props.caption || b.props.name || '' } : {}), ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
     }
     if (b.type === 'bulletListItem' && Array.isArray(b.content) && b.content[0]?.type === 'text' && /^▸\s/.test(b.content[0].text || '')) {
@@ -339,26 +350,44 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const root = fitRoot; if (!root) return undefined;
     const sheet = document.createElement('style'); sheet.setAttribute('data-pic-fit', '');
     document.head.appendChild(sheet);
-    let timer = 0; let last = '';
+    let timer = 0; let last = ''; let again = 0;
     const fit = () => {
       timer = 0;
-      const col = root.querySelector('.bn-editor')?.clientWidth || root.clientWidth; if (!col) return;
-      const ids = [];
+      const col = root.querySelector('.bn-editor > .bn-block-group')?.clientWidth || root.querySelector('.bn-editor')?.clientWidth || root.clientWidth; if (!col) return;
+      const parts = [];
       root.querySelectorAll('.bn-block-content[data-content-type="image"][data-preview-width]').forEach((c) => {
-        const w = Number(c.getAttribute('data-preview-width')) || 0;
+        const w0 = Number(c.getAttribute('data-preview-width')) || 0;
         const id = c.closest('.bn-block-outer')?.getAttribute('data-id');
-        if (id && w > 0 && (w >= col * 0.66 || col - w < 300)) ids.push(id);
+        if (!id || !(w0 > 0)) return;
+        // keep the owner's proportions on this screen: a picture half the owner's column is half of this one
+        const q = new URLSearchParams(String(c.querySelector('img')?.getAttribute('src') || '').split('#').slice(1).join('#'));
+        const rc = Number(q.get('rc')) || (guest ? 1090 : 0);
+        const w = rc > 0 && Math.abs(rc - col) > 8 ? Math.floor(Math.min(col, w0 * col / rc) * 0.92) : w0;
+        const sel = `.block-editor-container .bn-block-outer[data-id="${id}"]`;
+        if (w >= col * 0.66 || col - w < 295) parts.push(`${sel} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }`);
+        else if (w !== w0) parts.push(`${sel} .bn-visual-media-wrapper, ${sel} .bn-file-block-content-wrapper, ${sel} img.bn-visual-media { width: ${w}px !important; max-width: 100% !important; }`);
       });
-      const css = ids.map((id) => `.block-editor-container .bn-block-outer[data-id="${id}"]`).join(',');
-      const text = css ? `${css} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }` : '';
-      if (text !== last) { last = text; sheet.textContent = text; }
+      // text that comes right after a row of pictures starts below them when the pictures leave it too little room beside them
+      root.querySelectorAll('.bn-editor > .bn-block-group > .bn-block-outer').forEach((o) => {
+        const prev = o.previousElementSibling;
+        const isPic = (e) => !!e?.querySelector(':scope > .bn-block > .bn-block-content[data-content-type="image"]');
+        if (isPic(o) || !isPic(prev)) return;
+        const tops = []; let e = prev;
+        while (isPic(e)) { const r = e.getBoundingClientRect(); tops.push(r); e = e.previousElementSibling; }
+        const rowTop = tops[0].top; const row = tops.filter((r) => Math.abs(r.top - rowTop) < 4);
+        const used = row.reduce((a, r) => a + r.width, 0);
+        const fl = getComputedStyle(prev).float;
+        if (fl !== 'none' && col - used < 260) parts.push(`.block-editor-container .bn-block-outer[data-id="${o.getAttribute('data-id')}"] { clear: both; }`);
+      });
+      const text = parts.join('\n');
+      if (text !== last) { last = text; sheet.textContent = text; if (again < 4) { again += 1; timer = setTimeout(fit, 60); } } else again = 0; // the new sizes move other pictures, so look once more
     };
     const queue = () => { if (!timer) timer = setTimeout(fit, 30); };
     const mo = new MutationObserver(queue); mo.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-preview-width'] });
     const ro = new ResizeObserver(queue); ro.observe(root);
     queue();
     return () => { mo.disconnect(); ro.disconnect(); if (timer) clearTimeout(timer); sheet.remove(); };
-  }, [fitRoot]);
+  }, [fitRoot, guest]);
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
   const [findOpen, setFindOpen] = useState(false);

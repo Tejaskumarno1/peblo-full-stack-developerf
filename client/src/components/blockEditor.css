@@ -34,7 +34,8 @@
 .block-editor-container .bn-block-outer:has(> .bn-block > .bn-block-content[data-content-type="image"][data-text-alignment="right"][data-preview-width]) {
   float: right; max-width: 65%; margin: 4px 0 10px 0 !important; padding-left: 18px !important;
 }
-.block-editor-container .bn-block-outer.pb-pic-full { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }
+.block-editor-container .bn-block-outer:not(:has(> .bn-block > .bn-block-content[data-content-type="image"])) + .bn-block-outer:has(> .bn-block > .bn-block-content[data-content-type="image"][data-preview-width]) { clear: both; }
+/* a picture that follows text starts its own row, so floats from the paragraph above never push it sideways; pictures that follow each other still sit side by side */
 .block-editor-container .bn-editor::after { content: ''; display: block; clear: both; }
 .block-editor-container .bn-visual-media-wrapper img { max-width: 100%; height: auto; }
 @media (max-width: 560px) {
