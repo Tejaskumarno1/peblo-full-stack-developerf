@@ -8,7 +8,8 @@ import {
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2 } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { aiAPI, notesAPI, todosAPI } from '../api/index';
@@ -195,7 +196,54 @@ function CommentTools() {
     </>
   );
 }
-const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />, <CommentTools key="comments" />]}</FormattingToolbar>;
+// Ask: one button at the end of the selection bar that opens Explain, Make a task, Quiz me and the writing helpers.
+const ASK = [
+  { id: 'explain', label: 'Explain', Icon: Sparkles, send: { kind: 'explain' } },
+  { id: 'task', label: 'Make a task', Icon: CheckSquare, send: { kind: 'task' } },
+  { id: 'quiz', label: 'Quiz me', Icon: HelpCircle, send: { kind: 'quiz' } },
+  { id: 'grammar', label: 'Fix grammar', Icon: SpellCheck, send: { kind: 'improve', command: 'grammar' } },
+  { id: 'shorter', label: 'Make shorter', Icon: Minus, send: { kind: 'improve', command: 'shorter' } },
+  { id: 'longer', label: 'Make longer', Icon: Plus, send: { kind: 'improve', command: 'longer' } },
+];
+function AskTool() {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const editor = useBlockNoteEditor();
+  const sel = (editor.getSelectedText?.() || '').trim();
+  useEffect(() => {
+    if (!open) return undefined;
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) {
+      const w = 220, h = ASK.length * 38 + 14;
+      const top = r.bottom + 10 + h > window.innerHeight ? Math.max(8, r.top - 10 - h) : r.bottom + 10;
+      setPos({ top, left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) });
+    }
+    const close = (e) => { if (e.type === 'keydown' && e.key !== 'Escape') return; if (e.type === 'mousedown' && (e.target.closest?.('.pb-sel-menu') || e.target.closest?.('.pb-sel-ask'))) return; setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [open]);
+  if (!sel || sel.length < 3) return null;
+  return (
+    <div className="pb-sel-ask" onMouseDown={(e) => e.preventDefault()}>
+      <button ref={btnRef} type="button" className={`pb-sel-ask-btn${open ? ' on' : ''}`} data-testid="ask-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Sparkles size={14} />Ask<ChevronDown size={13} />
+      </button>
+      {open && pos && createPortal(
+        <div className="pb-sel-menu" role="menu" data-testid="ask-menu" style={{ top: pos.top, left: pos.left }} onMouseDown={(e) => e.preventDefault()}>
+          {ASK.map(({ id, label, Icon, send }) => (
+            <button key={id} type="button" role="menuitem" data-testid={`ask-${id}`} onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('pb-ai-run', { detail: send })); }}>
+              <Icon size={14} />{label}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />, <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
 
 // Ready-made starting points, offered in the slash menu.
 const TEMPLATES = {
@@ -442,14 +490,15 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     }
     return { blockId: block?.id, text, scope };
   };
-  const COMMANDS = { shorter: 'Rewrite much shorter, keeping the meaning:', simpler: 'Rewrite in simpler, plainer words:' };
+  const COMMANDS = { shorter: 'Rewrite much shorter, keeping the meaning:', simpler: 'Rewrite in simpler, plainer words:', grammar: 'Fix the grammar, spelling and punctuation, changing nothing else, in:', longer: 'Rewrite longer and richer, keeping the meaning:' };
+  const KIND_CMD = { explain: 'Explain this simply in 2 to 4 sentences:', quiz: 'Write 3 short quiz questions, each followed by its answer, about:' };
   const runAi = async (kind, source, command) => {
     const src = source || sourceFor(kind);
     if (!src.text) { setCard({ kind, src, status: 'error', error: 'Type or select some text first, then run this again.' }); return; }
-    setCard({ kind, src, status: 'loading' });
+    setCard({ kind, src, status: 'loading', command });
     aiBusyRef.current = true;
     try {
-      const cmd = command ? COMMANDS[command] : { todo: 'todo', improve: 'improve', summarize: 'summarize', continue: 'continue' }[kind];
+      const cmd = command ? COMMANDS[command] : KIND_CMD[kind] || { todo: 'todo', improve: 'improve', summarize: 'summarize', continue: 'continue' }[kind];
       const res = await aiAPI.processBlock({ text: src.text.slice(0, 12000), command: cmd });
       const result = (res.data?.result || '').trim();
       if (!result) throw new Error('The AI sent back nothing.');
@@ -461,6 +510,24 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       aiBusyRef.current = false;
     }
   };
+  // The Ask menu in the selection bar sends its choice here (see AskTool).
+  const runAiRef = useRef(runAi);
+  runAiRef.current = runAi;
+  useEffect(() => {
+    const onAsk = (e) => {
+      if (!rootRef.current?.contains(document.activeElement) && !rootRef.current?.querySelector('.bn-toolbar')) return;
+      const { kind, command } = e.detail || {};
+      if (kind === 'task') {
+        const src = sourceFor('task');
+        if (!src.text) { setCard({ kind: 'todo', src, status: 'error', error: 'Select some words first, then choose Make a task.' }); return; }
+        setCard({ kind: 'todo', src, status: 'done', items: [{ text: src.text.length > 120 ? `${src.text.slice(0, 117)}...` : src.text, on: true }] });
+        return;
+      }
+      runAiRef.current(kind, undefined, command);
+    };
+    window.addEventListener('pb-ai-run', onAsk);
+    return () => window.removeEventListener('pb-ai-run', onAsk);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const afterId = () => card?.src?.blockId || editor.document[editor.document.length - 1]?.id;
   const insertBelow = (blocks) => {
     editor.insertBlocks(blocks, afterId(), 'after');
@@ -647,7 +714,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     if (m) { e.preventDefault(); e.stopPropagation(); navigate(`/notes/${m[1]}`); }
   };
 
-  const title = { todo: 'Action items', improve: 'Improve writing', summarize: 'Summary', continue: 'Continue writing' }[card?.kind];
+  const title = { todo: 'Action items', improve: card?.command === 'grammar' ? 'Fix grammar' : card?.command === 'shorter' ? 'Make shorter' : card?.command === 'longer' ? 'Make longer' : 'Improve writing', summarize: 'Summary', continue: 'Continue writing', explain: 'Explain', quiz: 'Quiz me' }[card?.kind];
   const target = useMemo(() => (editable !== false ? commentTarget({ noteId, collab }) : null), [noteId, collab?.share, collab?.sid, editable]); // eslint-disable-line react-hooks/exhaustive-deps
   const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 

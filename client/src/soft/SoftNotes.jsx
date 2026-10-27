@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -55,8 +55,6 @@ export default function SoftNotes() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [question, setQuestion] = useState('');
-  const pillRef = useRef(null);
-  const [pill, setPill] = useState(null); // selection toolbar {x, y, text}
   const [toast, setToast] = useState('');
   const [q, setQ] = useState(''); // the search box
   const [dq, setDq] = useState(''); // what was typed, after a short pause
@@ -194,7 +192,6 @@ export default function SoftNotes() {
     setTagDraft(null);
     setMenuOpen(false);
     setHistoryOpen(false);
-    setPill(null);
   }, []);
 
   const startDraft = useCallback(() => {
@@ -502,62 +499,6 @@ export default function SoftNotes() {
   const words = useMemo(() => plainText.trim().split(/\s+/).filter(Boolean).length, [plainText]);
   const chars = useMemo(() => plainText.replace(/\s+/g, ' ').trim().length, [plainText]);
 
-  // Keep the Explain / Make a task pill clear of the formatting toolbar, wherever that one opens.
-  useLayoutEffect(() => {
-    const el = pillRef.current;
-    const box = bodyRef.current;
-    if (!pill || !el || !box) return;
-    const place = () => {
-    const tb = document.querySelector('.bn-toolbar');
-    const b = box.getBoundingClientRect();
-    let top = pill.y;
-    if (tb) {
-      const t = tb.getBoundingClientRect();
-      const h = el.offsetHeight || 44;
-      const mine = { top: b.top + top - box.scrollTop, bottom: b.top + top - box.scrollTop + h };
-      if (t.bottom + 6 > mine.top && t.top - 6 < mine.bottom) {
-        // overlap: slip below the toolbar if there is room, otherwise above it
-        const below = t.bottom + 8 - b.top + box.scrollTop;
-        const above = t.top - 8 - h - b.top + box.scrollTop;
-        top = (t.bottom + 8 + h < window.innerHeight) ? below : above;
-      }
-    }
-    el.style.top = Math.max(top, 0) + 'px';
-    };
-    place();
-    const t1 = window.setTimeout(place, 120);
-    const t2 = window.setTimeout(place, 400);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
-  }, [pill]);
-
-  // ---------- selection toolbar ----------
-  useEffect(() => {
-    const onSel = () => {
-      const sel = window.getSelection();
-      const box = bodyRef.current;
-      if (!sel || sel.isCollapsed || !box || !sel.rangeCount || !box.contains(sel.anchorNode)) { setPill(null); return; }
-      const text = sel.toString().trim();
-      if (text.length < 3) { setPill(null); return; }
-      const r = sel.getRangeAt(0).getBoundingClientRect();
-      const b = box.getBoundingClientRect();
-      setPill({ x: Math.min(Math.max(r.left + r.width / 2 - b.left, 150), b.width - 150), y: r.bottom - b.top + 10 + box.scrollTop, text: text.slice(0, 400) });
-    };
-    document.addEventListener('selectionchange', onSel);
-    return () => document.removeEventListener('selectionchange', onSel);
-  }, []);
-  const pillAction = async (kind) => {
-    const text = pill?.text;
-    setPill(null);
-    if (!text) return;
-    if (kind === 'task') {
-      if (!noteId) { flash('Type something first so the note is saved.'); return; }
-      await todosAPI.create({ text: text.length > 120 ? `${text.slice(0, 117)}…` : text, priority: 'medium', noteId });
-      queryClient.invalidateQueries({ queryKey: ['todos'] });
-      flash('Task added and linked to this note');
-    } else if (kind === 'explain') ask(`Explain this simply: "${text}"`);
-    else ask(`Quiz me on this: "${text}"`);
-  };
-
   // Notes that mention this note's title
   const mentions = useMemo(() => {
     const title = (doc?.title || '').trim().toLowerCase();
@@ -774,13 +715,6 @@ export default function SoftNotes() {
                 focusMode={typewriter === 'on'}
                 formattingToolbar
               />
-              {pill && !preview && (
-                <div className="s-sel-pill" ref={pillRef} style={{ left: pill.x, top: Math.max(pill.y, 0) }} onMouseDown={(e) => e.preventDefault()}>
-                  <button type="button" className="on" onClick={() => pillAction('explain')}>Explain</button>
-                  <button type="button" onClick={() => pillAction('task')}>Make a task</button>
-                  <button type="button" onClick={() => pillAction('quiz')}>Quiz me</button>
-                </div>
-              )}
             </div>
             {toast && <div className="s-toast" role="status">{toast}</div>}
           </>

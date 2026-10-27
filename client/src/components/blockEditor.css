@@ -69,3 +69,13 @@
 
 /* ---- cropped pictures ---- */
 .block-editor-container .bn-block-content[data-crop] img.bn-visual-media { aspect-ratio: var(--pb-ar); object-fit: cover; }
+
+
+/* Ask: the last button of the selection bar, with its menu (Explain, Make a task, Quiz me, Fix grammar, Make shorter, Make longer) */
+.pb-sel-ask { position: relative; display: inline-flex; flex: none; align-items: center; margin-left: 4px; padding-left: 6px; border-left: 1px solid rgba(128, 128, 128, .35); }
+.pb-sel-ask .pb-sel-ask-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--s-accent, #C4441C); color: #fff; font: 700 13px/1 inherit; cursor: pointer; }
+.pb-sel-ask .pb-sel-ask-btn:hover, .pb-sel-ask .pb-sel-ask-btn.on { filter: brightness(1.08); }
+.pb-sel-menu { position: fixed; z-index: 9999; width: 220px; padding: 6px; display: grid; gap: 2px; background: var(--s-surface, #fff); color: var(--s-fg, #241F1A); border: 1px solid var(--s-line, #EADFD0); border-radius: 16px; box-shadow: 0 18px 40px rgba(70, 45, 20, .22); }
+.pb-sel-menu button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent !important; color: inherit !important; font: 600 13.5px/1 inherit; text-align: left; cursor: pointer; box-shadow: none; }
+.pb-sel-menu button:hover, .pb-sel-menu button:focus-visible { background: var(--s-accent-soft, #FFE4D8) !important; outline: none; }
+.pb-sel-menu button svg { flex: none; opacity: .75; }
