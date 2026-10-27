@@ -17,6 +17,7 @@ import { fileToAttachment } from '../utils/imageData';
 import { createCollab } from '../utils/collab';
 import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
+import EditedBy from './EditedBy';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
@@ -738,6 +739,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         </CommentsDock>
       )}
       {rt && <Pointers rt={rt} rootRef={rootRef} ready={live.ready && live.connected} />}
+      {rt && editable && <EditedBy rt={rt} editor={editor} ready={live.ready && live.connected} />}
       {rt && <Reactions rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} canReact={editable} dark={dark} />}
       <CommentsOn.Provider value={!!target}>
       <BlockNoteView
