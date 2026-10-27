@@ -8,7 +8,7 @@ import {
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ import CommentsDock from './CommentsDock';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
+import MediaTools, { groupOf } from './MediaTools';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
@@ -107,6 +108,8 @@ const withLayout = (p) => {
   if (p.textAlignment && p.textAlignment !== 'left') q.push(`ta=${p.textAlignment}`);
   const ar = /^crop=([\d.]+)$/.exec(p.name || '');
   if (ar) q.push(`ar=${ar[1]}`);
+  const g = groupOf(p.url);
+  if (g.gl === 'grid') q.push('gl=grid', `gc=${g.gc}`); else if (g.gl === 'row') q.push('gl=row');
   const base = String(p.url).split('#')[0];
   return q.length ? `${base}#${q.join('&')}` : base;
 };
@@ -137,13 +140,16 @@ function fromStorage(blocks) {
       if (m) return { type: m[1], props: { url, name, showPreview: true }, children };
       return { type: 'file', props: { url, name }, children };
     }
-    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar)=/.test(b.props.url)) {
+    if (b.type === 'image' && /^https?:\/\/\S+\.(?:mp4|webm|ogv|mov|m4v)(?:[?#]|$)/i.test(b.props?.url || '')) return { type: 'video', props: { url: b.props.url.split('#')[0], name: b.props.caption || b.props.name || 'video', showPreview: true }, children };
+    if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar|gl|gc)=/.test(b.props.url)) {
       const [u, ...h] = b.props.url.split('#');
       const q = new URLSearchParams(h.join('#'));
       const pw = Number(q.get('pw'));
       const ta = q.get('ta');
       const ar = Number(q.get('ar'));
-      return { ...b, props: { ...b.props, url: u, ...(ar > 0 ? { name: `crop=${ar}`, caption: b.props.caption || b.props.name || '' } : {}), ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
+      const gl = q.get('gl');
+      const keep = gl === 'grid' ? `#gl=grid&gc=${Math.min(4, Math.max(2, Number(q.get('gc')) || 2))}` : gl === 'row' ? '#gl=row' : '';
+      return { ...b, props: { ...b.props, url: u + keep, ...(ar > 0 ? { name: `crop=${ar}`, caption: b.props.caption || b.props.name || '' } : {}), ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
     }
     if (b.type === 'bulletListItem' && Array.isArray(b.content) && b.content[0]?.type === 'text' && /^▸\s/.test(b.content[0].text || '')) {
       const first = { ...b.content[0], text: b.content[0].text.replace(/^▸\s+/, '') };
@@ -151,6 +157,64 @@ function fromStorage(blocks) {
     }
     return { ...b, children };
   });
+}
+
+// Callouts, cropped pictures and picture groups are drawn with decorations (the editor rewrites attributes it did not set itself, so a decoration is what it keeps).
+// The plugin is handed to the editor when it is created: registering it later rebuilds the editor's plugin views, which switched off Undo in a live note.
+function makeDecoPlugin() {
+  return new Plugin({
+    key: new PluginKey('pb-callouts'),
+    props: {
+      decorations(state) {
+        const out = [];
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'blockGroup') {
+            // pictures side by side: two or more in a row of blocks share a layout (stack is the plain default)
+            const run = [];
+            const flush = () => {
+              if (run.length > 1) {
+                const g = groupOf(run[0].url);
+                if (g.gl !== 'stack') for (const r of run) out.push(Decoration.node(r.pos, r.pos + r.size, { 'data-gl': g.gl, 'data-gn': String(Math.min(run.length, 6)), 'data-gc': String(g.gc) }));
+              }
+              run.length = 0;
+            };
+            node.forEach((child, offset) => {
+              const content = child.firstChild;
+              if (content && content.type.name === 'image' && child.type.name === 'blockContainer') run.push({ pos: pos + 1 + offset + 1, size: content.nodeSize, url: content.attrs?.url });
+              else flush();
+            });
+            flush();
+            return true;
+          }
+          if (node.type.name === 'image') {
+            const m = /^crop=([\d.]+)$/.exec(node.attrs?.name || '');
+            if (m) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-crop': m[1], style: `--pb-ar:${m[1]}` }));
+            return false;
+          }
+          if (node.type.name !== 'quote') return true;
+          const t = node.textContent.trim();
+          const k = CALLOUTS.find(([emoji]) => t.startsWith(emoji) || t.startsWith(emoji.replace('\uFE0F', '')));
+          if (k) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-callout': k[1] }));
+          return false;
+        });
+        return DecorationSet.create(state.doc, out);
+      },
+    },
+  });
+}
+
+// Undo in a live note is the shared document's own history. Comments and reactions add editor plugins after the note opens;
+// that rebuilds the plugin views, and the history was switched off with them (Ctrl Z did nothing). Keep it alive for the life of the editor.
+function undoManagerOf(editor) {
+  try {
+    const st = editor.prosemirrorState;
+    return st.plugins.find((p) => p.key === 'y-undo$')?.getState(st)?.undoManager || null;
+  } catch { return null; }
+}
+function keepUndo(editor) {
+  const um = undoManagerOf(editor);
+  if (um && !um.__pbKeep) { um.__pbKeep = true; um.destroy = () => {}; }
+  return um;
 }
 
 // Buttons that appear above a picture when it is clicked: where it sits and how wide it is.
@@ -176,6 +240,7 @@ function ImageTools() {
       {[['orig', 'Original shape', ''], ['sq', 'Crop to a square', 'crop=1'], ['43', 'Crop to 4:3', 'crop=1.333'], ['169', 'Crop to 16:9', 'crop=1.778']].map(([k, tip, v]) => (
         <Btn key={'c' + k} mainTooltip={tip} icon={tag({ orig: '◻', sq: '1:1', 43: '4:3', 169: '16:9' }[k])} isSelected={(b.props.name || '') === v || (!v && !/^crop=/.test(b.props.name || ''))} onClick={() => set({ name: v })} />
       ))}
+      <Btn key="crop" mainTooltip="Crop, rotate or flip this picture" icon={<Crop size={15} />} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'crop', id: b.id } }))} />
       <Btn key="f" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />
     </>
   );
@@ -280,10 +345,14 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return () => window.removeEventListener('pb-identity', on);
   }, [rt]);
   const [live, setLive] = useState({ connected: false, ready: false });
+  const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin()] }));
   const editor = useCreateBlockNote({
     uploadFile,
+    extensions: [decoExt],
     ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity' } } : {}),
   });
+  useMemo(() => keepUndo(editor), [editor]);
+  useEffect(() => { keepUndo(editor); }, [editor, rt]);
   const { theme } = useAuth();
   const loadingRef = useRef(!!rt); // a live document is not edited until it is in step with the server
   const changeSequenceRef = useRef(0);
@@ -362,6 +431,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const markReady = () => {
       loadingRef.current = true; // what arrives from the server is not an edit to save
       everReady = true;
+      try { keepUndo(editor)?.clear(); } catch { /* none */ } // filling the document is not something Ctrl Z may take back
       setLive((s) => ({ ...s, ready: true }));
       readyTimer = setTimeout(() => {
         loadingRef.current = false;
@@ -558,8 +628,16 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const flip = (i) => setCard({ ...card, items: card.items.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) });
 
   const getCustomSlashMenuItems = (query) => {
-    const defaultItems = getDefaultReactSlashMenuItems(editor);
+    const defaultItems = getDefaultReactSlashMenuItems(editor).filter((i) => i.title !== 'Video');
     const icon = (I, color) => <I size={16} style={{ color }} />;
+    const media = (act) => { let refId; try { refId = editor.getTextCursorPosition().block.id; } catch { /* none */ } window.dispatchEvent(new CustomEvent('pb-media', { detail: { act, refId } })); };
+    const mediaItems = editable === false ? [] : [
+      { title: 'Pictures', onItemClick: () => media('pictures'), aliases: ['pic', 'picture', 'photo', 'photos', 'image', 'images'], badge: '/pic', group: 'Media', icon: <Images size={16} />, subtext: 'Pick many at once' },
+      { title: 'GIF', onItemClick: () => media('gif'), aliases: ['gif', 'animated', 'meme'], badge: '/gif', group: 'Media', icon: <Smile size={16} />, subtext: 'Upload or paste a link' },
+      { title: 'Video', onItemClick: () => media('video'), aliases: ['vid', 'movie', 'mp4', 'clip'], badge: '/vid', group: 'Media', icon: <VideoIcon size={16} />, subtext: 'Upload or paste a link' },
+      { title: 'Voice note', onItemClick: () => media('voice'), aliases: ['mic', 'record', 'audio', 'voice'], badge: '/mic', group: 'Media', icon: <Mic size={16} />, subtext: 'Record a short audio clip' },
+      { title: 'Dictate', onItemClick: () => media('dictate'), aliases: ['dictate', 'speech', 'speak', 'type with voice'], badge: '/dict', group: 'Media', icon: <Keyboard size={16} />, subtext: 'Speak and it types for you' },
+    ];
     const aiItems = [
       { title: 'AI Action items', onItemClick: () => runAi('todo'), aliases: ['ai-todo', 'todo', 'actions', 'tasks', 'ai'], group: 'AI', icon: icon(CheckSquare, '#6366f1'), subtext: 'Pull tasks out of this note.' },
       { title: 'AI Improve writing', onItemClick: () => runAi('improve'), aliases: ['ai-improve', 'improve', 'rewrite', 'rephrase', 'ai'], group: 'AI', icon: icon(Wand2, '#6366f1'), subtext: 'Clearer, shorter, fix grammar.' },
@@ -601,7 +679,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
       ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <span style={{ fontSize: 15 }}>📄</span>, subtext: 'A ready layout to fill in.' })),
     ];
-    const all = [...defaultItems, ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
+    const all = [...mediaItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
     return filterSuggestionItems([...recent, ...all], query);
   };
@@ -676,35 +754,6 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return true;
   };
 
-  // Callouts: a quote that starts with a symbol is shown as a coloured box.
-  // (the editor rewrites attributes it did not set itself, so this is a decoration it keeps)
-  useEffect(() => {
-    const plugin = new Plugin({
-      key: new PluginKey('pb-callouts'),
-      props: {
-        decorations(state) {
-          const out = [];
-          state.doc.descendants((node, pos) => {
-            if (node.type.name === 'image') {
-              const m = /^crop=([\d.]+)$/.exec(node.attrs?.name || '');
-              if (m) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-crop': m[1], style: `--pb-ar:${m[1]}` }));
-              return false;
-            }
-            if (node.type.name !== 'quote') return true;
-            const t = node.textContent.trim();
-            const k = CALLOUTS.find(([emoji]) => t.startsWith(emoji) || t.startsWith(emoji.replace('\uFE0F', '')));
-            if (k) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-callout': k[1] }));
-            return false;
-          });
-          return DecorationSet.create(state.doc, out);
-        },
-      },
-    });
-    editor.registerExtension({ key: 'pb-callouts', prosemirrorPlugins: [plugin] });
-    return () => { try { editor.unregisterExtension('pb-callouts'); } catch { /* editor already gone */ } };
-    // registered again once a live document is ready: the shared document sets the editor up afresh when it first syncs
-  }, [editor, live.ready]);
-
   const onLinkClick = (e) => {
     if (copyCode(e)) return;
     const pic = e.target?.closest?.('img.bn-visual-media');
@@ -746,6 +795,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
       {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
       {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
+      <MediaTools editor={editor} rootRef={rootRef} uploadFile={uploadFile} editable={editable !== false} />
       {findOpen && <FindBar root={rootRef} onClose={() => setFindOpen(false)} />}
       {lightbox && (
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>

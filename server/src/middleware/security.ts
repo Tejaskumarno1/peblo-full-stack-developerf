@@ -36,7 +36,7 @@ export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): s
     "img-src 'self' data: blob: https: http:", // link previews and images in notes come from anywhere
     "font-src 'self' data:",
     `connect-src ${connect}`,
-    "media-src 'self' blob: data:",
+    "media-src 'self' blob: data: https:",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
