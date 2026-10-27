@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 // Find (Ctrl F) and Replace (Ctrl H) in the open note. Matches are painted with the browser's highlight feature, so the note itself is only
@@ -11,6 +11,25 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
   const [tick, setTick] = useState(0);
   const [place, setPlace] = useState({ top: 84, right: 28 });
   const ranges = useRef([]);
+  // sit just below whatever the page keeps at the top right (Live chip, share and menu buttons), never on top of it
+  useLayoutEffect(() => {
+    const place = () => {
+      const W = 330; const right = window.innerWidth < 640 ? 12 : 28;
+      const x0 = window.innerWidth - right - Math.min(W, window.innerWidth - 24);
+      let bottom = 0;
+      for (let y = 4; y < 300; y += 6) {
+        for (let x = x0 + 4; x < window.innerWidth - right; x += 40) {
+          const el = document.elementFromPoint(x, y);
+          const hit = el && !el.closest('.pb-find, .bn-editor, .bn-container') && el.closest('button, a, input, select, [role="button"], [role="toolbar"], [data-find-avoid]');
+          if (hit) bottom = Math.max(bottom, hit.getBoundingClientRect().bottom);
+        }
+      }
+      setPlace((cur) => { const top = Math.round(bottom ? Math.max(bottom + 10, 56) : 84); return cur.top === top && cur.right === right ? cur : { top, right }; });
+    };
+    place(); const t1 = setTimeout(place, 300); const t2 = setTimeout(place, 1200);
+    window.addEventListener('resize', place);
+    return () => { clearTimeout(t1); clearTimeout(t2); window.removeEventListener('resize', place); };
+  }, []);
   const lastQ = useRef('');
   const input = useRef(null);
   const repInput = useRef(null);

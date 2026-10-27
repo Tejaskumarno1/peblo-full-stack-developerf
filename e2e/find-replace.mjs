@@ -14,6 +14,19 @@ try {
   await page.keyboard.press('Control+f');
   await page.locator('.pb-find').waitFor({ timeout: 3000 });
   check('Owner: Ctrl F opens the card with a Find box', (await page.locator('.pb-find input.q').count()) === 1);
+  await wait(1500);
+  const overlap = await page.evaluate(() => {
+    const f = document.querySelector('.pb-find').getBoundingClientRect(); const hits = [];
+    document.querySelectorAll('button, a, [role="button"]').forEach((b) => {
+      if (b.closest('.pb-find, .bn-editor')) return;
+      const r = b.getBoundingClientRect(); if (!r.width || !r.height) return;
+      const cs = getComputedStyle(b); if (cs.visibility === 'hidden' || cs.display === 'none') return;
+      if (r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top) hits.push(((b.getAttribute('aria-label') || b.textContent || b.className).trim().slice(0, 30)) + ' @' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' find@' + Math.round(f.left) + ',' + Math.round(f.top) + '-' + Math.round(f.bottom));
+    });
+    return hits;
+  });
+  check('Owner: the card does not cover any header button', overlap.length === 0, overlap.join(' | '));
+
   check('Owner: the Replace row is there', (await page.locator('.pb-find input.r').count()) === 1 && (await page.locator('[data-testid="replace-all"]').count()) === 1);
   await page.locator('.pb-find input.q').fill('share');
   await wait(300);

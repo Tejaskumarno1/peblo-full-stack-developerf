@@ -43,7 +43,8 @@ const previewOf = () => {
 };
 
 // The Present dropdown (mockup P1c): four ways to start, options at the foot
-export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onClose }) {
+export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onClose, decks = [], onDeck }) {
+  const [deckList, setDeckList] = useState(false);
   const ref = useRef(null);
   const [pos, setPos] = useState({ top: 56, right: 16 });
   const closeRef = useRef(onClose); closeRef.current = onClose;
@@ -56,7 +57,7 @@ export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onC
     return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', key); };
   }, [anchor]);
   const Row = ({ tid, icon, title, sub, keys, hot, off, mode }) => (
-    <button type="button" role="menuitem" className={`pm-row${hot ? ' hot' : ''}`} data-testid={tid} disabled={off} onClick={() => onPick(mode)}>
+    <button type="button" role="menuitem" className={`pm-row${hot ? ' hot' : ''}`} data-testid={tid} disabled={off} onClick={() => (mode === 'ppt' ? (decks.length === 1 ? onDeck?.(decks[0]) : setDeckList((v) => !v)) : onPick(mode))}>
       <span className="pm-ic">{icon}</span><span className="pm-tx"><b>{title}</b><small>{sub}</small></span>{keys && <kbd>{keys}</kbd>}
     </button>
   );
@@ -65,7 +66,8 @@ export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onC
       <Row tid="pm-start" hot mode="follow" icon={<Presentation size={18} />} title="Start now, full screen" sub={`Follow me, questions ${qOn ? 'on' : 'off'}. ${count} ${count === 1 ? 'person is' : 'people'} here.`} keys="Ctrl Shift P" />
       <Row tid="pm-tour" mode="tour" icon={<Route size={18} />} title="Guided tour" sub="Walk everyone through stops you choose" />
       <Row tid="pm-point" mode="point" icon={<Eye size={18} />} title="Point only" sub="Your pointer shows, people read freely" />
-      <Row tid="pm-ppt" off mode="ppt" icon={<Download size={18} />} title="Present a PowerPoint" sub="Add a deck to the note first" />
+      <Row tid="pm-ppt" off={!decks.length} mode="ppt" icon={<Download size={18} />} title="Present a PowerPoint" sub={decks.length ? (decks.length === 1 ? decks[0].name : `${decks.length} decks in this note, pick one`) : 'Add a deck to the note first'} />
+      {deckList && decks.length > 1 && <div className="pm-decks">{decks.map((d) => <button key={d.url} type="button" role="menuitem" className="pm-deck" data-testid="pm-deck" onClick={() => onDeck?.(d)}><Presentation size={15} /><span>{d.name}</span></button>)}</div>}
       <div className="pm-foot">
         <button type="button" className="pm-opt" data-testid="present-options" onClick={onOptions}>Options</button>
         <button type="button" className={`pm-chip${qOn ? ' on' : ''}`} data-testid="pm-q" aria-pressed={qOn} onClick={() => setQOn(!qOn)}>{qOn ? <Check size={13} /> : null}Questions {qOn ? 'on' : 'off'}</button>
@@ -761,6 +763,7 @@ html.pb-presenting .pb-shared .dk, html.pb-presenting .pb-shared .dh, html.pb-pr
 .pb-pdock .pd-b[data-tip]:hover::after { content: attr(data-tip); position: absolute; z-index: 5; white-space: nowrap; background: #241f1a; color: #fff; border-radius: 12px; padding: 7px 12px; font: 700 13px 'Figtree', system-ui, sans-serif; box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
 .pb-pdock.v .pd-b[data-tip]:hover::after { left: calc(100% + 14px); top: 50%; transform: translateY(-50%); }
 
+.pb-pmenu .pm-decks { display: grid; gap: 2px; padding: 0 6px 6px 54px; } .pb-pmenu .pm-deck { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; font: 700 13px inherit; color: inherit; cursor: pointer; text-align: left; } .pb-pmenu .pm-deck:hover { background: #f4ede0; } .pb-pmenu .pm-deck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pb-pmenu { position: fixed; z-index: 1300; width: min(380px, calc(100vw - 24px)); background: #fffdf8; color: #241f1a; border: 1.5px solid #e6dccb; border-radius: 22px; padding: 8px; box-shadow: 0 24px 60px rgba(36, 31, 26, .25); font: 500 14px 'Figtree', system-ui, sans-serif; }
 .pm-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 12px; border: 0; border-radius: 16px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
 .pm-row:hover:not(:disabled) { background: #f4ede0; }

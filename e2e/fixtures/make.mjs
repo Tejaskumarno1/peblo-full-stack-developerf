@@ -13,7 +13,7 @@ export async function makeFixtures(dir = fs.mkdtempSync(path.join(os.tmpdir(), '
   const PptxGenJS = root('pptxgenjs');
   const p = new PptxGenJS();
   const titles = ['Launch plan', 'Goals', 'Scope', 'Timeline', 'Risks'];
-  titles.forEach((t, i) => { const s = p.addSlide(); s.addText(t, { x: 0.6, y: 0.5, w: 8, h: 1, fontSize: 32, bold: true }); s.addText(i === 4 ? 'The main risk is the share page review' : `Point ${i + 1} about ${t}`, { x: 0.6, y: 1.8, w: 8, h: 1, fontSize: 18 }); });
+  titles.forEach((t, i) => { const s = p.addSlide(); s.addText(t, { x: 0.6, y: 0.5, w: 8, h: 1, fontSize: 32, bold: true }); if (i === 1) s.addNotes('Mention the Friday review before the timeline.'); s.addText(i === 4 ? 'The main risk is the share page review' : `Point ${i + 1} about ${t}`, { x: 0.6, y: 1.8, w: 8, h: 1, fontSize: 18 }); });
   out.pptx = path.join(dir, 'Launch-plan.pptx'); await p.writeFile({ fileName: out.pptx });
   // Word
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = root('docx');

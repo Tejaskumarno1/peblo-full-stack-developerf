@@ -330,6 +330,35 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
   const rootRef = useRef(null);
+  const [fitRoot, setFitRoot] = useState(null);
+  useEffect(() => { if (rootRef.current !== fitRoot) setFitRoot(rootRef.current); });
+  // A picture saved at a width that is nearly the whole column (or leaves too little room beside it in a narrower column,
+  // such as a shared page) is shown full width instead of floating, so the text next to it never shrinks to a sliver.
+  // BlockNote rewrites the classes of a block, so the blocks are named in a style sheet of their own.
+  useEffect(() => {
+    const root = fitRoot; if (!root) return undefined;
+    const sheet = document.createElement('style'); sheet.setAttribute('data-pic-fit', '');
+    document.head.appendChild(sheet);
+    let timer = 0; let last = '';
+    const fit = () => {
+      timer = 0;
+      const col = root.querySelector('.bn-editor')?.clientWidth || root.clientWidth; if (!col) return;
+      const ids = [];
+      root.querySelectorAll('.bn-block-content[data-content-type="image"][data-preview-width]').forEach((c) => {
+        const w = Number(c.getAttribute('data-preview-width')) || 0;
+        const id = c.closest('.bn-block-outer')?.getAttribute('data-id');
+        if (id && w > 0 && (w >= col * 0.66 || col - w < 300)) ids.push(id);
+      });
+      const css = ids.map((id) => `.block-editor-container .bn-block-outer[data-id="${id}"]`).join(',');
+      const text = css ? `${css} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }` : '';
+      if (text !== last) { last = text; sheet.textContent = text; }
+    };
+    const queue = () => { if (!timer) timer = setTimeout(fit, 30); };
+    const mo = new MutationObserver(queue); mo.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-preview-width'] });
+    const ro = new ResizeObserver(queue); ro.observe(root);
+    queue();
+    return () => { mo.disconnect(); ro.disconnect(); if (timer) clearTimeout(timer); sheet.remove(); };
+  }, [fitRoot]);
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
   const [findOpen, setFindOpen] = useState(false);

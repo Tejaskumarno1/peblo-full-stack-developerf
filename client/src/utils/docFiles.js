@@ -192,3 +192,32 @@ export const rememberFile = (f) => {
 
 /* ---- plain text of a file, for search inside it ---- */
 export const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Speaker notes of a deck, one string per slide in slide order ("" where a slide has none). */
+export async function readNotes(buf) {
+  try {
+    const JSZip = (await import('jszip')).default;
+    const zip = await JSZip.loadAsync(buf);
+    const text = async (p) => (zip.file(p) ? zip.file(p).async('string') : '');
+    const decode = (t) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+    const relMap = (xml) => { const m = {}; for (const r of xml.matchAll(/<Relationship\b[^>]*>/g)) { const id = /Id="([^"]+)"/.exec(r[0]); const t = /Target="([^"]+)"/.exec(r[0]); const ty = /Type="([^"]+)"/.exec(r[0]); if (id && t) m[id[1]] = { target: t[1], type: ty ? ty[1] : '' }; } return m; };
+    const abs = (t) => (t.startsWith('/') ? t.slice(1) : 'ppt/' + t.replace(/^\.\.\//, ''));
+    const pres = await text('ppt/presentation.xml');
+    const rels = relMap(await text('ppt/_rels/presentation.xml.rels'));
+    const slidePaths = [...pres.matchAll(/<p:sldId\b[^>]*r:id="([^"]+)"/g)].map((m) => rels[m[1]]).filter(Boolean).map((r) => abs(r.target));
+    const out = [];
+    for (const sp of slidePaths) {
+      const rp = sp.replace('slides/', 'slides/_rels/') + '.rels';
+      const sr = relMap(await text(rp));
+      const nrel = Object.values(sr).find((r) => /notesSlide$/.test(r.type));
+      if (!nrel) { out.push(''); continue; }
+      const xml = await text('ppt/' + nrel.target.replace(/^\.\.\//, '').replace(/^\/?ppt\//, ''));
+      const shapes = [...xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map((m) => m[0]);
+      const body = shapes.filter((x) => /<p:ph[^>]*type="body"/.test(x));
+      const use = body.length ? body : shapes.filter((x) => !/type="(sldNum|sldImg|hdr|dt|ftr)"/.test(x));
+      const paras = use.flatMap((x) => [...x.matchAll(/<a:p>[\s\S]*?<\/a:p>/g)].map((p) => decode([...p[0].matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join(''))));
+      out.push(paras.join('\n').trim());
+    }
+    return out;
+  } catch { return []; }
+}

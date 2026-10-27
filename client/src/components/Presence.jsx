@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ic } from '../utils/icons';
 import { usePresence } from '../utils/presencePref';
+import DeckStage from './DeckPresent';
+import { baseOf, extOf } from '../utils/docFiles';
 import { AudienceActions, PRESENT_CSS, PresenterKit, PresentStart, PresentMenu, RecapModal, RecapReceived, RoomNotices, useHost, RESUME_KEY, FOLLOW_KEY, gotoPath } from './PresentTools';
 
 /*
@@ -62,7 +64,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, next: st.next || null, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, reacts: st.reacts || null, poll: st.poll || null, vote: st.vote || null, recapMd: st.recapMd || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, next: st.next || null, deck: st.deck || null, dp: st.dp || null, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, reacts: st.reacts || null, poll: st.poll || null, vote: st.vote || null, recapMd: st.recapMd || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -125,6 +127,14 @@ function ReadingRail({ root, peers, tick }) {
   );
 }
 
+// the PowerPoint files sitting in this note (the ones a browser can draw)
+function collectDecks(editor) {
+  const out = [];
+  const walk = (bs) => (bs || []).forEach((b) => { if (b.type === 'docfile' && b.props?.url && extOf(b.props.name) === 'pptx') out.push({ url: baseOf(b.props.url), name: b.props.name }); if (b.children?.length) walk(b.children); });
+  try { walk(editor?.document); } catch { /* editor not ready */ }
+  return out.filter((d, i) => out.findIndex((x) => x.url === d.url) === i);
+}
+
 export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const peers = usePeers(rt);
   const [following, setFollowing] = useState(null); // keyOf(peer)
@@ -137,6 +147,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   const [showPresence] = usePresence();
   const [startOpen, setStartOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deckSel, setDeckSel] = useState(null); // the PowerPoint being presented
   const presentBtn = useRef(null);
   const resumeRef = useRef(null);
   useEffect(() => { // I switched notes while presenting: carry on presenting here
@@ -149,7 +160,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
       resumeRef.current = r; setMode(r.mode || 'follow'); setQOn(r.qOn !== false); setNotesOn(r.notesOn !== false); setPresenting(true);
     } catch { /* nothing to resume */ }
   }, [ready]);
-  const quickStart = (m) => { setMenuOpen(false); setMode(m); try { if (localStorage.getItem('peblo-present-fs') !== '0') document.documentElement.requestFullscreen?.().catch(() => {}); } catch { /* not allowed */ } setPresenting(true); };
+  const quickStart = (m, deck) => { setMenuOpen(false); setMode(m); setDeckSel(m === 'ppt' ? deck || null : null); try { if (localStorage.getItem('peblo-present-fs') !== '0') document.documentElement.requestFullscreen?.().catch(() => {}); } catch { /* not allowed */ } setPresenting(true); };
   useEffect(() => { const k = (e) => { if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) { e.preventDefault(); if (!presenting) quickStart('follow'); } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); });
   const [mode, setMode] = useState('follow'); // follow | tour | point
   const [qOn, setQOn] = useState(true);
@@ -434,7 +445,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
             <button type="button" ref={presentBtn} className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => { if (presenting) { setPresenting(false); setStartOpen(false); } else { setStartOpen(false); setMenuOpen((v) => !v); } }}><Ic name="presentation" size={15} /></button>
             <button type="button" className="pb-presence-count" data-testid="open-collab" title="Who is here" aria-label="Open live collaboration" aria-live="polite" onClick={() => window.dispatchEvent(new Event('pb-open-collab'))}>{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</button>
           </div>
-          {menuOpen && !presenting && <PresentMenu anchor={presentBtn.current} count={others.length} qOn={qOn} setQOn={setQOn} onPick={quickStart} onOptions={() => { setMenuOpen(false); setStartOpen(true); }} onClose={() => setMenuOpen(false)} />}
+          {menuOpen && !presenting && <PresentMenu anchor={presentBtn.current} count={others.length} qOn={qOn} setQOn={setQOn} onPick={quickStart} decks={menuOpen ? collectDecks(editor) : []} onDeck={(d) => quickStart('ppt', d)} onOptions={() => { setMenuOpen(false); setStartOpen(true); }} onClose={() => setMenuOpen(false)} />}
           {startOpen && !presenting && <PresentStart mode={mode} setMode={setMode} qOn={qOn} setQOn={setQOn} notesOn={notesOn} setNotesOn={setNotesOn} count={others.length} onStart={() => { setStartOpen(false); setPresenting(true); }} onCancel={() => setStartOpen(false)} />}
           {presenters.map((p) => (
             <div key={keyOf(p)} className="pb-follow offer" role="status" data-testid="present-offer"><Ic name="presentation" size={14} />{p.name} is presenting
@@ -454,6 +465,8 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
       )}
       {others.length > 0 && livePresenters.length > 0 && !presenting && <div className="pb-presence-wrap pb-aud-wrap" style={{ position: 'fixed', right: 82, bottom: 24, zIndex: 1100 }}><AudienceActions presenter={talker || livePresenters[0]} qOn={!!talker} hand={myHand} onHand={raise} onAsk={ask} sent={myAsks.length} reacts={myReacts} onReact={react} /></div>}
       {presenting && <PresenterKit startedAt={resumeRef.current?.t0} startPanel={resumeRef.current?.drawer ? 'queue' : null} aw={rt.provider.awareness} me={myKey} peers={peers} mode={mode} qOn={qOn} notesOn={notesOn} laser={laser} setLaser={setLaser} spot={spot} setSpot={setSpot} getAnchor={() => anchorOf(rootRef.current)} goToBlock={goToBlock} onEnd={endSession} />}
+      {presenting && mode === 'ppt' && deckSel && <DeckStage role="presenter" deck={deckSel} aw={rt.provider.awareness} laser={laser} />}
+      {!presenting && followed?.deck && <DeckStage key={followed.deck.u} role="follower" lead={followed} onLeave={() => { setFollowing(null); setFreed({ name: followed.name, key: keyOf(followed), presenting: true }); }} />}
       {!presenting && livePresenters.length > 0 && <RoomNotices presenters={livePresenters} myKey={myKey} onClearHand={() => setMyHand(0)} myVote={myVote} onVote={(id, i) => setMyVote({ id, i })} />}
       {recap && <RecapModal recap={recap} sent={recapSent} onSend={sendRecap} onClose={() => setRecap(null)} />}
       {!recap && !presenting && rxPeer && <RecapReceived from={rxPeer.name} rx={rxPeer.recapMd} onClose={() => setRxGone(rxPeer.recapMd.at)} />}

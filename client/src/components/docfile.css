@@ -145,3 +145,27 @@ html.df-viewing { overflow: hidden; }
   .df-varr { display: none; } .df-keys { display: none; } .df-vbtn:not(.ic) { display: none; }
   .df-jobs { top: auto; bottom: 90px; }
 }
+
+/* presenting a PowerPoint from a note */
+.pb-deck { position: fixed; inset: 0; z-index: 1150; background: #14100d; color: #e8e0d6; display: flex; font-family: 'Figtree', system-ui, sans-serif; }
+.pb-deck .dk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px 16px 14px; gap: 10px; }
+.pb-deck .dk-top { display: flex; align-items: center; gap: 10px; min-height: 34px; padding-left: 4px; }
+.pb-deck .dk-name { font: 800 14px 'Figtree', system-ui, sans-serif; color: #fff; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-deck .dk-who { color: #bdb1a4; font-size: 12.5px; font-weight: 700; }
+.pb-deck .dk-sp, .pb-deck .dk-gap { flex: 1; }
+.pb-deck .dk-chip { height: 28px; padding: 0 12px; border-radius: 999px; background: rgba(255, 255, 255, .12); display: inline-flex; align-items: center; font: 700 12px 'Figtree', system-ui, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+.pb-deck .dk-btn { height: 34px; padding: 0 12px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, .12); color: #fff; font: 700 13px 'Figtree', system-ui, sans-serif; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.pb-deck .dk-btn.ic { width: 34px; padding: 0; justify-content: center; } .pb-deck .dk-btn.ac { background: #c4441c; } .pb-deck .dk-btn.on { background: #ffe9a6; color: #241f1a; } .pb-deck .dk-btn:disabled { opacity: .35; cursor: default; }
+.pb-deck .dk-stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: auto; }
+.pb-deck .df-slides.deck { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.pb-deck .df-slides.deck .df-slide-box { width: min(100%, calc((100vh - 160px) * 1.7778)); background: #fff; border-radius: 6px; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); margin: 0 auto; }
+.pb-deck .df-strip.deck { background: rgba(255, 255, 255, .06); border: 0; border-radius: 12px; max-width: 100%; }
+.pb-deck .df-strip.deck .df-t { background: #2c2520; } .pb-deck .df-strip.deck .df-t em { color: #e8e0d6; }
+.pb-deck .dk-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding-bottom: 56px; }
+.pb-deck .dk-count { min-width: 64px; text-align: center; font: 800 13px 'Figtree', system-ui, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+.pb-deck .dk-side { width: 300px; flex: none; background: #1b1714; border-left: 1px solid #2e2823; padding: 16px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.pb-deck .dk-lbl { font: 800 10.5px 'Figtree', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8a7f70; margin-top: 6px; }
+.pb-deck .dk-next { min-height: 120px; background: #2c2520; border-radius: 8px; display: grid; place-items: center; overflow: hidden; } .pb-deck .dk-end { color: #8a7f70; font-weight: 700; font-size: 13px; }
+.pb-deck .dk-notes { font-size: 15px; line-height: 1.5; white-space: pre-wrap; color: #f4ede0; } .pb-deck .dk-notes em { color: #8a7f70; }
+.pb-deck .dk-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 0 4px rgba(255, 59, 48, .35); pointer-events: none; z-index: 3; }
+@media (max-width: 900px) { .pb-deck .dk-side { display: none; } .pb-deck .dk-name { max-width: 30%; } }

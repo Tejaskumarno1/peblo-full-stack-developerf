@@ -84,7 +84,7 @@ function useSlides(buf, onCount) {
   return { hold, slides, err };
 }
 
-function Thumb({ el, h, w }) {
+export function Thumb({ el, h, w }) {
   const box = useRef(null);
   useEffect(() => {
     const c = el.cloneNode(true);
@@ -94,7 +94,7 @@ function Thumb({ el, h, w }) {
   return <span ref={box} className="df-thumb-i" style={{ width: w, height: h * (w / SLIDE_W) }} aria-hidden="true" />;
 }
 
-export function SlidesView({ buf, index, setIndex, onCount, mode = 'frame', strip = false, onSearchRoot }) {
+export function SlidesView({ buf, index, setIndex, onCount, mode = 'frame', strip = false, onSearchRoot, onSlides, overlay = null }) {
   const { hold, slides, err } = useSlides(buf, onCount);
   const box = useRef(null);
   const w = useWidth(box);
@@ -106,6 +106,7 @@ export function SlidesView({ buf, index, setIndex, onCount, mode = 'frame', stri
   }, [slides, index]);
   useEffect(() => { if (slides && stage.current) { slides.forEach((s) => { if (s.el.parentNode !== stage.current) stage.current.appendChild(s.el); }); } }, [slides]);
   useEffect(() => { onSearchRoot?.(stage.current, slides); }, [slides, onSearchRoot]);
+  useEffect(() => { onSlides?.(slides); }, [slides]); // eslint-disable-line react-hooks/exhaustive-deps
   if (err) {
     return err.code === 'password'
       ? <Problem tone="lilac" icon={<Lock size={22} />} title="Password protected" body="A slide deck with a password cannot be previewed here. Download it to open it." />
@@ -117,6 +118,7 @@ export function SlidesView({ buf, index, setIndex, onCount, mode = 'frame', stri
       <div className="df-hold" ref={hold} aria-hidden="true" />
       <div className="df-slide-box" ref={box} style={cur && w ? { height: cur.h * scale } : { aspectRatio: '16 / 9' }} data-testid="df-slide">
         {!slides ? <Busy what="Making the preview…" /> : <div ref={stage} className="df-slide-stage" style={{ width: SLIDE_W, transform: `scale(${scale})` }} />}
+        {overlay}
       </div>
       {slides && strip && (
         <div className={`df-strip ${mode}`} data-testid="df-strip" role="tablist" aria-label="Slides">
