@@ -1,7 +1,7 @@
 {
   "name": "peblo",
   "productName": "Peblo",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "description": "Peblo — AI-powered notes, to-dos and calendar that runs on your computer",
