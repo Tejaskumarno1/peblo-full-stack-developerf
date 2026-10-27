@@ -174,3 +174,24 @@
 .pb-bm-row .seg button { border: 0; background: transparent; color: inherit; font: 800 12px inherit; min-width: 28px; height: 24px; border-radius: 999px; cursor: pointer; }
 .pb-bm-row .seg button.on { background: #FFE9A6; color: #241F1A; }
 .pb-bm-row .mv { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128, 128, 128, .15); color: inherit; cursor: pointer; }
+
+/* Colours you can see (G1): a strong, readable shade for every colour name, text and highlight */
+.bn-editor [data-style-type="textColor"][data-value="gray"], .bn-editor [data-text-color="gray"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="gray"]) { color: #6B6459; }
+.bn-editor [data-style-type="backgroundColor"][data-value="gray"], .bn-editor [data-background-color="gray"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="gray"]) { background-color: #E6E0D6; }
+.bn-editor [data-style-type="textColor"][data-value="brown"], .bn-editor [data-text-color="brown"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="brown"]) { color: #9A5B2E; }
+.bn-editor [data-style-type="backgroundColor"][data-value="brown"], .bn-editor [data-background-color="brown"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="brown"]) { background-color: #EBD3BC; }
+.bn-editor [data-style-type="textColor"][data-value="red"], .bn-editor [data-text-color="red"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="red"]) { color: #D13B2E; }
+.bn-editor [data-style-type="backgroundColor"][data-value="red"], .bn-editor [data-background-color="red"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="red"]) { background-color: #FBCFCA; }
+.bn-editor [data-style-type="textColor"][data-value="orange"], .bn-editor [data-text-color="orange"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="orange"]) { color: #E8740C; }
+.bn-editor [data-style-type="backgroundColor"][data-value="orange"], .bn-editor [data-background-color="orange"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="orange"]) { background-color: #FFD9AE; }
+.bn-editor [data-style-type="textColor"][data-value="yellow"], .bn-editor [data-text-color="yellow"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="yellow"]) { color: #D4A000; }
+.bn-editor [data-style-type="backgroundColor"][data-value="yellow"], .bn-editor [data-background-color="yellow"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="yellow"]) { background-color: #FFEC99; }
+.bn-editor [data-style-type="textColor"][data-value="green"], .bn-editor [data-text-color="green"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="green"]) { color: #1E8E4E; }
+.bn-editor [data-style-type="backgroundColor"][data-value="green"], .bn-editor [data-background-color="green"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="green"]) { background-color: #BFEBCF; }
+.bn-editor [data-style-type="textColor"][data-value="blue"], .bn-editor [data-text-color="blue"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="blue"]) { color: #2563EB; }
+.bn-editor [data-style-type="backgroundColor"][data-value="blue"], .bn-editor [data-background-color="blue"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="blue"]) { background-color: #C5DDFB; }
+.bn-editor [data-style-type="textColor"][data-value="purple"], .bn-editor [data-text-color="purple"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="purple"]) { color: #7C3AED; }
+.bn-editor [data-style-type="backgroundColor"][data-value="purple"], .bn-editor [data-background-color="purple"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="purple"]) { background-color: #DCD1FF; }
+.bn-editor [data-style-type="textColor"][data-value="pink"], .bn-editor [data-text-color="pink"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="pink"]) { color: #D6336C; }
+.bn-editor [data-style-type="backgroundColor"][data-value="pink"], .bn-editor [data-background-color="pink"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="pink"]) { background-color: #F9D0E1; }
+.bn-editor td[data-background-color], .bn-editor th[data-background-color] { color: #241f1a; }

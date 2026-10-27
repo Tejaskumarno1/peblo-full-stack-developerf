@@ -559,3 +559,27 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-tab-menu button:hover:not(:disabled) { background: rgba(0,0,0,.05); }
 .soft .s-tab-menu button:disabled { opacity: .4; }
 .soft .s-tab-menu kbd { margin-left: auto; font: 700 10.5px var(--s-font-ui, inherit); padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.07); }
+
+/* Compact note header (mockup G1c, G1d): title, tags, saved dot and word count on one line, controls as icons */
+.soft .s-note-main { padding: 10px 28px 0; gap: 4px; }
+.soft .s-note-body { margin: 0 -28px; padding: 0 28px 24px; }
+.soft .s-note-head { flex-wrap: nowrap; gap: 10px; min-height: 44px; padding: 0 0 2px; }
+.soft .s-note-head .s-note-title { width: auto; flex: 0 1 auto; min-width: 140px; max-width: 46%; field-sizing: content; margin: 0; font-size: 26px; line-height: 32px; height: 32px; min-height: 32px; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.soft textarea.s-note-title { min-height: 32px; }
+.soft .s-note-head .s-note-tags { flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.soft .s-note-head .s-add-tag { padding: 2px 12px; height: 26px; font-size: 13px; }
+.soft .s-note-head .s-note-stats { margin: 0; white-space: nowrap; font-weight: 700; flex: none; }
+.soft .s-note-head .s-saved { padding: 0; background: transparent; width: 10px; height: 10px; flex: none; gap: 0; font-size: 0; }
+.soft .s-note-head .s-saved::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--s-ok, #1e7a46); display: block; }
+.soft .s-note-head .s-saved > svg { display: none; }
+.soft .s-note-head .s-saved.say { width: auto; height: auto; padding: 4px 12px; border-radius: 999px; background: var(--s-mint); font-size: 12.5px; font-weight: 700; gap: 6px; }
+.soft .s-note-head .s-saved.say::before { display: none; }
+.soft .s-note-head .s-saved.say.bad { background: var(--s-peach); }
+.soft .s-note-head .grow { flex: 1; min-width: 8px; }
+.soft .s-note-head .s-outline.s-ico { width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; }
+.soft .s-note-head .s-outline.s-ico:hover, .soft .s-note-head .s-outline.round:hover { background: var(--s-bg); }
+.soft .s-note-head .s-outline.s-ico[aria-pressed="true"] { background: var(--s-bg); }
+.soft .s-note-head .s-outline.round { width: 34px; height: 34px; border-color: transparent; }
+.soft .s-notes.focus .s-note-head { max-width: var(--fw); width: 100%; }
+.soft .s-notes.focus .s-note-head .s-note-title { width: auto; max-width: 46%; font-size: 40px; line-height: 46px; height: 46px; min-height: 46px; }
+@media (max-width: 800px) { .soft .s-note-head { flex-wrap: wrap; } .soft .s-note-head .s-note-title { max-width: 100%; flex: 1 1 100%; } }

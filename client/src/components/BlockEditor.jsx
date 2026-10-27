@@ -4,7 +4,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
-  FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
+  FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
@@ -18,6 +18,8 @@ import { createCollab } from '../utils/collab';
 import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
 import EditedBy from './EditedBy';
+import ColorTool from './ColorPanel';
+import TableMenu from './TableMenu';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
@@ -260,7 +262,7 @@ function AskTool() {
     </div>
   );
 }
-const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems(), <ImageTools key="imagetools" />, <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it)), <ImageTools key="imagetools" />, <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
 
 // Ready-made starting points, offered in the slash menu.
 const TEMPLATES = {
@@ -750,11 +752,13 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         slashMenu={false}
         formattingToolbar={false}
         sideMenu={false}
+        tableHandles={false}
       >
         <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BlockMenu} />} />
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
+        {editable && <TableHandlesController tableHandle={(p) => <TableHandle {...p} tableHandleMenu={TableMenu} />} />}
       </BlockNoteView>
       </CommentsOn.Provider>
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}

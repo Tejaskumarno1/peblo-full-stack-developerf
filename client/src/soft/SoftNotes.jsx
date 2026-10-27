@@ -3,7 +3,7 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -638,23 +638,59 @@ export default function SoftNotes() {
         ) : (
           <>
             <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
-            <div className="s-note-bar">
-              <span className="s-crumb">Notes{crumb ? `  ›  ${crumb}` : ''}</span>
-              <span className={`s-saved${saved.bad ? ' bad' : ''}`}>{saved.icon}{saved.text}</span>
+            <div className="s-note-bar s-note-head">
+              <label htmlFor="s-note-title" className="s-sr">Title</label>
+              <textarea
+                id="s-note-title"
+                className="s-note-title"
+                rows={1}
+                wrap="off"
+                value={doc.title}
+                placeholder="Untitled note"
+                ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                disabled={doc.isDeleted}
+              />
+              <div className="s-note-tags">
+                {doc.tags.map((t) => (
+                  <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
+                    #{t}
+                    {!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
+                  </span>
+                ))}
+                {tagDraft === null ? (
+                  !doc.isDeleted && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
+                ) : (
+                  <input
+                    className="s-tag-input"
+                    aria-label="New tag"
+                    autoFocus
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagDraft); } if (e.key === 'Escape') setTagDraft(null); }}
+                    onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
+                    placeholder="tag"
+                  />
+                )}
+              </div>
+              <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad ? '' : 's-sr'}>{saved.text}</span></span>
+              {!doc.isDraft && <span className="s-note-stats" title={`${words} words · ${chars} characters · ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</span></span>}
+              {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
               {!doc.isDraft && <ShareChips noteId={doc.id} />}
               <span className="grow" />
               {doc.isDeleted ? (
                 <button type="button" className="s-outline" onClick={restore}>Restore</button>
               ) : (
-                <button type="button" className="s-outline" onClick={() => setPreview((v) => !v)} aria-pressed={preview}>{preview ? 'Edit' : 'Preview'}</button>
+                <button type="button" className="s-outline round s-ico" onClick={() => setPreview((v) => !v)} aria-pressed={preview} aria-label={preview ? 'Edit' : 'Preview'} title={preview ? 'Edit' : 'Preview'}>{preview ? <Pencil size={15} /> : <Eye size={15} />}</button>
               )}
               {focus && (
                 <select className="s-outline s-focus-width" aria-label="Writing width" value={wide} onChange={(e) => { setWide(e.target.value); try { localStorage.setItem('peblo-focus-width', e.target.value); } catch { /* ignore */ } }}>
                   <option value="narrow">Width: Narrow</option><option value="wide">Width: Wide</option><option value="full">Width: Full</option>
                 </select>
               )}
-              <button type="button" className="s-outline" onClick={() => setFocus((v) => !v)} aria-pressed={focus} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
-                {focus ? <><Minimize2 size={14} /> Exit</> : <><Maximize2 size={14} /> Full screen</>}
+              <button type="button" className="s-outline round s-ico" onClick={() => setFocus((v) => !v)} aria-pressed={focus} aria-label={focus ? 'Exit full screen' : 'Full screen'} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
+                {focus ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
               <div className="s-menu-wrap" ref={outsideMenu}>
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
@@ -690,44 +726,6 @@ export default function SoftNotes() {
                 <span className="none">{linked.length} linked task{linked.length === 1 ? '' : 's'}</span>
               </nav>
             )}
-            <label htmlFor="s-note-title" className="s-sr">Title</label>
-            <textarea
-              id="s-note-title"
-              className="s-note-title"
-              rows={1}
-              value={doc.title}
-              placeholder="Untitled note"
-              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
-              onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-              disabled={doc.isDeleted}
-            />
-            <div className="s-note-meta">
-            <div className="s-note-tags">
-              {doc.tags.map((t) => (
-                <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
-                  #{t}
-                  {!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
-                </span>
-              ))}
-              {tagDraft === null ? (
-                !doc.isDeleted && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
-              ) : (
-                <input
-                  className="s-tag-input"
-                  aria-label="New tag"
-                  autoFocus
-                  value={tagDraft}
-                  onChange={(e) => setTagDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagDraft); } if (e.key === 'Escape') setTagDraft(null); }}
-                  onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
-                  placeholder="tag"
-                />
-              )}
-            </div>
-
-            {!doc.isDraft && <div className="s-note-stats" aria-label="Length of this note">{words} word{words === 1 ? '' : 's'} · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</div>}
-            </div>
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
           mentions={false}

@@ -49,8 +49,8 @@ try {
   // find in note
   await page.locator('.bn-editor').click();
   await page.keyboard.press('Control+f');
-  check('Ctrl+F opens a find bar inside the note', await page.locator('.pb-find input').waitFor({ timeout: 3000 }).then(() => true).catch(() => false));
-  await page.locator('.pb-find input').fill('roadmap');
+  check('Ctrl+F opens a find bar inside the note', await page.locator('.pb-find input').first().waitFor({ timeout: 3000 }).then(() => true).catch(() => false));
+  await page.locator('.pb-find input').first().fill('roadmap');
   await page.waitForTimeout(300);
   const fn = await page.locator('.pb-find .n').textContent();
   check('find counts the matches', /1 of 3/.test(fn || ''), fn);

@@ -529,7 +529,8 @@
 .soft .s-note-body .bn-editor th p, .soft .s-note-body .bn-editor td p { margin: 0; }
 .soft .s-note-body .bn-editor blockquote .bn-inline-content,
 .soft .s-note-body .bn-editor [data-content-type="quote"] .bn-inline-content { line-height: 1.5 !important; }
-.soft .s-note-body .bn-editor th, .soft .s-note-body .bn-editor td { font-weight: 400; text-align: left; background: transparent !important; }
+.soft .s-note-body .bn-editor th, .soft .s-note-body .bn-editor td { font-weight: 400; text-align: left; }
+.soft .s-note-body .bn-editor th:not([data-background-color]), .soft .s-note-body .bn-editor td:not([data-background-color]) { background: transparent !important; }
 .soft .s-note-body .bn-editor tr > :first-child { font-weight: 800; }
 .soft .s-note-body .bn-editor h1,
 .soft .s-note-body .bn-editor h2,
