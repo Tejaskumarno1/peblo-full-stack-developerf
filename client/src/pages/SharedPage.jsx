@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, MessageSquare, File as FileIcon } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
@@ -790,6 +790,27 @@ export default function SharedPage() {
 
   const reader = useShareReader({ enabled: data?.kind === 'note' && !shareOff, scope: `${kindPath}:${token}`, articleRef, deps: rev });
   const [bmOpen, setBmOpen] = useState(false);
+  const [fly, setFly] = useState(null); // 'outline' | 'history' | 'file' (people uses panelOpen)
+  const [wideScreen, setWideScreen] = useState(() => window.innerWidth > 1280);
+  useEffect(() => { const on = () => setWideScreen(window.innerWidth > 1280); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  const isNote = data?.kind === 'note';
+  const hasToc = isNote && headings.length > 0;
+  const pinnedToc = hasToc && tocOpen && wideScreen;
+  const shownFly = panelOpen ? 'people' : fly === 'outline' && pinnedToc ? null : fly;
+  const openFly = (name) => {
+    if (name === 'outline' && pinnedToc) { toggleToc(); setFly(null); setPanelOpen(false); return; }
+    setPanelOpen(name === 'people' ? !panelOpen : false);
+    setFly(name === 'people' ? null : (fly === name ? null : name));
+  };
+  useEffect(() => {
+    if (!shownFly) return undefined;
+    const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
+    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
+    document.addEventListener('keydown', esc); document.addEventListener('pointerdown', away);
+    return () => { document.removeEventListener('keydown', esc); document.removeEventListener('pointerdown', away); };
+  }, [shownFly]);
+  const tocLinks = headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>);
+  const commentsBtn = () => document.querySelector('.pb-shared .pb-cbtn');
   const handleHeadingClick = (event, id) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -853,6 +874,45 @@ export default function SharedPage() {
         </div>
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
+      {data && !error && <nav className="srail" aria-label="Page panels" data-testid="srail">
+        {hasToc && <button type="button" className={pinnedToc || shownFly === 'outline' ? 'on' : ''} data-testid="rail-outline" aria-label="Outline" aria-pressed={pinnedToc || shownFly === 'outline'} title="Outline [" onClick={() => openFly('outline')}><List size={19} /></button>}
+        <button type="button" className={shownFly === 'people' ? 'on' : ''} data-testid="rail-people" aria-label="People" aria-pressed={shownFly === 'people'} title="People ]" onClick={() => openFly('people')}><Users size={19} />{others.length > 0 && <i className="srail-n">{others.length}</i>}</button>
+        <button type="button" data-testid="rail-comments" aria-label="Comments" title={data.canEdit && isNote ? 'Comments' : 'Comments are for people who can edit'} disabled={!(data.canEdit && isNote)} onClick={() => { setFly(null); setPanelOpen(false); commentsBtn()?.click(); }}><MessageSquare size={19} /></button>
+        <button type="button" className={shownFly === 'history' ? 'on' : ''} data-testid="rail-history" aria-label="History" aria-pressed={shownFly === 'history'} title="History" disabled={!isNote} onClick={() => openFly('history')}><History size={19} />{(reader.changes || reader.place) && <i className="srail-dot" />}</button>
+        <button type="button" className={shownFly === 'file' ? 'on' : ''} data-testid="rail-file" aria-label="File" aria-pressed={shownFly === 'file'} title="File" onClick={() => openFly('file')}><FileIcon size={19} /></button>
+      </nav>}
+      {data && !error && shownFly === 'outline' && hasToc && <aside className="srail-fly" data-testid="fly-outline" aria-label="On this page">
+        <div className="fly-head"><b>On this page</b><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-label="Pin outline" title="Pin outline" onClick={() => { toggleToc(); setFly(null); }}><Pin size={16} /></button></div>
+        <div className="toc-list">{tocLinks}</div>
+        <div className="fly-prog"><span>Reading progress {Math.round(scrollProgress)} percent</span><i><b style={{ width: `${Math.min(100, Math.round(scrollProgress))}%` }} /></i></div>
+      </aside>}
+      {data && !error && shownFly === 'people' && <div className="srail-fly people cp-drawer docked" data-testid="fly-people">
+            <CollabPanel
+              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
+              muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
+              followId={followId} onFollow={setFollowId}
+            />
+      </div>}
+      {data && !error && shownFly === 'history' && isNote && <aside className="srail-fly" data-testid="fly-history" aria-label="History">
+        <div className="fly-head"><b>History</b></div>
+        {reader.changes && <div className="fly-row"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div></div>}
+        {reader.changes && <button type="button" className="fly-btn" data-testid="fly-marks" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button>}
+        {reader.place && <div className="fly-row"><Clock size={16} /><div><b>You stopped at {reader.place.title}</b></div></div>}
+        {reader.place && <button type="button" className="fly-btn" data-testid="fly-jump" onClick={() => { reader.jumpPlace(); setFly(null); }}>Jump back</button>}
+        {!reader.changes && !reader.place && <p className="fly-empty">Nothing new since you were last here.</p>}
+        <button type="button" className="fly-btn" data-testid="fly-bookmarks" onClick={() => { setBmOpen(true); setFly(null); }}><Bookmark size={15} />My bookmarks{reader.bookmarks.length > 0 ? ` (${reader.bookmarks.length})` : ''}</button>
+      </aside>}
+      {data && !error && shownFly === 'file' && <aside className="srail-fly" data-testid="fly-file" aria-label="File">
+        <div className="fly-head"><b>{data.title || data.text || 'Shared page'}</b></div>
+        <button type="button" className="fly-item" disabled={saveBusy} onClick={() => { setFly(null); if (savedCopy) navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks'); else saveSharedCopy(); }}><Clipboard size={16} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button>
+        <button type="button" className="fly-item" onClick={() => { copy(window.location.href, 'Share link copied'); setFly(null); }}><Link2 size={16} />Copy link</button>
+        <hr />
+        <button type="button" className="fly-item" onClick={() => { exportShared('md'); setFly(null); }}><Download size={16} />Markdown</button>
+        <button type="button" className="fly-item" onClick={() => { exportShared('pdf'); setFly(null); }}><FileText size={16} />PDF</button>
+        <button type="button" className="fly-item" onClick={() => { exportShared('doc'); setFly(null); }}><FileText size={16} />Word</button>
+        <button type="button" className="fly-item" onClick={() => { exportShared('html'); setFly(null); }}><FileText size={16} />HTML</button>
+        <button type="button" className="fly-item" onClick={() => { exportShared('txt'); setFly(null); }}><FileText size={16} />Plain text</button>
+      </aside>}
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
@@ -867,13 +927,11 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${panelOpen ? ' has-panel' : ''}${tocOpen ? '' : ' toc-collapsed'}`}>
-          {data.kind === 'note' && headings.length > 0 && <aside className={`toc${tocOpen ? '' : ' collapsed'}`} aria-label="On this page">
-            <div className="toc-head">{tocOpen && <h2>On this page</h2>}<button type="button" className="toc-toggle" data-testid="toc-toggle" aria-expanded={tocOpen} aria-label={tocOpen ? 'Hide outline' : 'Show outline'} title={tocOpen ? 'Hide outline' : 'Show outline'} onClick={toggleToc}>{tocOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}</button></div>
-            {tocOpen && <>
-            {headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => handleHeadingClick(event, id)} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>)}
+        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}`}>
+          {pinnedToc && <aside className="toc" aria-label="On this page">
+            <div className="toc-head"><h2>On this page</h2><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-pressed="true" aria-label="Unpin outline" title="Unpin outline" onClick={toggleToc}><Pin size={17} /></button></div>
+            {tocLinks}
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
-            </>}
           </aside>}
 
           <article ref={articleRef}>
@@ -923,13 +981,7 @@ export default function SharedPage() {
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
-          {panelOpen && <div className="cp-drawer docked">
-            <CollabPanel
-              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
-              muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
-              followId={followId} onFollow={setFollowId}
-            />
-          </div>}
+
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}

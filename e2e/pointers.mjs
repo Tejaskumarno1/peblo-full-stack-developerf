@@ -86,14 +86,15 @@ try {
   const tocW = async () => (await c.locator('.pb-shared .toc').boundingBox())?.width || 0;
   const w0 = await tocW();
   await c.locator('[data-testid="toc-toggle"]').click();
-  check('12 the outline collapses', await until(async () => (await tocW()) < w0 - 100), `${w0} -> ${await tocW()}`);
+  check('12 the outline unpins', await until(async () => (await c.locator('.pb-shared .toc').count()) === 0), `${w0}`);
   const artW0 = (await c.locator('.pb-shared article').boundingBox()).width;
   check('13 and the page gets the room', artW0 > 0);
   await c.reload();
   await ready(c);
-  check('14 the choice is remembered after a reload', (await c.locator('.pb-shared .toc.collapsed').count()) === 1);
-  await c.locator('[data-testid="toc-toggle"]').click();
-  check('15 the outline opens again', await until(async () => (await tocW()) > 150));
+  check('14 the choice is remembered after a reload', (await c.locator('.pb-shared .toc').count()) === 0);
+  await c.locator('[data-testid="rail-outline"]').click();
+  await c.locator('[data-testid="fly-outline"] [data-testid="toc-toggle"]').click();
+  check('15 pinning the outline brings it back', await until(async () => (await tocW()) > 150));
 
   await c.locator('[data-testid="look-btn"]').click();
   const fs0 = await c.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pb-shared .bn-editor')).zoom || '1'));
