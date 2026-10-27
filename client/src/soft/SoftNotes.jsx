@@ -1,5 +1,6 @@
 ﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
+import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon } from 'lucide-react';
@@ -441,6 +442,17 @@ export default function SoftNotes() {
     } catch { flash('Could not add the tag'); }
     setPicked([]); setSelectMode(false);
   };
+  const duplicateTab = async (id) => {
+    forceSave();
+    const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
+    if (!n) return;
+    try {
+      const { data } = await notesAPI.create({ title: `Copy of ${n.title || 'Untitled'}`, content: n.content || '', tags: n.tags || [] });
+      refreshLists();
+      navigate(`/notes/${data.note.id}`);
+      flash('Duplicated');
+    } catch { flash('Could not duplicate the note'); }
+  };
   const duplicate = async () => {
     setMenuOpen(false);
     forceSave();
@@ -614,6 +626,7 @@ export default function SoftNotes() {
           </div>
         ) : (
           <>
+            <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
             <div className="s-note-bar">
               <span className="s-crumb">Notes{crumb ? `  ›  ${crumb}` : ''}</span>
               <span className={`s-saved${saved.bad ? ' bad' : ''}`}>{saved.icon}{saved.text}</span>

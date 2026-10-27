@@ -541,3 +541,21 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-kbd { min-width: 0 !important; font: 700 12px var(--s-body); padding: 2px 8px; border-radius: 8px; background: var(--s-chip-solid); border: 1.5px solid var(--s-line); color: var(--s-fg); }
 .soft .s-keys-none { color: var(--s-fg3); font-weight: 600; }
 @media (max-width: 760px) { .soft .s-keys-grid { grid-template-columns: 1fr; } .soft .s-keys-head { flex-wrap: wrap; } }
+
+/* ---- note tabs (mockup B4) ---- */
+.soft .s-tabs { display: flex; align-items: flex-end; gap: 6px; margin: -4px 0 0; position: relative; flex: none; min-width: 0; }
+.soft .s-tab-nav { width: 30px; height: 30px; margin-bottom: 4px; border-radius: 10px; display: grid; place-items: center; background: var(--s-chip, rgba(0,0,0,.05)); color: var(--s-fg2); flex: none; }
+.soft .s-tab-nav:disabled { opacity: .35; cursor: default; }
+.soft .s-tab-row { display: flex; align-items: flex-end; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.soft .s-tab { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 14px; border-radius: 14px 14px 0 0; font-size: 13px; color: var(--s-fg2); cursor: pointer; flex: 0 1 170px; min-width: 70px; border-bottom: 3px solid transparent; }
+.soft .s-tab b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.soft .s-tab.on { background: var(--s-surface); color: var(--s-fg); border-bottom-color: var(--s-accent); box-shadow: var(--s-shadow); }
+.soft .s-tab:not(.on):hover { background: rgba(0,0,0,.04); }
+.soft .s-tab-x { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: transparent; color: inherit; flex: none; }
+.soft .s-tab-x:hover { background: rgba(0,0,0,.08); }
+.soft .s-tab-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--s-accent); flex: none; }
+.soft .s-tab-menu { position: fixed; z-index: 80; width: 250px; padding: 8px; border-radius: 20px; background: var(--s-surface); box-shadow: var(--s-shadow-lg, 0 18px 40px rgba(0,0,0,.2)); display: grid; gap: 2px; }
+.soft .s-tab-menu button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; font-size: 13.5px; font-weight: 600; color: var(--s-fg); text-align: left; background: transparent; }
+.soft .s-tab-menu button:hover:not(:disabled) { background: rgba(0,0,0,.05); }
+.soft .s-tab-menu button:disabled { opacity: .4; }
+.soft .s-tab-menu kbd { margin-left: auto; font: 700 10.5px var(--s-font-ui, inherit); padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.07); }
