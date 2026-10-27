@@ -48,10 +48,16 @@
 .pb-lightbox { position: fixed; inset: 0; z-index: 9500; background: rgba(15,10,6,.88); display: grid; place-items: center; cursor: zoom-out; }
 .pb-lightbox img { max-width: 94vw; max-height: 92vh; border-radius: 10px; background: #fff; }
 .pb-lightbox button { position: absolute; top: 16px; right: 18px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; color: #2a1f17; font-size: 16px; cursor: pointer; }
-.pb-find { position: fixed; top: 84px; right: 28px; z-index: 9100; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; border-radius: 999px; background: #fffdf8; color: #2a1f17; border: 1.5px solid #eadfce; box-shadow: 0 8px 24px rgba(60,40,20,.22); font: 600 13px system-ui, sans-serif; }
-.pb-find input { border: 0; outline: 0; background: transparent; font: inherit; width: 170px; color: inherit; }
-.pb-find .n { min-width: 64px; text-align: right; color: #6b5b4e; font-size: 12px; }
-.pb-find button { border: 0; background: #f4ede2; color: inherit; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 13px; }
+/* find and replace card (B3): find row, then replace row (editors only) */
+.pb-find { position: fixed; top: 84px; right: 28px; z-index: 9100; width: 330px; max-width: calc(100vw - 24px); box-sizing: border-box; display: grid; gap: 6px; padding: 10px; border-radius: 22px; background: #fffdf8; color: #2a1f17; border: 1px solid #EADFD0; box-shadow: 0 18px 40px rgba(36, 31, 26, .22); }
+.pb-find .row { display: flex; align-items: center; gap: 6px; }
+.pb-find input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1.5px solid #EADFD0; background: #fff; outline: none; font: 700 13.5px inherit; color: inherit; }
+.pb-find input.q { border-color: #C4441C; }
+.pb-find input.r { font-weight: 600; }
+.pb-find .n { flex: none; padding: 4px 10px; border-radius: 999px; background: #F4EDE2; font: 700 12px inherit; color: #6b5b4e; white-space: nowrap; }
+.pb-find button { flex: none; display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 8px; border: 0; border-radius: 999px; background: #F4EDE2 !important; color: inherit !important; font: 800 13px inherit; cursor: pointer; }
+.pb-find button.txt { padding: 0 14px; } .pb-find button.ac { background: #C4441C !important; color: #fff !important; } .pb-find button:disabled { opacity: .45; cursor: default; }
+.pb-find .hint { font: 600 11.5px/1.35 inherit; color: #6b5b4e; padding: 0 2px 2px; }
 ::highlight(pb-find) { background: #ffe27a; color: inherit; }
 ::highlight(pb-find-cur) { background: #ff9f43; color: #000; }
 .block-editor-container.pb-focus .bn-editor { padding-bottom: 40vh; }
@@ -155,3 +161,16 @@
 .pb-dropveil h3 { margin: 0; font-size: 22px; font-weight: 800; }
 .pb-dropveil .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; } .pb-dropveil .chip { padding: 4px 12px; border-radius: 999px; background: #F4EDE2; font: 700 12.5px inherit; }
 .pb-dropveil small { color: #8a7968; font-weight: 600; }
+
+/* block menu (B5) */
+.bn-drag-handle-menu.pb-block-menu { min-width: 290px; border-radius: 22px !important; padding: 8px !important; }
+.pb-block-menu .bn-menu-item { border-radius: 12px; min-height: 36px; font-weight: 600; }
+.pb-block-menu .pb-bm-del, .pb-block-menu .pb-bm-del svg { color: #b3261e !important; }
+.pb-bm-row { display: flex; align-items: center; gap: 6px; padding: 7px 10px; min-height: 36px; font: 600 13.5px/1 inherit; color: inherit; }
+.pb-bm-row .lab { width: 62px; flex: none; } .pb-bm-row .lab.wide { flex: 1; width: auto; }
+.pb-bm-row .sw { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid rgba(0, 0, 0, .12); cursor: pointer; flex: none; }
+.pb-bm-row .sw.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #C4441C; }
+.pb-bm-row .seg { display: inline-flex; border-radius: 999px; background: rgba(128, 128, 128, .15); padding: 2px; }
+.pb-bm-row .seg button { border: 0; background: transparent; color: inherit; font: 800 12px inherit; min-width: 28px; height: 24px; border-radius: 999px; cursor: pointer; }
+.pb-bm-row .seg button.on { background: #FFE9A6; color: #241F1A; }
+.pb-bm-row .mv { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(128, 128, 128, .15); color: inherit; cursor: pointer; }

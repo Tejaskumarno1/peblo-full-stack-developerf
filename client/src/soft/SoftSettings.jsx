@@ -35,7 +35,7 @@ const GROUPS = [
     { id: 'system', name: 'On this computer', icon: Laptop, view: SystemSection, desktopOnly: true, words: 'startup login windows tray background quit close launch' },
   ] },
   { label: 'Help', items: [
-    { id: 'shortcuts', name: 'Shortcuts', icon: Keyboard, view: ShortcutsSection, words: 'keyboard keys hotkey capture' },
+    { id: 'shortcuts', name: 'Keyboard shortcuts', icon: Keyboard, view: ShortcutsSection, words: 'keyboard keys hotkey capture undo redo bold find replace tab' },
     { id: 'about', name: 'About', icon: Info, view: AboutSection, words: 'version feedback address' },
   ] },
 ];
@@ -51,7 +51,7 @@ const SUBS = {
   connect: 'Let other AI apps work with your Peblo, safely.',
   shared: 'Everything you have shared with a link, and who can change it.',
   data: 'Take your notes with you, bring notes in, and find deleted ones.',
-  shortcuts: 'Keys that save time.',
+  shortcuts: 'Every key that saves time, in one searchable list.',
   about: 'Version, address and feedback.',
 };
 GROUPS.forEach((g) => { g.tone = TONES[g.label]; g.items.forEach((i) => { i.sub = SUBS[i.id]; }); });

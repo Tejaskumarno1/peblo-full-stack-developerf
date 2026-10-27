@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
+import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
 import { authHeaders } from '../api/token';
@@ -80,6 +81,8 @@ export default function SharedPage() {
   const [activeHeading, setActiveHeading] = useState('');
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('theme-dark'));
   const [previewMode, setPreviewMode] = useState(false);
+  const [readerFind, setReaderFind] = useState(false);
+  const docRef = useRef(null);
   const [viewers, setViewers] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false); // opens by itself only when other people are on the page
   const [sectionPeers, setSectionPeers] = useState({});
@@ -182,6 +185,18 @@ export default function SharedPage() {
     const onFs = () => { if (!document.fullscreenElement) setFullscreen(false); };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  // Ctrl F on a page that is only read: the same find card the editor has (Find only, no Replace)
+  useEffect(() => {
+    const onFind = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'f') return;
+      if (!docRef.current) return; // an editable page has the editor's own find
+      const t = event.target;
+      if (t?.closest?.('input, textarea, select')) return;
+      event.preventDefault(); setReaderFind(true);
+    };
+    document.addEventListener('keydown', onFind, true);
+    return () => document.removeEventListener('keydown', onFind, true);
   }, []);
   const showBar = () => { clearTimeout(barTimer.current); setBarShown(true); };
   const hideBarSoon = () => { clearTimeout(barTimer.current); barTimer.current = setTimeout(() => setBarShown(false), 1400); };
@@ -886,7 +901,8 @@ export default function SharedPage() {
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
                     collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
                     onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
-                : <div className="doc" dangerouslySetInnerHTML={{ __html: body }} />}
+                : <div className="doc" ref={docRef} dangerouslySetInnerHTML={{ __html: body }} />}
+              {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}
 

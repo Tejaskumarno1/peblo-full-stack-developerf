@@ -526,3 +526,18 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
   html:root:root:root .s-conn-cards { grid-template-columns: minmax(0, 1fr); }
   html:root:root:root .s-set-head { flex-wrap: wrap; gap: 8px; }
 }
+
+/* keyboard shortcuts list (B2) */
+.soft .s-keys { background: var(--s-surface); border: 1px solid var(--s-line); border-radius: 22px; padding: 16px 20px 12px; display: grid; gap: 6px; }
+.soft .s-keys-head { display: flex; align-items: center; gap: 12px; }
+.soft .s-keys-head h3 { margin: 0; flex: 1; font-size: 21px; }
+.soft .s-keys-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; width: 220px; border: 1.5px solid var(--s-line); border-radius: 12px; color: var(--s-fg3); background: var(--s-surface); }
+.soft .s-keys-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 600 13.5px var(--s-body); color: var(--s-fg); padding: 0; }
+.soft .s-keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+.soft .s-keys-group { padding: 4px 0; }
+.soft .s-keys-title { margin: 8px 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); }
+.soft .s-keys-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--s-line); font-size: 12.5px; font-weight: 600; color: var(--s-fg2); }
+.soft .s-keys-row span { flex: 1; }
+.soft .s-kbd { min-width: 0 !important; font: 700 12px var(--s-body); padding: 2px 8px; border-radius: 8px; background: var(--s-chip-solid); border: 1.5px solid var(--s-line); color: var(--s-fg); }
+.soft .s-keys-none { color: var(--s-fg3); font-weight: 600; }
+@media (max-width: 760px) { .soft .s-keys-grid { grid-template-columns: 1fr; } .soft .s-keys-head { flex-wrap: wrap; } }

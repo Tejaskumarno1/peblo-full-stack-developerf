@@ -4,7 +4,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
-  FormattingToolbarController, FormattingToolbar, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
+  FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import '@blocknote/mantine/style.css';
@@ -21,6 +21,8 @@ import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
 import MediaTools, { groupOf } from './MediaTools';
+import FindBar from './FindBar';
+import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive } from '../utils/noteSync';
 import Backlinks from './Backlinks';
@@ -41,57 +43,6 @@ async function uploadFile(file) {
     tell('error', e?.message || 'That file could not be added.');
     throw e;
   }
-}
-
-// Find in the open note (Ctrl+F). Matches are painted with the browser's highlight feature, so the note itself is never changed.
-function FindBar({ root, onClose }) {
-  const [q, setQ] = useState('');
-  const [idx, setIdx] = useState(0);
-  const [count, setCount] = useState(0);
-  const ranges = useRef([]);
-  const input = useRef(null);
-  useEffect(() => {
-    input.current?.focus(); input.current?.select();
-    return () => { try { CSS.highlights.delete('pb-find'); CSS.highlights.delete('pb-find-cur'); } catch { /* not supported */ } };
-  }, []);
-  useEffect(() => {
-    const el = root.current?.querySelector('.bn-editor');
-    ranges.current = [];
-    if (el && q) {
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      const ql = q.toLowerCase();
-      let n;
-      while ((n = walker.nextNode())) {
-        const t = n.nodeValue.toLowerCase();
-        let i = t.indexOf(ql);
-        while (i >= 0 && ranges.current.length < 500) {
-          const r = new Range(); r.setStart(n, i); r.setEnd(n, i + q.length); ranges.current.push(r);
-          i = t.indexOf(ql, i + q.length);
-        }
-      }
-    }
-    try { CSS.highlights.set('pb-find', new Highlight(...ranges.current)); } catch { /* not supported */ }
-    setCount(ranges.current.length); setIdx(0);
-  }, [q, root]);
-  useEffect(() => {
-    const r = ranges.current[idx];
-    try {
-      if (!r) { CSS.highlights.delete('pb-find-cur'); return; }
-      CSS.highlights.set('pb-find-cur', new Highlight(r));
-      r.startContainer.parentElement?.scrollIntoView({ block: 'center' });
-    } catch { /* not supported */ }
-  }, [idx, count]);
-  const step = (d) => { if (count) setIdx((i) => (i + d + count) % count); };
-  return (
-    <div className="pb-find" role="search">
-      <input ref={input} aria-label="Find in this note" placeholder="Find in this note" value={q} onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } if (e.key === 'Escape') { e.preventDefault(); onClose(); } }} />
-      <span className="n">{q ? (count ? `${idx + 1} of ${count}` : 'No matches') : ''}</span>
-      <button type="button" aria-label="Previous match" onClick={() => step(-1)}>↑</button>
-      <button type="button" aria-label="Next match" onClick={() => step(1)}>↓</button>
-      <button type="button" aria-label="Close find" onClick={onClose}>✕</button>
-    </div>
-  );
 }
 
 /* ---------------------------------------------------------------------------
@@ -362,6 +313,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
   const [findOpen, setFindOpen] = useState(false);
+  const [findReplace, setFindReplace] = useState(false);
 
   useEffect(() => {
     let timer;
@@ -377,15 +329,26 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   useEffect(() => {
     const key = (e) => {
       if (e.key === 'Escape' && lightbox) { setLightbox(null); return; }
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && rootRef.current?.contains(document.activeElement)) {
-        e.preventDefault(); setFindOpen(true);
+      const mod = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey;
+      const k = e.key.toLowerCase();
+      if (mod && (k === 'f' || k === 'h')) {
+        // inside the note, or with nothing else holding the keyboard (a reader on a shared page); not while typing in another field
+        const a = document.activeElement;
+        const elsewhere = a && a !== document.body && !rootRef.current?.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+        if (elsewhere) return;
+        if (k === 'h' && editable === false) return;
+        e.preventDefault(); setFindReplace(k === 'h'); setFindOpen(true);
+      }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && editable !== false && rootRef.current?.contains(document.activeElement)) {
+        e.preventDefault(); // Alt Up / Alt Down move the block
+        try { if (e.key === 'ArrowUp') editor.moveBlocksUp(); else editor.moveBlocksDown(); } catch { /* nothing to move */ }
       }
     };
-    const open = () => setFindOpen(true);
+    const open = () => { setFindReplace(false); setFindOpen(true); };
     document.addEventListener('keydown', key, true);
     window.addEventListener('pb-find-open', open);
     return () => { document.removeEventListener('keydown', key, true); window.removeEventListener('pb-find-open', open); };
-  }, [lightbox]);
+  }, [lightbox, editable, editor]);
 
   // Typewriter focus: the block you are writing in stays bright and centred, the rest fades.
   const [curId, setCurId] = useState(null);
@@ -784,7 +747,9 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         theme={dark ? 'dark' : 'light'}
         slashMenu={false}
         formattingToolbar={false}
+        sideMenu={false}
       >
+        <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BlockMenu} />} />
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
@@ -796,7 +761,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
       {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
       <MediaTools editor={editor} rootRef={rootRef} uploadFile={uploadFile} editable={editable !== false} />
-      {findOpen && <FindBar root={rootRef} onClose={() => setFindOpen(false)} />}
+      {findOpen && <FindBar key={findReplace ? 'r' : 'f'} root={rootRef} editor={editor} editable={editable !== false} withReplace={findReplace} onClose={() => { setFindOpen(false); try { editor.focus(); } catch { /* none */ } }} />}
       {lightbox && (
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" />
