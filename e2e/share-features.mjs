@@ -40,7 +40,7 @@ try {
   const seen = await page.locator('[data-testid="peer-pointer"][data-name="Mia"] .tag').first().evaluate((el) => getComputedStyle(el).backgroundColor).catch(() => '');
   check('6 pointer uses the chosen colour', seen === picked, `${seen} vs ${picked}`);
 
-  await g.locator('[data-testid="present-btn"]').click(); await g.locator('[data-testid="present-go"]').click();
+  await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
   check('7 laser and spotlight tools shown', (await g.locator('[data-testid="tool-laser"]').count()) === 1 && (await g.locator('[data-testid="tool-spot"]').count()) === 1);
   await g.locator('[data-testid="tool-laser"]').click();
   await g.mouse.move(bb.x + 70, bb.y + 9);

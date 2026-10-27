@@ -22,7 +22,7 @@ try {
   }
   const pres = P.p; const a = A.p; const b = B.p;
   await until(async () => (await pres.getByTestId('present-btn').count()) === 1, 20000);
-  await pres.getByTestId('present-btn').click();
+  await pres.getByTestId('present-btn').click(); await pres.getByTestId('present-options').click();
   await pres.getByTestId('present-go').click();
   await pres.getByTestId('presenting-banner').waitFor({ timeout: 8000 });
   check('audience gets reaction buttons even without hands on', await until(async () => (await a.getByTestId('react-up').count()) === 1));

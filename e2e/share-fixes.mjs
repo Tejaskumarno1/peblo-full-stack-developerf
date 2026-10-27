@@ -32,15 +32,15 @@ try {
     check(`1c ${tag}: editing the title still works`, (await g.getByLabel('Title').inputValue()) === 'Short title');
     await g.getByLabel('Title').fill(title);
     await g.locator('.bn-editor .bn-block-content', { hasText: 'Normalization removes' }).first().click({ timeout: 6000 });
-    await g.locator('[data-testid="present-btn"]').click(); await g.locator('[data-testid="present-go"]').click();
+    await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
     await g.locator('[data-testid="presenting-banner"]').waitFor({ timeout: 6000 });
     const o = await g.evaluate(() => {
       const bar = document.querySelector('[data-testid="presenting-banner"]').getBoundingClientRect();
       const blocks = [...document.querySelectorAll('.bn-editor .bn-block-outer')].filter((b) => b.getBoundingClientRect().height > 2);
       const top = Math.min(...blocks.map((b) => b.getBoundingClientRect().top));
-      return { barTop: Math.round(bar.top), barBottom: Math.round(bar.bottom), textTop: Math.round(top), vh: innerHeight };
+      return { barTop: Math.round(bar.top), barBottom: Math.round(bar.bottom), barLeft: Math.round(bar.left), barRight: Math.round(bar.right), vw: innerWidth, textTop: Math.round(top), vh: innerHeight };
     });
-    check(`3 ${tag}: the presenting dock floats at the bottom, and the first line of text starts above it`, o.barTop >= o.vh - 160 && o.barBottom <= o.vh && o.textTop < o.barTop, JSON.stringify(o));
+    check(`3 ${tag}: the presenting dock is a side rail on desktop and a bottom bar on phones, clear of the first line`, (o.vw > 720 ? o.barLeft <= 40 && o.barTop >= 0 && o.barBottom <= o.vh : o.barTop >= o.vh - 160 && o.barBottom <= o.vh && o.textTop < o.barTop), JSON.stringify(o));
     await c.close();
   }
   // a view-only link

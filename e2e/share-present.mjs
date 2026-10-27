@@ -27,7 +27,7 @@ try {
   check('both see the presence bar', await until(async () => (await pres.getByTestId('present-btn').count()) === 1 && (await aud.getByTestId('present-btn').count()) === 1, 20000));
 
   // options card, then the dock
-  await pres.getByTestId('present-btn').click();
+  await pres.getByTestId('present-btn').click(); await pres.getByTestId('present-options').click();
   check('Present opens the options card', await pres.getByTestId('present-start').isVisible());
   await pres.screenshot({ path: `${SHOTS}/present-1-start.png` });
   await pres.getByTestId('present-go').click();
@@ -87,7 +87,7 @@ try {
   check('the page returns to normal after ending', !(await pres.evaluate(() => document.documentElement.classList.contains('pb-presenting'))));
 
   // guided tour
-  await pres.getByTestId('present-btn').click();
+  await pres.getByTestId('present-btn').click(); await pres.getByTestId('present-options').click();
   await pres.getByTestId('mode-tour').click();
   await pres.getByTestId('present-go').click();
   await pres.getByTestId('dock-tour').click();

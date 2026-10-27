@@ -56,7 +56,7 @@ try {
   check('3c the owner no longer moves', after === stay || Math.abs(after - stay) < 4, `${stay} -> ${after}`);
 
   // presenting: the owner is offered to follow, and can say "not now"
-  await g.locator('[data-testid="present-btn"]').click(); await g.locator('[data-testid="present-go"]').click();
+  await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
   check('4 the guest sees they are presenting', await g.locator('[data-testid="presenting-banner"]').isVisible());
   check('5 the owner is offered to follow the presenter', await until(async () => (await page.locator('[data-testid="present-offer"]').count()) === 1));
   await page.locator('[data-testid="present-follow"]').click();
@@ -64,7 +64,7 @@ try {
   check('6 following the presenter lands on the same words', await until(async () => { const o = await offset(page, 'Paragraph number 12 '); return o !== null && Math.abs(o - 8) <= 14; }, 7000), String(await offset(page, 'Paragraph number 12 ')));
   await g.locator('[data-testid="present-btn"]').click();
   check('7 the offer goes when they stop presenting', await until(async () => (await page.locator('[data-testid="present-offer"]').count()) === 0));
-  await g.locator('[data-testid="present-btn"]').click(); await g.locator('[data-testid="present-go"]').click();
+  await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
   check('8 and comes back next time', await until(async () => (await page.locator('[data-testid="present-offer"]').count()) + (await page.locator('[data-testid="follow-banner"]').count()) >= 1));
 
   check('9 no crash', errors.length === 0, errors.join(' | '));

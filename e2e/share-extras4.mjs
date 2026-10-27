@@ -27,7 +27,7 @@ try {
   await other.locator('.bn-editor').waitFor({ timeout: 20000 });
   if (await page.getByLabel('Your name').count()) { await page.getByLabel('Your name').fill('Tejas'); await page.getByLabel('Your name').press('Enter'); }
   await until(async () => (await page.getByTestId('present-btn').count()) === 1, 20000);
-  await page.getByTestId('present-btn').click({ timeout: 8000 });
+  await page.getByTestId('present-btn').click({ timeout: 8000 }); await page.getByTestId('present-options').click();
   await page.getByTestId('present-go').click();
   await page.getByTestId('presenting-banner').waitFor({ timeout: 8000 });
   await page.getByTestId('present-end').click();

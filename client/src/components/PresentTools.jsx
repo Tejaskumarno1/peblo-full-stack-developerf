@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus, GripVertical, Minimize2, Maximize2, Pencil, Highlighter } from 'lucide-react';
+import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus, GripVertical, Minimize2, Maximize2, Pencil, Highlighter, Layers, Search, Link2 } from 'lucide-react';
 import { Ic } from '../utils/icons';
 import api from '../api/client';
 import { getToken } from '../api/token';
@@ -41,6 +41,39 @@ const previewOf = () => {
   const t = [...(root?.querySelectorAll('.bn-block-content') || [])].map((el) => ({ h: el.getAttribute('data-content-type') === 'heading', lvl: el.getAttribute('data-level') || '1', text: (el.textContent || '').trim() })).filter((x) => x.text).slice(0, 6);
   return t;
 };
+
+// The Present dropdown (mockup P1c): four ways to start, options at the foot
+export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onClose }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ top: 56, right: 16 });
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  useEffect(() => {
+    const r = anchor?.getBoundingClientRect?.();
+    if (r) { const up = r.bottom + 340 > window.innerHeight; const top = up ? -Math.round(window.innerHeight - r.top + 10) : Math.round(r.bottom + 10), right = Math.max(12, Math.round(window.innerWidth - r.right - 8)); const left = r.left + r.width / 2 < window.innerWidth / 2 ? Math.max(12, Math.round(r.left)) : null; setPos((p) => (p.top === top && p.right === right && p.left === left ? p : { top, right, left })); }
+    const off = (e) => { if (ref.current && !ref.current.contains(e.target) && !anchor?.contains(e.target)) closeRef.current(); };
+    const key = (e) => { if (e.key === 'Escape') closeRef.current(); };
+    document.addEventListener('mousedown', off); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', key); };
+  }, [anchor]);
+  const Row = ({ tid, icon, title, sub, keys, hot, off, mode }) => (
+    <button type="button" role="menuitem" className={`pm-row${hot ? ' hot' : ''}`} data-testid={tid} disabled={off} onClick={() => onPick(mode)}>
+      <span className="pm-ic">{icon}</span><span className="pm-tx"><b>{title}</b><small>{sub}</small></span>{keys && <kbd>{keys}</kbd>}
+    </button>
+  );
+  return createPortal(
+    <div ref={ref} className="pb-pmenu" role="menu" aria-label="Present" data-testid="present-menu" style={{ ...(pos.top < 0 ? { bottom: -pos.top } : { top: pos.top }), ...(pos.left != null ? { left: pos.left } : { right: pos.right }) }}>
+      <Row tid="pm-start" hot mode="follow" icon={<Presentation size={18} />} title="Start now, full screen" sub={`Follow me, questions ${qOn ? 'on' : 'off'}. ${count} ${count === 1 ? 'person is' : 'people'} here.`} keys="Ctrl Shift P" />
+      <Row tid="pm-tour" mode="tour" icon={<Route size={18} />} title="Guided tour" sub="Walk everyone through stops you choose" />
+      <Row tid="pm-point" mode="point" icon={<Eye size={18} />} title="Point only" sub="Your pointer shows, people read freely" />
+      <Row tid="pm-ppt" off mode="ppt" icon={<Download size={18} />} title="Present a PowerPoint" sub="Add a deck to the note first" />
+      <div className="pm-foot">
+        <button type="button" className="pm-opt" data-testid="present-options" onClick={onOptions}>Options</button>
+        <button type="button" className={`pm-chip${qOn ? ' on' : ''}`} data-testid="pm-q" aria-pressed={qOn} onClick={() => setQOn(!qOn)}>{qOn ? <Check size={13} /> : null}Questions {qOn ? 'on' : 'off'}</button>
+        <button type="button" className={`pm-chip${qOn ? ' on' : ''}`} aria-pressed={qOn} onClick={() => setQOn(!qOn)}>{qOn ? <Check size={13} /> : null}Reactions {qOn ? 'on' : 'off'}</button>
+      </div>
+    </div>, document.body);
+}
+
 export function PresentStart({ mode, setMode, qOn, setQOn, notesOn, setNotesOn, count, title = '', onStart, onCancel }) {
   const host = useHost();
   const [full, setFull] = useState(() => lsGet('peblo-present-fs', '1') === '1');
@@ -104,12 +137,104 @@ export function PresentStart({ mode, setMode, qOn, setQOn, notesOn, setNotesOn, 
  * The presenter's dock and its side panel.
  * `state` is kept by the parent (it must survive the panel closing); this component owns the notes, timer and tour.
  */
-export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLaser, spot, setSpot, getAnchor, goToBlock, onEnd }) {
+
+/* ---- The notes drawer (mockup P3d): a queue of notes to present through ---- */
+const QKEY = 'peblo-present-queue';
+export const RESUME_KEY = 'peblo-present-resume';
+export const FOLLOW_KEY = 'peblo-follow-resume';
+const hereNote = () => {
+  const p = window.location.pathname;
+  let m = p.match(/^\/notes\/([^/?#]+)/); if (m) return { id: m[1] };
+  m = p.match(/^\/s\/note\/([^/?#]+)/); return m ? { tok: m[1] } : {};
+};
+export const gotoPath = (path) => { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); };
+const whenShort = (t) => {
+  const d = new Date(t); const days = Math.floor((Date.now() - +d) / 864e5);
+  if (days < 1) return 'today'; if (days < 2) return 'Yesterday'; if (days < 7) return d.toLocaleDateString(undefined, { weekday: 'short' });
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+function useNoteQueue() {
+  const [all, setAll] = useState(null); // null until the owner's notes load (a guest never gets them)
+  const [ids, setIds] = useState(() => { try { const v = JSON.parse(localStorage.getItem(QKEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } });
+  useEffect(() => {
+    let off = false;
+    (async () => {
+      try {
+        const [n, s] = await Promise.all([api.get('/notes', { params: { limit: 80 } }), api.get('/share').catch(() => ({ data: { links: [] } }))]);
+        const toks = new Map(((s.data && s.data.links) || []).filter((l) => l.kind === 'note').map((l) => [l.id, l.token]));
+        const rows = (n.data && n.data.notes) || n.data || [];
+        if (!off && Array.isArray(rows)) setAll(rows.map((x) => ({ id: x.id, title: x.title || 'Untitled', updatedAt: x.updatedAt, token: toks.get(x.id) || null })));
+      } catch { /* not the owner: no drawer */ }
+    })();
+    return () => { off = true; };
+  }, []);
+  const here = hereNote();
+  const byId = new Map((all || []).map((n) => [n.id, n]));
+  const cur = (all || []).find((n) => n.id === here.id || (here.tok && n.token === here.tok)) || null;
+  let order = ids.filter((id) => byId.has(id));
+  if (cur && !order.includes(cur.id)) order = [cur.id, ...order];
+  const save = (next) => { setIds(next); try { localStorage.setItem(QKEY, JSON.stringify(next)); } catch { /* not kept */ } };
+  return { all, byId, cur, order, save };
+}
+
+function QueueDrawer({ q, keepRoom, setKeepRoom, onGo, onClose }) {
+  const [find, setFind] = useState('');
+  const [over, setOver] = useState(null);
+  const dragId = useRef(null);
+  const term = find.trim().toLowerCase();
+  const hit = (n) => !term || n.title.toLowerCase().includes(term);
+  const rows = q.order.map((id) => q.byId.get(id)).filter(Boolean);
+  const more = q.all.filter((n) => !q.order.includes(n.id) && hit(n)).sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)).slice(0, term ? 8 : 5);
+  const move = (id, to) => {
+    const from = q.order.indexOf(id); if (from < 0 || to < 0 || to >= q.order.length || from === to) return;
+    const next = q.order.slice(); next.splice(from, 1); next.splice(to, 0, id); q.save(next);
+  };
+  const add = (n) => q.save([...q.order, n.id]);
+  const chipOf = (n) => (n.id === q.cur?.id ? <span className="qd-chip ok">Live</span> : n.token ? <span className="qd-chip pub" title="Everyone on the link can follow you to this note">Public</span> : <span className="qd-chip priv" title="Only you see this note: the room cannot follow you into it yet">Private</span>);
+  return (
+    <aside className="pb-qd" role="complementary" aria-label="Notes to present" data-testid="queue-drawer">
+      <h3><Layers size={18} />Notes to present<button type="button" className="qd-x" aria-label="Close" data-testid="queue-close" onClick={onClose}><X size={16} /></button></h3>
+      <label className="qd-srch"><Search size={15} /><input data-testid="queue-search" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Jump to a note" aria-label="Jump to a note"
+        onKeyDown={(e) => { if (e.key === 'Enter') { const n = rows.filter(hit)[0] || more[0]; if (n) { if (!q.order.includes(n.id)) add(n); onGo(n); } } }} /></label>
+      <div className="qd-list">
+        <div className="qd-note"><Link2 size={13} /> Link A follows the note you are on. Private notes show only while you present.</div>
+        <div className="qd-lab">Up next, drag to reorder</div>
+        {rows.filter(hit).map((n, i) => (
+          <div key={n.id} className={`qd-n${n.id === q.cur?.id ? ' on' : ''}${over === n.id ? ' over' : ''}`} data-testid="queue-row" draggable
+            onDragStart={() => { dragId.current = n.id; }} onDragOver={(e) => { e.preventDefault(); setOver(n.id); }} onDragLeave={() => setOver(null)}
+            onDrop={(e) => { e.preventDefault(); setOver(null); if (dragId.current && dragId.current !== n.id) move(dragId.current, q.order.indexOf(n.id)); dragId.current = null; }}>
+            <button type="button" className="qd-go" onClick={() => onGo(n)} title={n.id === q.cur?.id ? 'Presenting now' : 'Present this note'}>
+              <span className="no">{q.order.indexOf(n.id) + 1}</span>
+              <span className="tx"><b>{n.title}</b><small>{n.id === q.cur?.id ? 'Presenting now' : `Edited ${whenShort(n.updatedAt)}`}</small></span>
+            </button>
+            {chipOf(n)}
+            <button type="button" className="qd-grip" aria-label={`Move ${n.title}. Arrow keys reorder`} data-testid="queue-grip" onKeyDown={(e) => { if (e.key === 'ArrowUp') { e.preventDefault(); move(n.id, q.order.indexOf(n.id) - 1); } if (e.key === 'ArrowDown') { e.preventDefault(); move(n.id, q.order.indexOf(n.id) + 1); } }}><GripVertical size={16} /></button>
+          </div>
+        ))}
+        <div className="qd-lab">{term ? 'Results' : 'Recent'}</div>
+        {more.length === 0 && <p className="qd-empty">{term ? 'No note matches.' : 'Nothing else yet.'}</p>}
+        {more.map((n) => (
+          <button type="button" key={n.id} className="qd-n qd-add" data-testid="queue-recent" onClick={() => add(n)} title="Add to the queue">
+            <span className="no"><Plus size={13} /></span><span className="tx"><b>{n.title}</b><small>{whenShort(n.updatedAt)}</small></span>
+          </button>
+        ))}
+      </div>
+      <div className="qd-foot"><kbd>N</kbd>next note<kbd>P</kbd>previous
+        <label className="qd-sw" title="Keep the room following"><input type="checkbox" role="switch" data-testid="queue-keep" checked={keepRoom} onChange={(e) => setKeepRoom(e.target.checked)} /><span className="sw" /><span className="sr">Keep the room following</span></label></div>
+    </aside>
+  );
+}
+
+const defaultRail = () => typeof window !== 'undefined' && window.innerWidth > 720; // side rail on wide screens, bottom bar on phones
+export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLaser, spot, setSpot, getAnchor, goToBlock, onEnd, startedAt, startPanel }) {
   const host = useHost();
-  const [panel, setPanel] = useState(null); // 'room' | 'notes' | 'q' | 'tour'
+  const [panel, setPanel] = useState(startPanel || null); // 'room' | 'notes' | 'q' | 'tour' | 'queue'
+  const q = useNoteQueue();
+  const [keepRoom, setKeepRoomS] = useState(() => { try { return localStorage.getItem('peblo-present-keep') !== '0'; } catch { return true; } });
+  const setKeepRoom = (v) => { setKeepRoomS(v); try { localStorage.setItem('peblo-present-keep', v ? '1' : '0'); } catch { /* not kept */ } };
   // the dock can be dragged anywhere, snaps to the screen edges (vertical on the left and right), and folds down to a small pill
   const dockRef = useRef(null);
-  const [dock, setDock] = useState(() => { try { const d = JSON.parse(localStorage.getItem('peblo-dock') || 'null'); return d && typeof d.x === 'number' ? d : { x: null, y: null, v: false, c: false }; } catch { return { x: null, y: null, v: false, c: false }; } });
+  const [dock, setDock] = useState(() => { try { const d = JSON.parse(localStorage.getItem('peblo-dock') || 'null'); return d && typeof d.x === 'number' ? d : { x: null, y: null, v: defaultRail(), c: false }; } catch { return { x: null, y: null, v: defaultRail(), c: false }; } });
   const saveDock = (d) => { setDock(d); try { localStorage.setItem('peblo-dock', JSON.stringify(d)); } catch { /* not kept */ } };
   const dragging = useRef(null);
   const fit = (d) => {
@@ -148,7 +273,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
       saveDock(fit({ ...dock, x: nx, y: ny, v }));
     });
   };
-  const resetDock = () => saveDock({ x: null, y: null, v: false, c: dock.c });
+  const resetDock = () => saveDock({ x: null, y: null, v: defaultRail(), c: dock.c });
   const onRight = dock.x !== null && dock.v && dock.x > window.innerWidth / 2;
   const [clock, setClock] = useState({ acc: 0, since: Date.now() });
   const [, tick] = useState(0);
@@ -166,7 +291,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
   const reactSeen = useRef(new Map());
   const seen = useRef(new Map()); // person -> minutes in the room while presenting
   const asked = useRef(new Map()); // question id -> { who, text, at }
-  const t0 = useRef(Date.now());
+  const t0 = useRef(startedAt || Date.now());
   const last = useRef(Date.now());
 
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
@@ -246,10 +371,19 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
     onEnd({ minutes: Math.max(1, Math.round((now - t0.current) / 60000)), people, joined: people.length, stayed: people.filter((p) => p.stayed).length, questions: qs, notes, reacts: reactTotals, polls: [...pollLog.current.values()] });
   };
 
+  const goNote = (n) => {
+    if (!n || n.id === q.cur?.id) return;
+    try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ t: Date.now(), mode, qOn, notesOn, t0: t0.current, drawer: panel === 'queue' })); } catch { /* private mode */ }
+    const room = keepRoom && n.token;
+    if (room) { try { aw.setLocalStateField('next', n.token); } catch { /* gone */ } }
+    setTimeout(() => gotoPath('/notes/' + n.id), room ? 450 : 0);
+  };
+  const stepNote = (d) => { const i = q.order.indexOf(q.cur?.id); const id = q.order[i + d]; if (i >= 0 && id) goNote(q.byId.get(id)); };
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typingTarget(e.target)) return;
       const k = e.key.toLowerCase();
+      if (panel === 'queue' && q.order.length > 1 && (k === 'n' || k === 'p')) { stepNote(k === 'n' ? 1 : -1); return; }
       if (k === 'n' && notesOn) setPanel((p) => (p === 'notes' ? null : 'notes'));
       else if (k === 'q' && qOn) setPanel((p) => (p === 'q' ? null : 'q'));
       else if (k === 'p') setPanel((p) => (p === 'poll' ? null : 'poll'));
@@ -261,7 +395,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
   });
 
   const Btn = ({ id, icon, label, on, onClick, badge, tid, hint }) => (
-    <button type="button" className={`pd-t pd-b${on ? ' on' : ''}`} data-testid={tid} aria-pressed={on} title={hint || label} onClick={onClick}>{icon}<span>{label}</span>{badge > 0 && <i className="pd-n">{badge}</i>}</button>
+    <button type="button" className={`pd-t pd-b${on ? ' on' : ''}`} data-testid={tid} aria-pressed={on} title={hint || label} data-tip={hint || label} onClick={onClick}>{icon}<span>{label}</span>{badge > 0 && <i className="pd-n">{badge}</i>}</button>
   );
 
   const timerRow = (
@@ -274,7 +408,8 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
 
   return createPortal(
     <>
-      {panel && (
+      {panel === 'queue' && q.all && <QueueDrawer q={q} keepRoom={keepRoom} setKeepRoom={setKeepRoom} onGo={goNote} onClose={() => setPanel(null)} />}
+      {panel && panel !== 'queue' && (
         <aside className="pb-ppanel" style={onRight ? { right: 88 } : undefined} data-testid={`panel-${panel}`} aria-label="Presenter panel">
           <header><h3>{{ room: 'Audience', notes: 'Notes', q: 'Questions', tour: 'Tour', poll: 'Poll' }[panel]}</h3><button type="button" aria-label="Close panel" onClick={() => setPanel(null)}><X size={16} /></button></header>
           {panel === 'room' && <div className="pp-body">
@@ -336,7 +471,7 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
       )}
       <div ref={dockRef} className={`pb-pdock${dock.v ? ' v' : ''}${dock.c ? ' c' : ''}${dock.x !== null ? ' free' : ''}`} style={dock.x !== null ? { left: dock.x, top: dock.y, bottom: 'auto', transform: 'none' } : undefined} role="toolbar" aria-label="Presenter tools" data-testid="presenting-banner">
         <button type="button" className="pd-grip" data-testid="dock-grip" aria-label="Drag the toolbar. Double-click to put it back" title="Drag to move. Double-click to reset" onPointerDown={gripDown} onPointerMove={gripMove} onPointerUp={gripUp} onPointerCancel={gripUp} onDoubleClick={resetDock}><GripVertical size={16} /></button>
-        <span className="pd-pill" title={`${following} following`}><Presentation size={14} />{dock.v ? mmss(elapsed) : `Presenting · ${mmss(elapsed)} · ${following} following`}</span>
+        <span className="pd-pill" title={`${following} following`}><Presentation size={14} />{dock.v ? <>{mmss(elapsed)}<span className="pd-sr">{` · ${following} following`}</span></> : `Presenting · ${mmss(elapsed)} · ${following} following`}</span>
         <button type="button" className="pd-b pd-fold" data-testid="dock-fold" aria-label={dock.c ? 'Show all tools' : 'Fold the toolbar'} title={dock.c ? 'Show all tools' : 'Fold the toolbar'} onClick={() => saveDock({ ...dock, c: !dock.c })}>{dock.c ? <Maximize2 size={15} /> : <Minimize2 size={15} />}</button>
         <span className="pd-sep" />
         <button type="button" className={`pd-t pd-b${laser ? ' on' : ''}`} aria-pressed={laser} data-testid="tool-laser" title="Laser pointer: your pointer shows as a red dot" onClick={() => setLaser((v) => !v)}><Ic name="laser" size={16} /><span>Laser</span></button>
@@ -346,7 +481,8 @@ export function PresenterKit({ aw, me, peers, mode, qOn, notesOn, laser, setLase
         {reactSum > 0 && <span className="pd-t pd-react" data-testid="react-counts" title="Reactions from the room"><ThumbsUp size={13} />{reactTotals.up}<Lightbulb size={13} />{reactTotals.idea}<Heart size={13} />{reactTotals.heart}</span>}
         <Btn tid="dock-poll" icon={<ListChecks size={16} />} label="Poll" on={panel === 'poll'} onClick={() => setPanel((p) => (p === 'poll' ? null : 'poll'))} badge={poll && poll.open ? votes.length : 0} hint="Poll (P)" />
         <Btn tid="dock-room" icon={<Users size={16} />} label="Audience" on={panel === 'room'} onClick={() => setPanel((p) => (p === 'room' ? null : 'room'))} badge={0} />
-        {notesOn && <Btn tid="dock-notes" icon={<StickyNote size={16} />} label="Notes" on={panel === 'notes'} onClick={() => setPanel((p) => (p === 'notes' ? null : 'notes'))} hint="Notes (N)" />}
+        {q.all && q.order.length > 0 && <Btn tid="dock-queue" icon={<Layers size={16} />} label={`Notes ${Math.max(0, q.order.indexOf(q.cur?.id)) + 1} of ${q.order.length}`} on={panel === 'queue'} onClick={() => setPanel((p) => (p === 'queue' ? null : 'queue'))} hint={`Notes ${Math.max(0, q.order.indexOf(q.cur?.id)) + 1} of ${q.order.length}`} />}
+        {notesOn && <Btn tid="dock-notes" icon={<StickyNote size={16} />} label="My notes" on={panel === 'notes'} onClick={() => setPanel((p) => (p === 'notes' ? null : 'notes'))} hint="Notes (N)" />}
         {qOn && <Btn tid="dock-q" icon={<CircleHelp size={16} />} label="Questions" on={panel === 'q'} onClick={() => setPanel((p) => (p === 'q' ? null : 'q'))} badge={open.length + hands.length} hint="Questions (Q)" />}
         {mode === 'tour' && <Btn tid="dock-tour" icon={<Route size={16} />} label={stops.length ? `Stop ${Math.max(0, stopI) + 1} of ${stops.length}` : 'Tour'} on={panel === 'tour'} onClick={() => setPanel((p) => (p === 'tour' ? null : 'tour'))} hint="Tour (T)" />}
         {stops.length > 0 && <button type="button" className="pd-t pd-b" data-testid="next-stop" title="Next stop (Space)" onClick={nextStop}><SkipForward size={16} /><span>Next</span></button>}
@@ -603,4 +739,62 @@ html.pb-presenting .pb-shared .dk, html.pb-presenting .pb-shared .dh, html.pb-pr
 .pb-rx .rx-x { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; opacity: .8; }
 .pb-rx .rx-go { justify-self: start; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; border: 0; border-radius: 999px; padding: 8px 14px; background: #fff; color: #2b1458; font: 700 13px 'Figtree', system-ui, sans-serif; cursor: pointer; }
 .pb-recap .row button:disabled { opacity: .6; cursor: default; }
+
+/* The presenting control bar in the Soft look (mockups P2a, P2b): dark bar, butter for what is on, accent for End; default is the side rail */
+.pb-pdock { background: #241f1a; color: #e8e0d6; box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
+.pb-pdock .pd-pill { background: transparent; color: #bdb1a4; padding: 2px 4px; font-weight: 700; font-size: 11px; }
+.pb-pdock .pd-b.on { background: #ffe9a6; color: #241f1a; }
+.pb-pdock .pd-b.end { background: #c4441c; color: #fff; }
+.pb-pdock .pd-n { background: #c4441c; color: #fff; }
+.pb-pdock .pd-b:hover { background: rgba(255, 255, 255, .14); } .pb-pdock .pd-b.on:hover { background: #ffe9a6; }
+.pb-pdock.v:not(.free) { left: 22px; top: 50%; bottom: auto; transform: translateY(-50%); }
+.pb-pdock.v { width: 62px; padding: 8px; gap: 4px; border-radius: 999px; overflow: visible; max-height: none; align-items: center; }
+.pb-pdock.v .pd-b { width: 46px; height: 46px; padding: 0; border-radius: 50%; justify-content: center; font-size: 0; }
+.pb-pdock.v .pd-b > span:not(.pd-n) { display: none; }
+.pb-pdock.v .pd-b.end { margin-top: 4px; }
+.pb-pdock.v .pd-b svg { width: 20px; height: 20px; }
+.pb-pdock.v .pd-pill { width: auto; padding: 2px 0; }
+.pb-pdock.v .pd-pill svg { display: none; }
+.pb-pdock .pd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pb-pdock.v .pd-sep { width: 22px; height: 1px; margin: 3px 0; }
+.pb-pdock.v .pd-grip { width: 46px; height: 22px; }
+.pb-pdock .pd-b[data-tip]:hover::after { content: attr(data-tip); position: absolute; z-index: 5; white-space: nowrap; background: #241f1a; color: #fff; border-radius: 12px; padding: 7px 12px; font: 700 13px 'Figtree', system-ui, sans-serif; box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
+.pb-pdock.v .pd-b[data-tip]:hover::after { left: calc(100% + 14px); top: 50%; transform: translateY(-50%); }
+
+.pb-pmenu { position: fixed; z-index: 1300; width: min(380px, calc(100vw - 24px)); background: #fffdf8; color: #241f1a; border: 1.5px solid #e6dccb; border-radius: 22px; padding: 8px; box-shadow: 0 24px 60px rgba(36, 31, 26, .25); font: 500 14px 'Figtree', system-ui, sans-serif; }
+.pm-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 12px; border: 0; border-radius: 16px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.pm-row:hover:not(:disabled) { background: #f4ede0; }
+.pm-row.hot { background: #fde3d6; } .pm-row.hot:hover { background: #fbd6c4; }
+.pm-row:disabled { opacity: .5; cursor: not-allowed; }
+.pm-ic { width: 38px; height: 38px; border-radius: 12px; background: #f4ede0; display: grid; place-items: center; flex: none; } .pm-row.hot .pm-ic { background: #c4441c; color: #fff; }
+.pm-tx { display: flex; flex-direction: column; min-width: 0; flex: 1; } .pm-tx b { font-weight: 800; font-size: 14.5px; } .pm-tx small { color: #6f6557; font-size: 12.5px; margin-top: 1px; }
+.pm-row kbd { font: 700 11px 'Figtree', system-ui, sans-serif; background: #fffdf8; border: 1.5px solid #e6dccb; border-radius: 8px; padding: 3px 7px; color: #6f6557; white-space: nowrap; }
+.pm-foot { display: flex; align-items: center; gap: 8px; padding: 10px 8px 4px; border-top: 1.5px dashed #e6dccb; margin-top: 6px; flex-wrap: wrap; }
+.pm-opt { border: 0; background: transparent; font: 800 13px 'Figtree', system-ui, sans-serif; color: #241f1a; cursor: pointer; padding: 6px 8px; border-radius: 10px; margin-right: auto; } .pm-opt:hover { background: #f4ede0; }
+.pm-chip { display: inline-flex; align-items: center; gap: 4px; border: 1.5px solid #e6dccb; background: #fffdf8; color: #6f6557; font: 700 12px 'Figtree', system-ui, sans-serif; padding: 5px 10px; border-radius: 999px; cursor: pointer; } .pm-chip.on { background: #ffe9a6; border-color: #ecd079; color: #241f1a; }
+
+.pb-qd { position: fixed; right: 16px; top: 16px; bottom: 16px; width: min(310px, calc(100vw - 24px)); z-index: 1160; display: grid; grid-template-rows: auto auto 1fr auto; gap: 12px; padding: 18px; background: #fffdf8; color: #241f1a; border: 1px solid #e6dccb; border-radius: 28px; box-shadow: 0 24px 60px rgba(36, 31, 26, .22); font: 500 14px 'Figtree', system-ui, sans-serif; }
+.pb-qd h3 { margin: 0; font: 800 20px 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; display: flex; align-items: center; gap: 8px; }
+.qd-x { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; display: grid; place-items: center; } .qd-x:hover { background: #f4ede0; }
+.qd-srch { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid #e6dccb; border-radius: 999px; color: #8a7f70; background: #fff; }
+.qd-srch input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: #241f1a; }
+.qd-list { display: grid; gap: 6px; align-content: start; overflow: auto; min-height: 0; }
+.qd-note { display: flex; gap: 6px; align-items: flex-start; background: #dff3e4; padding: 7px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; } .qd-note svg { flex: none; margin-top: 2px; }
+.qd-lab { padding: 6px 4px 0; font: 800 11px 'Figtree', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8a7f70; }
+.qd-empty { margin: 0; padding: 4px 6px; color: #8a7f70; font-size: 12.5px; }
+.qd-n { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 18px; border: 0; background: transparent; text-align: left; font: inherit; color: inherit; }
+.qd-n.on { background: #ffe9a6; } .qd-n.over { outline: 2px dashed #c4441c; outline-offset: -2px; }
+.qd-go { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 4px; border-radius: 14px; }
+.qd-add { width: 100%; cursor: pointer; padding: 10px 12px 10px 6px; } .qd-add:hover, .qd-n:not(.on):hover { background: #f4ede0; }
+.qd-n .no { width: 22px; height: 22px; border-radius: 8px; background: #f4ede0; display: grid; place-items: center; font-weight: 800; font-size: 12px; flex: none; } .qd-n.on .no { background: #241f1a; color: #fff; }
+.qd-n .tx { display: flex; flex-direction: column; min-width: 0; } .qd-n b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .qd-n small { font-size: 12px; color: #8a7f70; }
+.qd-chip { font: 700 11px 'Figtree', system-ui, sans-serif; padding: 3px 8px; border-radius: 999px; background: #f4ede0; flex: none; } .qd-chip.ok { background: #cdeed7; color: #14532d; } .qd-chip.pub { background: #dff3e4; } .qd-chip.priv { background: #ffe9a6; }
+.qd-grip { border: 0; background: transparent; color: #8a7f70; cursor: grab; padding: 4px; border-radius: 8px; display: grid; place-items: center; } .qd-grip:focus-visible { outline: 2px solid #c4441c; }
+.qd-foot { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: #6f6557; font-weight: 600; }
+.qd-foot kbd { font: 800 11px 'Figtree', system-ui, sans-serif; background: #f4ede0; border: 1.5px solid #e6dccb; border-radius: 7px; padding: 2px 7px; color: #241f1a; } .qd-foot kbd + kbd { margin-left: 6px; }
+.qd-sw { margin-left: auto; position: relative; display: inline-flex; cursor: pointer; } .qd-sw input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+.qd-sw .sw { width: 38px; height: 22px; border-radius: 999px; background: #d9cfbd; position: relative; transition: background .15s; } .qd-sw .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.qd-sw input:checked + .sw { background: #c4441c; } .qd-sw input:checked + .sw::after { transform: translateX(16px); } .qd-sw .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 640px) { .pb-qd { top: 8px; bottom: 90px; right: 8px; } }
 `;
+

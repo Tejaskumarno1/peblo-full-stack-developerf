@@ -12,7 +12,7 @@ try {
   const g = await c.newPage(); await g.goto(`${base}/s/note/${tok}`); await ready(g);
   await page.evaluate(() => localStorage.setItem('peblo-present-instant', '0'));
   await page.locator('[data-testid="present-btn"]').waitFor({ timeout: 15000 });
-  await page.locator('[data-testid="present-btn"]').click();
+  await page.locator('[data-testid="present-btn"]').click(); await page.getByTestId('present-options').click();
   const dlg = page.locator('[data-testid="present-start"]');
   check('1 the window opens', await dlg.isVisible());
   check('2 asks Ready to present?', /Ready to present\?/.test(await dlg.innerText()));
@@ -22,7 +22,7 @@ try {
   await page.locator('[data-testid="opt-full"]').uncheck({ force: true });
   await page.keyboard.press('Escape');
   check('6 Escape cancels', await until(async () => (await dlg.count()) === 0, 3000));
-  await page.locator('[data-testid="present-btn"]').click();
+  await page.locator('[data-testid="present-btn"]').click(); await page.getByTestId('present-options').click();
   await page.locator('[data-testid="present-go"]').click();
   check('7 counting down shows the number', await until(async () => /Starting in/.test(await page.locator('[data-testid="present-go"]').innerText()), 2000));
   check('8 presenting starts after about 3 seconds', await until(async () => (await page.locator('[data-testid="present-btn"][aria-pressed="true"]').count()) === 1, 6000));

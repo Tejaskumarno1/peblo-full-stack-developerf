@@ -14,7 +14,7 @@ try {
   const g = await c.newPage(); await g.goto(`${base}/s/note/${tok}`); await ready(g);
   await g.locator('.bn-editor .bn-block-content', { hasText: 'Some words' }).first().click();
   await until(async () => (await g.getByTestId('present-btn').count()) === 1, 20000);
-  await g.getByTestId('present-btn').click(); await g.getByTestId('present-go').click();
+  await g.getByTestId('present-btn').click(); await g.getByTestId('present-options').click(); await g.getByTestId('present-go').click();
   const dock = g.getByTestId('presenting-banner');
   await dock.waitFor({ timeout: 8000 });
   const grip = g.getByTestId('dock-grip');
@@ -42,7 +42,7 @@ try {
   // reset
   await grip.dblclick();
   await wait(300);
-  check('8 double-click puts the dock back', !(await dock.getAttribute('class')).includes(' free') && !(await dock.getAttribute('class')).includes(' v'));
+  check('8 double-click puts the dock back on its side rail', !(await dock.getAttribute('class')).includes(' free') && (await dock.getAttribute('class')).includes(' v'));
   // a drag past the window clamps it on screen
   const gb3 = await grip.boundingBox();
   await g.mouse.move(gb3.x + 10, gb3.y + 15); await g.mouse.down(); await g.mouse.move(1500, 1200, { steps: 4 }); await g.mouse.up();

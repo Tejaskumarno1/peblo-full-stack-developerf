@@ -46,7 +46,7 @@ try {
 
   // presenting from the desktop, following on the phone
   await until(async () => (await pres.getByTestId('present-btn').count()) === 1, 20000);
-  await pres.getByTestId('present-btn').click();
+  await pres.getByTestId('present-btn').click(); await pres.getByTestId('present-options').click();
   await pres.getByTestId('present-go').click();
   await pres.getByTestId('presenting-banner').waitFor({ timeout: 8000 });
   check('the phone is offered to follow', await until(async () => (await ph.getByTestId('present-follow').count()) === 1, 15000));
