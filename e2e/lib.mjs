@@ -31,7 +31,7 @@ export async function boot(opts = {}) {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: !process.env.HEADED, args: process.env.HEADED ? ['--window-position=-1366,0', '--window-size=1366,768'] : [] });
   { // every context (guests too) starts with live cursors on and the join card already answered, like the tests were written for
     const mk = browser.newContext.bind(browser);
-    browser.newContext = async (o) => { const c = await mk(o); await c.addInitScript((f) => { try { if (!f.presence && !localStorage.getItem('peblo-pointers')) localStorage.setItem('peblo-pointers', 'on'); if (!f.guest && !localStorage.getItem('peblo-guest-joined')) localStorage.setItem('peblo-guest-joined', '1'); } catch {} }, { presence: !!opts.freshPresence, guest: !!opts.freshGuest }); return c; };
+    browser.newContext = async (o) => { const c = await mk(o); await c.addInitScript((f) => { try { if (!f.presence && !localStorage.getItem('peblo-pointers')) localStorage.setItem('peblo-pointers', 'on'); if (!f.guest && !localStorage.getItem('peblo-guest-joined')) localStorage.setItem('peblo-guest-joined', '1'); localStorage.setItem('peblo-present-instant', '1'); localStorage.setItem('peblo-present-fs', '0'); } catch {} }, { presence: !!opts.freshPresence, guest: !!opts.freshGuest }); return c; };
   }
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((t) => { try { if (!localStorage.getItem('peblo-token')) localStorage.setItem('peblo-token', t); } catch {} }, token);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus, GripVertical, Minimize2, Maximize2 } from 'lucide-react';
+import { Check, CircleHelp, Download, Eye, EyeOff, Hand, Heart, Lightbulb, ListChecks, Pause, Play, Route, Send, SkipForward, StickyNote, ThumbsUp, Timer, Users, X, Presentation, Plus, GripVertical, Minimize2, Maximize2, Pencil, Highlighter } from 'lucide-react';
 import { Ic } from '../utils/icons';
 import api from '../api/client';
 import { getToken } from '../api/token';
@@ -33,27 +33,68 @@ export function useHost() {
   return document.fullscreenElement || document.body;
 }
 
-/** The small "Present to the room" card: how the room follows, and which extras are on. */
-export function PresentStart({ mode, setMode, qOn, setQOn, notesOn, setNotesOn, count, onStart, onCancel }) {
+/** "Ready to present?": options on the left, what the room will see on the right (mockups P1b, P1e). */
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* not kept */ } };
+const previewOf = () => {
+  const root = document.querySelector('.bn-editor');
+  const t = [...(root?.querySelectorAll('.bn-block-content') || [])].map((el) => ({ h: el.getAttribute('data-content-type') === 'heading', lvl: el.getAttribute('data-level') || '1', text: (el.textContent || '').trim() })).filter((x) => x.text).slice(0, 6);
+  return t;
+};
+export function PresentStart({ mode, setMode, qOn, setQOn, notesOn, setNotesOn, count, title = '', onStart, onCancel }) {
   const host = useHost();
-  const Opt = ({ id, icon, title, sub }) => (
-    <button type="button" className={`opt${mode === id ? ' on' : ''}`} data-testid={`mode-${id}`} onClick={() => setMode(id)}>
-      {icon}<span><strong>{title}</strong><small>{sub}</small></span>{mode === id && <Check size={16} />}
+  const [full, setFull] = useState(() => lsGet('peblo-present-fs', '1') === '1');
+  const [left, setLeft] = useState(0); // countdown seconds, 0 = not counting
+  const lines = useMemo(previewOf, []);
+  const instant = lsGet('peblo-present-instant', '0') === '1';
+  const timer = useRef(null);
+  const begin = () => { clearInterval(timer.current); lsSet('peblo-present-fs', full ? '1' : '0'); if (full) { try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch { /* not allowed */ } } onStart(); };
+  const go = () => {
+    if (left > 0 || instant) { begin(); return; } // a second click skips the wait
+    setLeft(3);
+    timer.current = setInterval(() => setLeft((n) => { if (n <= 1) { clearInterval(timer.current); setTimeout(begin, 0); return 0; } return n - 1; }), 1000);
+  };
+  useEffect(() => () => clearInterval(timer.current), []);
+  useEffect(() => {
+    const k = (e) => { if (e.key === 'Escape') { e.stopPropagation(); clearInterval(timer.current); onCancel(); } };
+    window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true);
+  }, [onCancel]);
+  const Opt = ({ id, icon, title: t, sub }) => (
+    <button type="button" className={`opt${mode === id ? ' on' : ''}`} data-testid={`mode-${id}`} role="radio" aria-checked={mode === id} onClick={() => setMode(id)}>
+      {icon}<span><strong>{t}</strong><small>{sub}</small></span>{mode === id && <Check size={16} />}
     </button>
   );
-  const Tog = ({ on, set, label, id }) => (
-    <label className="tog-row"><span>{label}</span><input type="checkbox" role="switch" data-testid={id} checked={on} onChange={(e) => set(e.target.checked)} /></label>
+  const Tog = ({ on, set, label, id, kbd }) => (
+    <label className="tog-row"><span className="sw-wrap"><input type="checkbox" role="switch" data-testid={id} checked={on} onChange={(e) => set(e.target.checked)} /><span className="sw" /></span><span className="tl">{label}</span>{kbd && <kbd>{kbd}</kbd>}</label>
   );
+  const first = lines.find((l) => l.h) || lines[0];
   return createPortal(
-    <div className="pb-pstart" role="dialog" aria-label="Present to the room" data-testid="present-start">
-      <h4><Presentation size={16} />Present to the room<span className="pill">{count} here now</span></h4>
-      <Opt id="follow" icon={<Users size={18} />} title="Everyone follows me" sub="Their page scrolls with yours. They can step out and return." />
-      <Opt id="tour" icon={<Route size={18} />} title="Guided tour" sub="You set the stops and move through them." />
-      <Opt id="point" icon={<Eye size={18} />} title="I point, they browse" sub="Laser and ping only. Nobody is moved." />
-      <hr />
-      <Tog on={qOn} set={setQOn} label="Raise hand and questions" id="opt-q" />
-      <Tog on={notesOn} set={setNotesOn} label="Private notes and timer" id="opt-notes" />
-      <div className="row"><button type="button" className="go" data-testid="present-go" onClick={onStart}><Play size={15} />Start presenting</button><button type="button" onClick={onCancel}>Cancel</button></div>
+    <div className="pb-pback" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) { clearInterval(timer.current); onCancel(); } }}>
+      <div className="pb-pstart" role="dialog" aria-label="Ready to present" data-testid="present-start">
+        <div className="ps-side">
+          <h3>Ready to present?</h3>
+          <p className="ps-sub">{title || 'This note'} · <span data-testid="ps-count">{count} {count === 1 ? 'person' : 'people'}</span> here</p>
+          <div role="radiogroup" aria-label="How the room follows" className="ps-opts">
+            <Opt id="follow" icon={<Users size={18} />} title="Follow me" sub="Everyone scrolls with you" />
+            <Opt id="tour" icon={<Route size={18} />} title="Guided tour" sub="Next steps through headings" />
+            <Opt id="point" icon={<Eye size={18} />} title="Point only" sub="Pointer shows, free reading" />
+          </div>
+          <Tog on={full} set={setFull} label="Go full screen" id="opt-full" kbd="F11" />
+          <Tog on={qOn} set={setQOn} label="Questions and reactions" id="opt-q" />
+          <Tog on={notesOn} set={setNotesOn} label="Edit notes while presenting" id="opt-notes" />
+          <button type="button" className="go big" data-testid="present-go" onClick={go}><Play size={16} />{left > 0 ? `Starting in ${left}. Click to start now` : instant ? 'Start' : 'Start in 3 seconds'}</button>
+          <button type="button" className="ghost" data-testid="present-cancel" onClick={() => { clearInterval(timer.current); onCancel(); }}>Cancel</button>
+        </div>
+        <div className="ps-pv">
+          <div className="ps-pt"><Maximize2 size={15} />What the room sees, full screen<span className="chip">16:9</span></div>
+          <div className="ps-frame" data-testid="ps-frame">
+            {left > 0 && <span className="ps-count" aria-live="polite">{left}</span>}
+            {lines.length ? lines.slice(0, 5).map((l, i) => (l === first && l.h ? <h1 key={i}>{l.text}</h1> : l.h ? <h2 key={i}>{l.text}</h2> : <p key={i}>{l.text.length > 110 ? `${l.text.slice(0, 107)}…` : l.text}</p>)) : <h1>{title || 'Your note'}</h1>}
+          </div>
+          <div className="ps-dock" aria-hidden="true"><span><Eye size={15} /></span><span><Pencil size={15} /></span><span><Highlighter size={15} /></span><i /><span><Timer size={15} />00:00</span><span className="acc"><X size={14} />End</span></div>
+          <div className="ps-note">Your control bar stays on top of the full screen. Esc or End leaves.</div>
+        </div>
+      </div>
     </div>,
     host,
   );
@@ -433,17 +474,37 @@ export function RecapReceived({ from, rx, onClose }) {
 }
 
 export const PRESENT_CSS = `
-.pb-pstart { pointer-events: auto; position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 1210; max-height: calc(100dvh - 110px); overflow-y: auto; width: min(380px, calc(100vw - 24px)); padding: 16px; border-radius: 20px; background: #fff; color: #241f1a; box-shadow: 0 18px 50px rgba(30,10,70,.28); border: 1px solid #e8e1f5; font: 500 13px 'Figtree', system-ui, sans-serif; text-align: left; }
-.pb-pstart h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
-.pb-pstart h4 .pill { margin-left: auto; padding: 2px 10px; border-radius: 999px; background: #dff3e8; font-size: 11px; font-weight: 700; }
-.pb-pstart .opt { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 14px; padding: 10px 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.pb-pstart .opt.on { background: #efe9ff; }
+.pb-pback { pointer-events: auto; position: fixed; inset: 0; z-index: 1210; display: grid; place-items: center; padding: 16px; background: rgba(58, 42, 26, .42); }
+.pb-pstart { width: min(1060px, 100%); max-height: calc(100dvh - 32px); display: grid; grid-template-columns: 360px minmax(0, 1fr); overflow: hidden; border-radius: 34px; background: #fff; color: #241f1a; box-shadow: 0 30px 70px rgba(60, 40, 20, .35); font: 500 13px 'Figtree', system-ui, sans-serif; text-align: left; }
+.pb-pstart .ps-side { padding: 28px; display: grid; gap: 14px; align-content: start; border-right: 1px solid #eadfd0; overflow-y: auto; }
+.pb-pstart h3 { margin: 0; font: 800 26px/1.1 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; }
+.pb-pstart .ps-sub { margin: 0; color: #564d43; font-size: 14px; }
+.pb-pstart .ps-opts { display: grid; gap: 14px; }
+.pb-pstart .opt { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 1.5px solid #eadfd0; border-radius: 18px; background: transparent; color: inherit; text-align: left; font: 700 14px 'Figtree', system-ui, sans-serif; cursor: pointer; }
+.pb-pstart .opt.on { border-color: #241f1a; background: #ffe9a6; }
 .pb-pstart .opt span { flex: 1; display: grid; }
-.pb-pstart .opt small { color: #6b6378; font-weight: 500; }
+.pb-pstart .opt small { color: #564d43; font-weight: 500; font-size: 12px; }
+.pb-pstart .tog-row { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.pb-pstart .tog-row .tl { flex: 1; } .pb-pstart kbd { padding: 2px 8px; border: 1px solid #eadfd0; border-radius: 8px; background: #f4eee5; font: 700 11px inherit; }
+.pb-pstart .sw-wrap { position: relative; display: inline-flex; } .pb-pstart .sw-wrap input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.pb-pstart .sw { width: 36px; height: 21px; border-radius: 999px; background: #d9cdbb; position: relative; transition: background .15s; }
+.pb-pstart .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .15s; }
+.pb-pstart input:checked + .sw { background: #241f1a; } .pb-pstart input:checked + .sw::after { left: 17px; }
+.pb-pstart input:focus-visible + .sw { outline: 2px solid #c4441c; outline-offset: 2px; }
+.pb-pstart button.go.big { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 6px; border: 0; border-radius: 999px; font: 800 15px 'Figtree', system-ui, sans-serif; cursor: pointer; background: #c4441c !important; color: #fff !important; }
+.pb-pstart button.ghost { height: 34px; border: 0; border-radius: 999px; background: transparent; font: 700 13px 'Figtree', system-ui, sans-serif; color: #564d43; cursor: pointer; }
+.pb-pstart .ps-pv { background: #2b2420; padding: 28px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 16px; color: #e8e0d6; min-width: 0; }
+.pb-pstart .ps-pt { display: flex; align-items: center; gap: 10px; font-weight: 700; } .pb-pstart .ps-pt .chip { margin-left: auto; padding: 2px 10px; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; font-size: 12px; }
+.pb-pstart .ps-frame { position: relative; overflow: hidden; min-height: 180px; padding: 22px 30px; border-radius: 14px; background: #fbf6ee; color: #241f1a; box-shadow: 0 20px 50px rgba(0,0,0,.4); }
+.pb-pstart .ps-frame h1 { margin: 0; font: 800 34px/1.1 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; } .pb-pstart .ps-frame h2 { margin: 18px 0 6px; font-size: 20px; } .pb-pstart .ps-frame p { margin: 8px 0 0; font-size: 14px; color: #564d43; }
+.pb-pstart .ps-count { position: absolute; right: 16px; top: 14px; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #c4441c; color: #fff; font: 800 24px 'Bricolage Grotesque', 'Figtree', sans-serif; }
+.pb-pstart .ps-dock { justify-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px; background: #17120f; }
+.pb-pstart .ps-dock span { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 12px; } .pb-pstart .ps-dock span.acc { background: #c4441c; } .pb-pstart .ps-dock i { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+.pb-pstart .ps-note { text-align: center; font-size: 12.5px; color: #bdb1a4; }
+@media (max-width: 800px) { .pb-pstart { grid-template-columns: 1fr; overflow-y: auto; } .pb-pstart .ps-pv { display: none; } }
 .pb-pstart hr, .pb-ppanel hr, .pb-recap hr { border: 0; border-top: 1px solid rgba(120,100,160,.2); margin: 8px 0; }
-.pb-pstart .tog-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; }
-.pb-pstart .row, .pb-recap .row { display: flex; gap: 10px; margin-top: 10px; }
-.pb-pstart .row button, .pb-recap .row button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #ddd3f0; border-radius: 999px; padding: 9px 16px; background: #fff; font: 700 13px 'Figtree', system-ui, sans-serif; cursor: pointer; color: inherit; }
+.pb-recap .row { display: flex; gap: 10px; margin-top: 10px; }
+.pb-recap .row button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #ddd3f0; border-radius: 999px; padding: 9px 16px; background: #fff; font: 700 13px 'Figtree', system-ui, sans-serif; cursor: pointer; color: inherit; }
 .pb-pstart .go, .pb-recap .go, .pb-ppanel .go { background: #7c3aed !important; border-color: #7c3aed !important; color: #fff !important; }
 .pb-pdock { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 1160; display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 20px); overflow-x: auto; padding: 6px; border-radius: 999px; background: #2b1458; color: #f3ecff; box-shadow: 0 16px 44px rgba(30,10,70,.5); font: 700 13px 'Figtree', system-ui, sans-serif; }
 .pb-pdock .pd-pill { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px; background: #7c3aed; color: #fff; white-space: nowrap; }

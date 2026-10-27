@@ -236,6 +236,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
     try { aw.setLocalStateField('presenting', presenting); aw.setLocalStateField('mode', mode); aw.setLocalStateField('qOn', qOn); } catch { /* gone */ }
     if (!presenting) { setLaser(false); setSpot(false); }
     document.documentElement.classList.toggle('pb-presenting', presenting);
+    if (!presenting && document.fullscreenElement === document.documentElement) document.exitFullscreen?.().catch(() => {});
     return () => { document.documentElement.classList.remove('pb-presenting'); try { aw.setLocalStateField('presenting', false); } catch { /* gone */ } };
   }, [rt, ready, presenting, mode, qOn]);
   // the audience: my hand, my questions, who I am following; a question the presenter has dealt with leaves my list
