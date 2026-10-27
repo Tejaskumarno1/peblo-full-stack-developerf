@@ -27,6 +27,7 @@ import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { shareRoutes, publicRoutes, shortRedirect } from './routes/share.js';
 import mediaRoutes from './routes/media.js';
+import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
@@ -116,6 +117,7 @@ app.use('/api/tokens', tokensRoutes);
   app.use('/api/study', studyRoutes);
   app.use('/api/river', riverRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/files', filesRoutes);
 app.get('/l/:code', shortRedirect);
 app.use('/api/share', shareRoutes);
 app.get('/s/note/:tok', agentNote); // bots and programs get Markdown or JSON from the same link

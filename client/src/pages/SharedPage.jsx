@@ -1,5 +1,5 @@
 import PagePolls from '../components/PagePolls';
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -14,9 +14,13 @@ import { caretSelection, headingIndexes, peerColor, scrollToPeerBlock, showPeers
 import { presenceOn } from '../utils/presencePref';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import useShareReader from './useShareReader';
+import useFileFrames from '../components/useFileFrames';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
+
+// The note's HTML is written once per change (a fresh object each render would write it again and undo the file frames drawn into it).
+const DocHtml = memo(function DocHtml({ innerRef, html }) { return <div className="doc" ref={innerRef} dangerouslySetInnerHTML={{ __html: html }} />; });
 
 const toHtml = (md) => {
   let html = marked.parse(md || '');
@@ -442,6 +446,7 @@ export default function SharedPage() {
     const html = data?.kind === 'note' ? toHtml(data.content) : data?.note ? toHtml(data.note.content) : '';
     return data?.kind === 'note' ? withoutTitleHeading(html, data.title) : html;
   }, [data]);
+  useFileFrames(docRef, body);
   // the title is shown big at the top, so a first heading that says the same thing is hidden (still there for the editor)
   useEffect(() => {
     if (data?.kind !== 'note') return undefined;
@@ -1003,7 +1008,7 @@ export default function SharedPage() {
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
                     collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
                     onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
-                : <div className="doc" ref={docRef} dangerouslySetInnerHTML={{ __html: body }} />}
+                : <DocHtml innerRef={docRef} html={body} />}
               {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}

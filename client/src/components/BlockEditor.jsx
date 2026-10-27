@@ -7,8 +7,9 @@ import {
   FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
+import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Presentation, FileText, FileSpreadsheet, File as FileGlyph } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -24,6 +25,10 @@ import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
 import MediaTools, { groupOf } from './MediaTools';
+import FileTools from './FileTools';
+import { docFileSpec } from './DocFile';
+import { packProps, unpackProps, isFileUrl } from '../utils/docFiles';
+import './docfile.css';
 import FindBar from './FindBar';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
@@ -68,9 +73,16 @@ const withLayout = (p) => {
   return q.length ? `${base}#${q.join('&')}` : base;
 };
 
+// Pictures, files and documents live in notes as blocks; the document block (PowerPoint, Word, Excel, PDF and other files) is added to the standard set.
+const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, docfile: docFileSpec() } });
+
 function toStorage(blocks) {
   return blocks.map((b) => {
     const children = b.children?.length ? toStorage(b.children) : [];
+    if (b.type === 'docfile') {
+      if (!b.props?.url) return { ...b, type: 'paragraph', props: {}, content: [], children };
+      return { id: b.id, type: 'image', props: { url: packProps(b.props), caption: b.props.name || 'file' }, children };
+    }
     if (b.type === 'video' || b.type === 'audio' || b.type === 'file') {
       const url = b.props?.url;
       if (!url) return { ...b, type: 'paragraph', props: {}, content: [], children };
@@ -87,6 +99,10 @@ function toStorage(blocks) {
 function fromStorage(blocks) {
   return blocks.map((b) => {
     const children = b.children?.length ? fromStorage(b.children) : [];
+    if (b.type === 'image' && isFileUrl(b.props?.url)) {
+      const u = unpackProps(b.props.url);
+      return { type: 'docfile', props: { url: u.url, name: u.name === 'file' && b.props.caption ? b.props.caption : u.name, size: u.size, meta: u.meta, frame: u.frame, download: u.download, pages: u.pages, caption: u.caption }, children };
+    }
     if (b.type === 'image' && /^data:(?!image\/)/.test(b.props?.url || '')) {
       const url = b.props.url;
       const name = b.props.caption || b.props.name || 'file';
@@ -301,6 +317,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const [live, setLive] = useState({ connected: false, ready: false });
   const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin()] }));
   const editor = useCreateBlockNote({
+    schema,
     uploadFile,
     extensions: [decoExt],
     ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity' } } : {}),
@@ -604,6 +621,14 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       { title: 'Voice note', onItemClick: () => media('voice'), aliases: ['mic', 'record', 'audio', 'voice'], badge: '/mic', group: 'Media', icon: <Mic size={16} />, subtext: 'Record a short audio clip' },
       { title: 'Dictate', onItemClick: () => media('dictate'), aliases: ['dictate', 'speech', 'speak', 'type with voice'], badge: '/dict', group: 'Media', icon: <Keyboard size={16} />, subtext: 'Speak and it types for you' },
     ];
+    const doc = (kind) => { let refId; try { refId = editor.getTextCursorPosition().block.id; } catch { /* none */ } window.dispatchEvent(new CustomEvent('pb-docfile', { detail: { act: 'add', kind, refId } })); };
+    const fileItems = editable === false || guest ? [] : [
+      { title: 'Presentation', onItemClick: () => doc('ppt'), aliases: ['ppt', 'pptx', 'powerpoint', 'slides', 'deck', 'keynote'], badge: '/ppt', group: 'Files', icon: <Presentation size={16} style={{ color: '#c4441c' }} />, subtext: 'Show its slides right in the note' },
+      { title: 'Document', onItemClick: () => doc('doc'), aliases: ['doc', 'docx', 'word', 'letter', 'contract'], badge: '/doc', group: 'Files', icon: <FileText size={16} style={{ color: '#1f5a8c' }} />, subtext: 'Read a Word file in place' },
+      { title: 'Spreadsheet', onItemClick: () => doc('xls'), aliases: ['xls', 'xlsx', 'excel', 'sheet', 'csv', 'table'], badge: '/xls', group: 'Files', icon: <FileSpreadsheet size={16} style={{ color: '#1e8e4e' }} />, subtext: 'Look through an Excel sheet' },
+      { title: 'PDF', onItemClick: () => doc('pdf'), aliases: ['pdf', 'paper', 'report'], badge: '/pdf', group: 'Files', icon: <FileGlyph size={16} style={{ color: '#a5281b' }} />, subtext: 'Read pages, or show just a few' },
+      { title: 'Any other file', onItemClick: () => doc('any'), aliases: ['file', 'attach', 'attachment', 'upload', 'zip'], badge: '/file', group: 'Files', icon: <FileGlyph size={16} />, subtext: 'Keep it with the note to download' },
+    ];
     const aiItems = [
       { title: 'AI Action items', onItemClick: () => runAi('todo'), aliases: ['ai-todo', 'todo', 'actions', 'tasks', 'ai'], group: 'AI', icon: icon(CheckSquare, '#6366f1'), subtext: 'Pull tasks out of this note.' },
       { title: 'AI Improve writing', onItemClick: () => runAi('improve'), aliases: ['ai-improve', 'improve', 'rewrite', 'rephrase', 'ai'], group: 'AI', icon: icon(Wand2, '#6366f1'), subtext: 'Clearer, shorter, fix grammar.' },
@@ -645,7 +670,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
       ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <span style={{ fontSize: 15 }}>📄</span>, subtext: 'A ready layout to fill in.' })),
     ];
-    const all = [...mediaItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
+    const all = [...mediaItems, ...fileItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
     return filterSuggestionItems([...recent, ...all], query);
   };
@@ -767,6 +792,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
       {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
       <MediaTools editor={editor} rootRef={rootRef} uploadFile={uploadFile} editable={editable !== false} />
+      <FileTools editor={editor} rootRef={rootRef} editable={editable !== false && !guest} />
       {findOpen && <FindBar key={findReplace ? 'r' : 'f'} root={rootRef} editor={editor} editable={editable !== false} withReplace={findReplace} onClose={() => { setFindOpen(false); try { editor.focus(); } catch { /* none */ } }} />}
       {lightbox && (
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
