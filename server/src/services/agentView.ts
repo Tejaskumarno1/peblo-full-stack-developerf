@@ -24,7 +24,7 @@ async function imagesOf(content: string, userId: string, base: string): Promise<
   const ids = [...new Set([...content.matchAll(MEDIA)].map((m) => m[1]))];
   const out: Img[] = [];
   for (const [i, id] of ids.entries()) {
-    const rows: any[] = await prisma.$queryRaw`SELECT description, mime, size FROM media WHERE id = ${id}`.catch(() => []);
+    const rows = (await prisma.$queryRaw`SELECT description, mime, size FROM media WHERE id = ${id}`.catch(() => [])) as any[];
     if (!rows.length) continue;
     let description: string | null = rows[0].description || null;
     if (!description && i < MAX_DESCRIBE && rows[0].size < 4_000_000) {
