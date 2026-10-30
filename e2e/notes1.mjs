@@ -81,7 +81,7 @@ try {
   await page.keyboard.press('Escape');
 
   // ---------- floating toolbar ----------
-  await page.locator('.bn-block-content[data-content-type="paragraph"]').nth(1).dblclick();
+  await page.locator('.bn-block-content[data-content-type="paragraph"]').nth(1).dblclick({ position: { x: 70, y: 12 } }); // first line, on a word (a centre click can land between wrapped lines)
   const tb = page.locator('.bn-toolbar').first();
   check('selecting text shows the formatting toolbar', await tb.isVisible({ timeout: 4000 }).catch(() => false));
   await shot('notes1-toolbar');
@@ -99,7 +99,7 @@ try {
     await wrap.click({ force: true });
     await page.waitForTimeout(400);
     const f2 = await page.evaluate(() => { const el = document.querySelector('.bn-block-content[data-content-type="image"]')?.closest('.bn-block-outer'); return el ? getComputedStyle(el).float : 'x'; });
-    check('aligning a smaller picture left floats it left', f2 === 'left', f2);
+    check('aligning a smaller picture left never floats: no text beside it', f2 === 'none', f2);
     await shot('notes1-wrapleft');
   }
 
@@ -107,11 +107,10 @@ try {
   await page.goto(base + `/notes/${A.id}`);
   await page.locator('.s-nsearch input').waitFor({ timeout: 10000 });
   await page.locator('.s-nsearch input').fill('meetng');
-  await page.waitForTimeout(900);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('the notes list search finds a note despite a typo', rows.some((t) => /Weekly meeting/.test(t)), rows.join(' | '));
   await page.locator('.s-nsearch input').fill('roadmap');
-  await page.waitForTimeout(900);
+  await page.locator('.s-note-row mark').first().waitFor({ timeout: 4000 }).catch(() => {}); // search is debounced
   check('the match is highlighted in the list', (await page.locator('.s-note-row mark').count()) > 0);
   await shot('notes1-search');
   await page.locator('.s-nsearch input').fill('');

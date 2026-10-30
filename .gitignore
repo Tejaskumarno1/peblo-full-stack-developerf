@@ -22,3 +22,5 @@ tmp-*.png
 .shots/
 scratch-ref/
 /Untitled
+
+e2e-results.json
