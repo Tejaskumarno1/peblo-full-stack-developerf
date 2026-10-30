@@ -1,6 +1,7 @@
 import './env.js';
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import path from 'path';
 import { existsSync } from 'fs';
 import { createServer, Server } from 'http';
@@ -76,6 +77,16 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
 
   // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
   app.use(cors(corsDelegate));
+  // Smaller responses over the wire (HTML, JS, CSS, JSON). Streaming answers (AI text, server-sent events) must not be
+  // buffered, and images, video and other already-compressed files are left alone.
+  app.use(compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      const type = String(res.getHeader('Content-Type') || '');
+      if (/event-stream|ndjson/i.test(type) || req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+  }));
 app.use('/api', apiLimiter());
   app.use(express.json({ limit: '10mb' }));
   app.use(cleanBody); // NUL characters and broken surrogates would make PostgreSQL fail (500)

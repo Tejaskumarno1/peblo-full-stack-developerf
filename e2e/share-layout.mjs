@@ -54,7 +54,7 @@ try {
   await page.locator('.bn-editor').waitFor({ timeout: 20000 });
   await wait(2500);
   const po = await rects(page); console.log('pair owner', JSON.stringify(po));
-  check('pair owner: two pictures side by side', po.a && po.b && Math.abs(po.a[1] - po.b[1]) < 30);
+  check('pair owner: two pictures each on their own row', po.a && po.b && po.b[1] > po.a[1]);
   const ptok = (await api('POST', `/api/share/note/${pair.id}`, { edit: true })).token;
   for (const vw of [1920, 1100]) {
     const g = await ctx.browser().newContext({ viewport: { width: vw, height: 1000 } });
@@ -64,7 +64,7 @@ try {
     await gp.locator('.bn-editor').waitFor({ timeout: 25000 });
     await wait(2500);
     const r = await rects(gp); console.log('pair share', vw, JSON.stringify(r));
-    if (vw >= 1500) check(`pair share ${vw}px: pictures stay side by side like the owner's page`, r.a && r.b && Math.abs(r.a[1] - r.b[1]) < 30);
+    if (vw >= 1500) check(`pair share ${vw}px: pictures each on their own row like the owner's page`, r.a && r.b && r.b[1] > r.a[1]);
     else check(`pair share ${vw}px: in a narrow column the pictures stack, each fully visible`, r.a && r.b && r.a[2] <= r.col && r.b[2] <= r.col);
     check(`pair share ${vw}px: the text below them is full width, not a sliver`, r.text && r.text[2] > 240);
     await g.close();

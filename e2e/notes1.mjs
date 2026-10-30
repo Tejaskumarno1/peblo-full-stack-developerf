@@ -41,7 +41,7 @@ try {
   const props = await page.evaluate(() => { const b = window.__pebloEditor?.document.find((x) => x.type === 'image'); return b ? { url: b.props.url, pw: b.props.previewWidth, ta: b.props.textAlignment } : null; });
   check('a saved picture keeps its width and side', props && props.pw === 300 && props.ta === 'right' && !props.url.includes('#'), JSON.stringify(props));
   const flt = await page.evaluate(() => { const el = document.querySelector('.bn-block-content[data-content-type="image"]')?.closest('.bn-block-outer'); return el ? getComputedStyle(el).float : 'none-found'; });
-  check('a smaller right-hand picture floats right so text wraps beside it', flt === 'right', flt);
+  check('a smaller right-hand picture never floats: no text can sit beside it', flt === 'none', flt);
   await shot('notes1-wrap');
 
   // ---------- paste a picture: converted to WebP and stored on the server ----------

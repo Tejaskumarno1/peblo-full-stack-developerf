@@ -109,11 +109,11 @@ export function DocFrame({ p, editable, onChange, onRemove, onReplace, title = '
           )}
           {shown && !loadErr && !buf && <div className="df-busy" role="status"><i className="df-spin" />Loading the file…</div>}
           {shown && buf && kind === 'ppt' && (
-            <div className="df-stagewrap">
+            <div className="df-stagewrap df-noselect">
               <SlidesView buf={buf} index={idx} setIndex={setIdx} onCount={setCount} mode="frame" strip={strip} />
               {count > 1 && <>
-                <button type="button" className="df-arr l" aria-label="Previous slide" data-testid="df-prev" disabled={idx === 0} onClick={() => go(-1)}><ChevronLeft size={18} /></button>
-                <button type="button" className="df-arr r" aria-label="Next slide" data-testid="df-next" disabled={idx >= count - 1} onClick={() => go(1)}><ChevronRight size={18} /></button>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} className="df-arr l" aria-label="Previous slide" data-testid="df-prev" disabled={idx === 0} onClick={() => go(-1)}><ChevronLeft size={18} /></button>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} className="df-arr r" aria-label="Next slide" data-testid="df-next" disabled={idx >= count - 1} onClick={() => go(1)}><ChevronRight size={18} /></button>
                 <span className="df-cnt" data-testid="df-count">{idx + 1} / {count}</span>
               </>}
             </div>
@@ -129,8 +129,8 @@ export function DocFrame({ p, editable, onChange, onRemove, onReplace, title = '
             <div className="df-stagewrap">
               <PdfView {...pdfState} onPassword={(pw) => pdfState.open(pw)} first={first} last={last} at={idx} mode="frame" twoUp={twoUp && wide} />
               {span > 1 && !pdfState.ask && pdfState.pdf && <>
-                <button type="button" className="df-arr l" aria-label="Previous page" data-testid="df-prev" disabled={idx === 0} onClick={() => go(-1)}><ChevronLeft size={18} /></button>
-                <button type="button" className="df-arr r" aria-label="Next page" data-testid="df-next" disabled={idx + step >= span} onClick={() => go(1)}><ChevronRight size={18} /></button>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} className="df-arr l" aria-label="Previous page" data-testid="df-prev" disabled={idx === 0} onClick={() => go(-1)}><ChevronLeft size={18} /></button>
+                <button type="button" onMouseDown={(e) => e.preventDefault()} className="df-arr r" aria-label="Next page" data-testid="df-next" disabled={idx + step >= span} onClick={() => go(1)}><ChevronRight size={18} /></button>
                 <span className="df-cnt" data-testid="df-count">{step === 2 && first + idx + 1 <= last ? `Pages ${first + idx} and ${first + idx + 1}` : `Page ${first + idx}`} of {total}</span>
               </>}
             </div>

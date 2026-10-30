@@ -42,6 +42,7 @@
     "@prisma/client": "^6.2.0",
     "adm-zip": "^0.6.1",
     "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
     "cors": "^2.8.5",
     "diff-match-patch": "^1.0.5",
     "dotenv": "^16.4.7",
@@ -62,6 +63,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/diff-match-patch": "^1.0.36",
     "@types/express": "^5.0.6",

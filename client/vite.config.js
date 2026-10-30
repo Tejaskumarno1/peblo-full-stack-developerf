@@ -33,7 +33,6 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           ui: ['lucide-react', 'framer-motion'],
-          editor: ['@blocknote/core', '@blocknote/mantine', '@blocknote/react', '@mantine/core', '@mantine/hooks'],
           utils: ['marked', 'axios'],
           pdf: ['html2pdf.js']
         }

@@ -169,3 +169,7 @@ html.df-viewing { overflow: hidden; }
 .pb-deck .dk-notes { font-size: 15px; line-height: 1.5; white-space: pre-wrap; color: #f4ede0; } .pb-deck .dk-notes em { color: #8a7f70; }
 .pb-deck .dk-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 0 4px rgba(255, 59, 48, .35); pointer-events: none; z-index: 3; }
 @media (max-width: 900px) { .pb-deck .dk-side { display: none; } .pb-deck .dk-name { max-width: 30%; } }
+
+/* Slides are looked at, not selected: clicking Next or the slide must never highlight its text */
+.df-noselect, .df-noselect * { -webkit-user-select: none; user-select: none; }
+.df-arr, .df-cnt { -webkit-user-select: none; user-select: none; }

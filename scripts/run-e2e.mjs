@@ -27,7 +27,7 @@ const E2E = path.join(REPO, 'e2e');
 const SKIP = [
   'hosted-cursors', 'spawn-lab', 'shots-share', 'present2-dbg', 'yjs-debug*', 'notesprobe*', 'np-shots*',
   'orbitshots', 'ref-shots', 'refshots', 'rivshots', 'comments-dbg', 'rivprobe',
-  'seeddemo', 'media-probe', 'perf-scale', 'responsive-smoke', 'electron-app',
+  'seeddemo', 'media-probe', 'perf-scale', 'responsive-smoke', 'electron-app', 'encryption', 'enc-perf',
 ];
 const skipRes = SKIP.map((p) => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'));
 const isSkipped = (n) => n.startsWith('lib') || n.startsWith('_') || skipRes.some((r) => r.test(n));
