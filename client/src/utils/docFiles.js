@@ -31,7 +31,7 @@ export const sizeText = (n) => {
 };
 export const idOf = (url) => (/\/api\/files\/([\w-]+)/.exec(String(url || '')) || [])[1] || '';
 export const baseOf = (url) => String(url || '').split('#')[0];
-export const downloadUrl = (url) => `${baseOf(url)}?dl=1`;
+export const downloadUrl = (url) => { const b = baseOf(url); return /^(?:\/(?!\/)|https?:\/\/)/i.test(b) ? `${b}?dl=1` : '#'; }; // only this site's own files or http(s) addresses; never javascript: or data:
 
 /** A named problem the person can act on (mockup F5 b). */
 export class FileProblem extends Error {

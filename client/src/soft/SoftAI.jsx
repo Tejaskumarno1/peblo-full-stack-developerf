@@ -38,7 +38,7 @@ export default function SoftAI() {
   const modelText = currentModelLabel.kind === 'local' ? `${currentModelLabel.name} · on this computer`
     : currentModelLabel.kind === 'cloud' ? `${currentModelLabel.name} · cloud` : 'No AI set up';
 
-  const copy = (m) => { navigator.clipboard?.writeText(m.content); setCopied(m.id); setTimeout(() => setCopied(null), 1500); };
+  const copy = (m) => { (navigator.clipboard ? navigator.clipboard.writeText(m.content) : Promise.reject(new Error('no clipboard'))).then(() => setCopied(m.id), () => setCopied(`fail-${m.id}`)).finally(() => setTimeout(() => setCopied(null), 1500)); };
 
   return (
     <div className="soft-page s-ai">
@@ -116,7 +116,7 @@ export default function SoftAI() {
                   {m.status === 'done' && m.content && (
                     <>
                       <button type="button" className="s-act" onClick={() => saveAsNote(m)}>Save as note</button>
-                      <button type="button" className="s-act" onClick={() => copy(m)}>{copied === m.id ? 'Copied' : 'Copy'}</button>
+                      <button type="button" className="s-act" onClick={() => copy(m)}>{copied === m.id ? 'Copied' : copied === `fail-${m.id}` ? 'Could not copy' : 'Copy'}</button>
               <SpeakButton className="s-act" text={m.content} />
                       <button type="button" className="s-act" onClick={() => regenerate(m)}>Try again</button>
                     </>

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
 import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
+import { useUndoToast } from '../utils/useUndoToast';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 
@@ -25,6 +26,9 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   const [doc, setDoc] = useState(null);
   const [editorKey, setEditorKey] = useState('none');
   const docRef = useRef(null);
+  const routeRef = useRef(routeId);
+  routeRef.current = routeId;
+  const { toast: actionToast, say: sayToast, dismiss: dismissActionToast } = useUndoToast();
 
   const { data: allNotes = [] } = useQuery({
     queryKey: ['notes', 'sidebar'],
@@ -64,7 +68,12 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
     if (doc?.id === routeId) return;
     const found = allNotes.find((n) => n.id === routeId);
     if (found) open(found);
-    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch(() => navigate('/notes', { replace: true }));
+    else {
+      // ignore the answer once the route has moved on, so an old note never shows over the new one
+      notesAPI.get(routeId)
+        .then((r) => { if (routeRef.current === routeId) open(r.data.note); })
+        .catch(() => { if (routeRef.current === routeId) navigate('/notes', { replace: true }); });
+    }
   }, [routeId, allNotes, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveData = useMemo(() => {
@@ -113,7 +122,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
       const m = e.detail;
       const d = docRef.current;
       if (!d || d.id !== m.id || d.content !== m.sent) return; // typed more meanwhile: the next save merges again
-      setDoc((cur) => ({ ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() }));
+      setDoc((cur) => (cur ? { ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() } : cur));
       setEditorKey(`merged-${Date.now()}`);
     };
     window.addEventListener('pb-note-merged', onMerged);
@@ -128,48 +137,70 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
     const base = getNoteBase(d.id);
     if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save
     if (new Date(f.updatedAt).getTime() <= new Date(base.updatedAt).getTime()) return;
-    setDoc((cur) => ({ ...cur, content: f.content, title: editable(f.title), updatedAt: f.updatedAt }));
+    setDoc((cur) => (cur ? { ...cur, content: f.content, title: editable(f.title), updatedAt: f.updatedAt } : cur));
     setEditorKey(`remote-${Date.now()}`);
   }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const patch = (p) => setDoc((d) => ({ ...d, ...p }));
+  const patch = (p) => setDoc((d) => (d ? { ...d, ...p } : d));
   // Replace the text from outside the editor (templates, find & replace): remounts the editor with the new content
-  const applyContent = (p) => { setDoc((d) => ({ ...d, ...p })); setEditorKey(`apply-${Date.now()}`); };
+  const applyContent = (p) => { if (!docRef.current) return; setDoc((d) => (d ? { ...d, ...p } : d)); setEditorKey(`apply-${Date.now()}`); };
 
   const refreshLists = () => {
     queryClient.invalidateQueries({ queryKey: ['notes'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
   const archive = async (after = '/notes') => {
-    await notesAPI.archive(doc.id);
+    if (!doc) return;
+    try {
+      await notesAPI.archive(doc.id);
+    } catch (err) {
+      console.error('Failed to archive note:', err);
+      sayToast('Could not archive the note. Try again.');
+      return;
+    }
     refreshLists();
     setDoc(null);
     navigate(after, { replace: true });
   };
   const trash = async (after = '/notes') => {
+    if (!doc) return;
     if (!window.confirm(doc.isDeleted ? 'Delete this note forever? This cannot be undone.' : 'Move this note to the Trash?')) return;
-    await notesAPI.delete(doc.id);
+    try {
+      await notesAPI.delete(doc.id, { permanent: !!doc.isDeleted });
+    } catch (err) {
+      console.error('Failed to delete note:', err);
+      sayToast(doc.isDeleted ? 'Could not delete the note. Try again.' : 'Could not move the note to the Trash. Try again.');
+      return;
+    }
     refreshLists();
     setDoc(null);
     navigate(after, { replace: true });
   };
   const restore = async () => {
-    await notesAPI.restore(doc.id);
+    if (!doc) return;
+    try {
+      await notesAPI.restore(doc.id);
+    } catch (err) {
+      console.error('Failed to restore note:', err);
+      sayToast('Could not restore the note. Try again.');
+      return;
+    }
     refreshLists();
     patch({ isDeleted: false });
   };
   const exportMd = () => {
+    if (!doc) return;
     const blob = new Blob([`# ${doc.title || 'Untitled'}\n\n${doc.content}`], { type: 'text/markdown' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${(doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note'}.md`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const addTag = (raw) => {
     const t = raw.trim().replace(/^#/, '').toLowerCase();
-    if (t && !doc.tags.includes(t)) patch({ tags: [...doc.tags, t] });
+    if (doc && t && !(doc.tags || []).includes(t)) patch({ tags: [...doc.tags, t] });
   };
-  const removeTag = (t) => patch({ tags: doc.tags.filter((x) => x !== t) });
+  const removeTag = (t) => { if (doc) patch({ tags: (doc.tags || []).filter((x) => x !== t) }); };
 
   const saved = saveStatus === 'saving' ? 'Saving…'
     : saveStatus === 'unsaved' ? 'Editing…'
@@ -180,5 +211,6 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
     routeId, doc, setDoc, editorKey, allNotes, open, startDraft, patch, applyContent, forceSave,
     saveStatus, saved, archive, trash, restore, exportMd, addTag, removeTag,
     noteId: doc && !doc.isDraft ? doc.id : null,
+    actionToast, dismissActionToast,
   };
 }

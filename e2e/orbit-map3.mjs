@@ -13,7 +13,8 @@ try {
   await go('/');
   await page.evaluate(() => window.dispatchEvent(new Event('peblo:topics')));
   await page.waitForTimeout(800);
-  await page.getByLabel('Icon for alpha').selectOption('🧠');
+  await page.getByRole('button', { name: /Icon for alpha/ }).click();
+  await page.getByRole('menuitem', { name: 'Use Brain' }).click();
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: 'red for alpha' }).click();
   await page.waitForTimeout(800);
@@ -21,7 +22,7 @@ try {
   await page.getByRole('button', { name: 'Close' }).first().click().catch(() => {});
   await page.waitForTimeout(500);
   const alpha = page.locator('.o-node .ball', { hasText: 'Alpha' }).first();
-  check('a topic icon shows on the map', (await alpha.innerText()).includes('🧠'));
+  check('a topic icon shows on the map', (await alpha.locator('svg').count()) > 0);
   check('a topic colour shows on the map', !!(await alpha.getAttribute('data-own-colour')));
 
   await go('/');

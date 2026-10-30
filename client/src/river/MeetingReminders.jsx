@@ -53,7 +53,7 @@ export default function MeetingReminders() {
             if (Notification.permission === 'granted') {
               const e = endOf(t) || new Date(s + 3600000);
               const n = new Notification(`${t.text} ${mins > 0 ? 'in ' + mins + ' min' : 'is starting'}`, { body: t.meta?.link ? 'Click to join ' + providerOf(t.meta.link) : clockRange(new Date(s), e), tag: key });
-              n.onclick = () => { if (t.meta?.link) window.open(t.meta.link, '_blank', 'noopener'); window.focus(); };
+              n.onclick = () => { if (/^https?:\/\//i.test(t.meta?.link || '')) window.open(t.meta.link, '_blank', 'noopener'); window.focus(); };
             }
           }
         } catch { /* notifications blocked */ }
@@ -73,7 +73,7 @@ export default function MeetingReminders() {
           <b>{c.t.text}</b>
           <span>{c.mins > 0 ? 'Starts in ' + c.mins + ' min' : 'Starting now'} · {clockRange(new Date(c.s), endOf(c.t) || new Date(c.s + 3600000))}</span>
           <div className="r-btns">
-            {c.t.meta?.link && <a className="r-btn small" href={c.t.meta.link} target="_blank" rel="noopener noreferrer" onClick={() => setCards((x) => x.filter((y) => y.key !== c.key))}>Join {providerOf(c.t.meta.link)}</a>}
+            {/^https?:\/\//i.test(c.t.meta?.link || '') && <a className="r-btn small" href={c.t.meta.link} target="_blank" rel="noopener noreferrer" onClick={() => setCards((x) => x.filter((y) => y.key !== c.key))}>Join {providerOf(c.t.meta.link)}</a>}
             <button type="button" className="r-btn ghost small" onClick={() => setCards((x) => x.filter((y) => y.key !== c.key))}>Dismiss</button>
           </div>
         </div>

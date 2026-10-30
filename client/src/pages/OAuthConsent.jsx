@@ -35,7 +35,9 @@ export default function OAuthConsent() {
     setBusy(true); setError('');
     try {
       const r = await api.post('/oauth/approve', { ...q, scope, deny });
-      window.location.href = r.data.redirect;
+      const target = String(r.data?.redirect || '');
+      if (!target || /^\s*(javascript|data|vbscript):/i.test(target)) throw new Error('Invalid redirect');
+      window.location.href = target;
     } catch (e) {
       setError(e.response?.data?.error || 'Something went wrong. Try again.');
       setBusy(false);

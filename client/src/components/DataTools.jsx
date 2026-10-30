@@ -28,9 +28,16 @@ export default function DataTools() {
       const notes = n.notes || [];
       const todos = t.todos || [];
       const safeSettings = Object.fromEntries(Object.entries(settings || {}).filter(([k]) => !SECRET_KEYS.includes(k)));
+      const used = new Map(); // two notes with the same title must not overwrite each other in the zip
+      const noteFile = (x) => {
+        const base = safeFileName(x.title, 'Untitled');
+        const n = (used.get(base.toLowerCase()) || 0) + 1;
+        used.set(base.toLowerCase(), n);
+        return `notes/${n === 1 ? base : `${base} (${n})`}.md`;
+      };
       const files = [
         { name: 'README.txt', data: `Peblo export, ${new Date().toISOString().slice(0, 10)}\r\nnotes/ one Markdown file per note\r\ntasks.csv and tasks.ics your tasks\r\nsettings.json your preferences (AI keys are never included)\r\n` },
-        ...notes.map((x) => ({ name: `notes/${safeFileName(x.title, 'Untitled')}.md`, data: docsToMarkdown([x]) })),
+        ...notes.map((x) => ({ name: noteFile(x), data: docsToMarkdown([x]) })),
         { name: 'tasks.csv', data: tasksToCsv(todos) },
         { name: 'tasks.ics', data: tasksToIcs(todos) },
         { name: 'settings.json', data: JSON.stringify(safeSettings, null, 2) },
@@ -50,8 +57,14 @@ export default function DataTools() {
     e.target.value = '';
     if (!f) return;
     setMsg(null);
-    const text = await f.text();
-    setPlan({ name: f.name, ...parseTasksCsv(text) });
+    try {
+      const text = await f.text();
+      setPlan({ name: f.name, ...parseTasksCsv(text) });
+    } catch (err) {
+      console.error('Could not read the CSV file', err);
+      setPlan(null);
+      setMsg({ ok: false, text: 'Could not read that file. Choose a CSV file with a Task column.' });
+    }
   };
 
   const confirm = async () => {

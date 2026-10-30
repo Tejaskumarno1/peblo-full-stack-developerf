@@ -2,7 +2,7 @@
  * MobileEditorControls — Extracted from WorkspacePage.
  * Mobile-only header and bottom action bar for the note editor.
  */
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import {
   PanelLeft,
@@ -37,6 +37,18 @@ function MobileEditorControls({
     showBackups, setShowBackups
   } = useWorkspaceStore();
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+
+  const moreRef = useRef(null);
+  // Escape or a tap elsewhere closes the menu
+  useEffect(() => {
+    if (!moreActionsOpen) return undefined;
+    const away = (e) => { if (moreRef.current && !moreRef.current.contains(e.target)) setMoreActionsOpen(false); };
+    const key = (e) => { if (e.key === 'Escape') setMoreActionsOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('touchstart', away, { passive: true });
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('touchstart', away); document.removeEventListener('keydown', key); };
+  }, [moreActionsOpen]);
 
   const toggleMoreActions = () => {
     setMoreActionsOpen((open) => {
@@ -82,7 +94,7 @@ function MobileEditorControls({
           <span>{saveStatus === 'saving' ? 'Saving' : 'Save'}</span>
         </button>
 
-        <div className="mobile-more-actions-wrapper" style={{ position: 'relative' }}>
+        <div className="mobile-more-actions-wrapper" ref={moreRef} style={{ position: 'relative' }}>
           <button
             type="button"
             className={`mobile-action-btn ${moreActionsOpen ? 'active' : ''}`}

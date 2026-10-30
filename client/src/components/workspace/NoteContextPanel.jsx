@@ -52,7 +52,7 @@ function NoteContextPanel({ note, noteTitle, notes, isDraft, onSummarise, onGetT
     queryClient.setQueryData(['todos', 'note', noteId], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
     try {
       await todosAPI.update(t.id, { completed: !t.completed });
-    } finally {
+    } catch { /* the list reloads below and shows the saved state */ } finally {
       queryClient.invalidateQueries({ queryKey: ['todos'] });
     }
   };
@@ -62,7 +62,7 @@ function NoteContextPanel({ note, noteTitle, notes, isDraft, onSummarise, onGetT
     if (!taskDraft.trim() || !noteId) return;
     const p = parseTask(taskDraft);
     setTaskDraft('');
-    await todosAPI.create({ text: p.text || taskDraft.trim(), priority: p.priority, tags: p.tags, deadline: p.deadline ? p.deadline.toISOString() : null, noteId });
+    try { await todosAPI.create({ text: p.text || taskDraft.trim(), priority: p.priority, tags: p.tags, deadline: p.deadline ? p.deadline.toISOString() : null, noteId }); } catch { setTaskDraft(taskDraft); return; }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
@@ -124,7 +124,7 @@ function NoteContextPanel({ note, noteTitle, notes, isDraft, onSummarise, onGetT
 
       {!isDraft && (
         <section className="nc-foot">
-          <span className="pb-muted">Created {new Date(note.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+          <span className="pb-muted">{note?.createdAt ? `Created ${new Date(note.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</span>
           <button type="button" className="pb-link" onClick={onHistory}><History size={12} /> History</button>
         </section>
       )}

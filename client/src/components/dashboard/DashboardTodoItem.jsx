@@ -9,7 +9,7 @@ function DashboardTodoItem({ task, handleToggleTask }) {
         borderLeft: `4px solid ${task.priority === 'high' ? '#ef4444' : task.priority === 'low' ? '#22c55e' : '#f59e0b'}` 
       }}
     >
-      <input
+      <input aria-label="Mark task complete"
         type="checkbox"
         checked={task.completed}
         onChange={() => handleToggleTask(task)}

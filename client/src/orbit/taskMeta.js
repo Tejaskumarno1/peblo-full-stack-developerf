@@ -8,12 +8,13 @@ export const LABEL_HEX = { red: '#e5484d', orange: '#f76b15', yellow: '#d9a400',
 export const DAY_LIMIT_MIN = 480;
 
 export const metaOf = (t) => (t && t.meta && typeof t.meta === 'object' ? t.meta : {});
+const listOf = (v) => (Array.isArray(v) ? v : []); // stored meta can be hand-edited or from an older build
 export const subProgress = (t) => {
-  const s = metaOf(t).subtasks || [];
+  const s = listOf(metaOf(t).subtasks);
   return { done: s.filter((x) => x.done).length, total: s.length };
 };
 /** Open tasks this one waits for. */
-export const blockersOf = (t, all) => (metaOf(t).dependsOn || []).map((id) => all.find((x) => x.id === id)).filter((x) => x && !x.completed);
+export const blockersOf = (t, all) => listOf(metaOf(t).dependsOn).map((id) => all.find((x) => x.id === id)).filter((x) => x && !x.completed);
 export const isBlocked = (t, all) => !t.completed && blockersOf(t, all).length > 0;
 export const plannedMinutes = (items) => items.reduce((m, t) => m + (t.completed ? 0 : metaOf(t).estimateMin || 0), 0);
 

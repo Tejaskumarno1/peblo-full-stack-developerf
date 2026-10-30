@@ -235,7 +235,8 @@ export function DocViewer({ p, kind, title, canDownload = true, onClose, startAt
   const input = useRef(null);
   const dark = true;
 
-  useEffect(() => { document.documentElement.classList.add('df-viewing'); return () => { document.documentElement.classList.remove('df-viewing'); unpaint(); onAt?.(idx); }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const idxRef = useRef(idx); idxRef.current = idx;
+  useEffect(() => { document.documentElement.classList.add('df-viewing'); return () => { document.documentElement.classList.remove('df-viewing'); unpaint(); onAt?.(idxRef.current); }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const move = (d) => setIdx((i) => clamp(i + d, 0, Math.max(0, (kind === 'xls' ? 0 : total - 1))));
   const jump = (i) => { if (kind === 'xls') setSheetAt(clamp(i, 0, Math.max(0, total - 1))); else setIdx(clamp(i, 0, Math.max(0, total - 1))); };
 

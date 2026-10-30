@@ -35,7 +35,7 @@ try {
   await page.waitForTimeout(1500);
   check('AI never pops a browser alert', dialogs.length === 0, dialogs.join('|'));
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/blocks-ai.png' });
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.pb-aicard').getByRole('button', { name: 'Close' }).click();
   check('card closes', (await page.locator('.pb-aicard').count()) === 0);
 
   // insert media / toggle / table / code / divider through the editor

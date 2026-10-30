@@ -6,7 +6,7 @@ export default function UndoToast({ toast, dismiss }) {
   return (
     <div className="pb-undo" role="status">
       <span>{toast.msg}</span>
-      <button type="button" onClick={() => { const u = toast.undo; dismiss(); u(); }}>Undo</button>
+      {toast.undo ? <button type="button" onClick={() => { const u = toast.undo; dismiss(); u(); }}>Undo</button> : <button type="button" onClick={dismiss}>Dismiss</button>}
     </div>
   );
 }

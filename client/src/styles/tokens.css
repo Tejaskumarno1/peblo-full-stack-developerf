@@ -185,6 +185,8 @@ body {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -484,4 +486,24 @@ body {
   --pb-surface-3: #1B202B;
   --pb-line: #1C212C;
   --pb-line-2: #282F3D;
+}
+
+/* ---- Accessibility / responsive safety net (audit) ----
+   Inputs whose own rule sets outline:none and has no :focus style of its own get a visible ring. */
+.pb-find input:focus-visible, .pb-gbar-alt input:focus-visible, .pb-ask-media input:focus-visible,
+.df-vfind input:focus-visible, .r-cap-search input:focus-visible, .soft .np .np-add input:focus-visible,
+.soft .np .np-inp input:focus-visible, .hub-search input:focus-visible, .hub-attach input:focus-visible,
+.cal-edit-form input:focus-visible, .cal-inline-task-form input:focus-visible, .cal-time-input:focus-visible,
+.cal-recurrence-select:focus-visible, .home-ask-row input:focus-visible, .form-select:focus-visible,
+.qc-input:focus-visible, .link-input-wrapper input:focus-visible, .todo-time-input:focus-visible,
+.todo-recurrence-select:focus-visible, .todo-edit-input:focus-visible, .todo-note-select:focus-visible {
+  outline: 2px solid var(--pb-ring, var(--pb-solid, #4F46E5));
+  outline-offset: 1px;
+}
+/* Fixed-width popovers must not spill past a 360px phone. */
+.pb-ask-media, .hub-picker-menu { max-width: calc(100vw - 24px); }
+/* Touch targets: raise small icon buttons to 36px on touch screens only. */
+@media (pointer: coarse) {
+  .cp-x, .eb-x, .pb-help-x, .pp-x, .df-btn.ic, .df-vbtn.ic { min-width: 36px; min-height: 36px; }
+  .pb-btn.sm, .df-btn, .df-vbtn { min-height: 36px; }
 }

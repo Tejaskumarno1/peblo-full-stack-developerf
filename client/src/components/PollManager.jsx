@@ -25,7 +25,11 @@ export default function PollManager({ noteId }) {
       setForm(false); setQ(''); setOpts(['', '']); setNamed(false); await load();
     } catch (e) { setErr(e?.response?.data?.error || 'Could not add the poll.'); }
   };
-  const act = async (pid, verb) => { try { await api.post(`/share/note/${noteId}/polls/${pid}/${verb}`); } catch { /* next load shows the truth */ } await load(); };
+  const act = async (pid, verb) => {
+    setErr('');
+    try { await api.post(`/share/note/${noteId}/polls/${pid}/${verb}`); } catch (e) { setErr(e?.response?.data?.error || 'Could not change the poll. Try again.'); }
+    await load();
+  };
   return (
     <div className="pm" data-testid="poll-manager">
       <div className="pm-head"><b><BarChart3 size={14} aria-hidden="true" />Polls on this page</b>
@@ -44,6 +48,7 @@ export default function PollManager({ noteId }) {
           </li>
         ))}
       </ul>
+      {err && !form && <small className="pm-err" role="alert">{err}</small>}
       {form && <div className="pm-form">
         <input data-testid="pm-q" placeholder="Your question" aria-label="Poll question" maxLength={140} value={q} onChange={(e) => setQ(e.target.value)} />
         {opts.map((o, i) => <input key={i} data-testid={`pm-opt-${i}`} placeholder={`Option ${i + 1}`} aria-label={`Option ${i + 1}`} maxLength={60} value={o} onChange={(e) => setOpts((cur) => cur.map((x, j) => (j === i ? e.target.value : x)))} />)}

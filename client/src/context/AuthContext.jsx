@@ -263,7 +263,7 @@ export function AuthProvider({ children }) {
     // Optimistic UI update
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
-      localStorage.setItem('peblo-settings', JSON.stringify(updated));
+      try { localStorage.setItem('peblo-settings', JSON.stringify(updated)); } catch { /* storage full or blocked: applies for this session */ }
       return updated;
     });
 
@@ -298,7 +298,7 @@ export function AuthProvider({ children }) {
         { id: Date.now().toString(), text, read: false, time: new Date().toISOString() },
         ...prev
       ];
-      localStorage.setItem('peblo-notifications', JSON.stringify(updated));
+      try { localStorage.setItem('peblo-notifications', JSON.stringify(updated)); } catch { /* storage full or blocked */ }
       return updated;
     });
   }, []);
@@ -306,7 +306,7 @@ export function AuthProvider({ children }) {
   const markNotificationRead = useCallback((id) => {
     setNotifications((prev) => {
       const updated = prev.map(n => n.id === id ? { ...n, read: true } : n);
-      localStorage.setItem('peblo-notifications', JSON.stringify(updated));
+      try { localStorage.setItem('peblo-notifications', JSON.stringify(updated)); } catch { /* storage full or blocked */ }
       return updated;
     });
   }, []);
@@ -314,14 +314,14 @@ export function AuthProvider({ children }) {
   const markAllNotificationsRead = useCallback(() => {
     setNotifications((prev) => {
       const updated = prev.map(n => ({ ...n, read: true }));
-      localStorage.setItem('peblo-notifications', JSON.stringify(updated));
+      try { localStorage.setItem('peblo-notifications', JSON.stringify(updated)); } catch { /* storage full or blocked */ }
       return updated;
     });
   }, []);
 
   const clearNotifications = useCallback(() => {
     setNotifications([]);
-    localStorage.removeItem('peblo-notifications');
+    try { localStorage.removeItem('peblo-notifications'); } catch { /* storage blocked */ }
   }, []);
 
   return (

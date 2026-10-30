@@ -42,7 +42,7 @@ try {
   check('the note lists the connected task', (await page.locator('.s-side-task', { hasText: 'scheduling algorithms' }).count()) === 1);
   await page.locator('.s-linked-open', { hasText: 'scheduling' }).click();
   check('a task opens from the note', await page.getByRole('dialog').isVisible());
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/tasksheet-note.png' });
 } catch (e) {
   console.error(e);

@@ -115,7 +115,7 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
     }
   };
 
-  const sourceTitle = (n) => brief.data?.sources.find((s) => s.n === n);
+  const sourceTitle = (n) => brief.data?.sources?.find((s) => s.n === n);
 
   return (
     <section className="r-drawer" aria-labelledby="rv-sel">
@@ -129,7 +129,7 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
               ? `Due ${isAllDay(selected) ? dayWord(at).toLowerCase() : `${dayWord(at).toLowerCase()}, ${clock(at)}`} · ${selected.priority} priority`
               : `No date yet · ${selected.priority} priority`}
         </span>
-        {meeting && selected.meta?.link && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Join {/meet\.google/i.test(selected.meta.link) ? 'Google Meet' : /teams\./i.test(selected.meta.link) ? 'Teams' : /zoom\./i.test(selected.meta.link) ? 'Zoom' : 'meeting'}</a>}
+        {meeting && /^https?:\/\//i.test(selected.meta?.link || '') && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Join {/meet\.google/i.test(selected.meta.link) ? 'Google Meet' : /teams\./i.test(selected.meta.link) ? 'Teams' : /zoom\./i.test(selected.meta.link) ? 'Zoom' : 'meeting'}</a>}
         {!meeting && /^https:\/\//i.test(selected.meta?.link || '') && <a className="r-btn small join" href={selected.meta.link} target="_blank" rel="noopener noreferrer">Open link</a>}
         {meeting && selected.meta?.linkedTasks?.length > 0 && <div className="r-chips" aria-label="Tasks for this meeting">{selected.meta.linkedTasks.map((t) => <span key={t.id} className="r-tag">Task: {t.text}</span>)}</div>}
         {tags.length > 0 && <div className="r-chips">{tags.map((t) => <span key={t} className="r-tag">#{t}</span>)}</div>}
@@ -169,17 +169,17 @@ export default function RiverDrawer({ selected, meetings, tasks, notes, now, aiR
             <h3 className="r-h3">PEBLO'S BRIEF · FROM YOUR NOTES</h3>
             {brief.isFetching && <p className="r-quiet" style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Loader2 size={15} className="r-spin" /> Reading the notes that mention it…</p>}
             {!brief.isFetching && brief.error && <p className="r-err">{brief.error.response?.data?.error || 'The brief could not be written.'}</p>}
-            {!brief.isFetching && brief.data && brief.data.points.length > 0 && (
+            {!brief.isFetching && brief.data && brief.data.points?.length > 0 && (
               <ul className="r-points">
-                {brief.data.points.map((p, i) => (
+                {(brief.data.points || []).map((p, i) => (
                   <li key={i}>
                     {p.text}{' '}
-                    {p.cite.map((n) => sourceTitle(n) && <Link key={n} to={`/notes/${sourceTitle(n).id}`}>[{sourceTitle(n).title}]</Link>)}
+                    {(p.cite || []).map((n) => sourceTitle(n) && <Link key={n} to={`/notes/${sourceTitle(n).id}`}>[{sourceTitle(n).title}]</Link>)}
                   </li>
                 ))}
               </ul>
             )}
-            {!brief.isFetching && brief.data && brief.data.points.length === 0 && (
+            {!brief.isFetching && brief.data && !(brief.data.points?.length > 0) && (
               <p className="r-quiet">None of your notes mention this meeting yet. Notes you take in it will feed the next brief.</p>
             )}
             {!brief.isFetching && !brief.data && (

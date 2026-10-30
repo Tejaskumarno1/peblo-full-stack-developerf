@@ -23,7 +23,8 @@ export const notesAPI = {
   daily: (date) => api.post('/notes/daily', { date }),
   create: (data) => api.post('/notes', data),
   update: (id, data) => api.patch(`/notes/${id}`, data),
-  delete: (id) => api.delete(`/notes/${id}`),
+  // Without { permanent: true } a note is only moved to the trash (and a repeat call on a trashed note does nothing).
+  delete: (id, opts) => api.delete(`/notes/${id}`, opts?.permanent ? { params: { permanent: 1 } } : undefined),
   restore: (id) => api.post(`/notes/${id}/restore`),
   archive: (id) => api.post(`/notes/${id}/archive`),
   getBackups: (id) => api.get(`/notes/${id}/backups`),

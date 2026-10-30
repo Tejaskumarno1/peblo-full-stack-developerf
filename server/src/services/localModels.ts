@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { execFile } from 'child_process';
-import { effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
+import { effectiveOllamaUrl, hosted } from '../utils/ollamaPolicy.js';
 
 export interface CatalogModel {
   id: string;            // the Ollama model name
@@ -78,7 +78,7 @@ export async function removeModel(userUrl: unknown, model: string): Promise<{ ok
   const base = effectiveOllamaUrl(userUrl, 'http://127.0.0.1:11434');
   if (!base) return { ok: false, error: 'Local AI is not available on this server.' };
   try {
-    const r = await fetch(`${base}/api/delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }), signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${base}/api/delete`, { redirect: 'manual', method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }), signal: AbortSignal.timeout(15000) });
     if (!r.ok && r.status !== 404) return { ok: false, error: `Ollama answered with HTTP ${r.status}` };
     jobs.delete(model);
     return { ok: true };
@@ -91,14 +91,14 @@ export async function startPull(userUrl: unknown, model: string): Promise<{ ok: 
   if (running && !running.done) return { ok: true };
   const base = effectiveOllamaUrl(userUrl, 'http://127.0.0.1:11434');
   if (!base) return { ok: false, error: 'Local AI is not available on this server.' };
-  try { await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) }); }
+  try { await fetch(`${base}/api/tags`, { redirect: 'manual', signal: AbortSignal.timeout(3000) }); }
   catch { return { ok: false, error: 'Ollama is not running. Install or start it first.' }; }
 
   const job: Job = { model, status: 'starting', completed: 0, total: 0, done: false, startedAt: Date.now(), abort: new AbortController() };
   jobs.set(model, job);
   (async () => {
     try {
-      const res = await fetch(`${base}/api/pull`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: true }), signal: job.abort.signal });
+      const res = await fetch(`${base}/api/pull`, { redirect: 'manual', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: true }), signal: job.abort.signal });
       if (!res.ok || !res.body) throw new Error(`Ollama answered with HTTP ${res.status}`);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -145,8 +145,9 @@ export function findOllama(): { exe: string; args: string[] } | null {
 export async function startOllama(userUrl: unknown): Promise<{ ok: boolean; error?: string }> {
   const base = effectiveOllamaUrl(userUrl, 'http://127.0.0.1:11434');
   if (!base) return { ok: false, error: 'Local AI is not available on this server.' };
-  const alive = async () => { try { return (await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
+  const alive = async () => { try { return (await fetch(`${base}/api/tags`, { redirect: 'manual', signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
   if (await alive()) return { ok: true };
+  if (hosted()) return { ok: false, error: 'Local AI is only available in the desktop app.' };
   const found = findOllama();
   if (!found) return { ok: false, error: 'Ollama is not installed on this computer yet.' };
   try {
@@ -176,6 +177,7 @@ export function installSnapshot() {
 }
 
 export function startInstall(): { ok: boolean; error?: string } {
+  if (hosted()) return { ok: false, error: 'Local AI is only available in the desktop app.' }; // never download and run an installer on a shared server
   if (!canInstallOllama()) return { ok: false, error: 'One-click install is only available on Windows for now. Use the Get Ollama button.' };
   if (install && (install.status === 'downloading' || install.status === 'installing')) return { ok: true };
   const job: Install = { status: 'downloading', completed: 0, total: 0, abort: new AbortController() };

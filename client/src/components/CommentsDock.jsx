@@ -30,7 +30,7 @@ function Composer({ mode, quote, people, onSubmit, onCancel, busy, autoFocus }) 
       {mode === 'suggest' && (
         <>
           <label className="lbl">Change it to</label>
-          <textarea value={replacement} onChange={(e) => setReplacement(e.target.value)} rows={2} data-testid="suggest-text" />
+          <textarea aria-label="Suggested replacement text" value={replacement} onChange={(e) => setReplacement(e.target.value)} rows={2} data-testid="suggest-text" />
         </>
       )}
       <textarea
@@ -183,6 +183,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
   const replies = useMemo(() => { const m = new Map(); for (const c of comments) if (c.parentId) m.set(c.parentId, [...(m.get(c.parentId) || []), c]); return m; }, [comments]);
   const openCount = roots.filter((c) => c.status === 'open').length;
   const people = useMemo(() => [...new Set([...peers.filter((p) => !p.me).map((p) => p.name), ...comments.map((c) => c.author.name)].filter((n) => n && n !== me?.name))], [peers, comments, me?.name]);
+  const [order, setOrder] = useState('new'); // hooks must all run before the early return below
   if (!target) return <div className="pb-dock" style={{ '--pb-bg': dark ? '#1f2430' : '#ffffff' }}>{children}</div>;
 
   const run = async (fn) => { setBusy(true); setErr(''); try { await fn(); await load(); ping(); } catch (e) { setErr(e?.response?.data?.error || (e?.message === 'moved' ? 'moved' : 'That did not work. Try again.')); } setBusy(false); };
@@ -204,7 +205,6 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
     setDraft({ quote, mode }); setErr('');
   };
 
-  const [order, setOrder] = useState('new');
   const nOpen = roots.filter((c) => c.status === 'open').length;
   const nDone = roots.length - nOpen;
   const picked = roots.filter((c) => (tab === 'open' ? c.status === 'open' : c.status !== 'open')).slice();

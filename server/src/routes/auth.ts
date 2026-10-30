@@ -18,16 +18,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Brute-force protection. Sign-in is limited twice: per address (generous, many people can share one) and
 // per account (tight, and it still holds when someone fakes their address). Only failed attempts count.
 // Trade-off: someone can lock a known email out for 15 minutes by failing on purpose.
-const emailOf = (req: any) => String(req.body?.email || '').trim().toLowerCase();
+const emailOf = (req: any) => String(req.body?.email || '').trim().toLowerCase().slice(0, 254);
+const userKeyOf = (req: any) => (req.user?.id ? `user:${req.user.id}` : '');
 const loginIpLimit = rateLimit({ windowMs: 15 * 60_000, max: 40, skipSuccessful: true, message: 'Too many sign-in attempts. Wait a few minutes and try again.' });
 const loginAccountLimit = rateLimit({ windowMs: 15 * 60_000, max: 10, skipSuccessful: true, key: (req) => { const e = emailOf(req); return e ? `acct:${e}` : ''; }, message: 'Too many sign-in attempts. Wait a few minutes and try again.' });
 const loginLimit = [loginIpLimit, loginAccountLimit];
 // An unknown email still costs one bcrypt comparison, so the reply time does not reveal whether an account exists.
 const DUMMY_HASH = bcrypt.hashSync('peblo-timing-placeholder', 12);
 const signupLimit = rateLimit({ windowMs: 60 * 60_000, max: Number(process.env.SIGNUP_RATE_MAX) || 10, message: 'Too many sign-ups from this address. Try again later.' });
-const passwordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, message: 'Too many attempts. Wait a few minutes and try again.' });
+// Counted per signed-in account (not just per address) and only on failures, so a stolen session cannot guess the current password from many addresses.
+const passwordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, skipSuccessful: true, key: userKeyOf, message: 'Too many attempts. Wait a few minutes and try again.' });
 
-const mailLimit = rateLimit({ windowMs: 15 * 60_000, max: 6, message: 'Too many emails requested. Wait a few minutes and try again.' });
+const mailLimit = rateLimit({ windowMs: 15 * 60_000, max: 6, key: userKeyOf, message: 'Too many emails requested. Wait a few minutes and try again.' });
 const linkLimit = rateLimit({ windowMs: 15 * 60_000, max: 30, message: 'Too many attempts. Wait a few minutes and try again.' });
 
 router.post('/signup', signupLimit, async (req, res, next) => {
@@ -44,7 +46,13 @@ router.post('/signup', signupLimit, async (req, res, next) => {
     if (existing) return res.status(409).json({ error: 'An account with that email already exists.' });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({ data: { email, name, passwordHash, settings: {} } });
+    let user;
+    try {
+      user = await prisma.user.create({ data: { email, name, passwordHash, settings: {} } });
+    } catch (e: any) {
+      if (e?.code === 'P2002') return res.status(409).json({ error: 'An account with that email already exists.' }); // two sign-ups raced
+      throw e;
+    }
 
     void sendVerification(req, user.id, user.email).catch(() => {}); // best effort: signing up never fails because of mail
     const token = signToken(user);

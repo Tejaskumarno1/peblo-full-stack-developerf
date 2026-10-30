@@ -14,3 +14,11 @@ server/generated/
 
 e2e/node_modules/
 release-*/
+# Local scratch: e2e screenshots, logs and notes left by test runs
+.commit-msg.tmp
+e2e-*.txt
+e2e/*.png
+tmp-*.png
+.shots/
+scratch-ref/
+/Untitled

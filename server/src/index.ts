@@ -6,13 +6,14 @@ import { existsSync } from 'fs';
 import { createServer, Server } from 'http';
 import { AddressInfo } from 'net';
 import { Server as SocketIOServer } from 'socket.io';
-import { attachCollab } from './services/collab.js';
+import { attachCollab, closeCollab } from './services/collab.js';
 import { pathToFileURL } from 'url';
 
 import prisma, { initDatabase } from './db.js';
 import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
+import { purgeExpiredTrash } from './controllers/notesController.js';
 import tagsRoutes from './routes/tags.js';
 import tokensRoutes from './routes/tokens.js';
 import aiRoutes, { noteAiRoutes } from './routes/ai.js';
@@ -118,9 +119,9 @@ app.use('/api/tokens', tokensRoutes);
   app.use('/api/river', riverRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/files', filesRoutes);
-app.get('/l/:code', shortRedirect);
+app.get('/l/:code', apiLimiter(), shortRedirect);
 app.use('/api/share', shareRoutes);
-app.get('/s/note/:tok', agentNote); // bots and programs get Markdown or JSON from the same link
+app.get('/s/note/:tok', apiLimiter(), agentNote); // bots and programs get Markdown or JSON from the same link
 app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);
 app.use('/api/public', publicRoutes);
@@ -147,7 +148,7 @@ app.use('/api/public', publicRoutes);
       // A shared note: tell crawlers and agents where the plain-text version is.
       try {
         const { readFile } = await import('fs/promises');
-        const base = reqOrigin(req);
+        const base = reqOrigin(req).replace(/[^\w.:/\[\]-]/g, ''); // comes from the Host header: keep it out of the HTML as anything but an address
         const tags = '<link rel="alternate" type="text/markdown" href="' + base + '/s/note/' + sh[1] + '.md"><link rel="alternate" type="application/json" href="' + base + '/s/note/' + sh[1] + '.json">';
         res.type('html').send((await readFile(indexHtml, 'utf8')).replace('</head>', tags + '</head>'));
       } catch { res.sendFile(indexHtml); }
@@ -170,7 +171,9 @@ export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: S
   // Each connection must carry a valid sign-in token; it only ever hears its own account's events.
   // destroyUpgrade:false so Socket.IO leaves the /collab WebSocket (live co-editing) alone while it signs a person in.
   const io = new SocketIOServer(httpServer, { destroyUpgrade: false });
-  attachCollab(httpServer);
+  // Pass the app's trust-proxy rule so the /collab upgrade limiter sees the same client address as req.ip.
+  const trustFn = app.get('trust proxy fn') as ((addr: string, i: number) => boolean) | undefined;
+  attachCollab(httpServer, { trustProxy: typeof trustFn === 'function' ? trustFn : undefined });
   io.use(async (socket, next) => {
     try {
       const user = await verifyToken(socket.handshake.auth?.token);
@@ -215,6 +218,30 @@ if (isDirectRun) {
     port: Number(process.env.PORT) || 3001,
     host: process.env.HOST || (production ? '0.0.0.0' : '127.0.0.1'),
     staticDir: production && existsSync(clientDir) ? clientDir : undefined,
+  }).then(({ server }) => {
+    // Trash retention: notes trashed more than 30 days ago are removed, up to 200 per sweep.
+    const sweepTrash = () => { purgeExpiredTrash().catch((e) => console.error('[trash] purge:', e)); };
+    // Off unless the owner opts in (PEBLO_TRASH_PURGE=1): permanent removal should never be a surprise.
+    const trashSweep = process.env.PEBLO_TRASH_PURGE === '1' ? setInterval(sweepTrash, 60 * 60 * 1000) : null;
+    trashSweep?.unref?.();
+    if (trashSweep) setTimeout(sweepTrash, 30_000).unref();
+    // Hosting platforms stop the app with SIGTERM: save the open live documents and let the database connections go first.
+    let stopping = false;
+    const stop = (signal: string) => {
+      if (stopping) return;
+      stopping = true;
+      console.log(`${signal} received, shutting down`);
+      if (trashSweep) clearInterval(trashSweep);
+      setTimeout(() => process.exit(0), 10_000).unref();
+      closeCollab()
+        .catch((e) => console.error('[collab] shutdown:', e))
+        .finally(() => {
+          server.close(() => { prisma.$disconnect().catch(() => {}).finally(() => process.exit(0)); });
+          server.closeAllConnections?.();
+        });
+    };
+    process.on('SIGTERM', () => stop('SIGTERM'));
+    process.on('SIGINT', () => stop('SIGINT'));
   }).catch((err) => {
     console.error(err);
     process.exit(1);

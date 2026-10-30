@@ -9,6 +9,9 @@ const PREFIX = 'enc:v1:';
 
 function masterKey(): Buffer {
   const secret = process.env.KEY_ENCRYPTION_SECRET || process.env.JWT_SECRET || 'dev-only-insecure-secret-change-me';
+  if (process.env.NODE_ENV === 'production' && (!(process.env.KEY_ENCRYPTION_SECRET || process.env.JWT_SECRET) || secret === 'dev-only-insecure-secret-change-me')) {
+    throw new Error('KEY_ENCRYPTION_SECRET or JWT_SECRET must be set in production; refusing to encrypt with the development default.');
+  }
   return crypto.createHash('sha256').update(`peblo-keys:${secret}`).digest();
 }
 

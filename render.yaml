@@ -20,6 +20,8 @@ services:
         value: "1"
       - key: SERVER_AI_KEYS
         value: "off"
+      - key: PEBLO_HOSTED
+        value: "1"
       - key: ELECTRON_SKIP_BINARY_DOWNLOAD
         value: "1"
       - key: PEBLO_DB_CONNECTIONS

@@ -13,11 +13,11 @@ try {
   check('avatar opens the Settings page', page.url().endsWith('/settings/profile'), page.url());
 
   const navNames = await page.locator('.s-set-link').allInnerTexts();
-  check('six groups of sections in the menu', navNames.length === 10 && (await page.locator('.s-set-group').count()) === 6, navNames.join('|'));
+  check('seven groups of sections in the menu', navNames.length === 11 && (await page.locator('.s-set-group').count()) === 7, navNames.join('|'));
 
   // search
   await page.getByLabel('Find a setting').fill('dark');
-  await page.getByRole('option', { name: /Appearance/ }).click();
+  await page.getByRole('option', { name: /Appearance/ }).first().click();
   check('search jumps to Appearance', page.url().endsWith('/settings/appearance'));
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/settings-appearance.png' });
 

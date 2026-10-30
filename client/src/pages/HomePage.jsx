@@ -92,7 +92,7 @@ export default function HomePage() {
       : { name: 'Set up AI', kind: 'off', label: '' };
 
   const toggleTask = async (t) => {
-    await todosAPI.update(t.id, { completed: !t.completed });
+    try { await todosAPI.update(t.id, { completed: !t.completed }); } catch { /* the lists reload below and show the saved state */ }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };

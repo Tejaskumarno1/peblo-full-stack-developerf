@@ -36,7 +36,8 @@ export function nextOccurrence(rule: Exclude<Recurrence, 'none'>, anchor: Date, 
     y += 1; m = a.m;
     d = Math.min(a.d, daysInMonth(y, m));
   }
-  return zonedTime(y, m, d, l.h, l.mi, l.s, last.getUTCMilliseconds(), tz);
+  // Use the anchor's time of day, not the last one's: a time that fell in a daylight-saving gap (02:30 -> 03:30) must not stick to every later occurrence.
+  return zonedTime(y, m, d, a.h, a.mi, a.s, last.getUTCMilliseconds(), tz);
 }
 
 /** Make sure every open series of this person has occurrences up to its horizon. Safe to call often and from parallel requests. */

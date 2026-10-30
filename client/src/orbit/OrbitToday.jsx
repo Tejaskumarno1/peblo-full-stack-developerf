@@ -6,9 +6,12 @@ import { orbitPrefs } from './orbitPrefs';
 import { metaOf, minutesLabel } from './taskMeta';
 import { topicName, tagsOfNote, tagsOfTodo, agoText } from './orbitUtils';
 import { startOfDay, sameDay, clock, isAllDay } from '../river/riverUtils';
+import { TopicIcon } from './OrbitIcons';
 
 const DAY = 86400000;
-export const daysUntil = (iso, now = new Date()) => Math.round((startOfDay(iso) - startOfDay(now)) / DAY);
+// "2026-11-02" alone is read as UTC midnight, which is the day before in zones behind UTC; read it as a local date instead
+const asDay = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '')); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : v; };
+export const daysUntil = (iso, now = new Date()) => Math.round((startOfDay(asDay(iso)) - startOfDay(now)) / DAY);
 
 /** Today on one screen: tasks due, notes edited today, the next quiz, exam countdowns and time logged. */
 export default function OrbitToday({ onToggle }) {
@@ -18,6 +21,7 @@ export default function OrbitToday({ onToggle }) {
   const [topic, setTopic] = useState('');
   const [date, setDate] = useState('');
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const now = new Date();
   const due = todos.filter((t) => t.deadline && sameDay(t.deadline, now));
   const edited = notes.filter((n) => n.updatedAt && sameDay(n.updatedAt, now)).slice(0, 6);
@@ -28,14 +32,18 @@ export default function OrbitToday({ onToggle }) {
 
   const saveExams = async (next) => {
     setErr('');
-    const ok = await updateSettings({ orbit: { ...orbitPrefs(settings), exams: next } });
+    let ok = false;
+    try { ok = await updateSettings({ orbit: { ...orbitPrefs(settings), exams: next } }); } catch { ok = false; }
     if (!ok) setErr('Could not save. Check your connection and try again.');
+    return ok;
   };
-  const addExam = (e) => {
+  const addExam = async (e) => {
     e.preventDefault();
-    if (!topic || !date) return;
-    saveExams({ ...exams, [topic]: date });
-    setTopic(''); setDate('');
+    if (!topic || !date || saving) return;
+    setSaving(true);
+    const ok = await saveExams({ ...exams, [topic]: date });
+    setSaving(false);
+    if (ok) { setTopic(''); setDate(''); } // on a failed save the choice stays so it can be tried again
   };
 
   return (
@@ -54,7 +62,7 @@ export default function OrbitToday({ onToggle }) {
       <section>
         <h3 className="o-day-head">Notes edited today · {edited.length}</h3>
         {edited.length === 0 && <p className="o-quiet">No notes edited yet today.</p>}
-        {edited.map((n) => <Link key={n.id} to={`/notes/${n.id}`} className="o-chip">{n.meta?.emoji ? `${n.meta.emoji} ` : ''}{n.title || 'Untitled'} · {agoText(n.updatedAt)}</Link>)}
+        {edited.map((n) => <Link key={n.id} to={`/notes/${n.id}`} className="o-chip">{n.meta?.emoji ? <><TopicIcon value={n.meta.emoji} size={14} />{' '}</> : null}{n.title || 'Untitled'} · {agoText(n.updatedAt)}</Link>)}
       </section>
       <section>
         <h3 className="o-day-head">Next quiz</h3>
@@ -82,7 +90,7 @@ export default function OrbitToday({ onToggle }) {
             {topics.map((t) => <option key={t} value={t}>{topicName(t)}</option>)}
           </select>
           <input type="date" aria-label="Exam date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <button type="submit" className="o-btn small" disabled={!topic || !date}>Set exam</button>
+          <button type="submit" className="o-btn small" disabled={!topic || !date || saving}>Set exam</button>
         </form>
         {err && <p className="o-err" role="alert">{err}</p>}
       </section>

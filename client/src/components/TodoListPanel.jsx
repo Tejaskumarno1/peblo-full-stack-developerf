@@ -66,7 +66,7 @@ export default function TodoListPanel({ onClose, noteId = null }) {
     <div className="ai-panel" style={{ display: 'flex', flexDirection: 'column', width: '350px', borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-panel)' }}>
       <div className="ai-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{noteId ? 'Tasks for this note' : 'Tasks'}</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+        <button type="button" aria-label="Close" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <X size={18} />
         </button>
       </div>
@@ -114,7 +114,7 @@ export default function TodoListPanel({ onClose, noteId = null }) {
             {tasks.filter(t => !t.completed).map(task => (
               <div key={task.id} className="dash-todo-item" style={{ alignItems: 'flex-start', padding: '0.5rem' }}>
                 <button 
-                  onClick={() => handleToggleTask(task)} 
+                  type="button" aria-label="Mark task done" onClick={() => handleToggleTask(task)} 
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', marginTop: '2px', padding: 0 }}
                 >
                   <Circle size={16} />
@@ -123,7 +123,7 @@ export default function TodoListPanel({ onClose, noteId = null }) {
                 <span className="dash-todo-text" style={{ fontSize: '0.875rem', flex: 1 }}>{task.text}</span>
                 {task.note && <FileText size={12} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '3px', opacity: 0.7 }} />}
                 <button 
-                  onClick={() => handleDeleteTask(task.id)}
+                  type="button" aria-label="Delete task" onClick={() => handleDeleteTask(task.id)}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, marginLeft: '4px' }}
                 >
                   <Trash2 size={14} />
@@ -139,14 +139,14 @@ export default function TodoListPanel({ onClose, noteId = null }) {
                 {tasks.filter(t => t.completed).map(task => (
                   <div key={task.id} className="dash-todo-item completed" style={{ alignItems: 'flex-start', padding: '0.5rem' }}>
                     <button 
-                      onClick={() => handleToggleTask(task)} 
+                      type="button" aria-label="Mark task not done" onClick={() => handleToggleTask(task)} 
                       style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', display: 'flex', marginTop: '2px', padding: 0 }}
                     >
                       <CheckCircle2 size={16} />
                     </button>
                     <span className="dash-todo-text" style={{ fontSize: '0.875rem', flex: 1, textDecoration: 'line-through', opacity: 0.5 }}>{task.text}</span>
                     <button 
-                      onClick={() => handleDeleteTask(task.id)}
+                      type="button" aria-label="Delete task" onClick={() => handleDeleteTask(task.id)}
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
                     >
                       <Trash2 size={14} />

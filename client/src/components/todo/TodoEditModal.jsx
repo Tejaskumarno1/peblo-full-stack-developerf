@@ -56,7 +56,7 @@ export default function TodoEditModal({ task, onClose, onSave, notes }) {
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           style={{ maxWidth: '600px', height: 'auto', padding: '2rem', display: 'block' }}
         >
-          <button className="settings-hub-close" onClick={onClose} type="button">
+          <button className="settings-hub-close" onClick={onClose} type="button" aria-label="Close">
             <X size={18} />
           </button>
           
@@ -65,7 +65,7 @@ export default function TodoEditModal({ task, onClose, onSave, notes }) {
           <form onSubmit={handleSubmit}>
             <div className="settings-field-group">
               <label className="settings-field-label">Task Description</label>
-              <input
+              <input aria-label="Task text"
                 type="text"
                 className="settings-field-input"
                 value={editText}
@@ -94,7 +94,7 @@ export default function TodoEditModal({ task, onClose, onSave, notes }) {
 
               <div className="settings-field-group">
                 <label className="settings-field-label">Deadline</label>
-                <input
+                <input aria-label="Due date"
                   className="settings-field-input"
                   type="date"
                   value={editDeadline}
@@ -108,15 +108,15 @@ export default function TodoEditModal({ task, onClose, onSave, notes }) {
                 <label className="settings-field-label">Time Window</label>
                 <div className="todo-time-inputs" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.65rem', marginTop: '0.5rem' }}>
                   <Clock size={14} style={{ color: 'var(--text-muted)' }} />
-                  <input type="time" value={editStartTime} onChange={e => setEditStartTime(e.target.value)} className="todo-time-input" />
+                  <input aria-label="Start time" type="time" value={editStartTime} onChange={e => setEditStartTime(e.target.value)} className="todo-time-input" />
                   <span className="todo-time-separator">-</span>
-                  <input type="time" value={editEndTime} onChange={e => setEditEndTime(e.target.value)} className="todo-time-input" />
+                  <input aria-label="End time" type="time" value={editEndTime} onChange={e => setEditEndTime(e.target.value)} className="todo-time-input" />
                 </div>
               </div>
 
               <div className="settings-field-group">
                 <label className="settings-field-label">Recurrence</label>
-                <select 
+                <select aria-label="Repeat" 
                   value={editRecurrence} 
                   onChange={e => setEditRecurrence(e.target.value)} 
                   className="settings-field-input"
@@ -146,7 +146,7 @@ export default function TodoEditModal({ task, onClose, onSave, notes }) {
               {notes && notes.length > 0 && (
                 <div className="settings-field-group">
                   <label className="settings-field-label">Linked Note</label>
-                  <select
+                  <select aria-label="Linked note"
                     className="settings-field-input"
                     value={editNoteId}
                     onChange={(e) => setEditNoteId(e.target.value)}

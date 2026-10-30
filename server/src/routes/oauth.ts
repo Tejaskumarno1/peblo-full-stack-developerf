@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate, TOKEN_PREFIX, hashToken, verifyToken } from '../middleware/auth.js';
 import { createPebloMcp } from '../mcp/tools.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 /*
@@ -61,7 +62,7 @@ oauthRoutes.use(express.urlencoded({ extended: false, limit: '20kb' }));
 oauthRoutes.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
 // POST /oauth/register: an app tells Peblo its name and where to send people back
-oauthRoutes.post('/register', async (req, res, next) => {
+oauthRoutes.post('/register', rateLimit({ windowMs: 60 * 60_000, max: 20, message: 'Too many app registrations from this address. Try again later.' }), async (req, res, next) => {
   try {
     const { client_name, redirect_uris } = req.body || {};
     if (!Array.isArray(redirect_uris) || redirect_uris.length < 1 || redirect_uris.length > 10 || !redirect_uris.every(okRedirect)) {

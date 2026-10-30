@@ -100,6 +100,11 @@ export default function CommandPalette() {
     setSelectedIndex(0);
   }, [query]);
 
+  // keep the highlighted row on screen when moving with the arrow keys
+  useEffect(() => {
+    listRef.current?.querySelector('.cmd-item.selected')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex, isOpen]);
+
   const handleSelect = (item) => {
     if (!item) return;
     setIsOpen(false);

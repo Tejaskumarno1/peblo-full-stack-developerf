@@ -4,13 +4,21 @@
 export const LABELS = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'] as const;
 const ASTATUS = ['not-started', 'in-progress', 'submitted'];
 
+/** Postgres text and JSON columns reject NUL (\u0000, error 22P05 / 22021) and a lone UTF-16 surrogate cannot be encoded as UTF-8: drop both. */
+export const scrub = (s: string): string => s.replace(/\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+/** Scrubs the free-text fields of a request body in place. */
+export function scrubBody(body: any, keys: string[]): void {
+  if (!body || typeof body !== 'object') return;
+  for (const k of keys) if (typeof body[k] === 'string') body[k] = scrub(body[k]);
+}
+
 type Meta = Record<string, any>;
 const isObj = (v: unknown): v is Meta => typeof v === 'object' && v !== null && !Array.isArray(v);
 const int = (v: unknown, min: number, max: number): number | undefined => {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isInteger(n) && n >= min && n <= max ? n : undefined;
 };
-const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
+const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? scrub(v).trim().slice(0, max) || undefined : undefined);
 
 function apply(current: Meta, input: Meta, rules: Record<string, (v: any) => any>): Meta {
   const out: Meta = isObj(current) ? { ...current } : {};
@@ -61,7 +69,7 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
 export function cleanNoteMeta(input: unknown, current: unknown = {}): Meta {
   if (!isObj(input)) return isObj(current) ? current : {};
   return apply(current as Meta, input, {
-    emoji: (v) => (typeof v === 'string' && v.trim() ? Array.from(v.trim()).slice(0, 4).join('') : undefined),
+    emoji: (v) => (typeof v === 'string' && v.trim() ? Array.from(scrub(v).trim()).slice(0, 4).join('') : undefined),
     favourite: (v) => (v === true ? true : undefined),
     pinned: (v) => (v === true ? true : undefined),
     locked: (v) => (v === true ? true : undefined),

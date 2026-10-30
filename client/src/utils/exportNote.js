@@ -1,6 +1,7 @@
 // Downloads for notes (the same files Soft Studio makes): Markdown, Word and PDF, one note or many.
 import { marked } from 'marked';
 import { inlineMedia } from './imageData';
+import { sanitizeHtml } from './safeHtml';
 
 const baseName = (n) => (n.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
 
@@ -15,7 +16,7 @@ function save(blob, name) {
 }
 
 const md = async (n) => `# ${n.title || 'Untitled'}\n\n${await inlineMedia(n.content || '')}`;
-const html = async (n) => `<h1>${(n.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(n.content || ''))}`;
+const html = async (n) => sanitizeHtml(`<h1>${(n.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(n.content || ''))}`);
 
 export async function exportMarkdown(n) {
   save(new Blob([await md(n)], { type: 'text/markdown' }), `${baseName(n)}.md`);

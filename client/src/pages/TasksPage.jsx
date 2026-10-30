@@ -101,6 +101,8 @@ export default function TasksPage() {
       });
       setDraft('');
       refresh();
+    } catch {
+      setActionError('Could not add that task. Try again.');
     } finally {
       setSaving(false);
     }

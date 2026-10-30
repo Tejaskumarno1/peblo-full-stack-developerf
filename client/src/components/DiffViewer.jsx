@@ -78,6 +78,8 @@ export default function DiffViewer({ oldText = '', newText = '', onRestore, onBa
       }
     }
 
+    // real line numbers: padding rows opposite an addition or deletion do not count
+    [leftSide, rightSide].forEach((side) => { let n = 0; side.forEach((l) => { if (l.type !== 'empty') l.n = ++n; }); });
     return { leftSide, rightSide };
   }, [diffParts]);
 
@@ -135,7 +137,7 @@ export default function DiffViewer({ oldText = '', newText = '', onRestore, onBa
               <pre className="diff-pre">
                 {sideBySideLines.leftSide.map((line, index) => (
                   <div key={index} className={`diff-line-row ${line.type}`}>
-                    <span className="diff-line-num">{line.type !== 'empty' ? index + 1 : ''}</span>
+                    <span className="diff-line-num">{line.type !== 'empty' ? line.n : ''}</span>
                     <span className="diff-line-indicator">
                       {line.type === 'removed' ? '-' : ' '}
                     </span>
@@ -149,7 +151,7 @@ export default function DiffViewer({ oldText = '', newText = '', onRestore, onBa
               <pre className="diff-pre">
                 {sideBySideLines.rightSide.map((line, index) => (
                   <div key={index} className={`diff-line-row ${line.type}`}>
-                    <span className="diff-line-num">{line.type !== 'empty' ? index + 1 : ''}</span>
+                    <span className="diff-line-num">{line.type !== 'empty' ? line.n : ''}</span>
                     <span className="diff-line-indicator">
                       {line.type === 'added' ? '+' : ' '}
                     </span>

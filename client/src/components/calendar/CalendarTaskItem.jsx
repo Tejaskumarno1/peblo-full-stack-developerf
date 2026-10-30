@@ -37,7 +37,7 @@ function CalendarTaskItem({
       <div className="cal-task-body">
         {editingTaskId === task.id ? (
           <form className="cal-edit-form" onSubmit={(e) => handleUpdateTask(e, task.id)}>
-            <input 
+            <input aria-label="Edit task text" 
               type="text" 
               value={editTaskText} 
               onChange={(e) => setEditTaskText(e.target.value)}

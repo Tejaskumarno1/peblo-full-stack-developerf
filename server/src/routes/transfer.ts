@@ -9,9 +9,12 @@ import { cleanNoteMeta, cleanTodoMeta } from '../utils/meta.js';
 const router = Router();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 200 } });
+// multer buffers uploads in memory: refuse a request that declares more than 150 MB in total before reading any of it
+const capTotal = (req: any, res: any, next: any) => (Number(req.headers['content-length']) > 150 * 1024 * 1024 ? res.status(413).json({ error: 'Those files are too large to import together (limit 150 MB).' }) : next());
 
 // POST /api/import — Notion export .zip, Obsidian vault .zip, or loose .md/.txt/.csv files
-router.post('/import', authenticate, upload.array('files'), async (req, res, next) => {
+router.post('/import', authenticate, capTotal, upload.array('files'), async (req, res, next) => {
+  const created: { id: string; title: string }[] = [];
   try {
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) return res.status(400).json({ error: 'Choose a Notion export (.zip) or Markdown files to import.' });
@@ -21,7 +24,6 @@ router.post('/import', authenticate, upload.array('files'), async (req, res, nex
 
     const parsed = parseUploads(files);
     const userId = req.user!.id;
-    const created: { id: string; title: string }[] = [];
 
     for (const n of parsed.notes) {
       const note = await prisma.note.create({
@@ -47,6 +49,7 @@ router.post('/import', authenticate, upload.array('files'), async (req, res, nex
       skippedFiles: parsed.skippedFiles.slice(0, 20),
     });
   } catch (error) {
+    await prisma.note.deleteMany({ where: { userId: req.user!.id, id: { in: created.map((c) => c.id) } } }).catch(() => {}); // a failed import leaves nothing half-added
     next(error);
   }
 });
@@ -111,6 +114,8 @@ const strs = (v: any): string[] => (Array.isArray(v) ? v.filter((x) => typeof x 
 
 // POST /api/restore — add everything from a backup file. Nothing existing is changed or deleted.
 router.post('/restore', authenticate, async (req, res, next) => {
+  const madeNoteIds: string[] = [];
+  const madeTodoIds: string[] = [];
   try {
     const b = req.body;
     if (!b || b.format !== 'peblo-backup' || b.version !== 1 || !Array.isArray(b.notes) || !Array.isArray(b.todos)) {
@@ -134,13 +139,14 @@ router.post('/restore', authenticate, async (req, res, next) => {
         },
         select: { id: true },
       });
+      madeNoteIds.push(created.id);
       if (typeof n.id === 'string') idMap.set(n.id, created.id);
       await syncTags(userId, created.id, strs(n.tags));
       notes += 1;
     }
     for (const t of b.todos) {
       if (!t || typeof t.text !== 'string' || !t.text.trim()) continue;
-      await prisma.todo.create({
+      const madeTodo = await prisma.todo.create({
         data: {
           userId,
           text: t.text.slice(0, 2000),
@@ -153,13 +159,17 @@ router.post('/restore', authenticate, async (req, res, next) => {
           endTime: typeof t.endTime === 'string' ? t.endTime.slice(0, 5) : null,
           meta: cleanTodoMeta(t.meta, {}),
         },
+        select: { id: true },
       });
+      madeTodoIds.push(madeTodo.id);
       todos += 1;
     }
     const io = req.app.get('io');
     if (io) io.to(userId).emit('notes_changed');
     res.json({ restored: { notes, todos } });
   } catch (error) {
+    await prisma.todo.deleteMany({ where: { userId: req.user!.id, id: { in: madeTodoIds } } }).catch(() => {}); // a failed restore leaves nothing half-added
+    await prisma.note.deleteMany({ where: { userId: req.user!.id, id: { in: madeNoteIds } } }).catch(() => {});
     next(error);
   }
 });

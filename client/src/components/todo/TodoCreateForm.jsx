@@ -61,7 +61,7 @@ function TodoCreateForm({ handleCreate, notes }) {
           <span className="todo-time-separator">-</span>
           <input type="time" value={newEndTime} onChange={e => setNewEndTime(e.target.value)} className="todo-time-input" aria-label="End time" />
         </div>
-        <select value={newRecurrence} onChange={e => setNewRecurrence(e.target.value)} className="todo-recurrence-select">
+        <select aria-label="Repeat" value={newRecurrence} onChange={e => setNewRecurrence(e.target.value)} className="todo-recurrence-select">
           <option value="none">Does not repeat</option>
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
@@ -101,7 +101,7 @@ function TodoCreateForm({ handleCreate, notes }) {
         />
 
         {notes.length > 0 && (
-          <select
+          <select aria-label="Linked note"
             className="todo-note-select"
             value={newNoteId}
             onChange={(e) => setNewNoteId(e.target.value)}

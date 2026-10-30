@@ -55,7 +55,7 @@ try {
   // short link
   const s1 = await api('GET', `/api/share/note/${note.id}/short`);
   const s2 = await api('GET', `/api/share/note/${note.id}/short`);
-  check('a short code is made once and kept', /^[a-z0-9]{6}$/.test(s1.code) && s1.code === s2.code, JSON.stringify(s1));
+  check('a short code is made once and kept', /^[a-z0-9]{6,12}$/.test(s1.code) && s1.code === s2.code, JSON.stringify(s1));
   const red = await pub('GET', `/l/${s1.code}`);
   check('the short link redirects to the page', red.status === 302 && red.loc === `/s/note/${tok}`, `${red.status} ${red.loc}`);
   const nored = await pub('GET', `/l/zzzzzz`);

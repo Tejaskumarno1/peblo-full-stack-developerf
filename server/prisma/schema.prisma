@@ -161,6 +161,7 @@ model Todo {
   @@index([userId, deadline])
   @@index([userId, completed])
   @@index([seriesId])
+  @@index([noteId])
   @@map("todos")
 }
 
@@ -306,7 +307,7 @@ model OauthClient {
   id           String      @id
   name         String
   redirectUris Json        @map("redirect_uris")
-  createdAt    DateTime    @default(now()) @map("created_at")
+  createdAt    DateTime    @db.Timestamptz(3) @default(now()) @map("created_at")
   codes        OauthCode[]
 
   @@map("oauth_clients")
@@ -320,10 +321,12 @@ model OauthCode {
   redirectUri   String      @map("redirect_uri")
   codeChallenge String      @map("code_challenge")
   scope         String      @default("write")
-  expiresAt     DateTime    @map("expires_at")
+  expiresAt     DateTime    @db.Timestamptz(3) @map("expires_at")
   client        OauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
+  @@index([clientId])
+  @@index([userId])
   @@map("oauth_codes")
 }

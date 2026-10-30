@@ -19,28 +19,37 @@ export default function OrbitBackup() {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState('restore'); // 'restore' shows the file picker; 'info' only a message
+  const working = useRef(false); // one backup or example change at a time (a second menu click is ignored)
 
   useEffect(() => {
     const backup = async () => {
+      if (working.current) return;
+      working.current = true;
       setMode('info'); setMsg('');
       try {
         const r = await backupAPI.get();
         downloadText(`peblo-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(r.data, null, 2), 'application/json');
         setOpen(true);
-        setMsg(`Backed up ${r.data.notes.length} notes and ${r.data.todos.length} tasks.`);
-      } catch (e) { console.error('Backup failed', e); setOpen(true); setMsg("Couldn't make the backup. Try again."); }
+        setMsg(`Backed up ${r.data?.notes?.length ?? 0} notes and ${r.data?.todos?.length ?? 0} tasks.`);
+      } catch (e) { console.error('Backup failed', e); setOpen(true); setMsg("Couldn't make the backup. Try again."); } finally { working.current = false; }
     };
     const restore = () => { setMode('restore'); setOpen(true); setFound(null); setMsg(''); };
     const refreshAll = () => { for (const k of ['notes', 'todos', 'tags', 'study', 'dashboard']) queryClient.invalidateQueries({ queryKey: [k] }); };
     const example = async () => {
+      if (working.current) return;
+      working.current = true;
       setMode('info'); setOpen(true); setFound(null); setMsg('');
-      try { const r = await backupAPI.addExample(); setMsg(`Added ${r.data.added.notes} example notes and ${r.data.added.todos} example tasks. Clear them any time from your menu.`); refreshAll(); }
+      try { const r = await backupAPI.addExample(); setMsg(`Added ${r.data?.added?.notes ?? 0} example notes and ${r.data?.added?.todos ?? 0} example tasks. Clear them any time from your menu.`); }
       catch (e) { setMsg(e.response?.data?.error || "Couldn't add the example data."); }
+      finally { working.current = false; refreshAll(); }
     };
     const clearExample = async () => {
+      if (working.current) return;
+      working.current = true;
       setMode('info'); setOpen(true); setFound(null); setMsg('');
-      try { const r = await backupAPI.clearExample(); setMsg(`Removed ${r.data.removed.notes} example notes and ${r.data.removed.todos} example tasks. Your own notes were not touched.`); refreshAll(); }
+      try { const r = await backupAPI.clearExample(); setMsg(`Removed ${r.data?.removed?.notes ?? 0} example notes and ${r.data?.removed?.todos ?? 0} example tasks. Your own notes were not touched.`); }
       catch { setMsg("Couldn't clear the example data."); }
+      finally { working.current = false; refreshAll(); }
     };
     window.addEventListener('peblo:example', example);
     window.addEventListener('peblo:example-clear', clearExample);
@@ -50,6 +59,12 @@ export default function OrbitBackup() {
   }, []);
 
   const close = () => { setOpen(false); setFound(null); setMsg(''); };
+  useEffect(() => { // Escape closes the dialog
+    if (!open) return undefined;
+    const key = (e) => { if (e.key === 'Escape') { setOpen(false); setFound(null); setMsg(''); } };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [open]);
   const choose = async (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -63,10 +78,11 @@ export default function OrbitBackup() {
     } catch { setFound(null); setMsg('That file could not be read. Choose a .json backup made by Peblo.'); }
   };
   const run = async () => {
+    if (busy || !found) return;
     setBusy(true);
     try {
       const r = await backupAPI.restore(found.data);
-      setMsg(`Restored ${r.data.restored.notes} notes and ${r.data.restored.todos} tasks.`);
+      setMsg(`Restored ${r.data?.restored?.notes ?? 0} notes and ${r.data?.restored?.todos ?? 0} tasks.`);
       setFound(null);
       for (const k of ['notes', 'todos', 'tags', 'study', 'dashboard']) queryClient.invalidateQueries({ queryKey: [k] });
     } catch (e) {
@@ -95,7 +111,7 @@ export default function OrbitBackup() {
           )}
           {found && (
             <>
-              <p>This backup has <b>{found.info.notes} notes</b> and <b>{found.info.todos} tasks</b>{found.info.exportedAt ? ` (saved ${new Date(found.info.exportedAt).toLocaleDateString()})` : ''}.</p>
+              <p>This backup has <b>{found.info.notes} notes</b> and <b>{found.info.todos} tasks</b>{found.info.exportedAt && !Number.isNaN(new Date(found.info.exportedAt).getTime()) ? ` (saved ${new Date(found.info.exportedAt).toLocaleDateString()})` : ''}.</p>
               <p className="o-quiet">They will be added to your account. Existing notes stay as they are, so restoring the same file twice makes copies.</p>
               <div className="o-btns">
                 <button type="button" className="o-btn" disabled={busy} onClick={run}>{busy ? 'Restoring…' : 'Restore now'}</button>

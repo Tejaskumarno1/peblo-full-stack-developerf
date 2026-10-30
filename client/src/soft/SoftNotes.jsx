@@ -15,6 +15,7 @@ import './notespanel.css';
 import TagManager from './TagManager';
 import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
+import { sanitizeHtml } from '../utils/safeHtml';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
@@ -304,7 +305,7 @@ export default function SoftNotes() {
   const trash = async () => {
     setMenuOpen(false);
     if (!window.confirm(doc.isDeleted ? 'Delete this note forever? This cannot be undone.' : 'Move this note to the Trash?')) return;
-    await notesAPI.delete(doc.id);
+    await notesAPI.delete(doc.id, { permanent: !!doc.isDeleted });
     refreshLists();
     setDoc(null);
     navigate('/notes', { replace: true });
@@ -322,10 +323,10 @@ export default function SoftNotes() {
     a.href = URL.createObjectURL(blob);
     a.download = `${(doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note'}.md`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const fileBase = () => (doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
-  const noteHtml = async () => `<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(doc.content || ''))}`;
+  const noteHtml = async () => sanitizeHtml(`<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(doc.content || ''))}`);
   const exportWord = async () => {
     setMenuOpen(false);
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${fileBase()}</title></head><body style="font-family:Calibri,Arial,sans-serif">${await noteHtml()}</body></html>`;
@@ -333,7 +334,7 @@ export default function SoftNotes() {
     a.href = URL.createObjectURL(new Blob(['\ufeff', html], { type: 'application/msword' }));
     a.download = `${fileBase()}.doc`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const exportPdf = async () => {
     setMenuOpen(false);
@@ -358,7 +359,7 @@ export default function SoftNotes() {
     const text = taskDraft.trim();
     if (!text || !noteId) return;
     setTaskDraft('');
-    await todosAPI.create({ text, priority: 'medium', noteId });
+    try { await todosAPI.create({ text, priority: 'medium', noteId }); } catch { setTaskDraft(text); flash('Could not add the task'); return; }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
   const linkTask = async (id) => {
@@ -498,9 +499,11 @@ export default function SoftNotes() {
   };
 
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
+  // runs an action and shows a message instead of failing silently
+  const guarded = (fn, msg) => (...a) => Promise.resolve().then(() => fn(...a)).catch(() => flash(msg));
   const toggleTask = async (t) => {
     queryClient.setQueryData(['todos', 'note', noteId], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
-    await todosAPI.update(t.id, { completed: !t.completed });
+    try { await todosAPI.update(t.id, { completed: !t.completed }); } catch { flash('Could not update that task'); }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
@@ -548,7 +551,7 @@ export default function SoftNotes() {
   return (
     <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
       {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
-        onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await restoreVersion(v); }} onKeep={keepAsNote} />}
+        onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
       <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
@@ -624,7 +627,7 @@ export default function SoftNotes() {
             <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
             <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
             <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
-            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
+            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
         {viewOpen && <><div className="np-dim" style={{ background: 'rgba(58,42,26,.18)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
@@ -689,7 +692,7 @@ export default function SoftNotes() {
               {!doc.isDraft && <ShareChips noteId={doc.id} />}
               <span className="grow" />
               {doc.isDeleted ? (
-                <button type="button" className="s-outline" onClick={restore}>Restore</button>
+                <button type="button" className="s-outline" onClick={guarded(restore, 'Could not restore the note')}>Restore</button>
               ) : (
                 <button type="button" className="s-outline round s-ico" onClick={() => setPreview((v) => !v)} aria-pressed={preview} aria-label={preview ? 'Edit' : 'Preview'} title={preview ? 'Edit' : 'Preview'}>{preview ? <Pencil size={15} /> : <Eye size={15} />}</button>
               )}
@@ -708,8 +711,8 @@ export default function SoftNotes() {
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={archive}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={togglePin}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
                     <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
@@ -719,10 +722,10 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
-                    <button type="button" role="menuitem" onClick={exportPdf}><FileDown size={15} />Export as PDF</button>
-                    <button type="button" role="menuitem" onClick={exportWord}><FileDown size={15} />Export as Word</button>
-                    <button type="button" role="menuitem" onClick={exportMd}><FileDown size={15} />Export as Markdown</button>
-                    <button type="button" role="menuitem" className="danger" onClick={trash}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
+                    <button type="button" role="menuitem" className="danger" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
               </div>
@@ -780,7 +783,7 @@ export default function SoftNotes() {
                 <button type="button" className="t s-linked-open" onClick={(e) => { e.preventDefault(); setSheetTask({ ...t, note: { id: doc.id, title: doc.title } }); }}>{t.text}</button>
                 {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
               </label>
-              <button type="button" className="s-unlink" aria-label={`Unlink ${t.text}`} title="Unlink" onClick={() => unlinkTask(t)}><X size={12} /></button>
+              <button type="button" className="s-unlink" aria-label={`Unlink ${t.text}`} title="Unlink" onClick={guarded(() => unlinkTask(t), 'Could not unlink the task')}><X size={12} /></button>
             </div>
           ))}
           {noteId && (
@@ -796,8 +799,8 @@ export default function SoftNotes() {
                 <TaskLinker
                   noteTitle={doc.title}
                   tasks={openTasks}
-                  onLink={(id) => { linkTask(id); setLinkOpen(false); }}
-                  onCreate={async (text) => { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); setLinkOpen(false); }}
+                  onLink={(id) => { guarded(linkTask, 'Could not link the task')(id); setLinkOpen(false); }}
+                  onCreate={async (text) => { try { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); setLinkOpen(false); } catch { flash('Could not add the task'); } }}
                   onClose={() => setLinkOpen(false)}
                 />
               )}

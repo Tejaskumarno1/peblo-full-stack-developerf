@@ -5,6 +5,8 @@ import {
   CalendarDays, Copy, RotateCcw, FilePlus2, X, Cloud, Trash2, Search,
 } from 'lucide-react';
 import useHubChat, { STARTERS, renderAnswer, groupLabel } from '../hooks/useHubChat';
+import UndoToast from '../components/UndoToast';
+import { useDismiss } from '../river/RiverShell';
 import '../styles/ai-hub.css';
 
 
@@ -15,14 +17,17 @@ export default function AIHubPage() {
     chats, activeId, setActiveId, active, input, setInput, attached, setAttached, streaming,
     focusedSource, setFocusedSource, modelChoice, setModelChoice, allNotes,
     local, routing, localModels, cloudModels, noAI, currentModelLabel, lastAssistant, panelSources,
-    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote, privacyLine,
-    threadRef, inputRef,
+    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote, copyText, privacyLine,
+    toast, dismissToast, threadRef, inputRef,
   } = useHubChat();
   const [showSources, setShowSources] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachQuery, setAttachQuery] = useState('');
   const [chatFilter, setChatFilter] = useState('');
+  // Escape or a click elsewhere closes the model picker and the attach list
+  const pickerRef = useDismiss(pickerOpen, () => setPickerOpen(false));
+  const composerRef = useDismiss(attachOpen, () => { setAttachOpen(false); setAttachQuery(''); });
 
   const onThreadClick = (e) => {
     const btn = e.target.closest('[data-cite]');
@@ -94,7 +99,7 @@ export default function AIHubPage() {
       {/* Chat */}
       <section className="hub-chat" aria-label="Chat">
         <div className="pb-topbar" style={{ padding: '0 14px 0 20px' }}>
-          <div className="hub-picker">
+          <div className="hub-picker" ref={pickerRef}>
             <button type="button" className="pb-btn" aria-haspopup="listbox" aria-expanded={pickerOpen} onClick={() => setPickerOpen((v) => !v)}>
               <span className={`pb-dot ${currentModelLabel.kind}`} />
               {currentModelLabel.name}
@@ -196,7 +201,7 @@ export default function AIHubPage() {
                   {m.status === 'done' && m.content && (
                     <div className="hub-actions">
                       <button type="button" className="pb-btn sm" onClick={() => saveAsNote(m)}><FilePlus2 size={13} /> Save as note</button>
-                      <button type="button" className="pb-btn ghost sm" onClick={() => navigator.clipboard?.writeText(m.content)}><Copy size={13} /> Copy</button>
+                      <button type="button" className="pb-btn ghost sm" onClick={() => copyText(m.content)}><Copy size={13} /> Copy</button>
                       <button type="button" className="pb-btn ghost sm" onClick={() => regenerate(m)}><RotateCcw size={13} /> Regenerate</button>
                     </div>
                   )}
@@ -207,7 +212,7 @@ export default function AIHubPage() {
         </div>
 
         <div className="hub-composer-wrap">
-          <form className="hub-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+          <form className="hub-composer" ref={composerRef} onSubmit={(e) => { e.preventDefault(); send(); }}>
             {(attached.length > 0 || attachOpen) && (
               <div className="hub-chips">
                 {attached.map((a) => (
@@ -285,6 +290,7 @@ export default function AIHubPage() {
           )}
         </aside>
       )}
+      <UndoToast toast={toast} dismiss={dismissToast} />
     </div>
   );
 }

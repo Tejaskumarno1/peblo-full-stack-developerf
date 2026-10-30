@@ -252,7 +252,7 @@ export function SharedSection() {
         {links?.map((l) => (
           <li key={`${l.kind}-${l.id}`}>
             <span className="s-set-avatar sm" style={{ background: l.kind === 'note' ? 'var(--s-butter)' : 'var(--s-mint)' }} aria-hidden="true"><Link2 size={16} /></span>
-            <span className="grow"><b>{l.title}</b><small>{l.kind === 'note' ? 'Note' : 'Task'} · {hostOf(base)}/s/{l.kind}/…{l.token.slice(-4)}</small></span>
+            <span className="grow"><b>{l.title}</b><small>{l.kind === 'note' ? 'Note' : 'Task'} · {hostOf(base)}/s/{l.kind}/…{String(l.token || '').slice(-4)}</small></span>
             {askEdit === l.id ? (
               <span className="s-set-confirm" role="group" aria-label="Allow editing">
                 <span>Anyone with this link will be able to change it, without signing in. Allow?</span>
@@ -325,7 +325,7 @@ export function DataSection() {
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement('a');
       a.href = url; a.download = `peblo-notes-${new Date().toISOString().slice(0, 10)}.zip`; a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch { setMsg({ ok: false, text: 'Could not export your notes. Try again.' }); }
     finally { setExporting(false); }
   };

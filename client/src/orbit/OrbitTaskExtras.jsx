@@ -10,9 +10,10 @@ export function TaskDetail({ t, todos, onMeta, onOpenNote, onFocus }) {
   const m = metaOf(t);
   const [details, setDetails] = useState(m.details || '');
   const [step, setStep] = useState('');
-  const steps = m.subtasks || [];
+  const steps = Array.isArray(m.subtasks) ? m.subtasks.filter((s) => s && s.id) : [];
+  const deps = Array.isArray(m.dependsOn) ? m.dependsOn : [];
   const setSteps = (next) => onMeta(t, { subtasks: next });
-  const others = todos.filter((x) => x.id !== t.id && !x.completed && !(m.dependsOn || []).includes(x.id));
+  const others = todos.filter((x) => x.id !== t.id && !x.completed && !deps.includes(x.id));
   return (
     <div className="o-detail" aria-label={`Details of ${t.text}`}>
       <label>Details
@@ -64,11 +65,11 @@ export function TaskDetail({ t, todos, onMeta, onOpenNote, onFocus }) {
       </div>
       <div className="o-deps">
         <span className="o-eyebrow">Waits for</span>
-        {(m.dependsOn || []).map((id) => {
+        {deps.map((id) => {
           const x = todos.find((y) => y.id === id);
-          return x ? <span key={id} className="o-chip on">{x.text}{x.completed ? ' (done)' : ''}<button type="button" aria-label={`Stop waiting for ${x.text}`} onClick={() => onMeta(t, { dependsOn: (m.dependsOn || []).filter((d) => d !== id) })}><X size={12} /></button></span> : null;
+          return x ? <span key={id} className="o-chip on">{x.text}{x.completed ? ' (done)' : ''}<button type="button" aria-label={`Stop waiting for ${x.text}`} onClick={() => onMeta(t, { dependsOn: deps.filter((d) => d !== id) })}><X size={12} /></button></span> : null;
         })}
-        <select value="" onChange={(e) => e.target.value && onMeta(t, { dependsOn: [...(m.dependsOn || []), e.target.value] })} aria-label="Add a task this waits for">
+        <select value="" onChange={(e) => e.target.value && onMeta(t, { dependsOn: [...deps, e.target.value] })} aria-label="Add a task this waits for">
           <option value="">Add a task…</option>
           {others.slice(0, 80).map((x) => <option key={x.id} value={x.id}>{x.text}</option>)}
         </select>

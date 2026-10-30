@@ -22,7 +22,7 @@ export default function AppShell({ children }) {
   useEffect(() => {
     const onKey = (e) => {
       if (/^\/notes\/./.test(pathname)) return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key || '').toLowerCase() === 'j') {
         e.preventDefault();
         navigate('/ai');
       }

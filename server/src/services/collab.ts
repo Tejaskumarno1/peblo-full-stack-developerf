@@ -167,7 +167,14 @@ class Room {
     const next = [...this.conns.values()].find((c) => !c.readOnly && c.ws.readyState === WebSocket.OPEN);
     if (!next) return;
     this.seedHolder = next.ws;
-    const note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true } });
+    let note: { content: string } | null;
+    try {
+      note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true } });
+    } catch (e) {
+      this.seedHolder = null; // a database hiccup must not crash the server or block seeding for good
+      console.error('[collab] could not offer the saved text:', (e as Error).message);
+      return;
+    }
     if (!note || this.closed) return;
     const enc = encoding.createEncoder();
     encoding.writeVarUint(enc, MSG_SEED);
@@ -179,16 +186,33 @@ class Room {
     const ws = conn.ws;
     // The browser speaks the moment the socket opens, before the room has loaded: keep what it says until the room is ready.
     const early: Uint8Array[] = [];
+    let earlyBytes = 0;
     let open = false;
     ws.on('message', (data: Buffer) => {
       const msg = new Uint8Array(data);
-      if (!open) { early.push(msg); return; }
+      if (!open) {
+        // the room is still loading: do not let a client queue up an unlimited amount in the meantime
+        earlyBytes += msg.length;
+        if (earlyBytes > MAX_PAYLOAD) { try { ws.close(1009, 'too big'); } catch { /* gone */ } return; }
+        early.push(msg);
+        return;
+      }
       try { this.onMessage(conn, msg); } catch (e) { console.error('[collab] bad message:', (e as Error).message); }
     });
     ws.on('close', () => this.remove(conn));
     ws.on('error', () => { try { ws.close(); } catch { /* gone */ } });
-    await this.ready;
+    try {
+      await this.ready;
+    } catch (e) {
+      // the note could not be loaded (database trouble): drop this person and the broken room instead of crashing or leaving it stuck
+      console.error('[collab] could not open a room:', (e as Error).message);
+      try { ws.close(1011, 'unavailable'); } catch { /* gone */ }
+      this.dispose();
+      return;
+    }
     if (this.closed) { ws.close(CLOSE_RESET, 'reset'); return; }
+    // they left while the room was loading: do not keep a dead connection in the room (it would never be removed)
+    if (ws.readyState !== WebSocket.OPEN) { if (!this.conns.size) void this.idleClose(); return; }
     this.conns.set(ws, conn);
     ws.on('pong', () => { conn.alive = true; });
     // say hello the way y-websocket does: our state vector, then everyone's cursors
@@ -382,13 +406,60 @@ export function invalidateNote(noteId: string, newContent?: string) {
 
 let wss: WebSocketServer | null = null;
 
+// Upgrade attempts per client address. Each attempt can cost DB queries (authorize), and /collab upgrades skip the Express API limiter.
+const UPGRADE_WINDOW_MS = 60_000;
+const UPGRADE_MAX_PER_WINDOW = 60;
+const upgradeHits = new Map<string, number[]>();
+const upgradeSweep = setInterval(() => {
+  const cutoff = Date.now() - UPGRADE_WINDOW_MS;
+  for (const [ip, times] of upgradeHits) {
+    const fresh = times.filter((t) => t > cutoff);
+    if (fresh.length) upgradeHits.set(ip, fresh); else upgradeHits.delete(ip);
+  }
+}, UPGRADE_WINDOW_MS);
+upgradeSweep.unref();
+
+/** True when this address is over its upgrade budget; otherwise counts the attempt. */
+function upgradeLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (upgradeHits.get(ip) || []).filter((t) => t > now - UPGRADE_WINDOW_MS);
+  if (recent.length >= UPGRADE_MAX_PER_WINDOW) { upgradeHits.set(ip, recent); return true; }
+  recent.push(now);
+  upgradeHits.set(ip, recent);
+  return false;
+}
+
+/** Client address of a raw upgrade request, honouring the app's `trust proxy` setting the way req.ip does. */
+export function clientIpFor(req: IncomingMessage, trust?: (addr: string, i: number) => boolean): string {
+  const remote = req.socket?.remoteAddress || 'unknown';
+  if (!trust) return remote;
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',').map((a) => a.trim()).filter(Boolean).reverse();
+  const chain = [remote, ...xff];
+  let i = 0;
+  while (i < chain.length - 1 && trust(chain[i], i)) i++;
+  return chain[i];
+}
+
 /** Hooks the /collab WebSocket into the HTTP server. */
-export function attachCollab(httpServer: Server) {
+export function attachCollab(httpServer: Server, opts: { trustProxy?: (addr: string, i: number) => boolean } = {}) {
   wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
   httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     let url: URL;
     try { url = new URL(req.url || '', 'http://x'); } catch { socket.destroy(); return; }
-    if (url.pathname !== '/collab') return; // Socket.IO and others look after their own paths
+    if (url.pathname !== '/collab') {
+      // Socket.IO (created with destroyUpgrade:false) handles /socket.io itself. Nothing else in this server listens for
+      // upgrades (the Vite dev server is a separate process that proxies), so any other path would hang open: close it.
+      if (!url.pathname.startsWith('/socket.io')) { socket.on('error', () => {}); socket.destroy(); }
+      return;
+    }
+    if (upgradeLimited(clientIpFor(req, opts.trustProxy))) {
+      socket.on('error', () => {});
+      try { socket.write('HTTP/1.1 429 Too Many Requests\r\nRetry-After: 60\r\nConnection: close\r\n\r\n'); } catch { /* gone */ }
+      socket.destroy();
+      return;
+    }
+    // Node stops listening for socket errors once it hands the socket over; a reset while we check the sign-in would crash the server.
+    socket.on('error', () => { try { socket.destroy(); } catch { /* gone */ } });
     void (async () => {
       try {
         const who = await authorize(url);

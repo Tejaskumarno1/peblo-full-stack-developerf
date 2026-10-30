@@ -7,6 +7,7 @@ import RiverDrawer from './RiverDrawer';
 import { quickMeetingTimes, timeOfDay } from './quickAdd';
 import { hiddenClusters, nextHidden } from './hidden';
 import { freeGaps, clashes, dur } from './planner';
+import { AlertTriangle } from 'lucide-react';
 import { useUndoToast } from '../utils/useUndoToast';
 import UndoToast from '../components/UndoToast';
 import {
@@ -604,7 +605,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
                 );
               })}
               {lay && clash.list.filter((c) => c.e > now).map((c) => (
-                <span key={c.a + c.b} className="r-clash-tag" style={{ left: X(c.s), bottom: 1 }}>⚠ Clash · {dur(c.mins)}</span>
+                <span key={c.a + c.b} className="r-clash-tag" style={{ left: X(c.s), bottom: 1 }}><AlertTriangle size={11} aria-hidden="true" style={{ verticalAlign: '-1px' }} /> Clash · {dur(c.mins)}</span>
               ))}
               {lay && lay.mItems.filter((m) => m.row < 3).map((m) => {
                 const kind = kindOf(m.t);

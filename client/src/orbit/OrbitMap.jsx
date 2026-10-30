@@ -54,6 +54,7 @@ import { LABEL_HEX } from './taskMeta';
 import { mapToSvg, svgToPng } from './mapImage';
 import { downloadBlob, downloadText, safeFileName } from '../utils/download';
 import OrbitStudy, { MasteryInfo } from './OrbitStudy';
+import { TopicIcon } from './OrbitIcons';
 import DownloadMenu from './OrbitExport';
 
 export default function OrbitMap({ interactive }) {
@@ -68,6 +69,13 @@ export default function OrbitMap({ interactive }) {
   const [view, setView] = useState(() => loadView(space));
   const [tool, setTool] = useState(null); // 'connect' | 'topic'
   const drag = useRef(null);
+  const [notice, setNotice] = useState(''); // a visible message when a save or download fails
+  const connecting = useRef(false);
+  useEffect(() => {
+    if (!notice) return undefined;
+    const id = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(id);
+  }, [notice]);
 
   useLayoutEffect(() => {
     const el = boxRef.current;
@@ -180,7 +188,7 @@ export default function OrbitMap({ interactive }) {
     try {
       if (fmt === 'svg') downloadText(`${base}.svg`, svg, 'image/svg+xml');
       else downloadBlob(`${base}.png`, await svgToPng(svg));
-    } catch (e) { console.error('Could not save the map', e); }
+    } catch (e) { console.error('Could not save the map', e); setNotice("Couldn't save the map picture. Try again."); }
   };
   const saveMapRef = useRef(saveMap);
   saveMapRef.current = saveMap;
@@ -235,13 +243,17 @@ export default function OrbitMap({ interactive }) {
     return notes.filter((n) => !tagsOfNote(n).includes(topicTag) && (!s || (n.title || '').toLowerCase().includes(s))).slice(0, 6);
   }, [notes, topicTag, connectQ]);
   const connect = async (n) => {
+    if (connecting.current) return; // a second click while the first is still saving
+    connecting.current = true;
     try {
       await notesAPI.update(n.id, { tags: [...(n.tags || []), topicTag] });
       setTool(null);
       setConnectQ('');
     } catch (e) {
       console.error('Could not connect the note', e); // the picker stays open so the person can retry
+      setNotice("Couldn't put that note on the topic. Try again.");
     } finally {
+      connecting.current = false;
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     }
   };
@@ -250,11 +262,13 @@ export default function OrbitMap({ interactive }) {
   const startQuiz = (tag) => navigate(`/quiz/${encodeURIComponent(tag)}`);
 
   const addTemplate = async (tpl) => {
+    if (seeding) return;
     setSeeding(true);
     try {
       await Promise.all(tpl.tags.map((t) => notesAPI.create({ title: `${topicName(t)}: start here`, content: `Write what you know about ${topicName(t)}.`, tags: [t] })));
     } catch (e) {
       console.error('Could not add the starter topics', e);
+      setNotice("Couldn't add the starter topics. Try again.");
     } finally {
       setSeeding(false);
       queryClient.invalidateQueries({ queryKey: ['notes'] });
@@ -382,7 +396,7 @@ export default function OrbitMap({ interactive }) {
                 onDoubleClick={() => n.kind === 'topic' && setSpace(n.tag)}
                 title={n.kind === 'topic' ? undefined : n.name}
               >
-                <span className="name" style={{ fontSize: fitName(n.name, n.d) }}>{icon ? `${icon} ` : ''}{n.name}</span>
+                <span className="name" style={{ fontSize: fitName(n.name, n.d) }}>{icon && <><TopicIcon value={icon} size={14} />{' '}</>}{n.name}</span>
                 <span className="meta">{n.kind === 'topic' ? `${n.count} NOTE${n.count === 1 ? '' : 'S'}` : `${n.tasks.length} TASK${n.tasks.length === 1 ? '' : 'S'}`}</span>
               </button>
               <span className="lbl">
@@ -426,6 +440,7 @@ export default function OrbitMap({ interactive }) {
 
       {interactive && (
         <>
+          {notice && <div className="o-pill" role="alert" style={{ position: 'absolute', top: 92, left: '50%', transform: 'translateX(-50%)', zIndex: 40, padding: '8px 16px', color: 'var(--o-weak-ink)', fontWeight: 600 }}>{notice}</div>}
           <div className="o-pill o-jump" role="search">
             <Search size={16} aria-hidden="true" />
             <input

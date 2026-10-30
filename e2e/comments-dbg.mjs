@@ -106,7 +106,7 @@ try {
   const named = await api('POST', `/api/notes/${note.id}/versions`, { label: 'Before the cats' });
   const list = (await api('GET', `/api/notes/${note.id}/backups`)).backups;
   check('6 a named version is listed with its name', list.some((b) => b.label === 'Before the cats'), JSON.stringify(list.map((b) => b.label)));
-  check('6 an empty name is refused', (await api('POST', `/api/notes/${note.id}/versions`, { label: '  ' }).catch((e) => e))?.error !== undefined || true);
+  { const refused = await api('POST', `/api/notes/${note.id}/versions`, { label: '  ' }).catch((e) => e); check('6 an empty name is refused', !!refused?.error && !refused?.ok, JSON.stringify(refused).slice(0, 120)); }
 
   // 7. who may comment
   const strangers = await api('GET', `/api/public/collab/${'x'.repeat(24)}/comments?sid=${'a'.repeat(20)}`).catch((e) => e);

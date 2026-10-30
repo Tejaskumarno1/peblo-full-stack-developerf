@@ -114,7 +114,7 @@ try {
   await page.reload();
   await page.getByText('Ollama not found').waitFor({ timeout: 10000 }).catch(() => {});
   check('without Ollama the page says how to get it', await page.getByText('Peblo needs the free Ollama app').isVisible().catch(() => false));
-  check('downloads are disabled until it runs', await page.locator('.lm-card button:has-text("Download")').first().isDisabled().catch(() => true));
+  { const dl = page.locator('.lm-card button:has-text("Download")'); const n = await dl.count(); const off = await dl.evaluateAll((els) => els.every((e) => e.disabled)); check('downloads are disabled until it runs', n > 0 && off, `${n} download buttons`); }
   await shot('models-river-no-ollama');
   check('with no Ollama on the computer, Install Ollama for me is offered', await page.getByRole('button', { name: /Install Ollama for me/ }).isVisible().catch(() => false));
 

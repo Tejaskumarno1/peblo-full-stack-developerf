@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer, groupLabel } from '../../hooks/useHubChat';
 import { MicButton, SpeakButton } from '../VoiceButtons';
 import ConnectionModelOptions from './ConnectionModelOptions';
+import UndoToast from '../UndoToast';
+import { useDismiss } from '../../river/RiverShell';
 
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make a checklist from this'];
 
@@ -16,13 +18,18 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
     chats, activeId, setActiveId, active, input, setInput, attached, setAttached, streaming,
     focusedSource, setFocusedSource, modelChoice, setModelChoice, allNotes,
     local, routing, localModels, cloudModels, noAI, currentModelLabel, lastAssistant, panelSources,
-    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote,
-    threadRef, inputRef,
+    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote, copyText,
+    toast, dismissToast, threadRef, inputRef,
   } = useHubChat();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachQuery, setAttachQuery] = useState('');
   const [copied, setCopied] = useState(null);
+  const copiedTimer = useRef(null);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  // Escape or a click elsewhere closes the model list and the note list
+  const attachRef = useDismiss(attachOpen, () => { setAttachOpen(false); setAttachQuery(''); });
+  const modelRef = useDismiss(pickerOpen, () => setPickerOpen(false));
   const c = (name) => `${p}-${name}`;
 
   const onThreadClick = (e) => {
@@ -39,7 +46,12 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
     .slice(0, 6);
   const modelText = currentModelLabel.kind === 'local' ? `${currentModelLabel.name} · on this computer`
     : currentModelLabel.kind === 'cloud' ? `${currentModelLabel.name} · cloud` : 'No AI set up';
-  const copy = (m) => { navigator.clipboard?.writeText(m.content); setCopied(m.id); setTimeout(() => setCopied(null), 1500); };
+  const copy = async (m) => {
+    if (!(await copyText(m.content))) return;
+    setCopied(m.id);
+    clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(null), 1500);
+  };
 
   let lastGroup = null;
 
@@ -159,7 +171,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
                 <button type="button" aria-label={`Remove ${a.title}`} onClick={() => setAttached((l) => l.filter((x) => x.id !== a.id))}><X size={12} strokeWidth={2.6} /></button>
               </span>
             ))}
-            <div className={c('menu-wrap')}>
+            <div className={c('menu-wrap')} ref={attachRef}>
               <button type="button" className="chip" onClick={() => setAttachOpen((v) => !v)} aria-expanded={attachOpen}>+ Add a note</button>
               {attachOpen && (
                 <div className={`${c('pop')} up ${c('attach')}`}>
@@ -172,7 +184,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
               )}
             </div>
             <span className="grow" />
-            <div className={c('menu-wrap')}>
+            <div className={c('menu-wrap')} ref={modelRef}>
               <button type="button" className={`${c('model')} ${currentModelLabel.kind}`} onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen}>
                 <span className="dot" /> {modelText}
               </button>
@@ -210,6 +222,7 @@ export default function HubScreen({ p, starters, welcome = 'Ask your notes anyth
         ))}
         {lastAssistant?.excludedPrivate > 0 && <span className={c('quiet')} style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center' }}><Lock size={13} /> {lastAssistant.excludedPrivate} private note{lastAssistant.excludedPrivate === 1 ? '' : 's'} left out</span>}
       </aside>
+      <UndoToast toast={toast} dismiss={dismissToast} />
     </div>
   );
 }

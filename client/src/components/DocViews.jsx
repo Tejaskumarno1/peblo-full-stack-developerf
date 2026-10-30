@@ -149,6 +149,8 @@ export function DocPagesView({ buf, onCount, zoom, setZoom, pageNo, setPageNo, m
         holder.current.innerHTML = '';
         await renderAsync(buf.slice(0), holder.current, null, { className: 'docx', inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: true, ignoreHeight: true, renderHeaders: false, renderFooters: false, useBase64URL: true });
         if (off) return;
+        // a Word file can carry javascript:/data: links; keep only safe schemes
+        holder.current.querySelectorAll('a[href]').forEach((a) => { if (!/^(https?:|mailto:|tel:|#)/i.test((a.getAttribute('href') || '').trim())) a.removeAttribute('href'); else if (/^https?:/i.test(a.getAttribute('href'))) { a.setAttribute('rel', 'noopener noreferrer'); a.setAttribute('target', '_blank'); } });
         const n = holder.current.querySelectorAll('section.docx').length;
         setPages(n); onCount?.(n); setState('ok'); onSearchRoot?.(holder.current);
       } catch (e) { if (!off) setState(e?.code === 'password' ? 'password' : 'bad'); }

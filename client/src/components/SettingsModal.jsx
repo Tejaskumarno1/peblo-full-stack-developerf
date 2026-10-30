@@ -230,7 +230,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
 
         {/* Main Content Area */}
         <div className="settings-hub-content">
-          <button className="settings-hub-close" onClick={onClose}><X size={18} /></button>
+          <button type="button" aria-label="Close settings" className="settings-hub-close" onClick={onClose}><X size={18} /></button>
 
           {activeTab === 'profile' && (
             <div className="settings-section fade-in">
@@ -249,7 +249,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
               <form onSubmit={handleSaveProfile}>
                 <div className="settings-field-group">
                   <label className="settings-field-label">Display Name</label>
-                  <input 
+                  <input aria-label="Display name" 
                     type="text" 
                     className="settings-field-input"
                     value={profileName} 
@@ -290,7 +290,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
 
                 <div className="settings-field-group">
                   <label className="settings-field-label">Email Address</label>
-                  <input 
+                  <input aria-label="Email address" 
                     type="email" 
                     className="settings-field-input"
                     value={profileEmail} 

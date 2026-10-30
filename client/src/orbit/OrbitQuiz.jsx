@@ -31,6 +31,7 @@ export default function OrbitQuiz() {
   const [submitError, setSubmitError] = useState('');
   const started = useRef('');
   const submitting = useRef(false);
+  const reqId = useRef(0); // a quiz that arrives after you left its topic is dropped
 
   // The score at the start of this quiz. After submitting, the server tells us what it was before this run.
   const liveBefore = mastery.get(topic)?.score ?? null;
@@ -39,6 +40,7 @@ export default function OrbitQuiz() {
   const count = notes.filter((n) => (n.tags || []).includes(topic)).length;
 
   const start = async () => {
+    const mine = ++reqId.current;
     setLoading(true);
     setError('');
     setQuiz(null);
@@ -50,18 +52,27 @@ export default function OrbitQuiz() {
     setStartBefore(undefined);
     try {
       const { data } = await studyAPI.quiz(topic, length);
+      if (mine !== reqId.current) return;
+      const qs = data?.questions;
+      if (!Array.isArray(qs) || !qs.length || qs.some((x) => !x || !Array.isArray(x.options) || !x.options.length)) {
+        setError('Peblo wrote a quiz it could not use. Try again.');
+        return;
+      }
       setStartBefore(mastery.get(topic)?.score ?? null);
       setQuiz(data);
     } catch (err) {
+      if (mine !== reqId.current) return;
       setError(err.response?.data?.error || 'Peblo could not write the quiz. Check Your AI.');
     } finally {
-      setLoading(false);
+      if (mine === reqId.current) setLoading(false);
     }
   };
   // The person picks the length first (PEB-160); a different topic goes back to the picker
   useEffect(() => {
     if (started.current === topic) return;
     started.current = topic;
+    reqId.current += 1; // forget a quiz still being written for the previous topic
+    setLoading(false);
     setBegun(false);
     setQuiz(null);
     setResult(null);
@@ -73,7 +84,10 @@ export default function OrbitQuiz() {
     start();
   };
 
-  const q = quiz?.questions[index];
+  const q = quiz?.questions?.[index];
+  const rm = result?.mastery || {}; // the server's new score, tolerated if a field is missing
+  const rmScore = Number.isFinite(rm.score) ? rm.score : 0;
+  const rmMissed = Array.isArray(rm.missed) ? rm.missed : [];
   const picked = answers[index];
   const answered = picked !== undefined;
 
@@ -204,15 +218,15 @@ export default function OrbitQuiz() {
               </div>
               <div className="o-mastery" style={{ maxWidth: 520 }}>
                 <div className="row">
-                  <b>{result.mastery.score}% mastered · {LEVEL_LABEL[levelOf(result.mastery.score)].toLowerCase()}</b>
+                  <b>{rmScore}% mastered · {LEVEL_LABEL[levelOf(rmScore)].toLowerCase()}</b>
                   <span>{before !== null ? `was ${before}%` : 'first quiz'}</span>
                 </div>
-                <div className="o-bar"><div style={{ width: `${result.mastery.score}%`, background: levelVar(levelOf(result.mastery.score)) }} /></div>
+                <div className="o-bar"><div style={{ width: `${rmScore}%`, background: levelVar(levelOf(rmScore)) }} /></div>
               </div>
-              {result.mastery.missed.length > 0 && (
+              {rmMissed.length > 0 && (
                 <div className="o-explain">
                   <b>What to look at again</b>
-                  <span>{result.mastery.missed.map((m) => `${m.concept}${m.n > 1 ? ` (${m.n} missed)` : ''}`).join(', ')}</span>
+                  <span>{rmMissed.map((m) => `${m.concept}${m.n > 1 ? ` (${m.n} missed)` : ''}`).join(', ')}</span>
                 </div>
               )}
               {(() => {

@@ -4,7 +4,7 @@
 .soft .s-sheet { gap: 16px; padding: 24px 26px; width: min(580px, 100%); }
 .soft .s-sheet.inline { padding: 0; gap: 12px; }
 .soft .s-sheet :focus-visible { outline: none; }
-.soft .s-sheet button:focus-visible, .soft .s-sheet a:focus-visible { box-shadow: 0 0 0 3px rgba(42,31,23,.28); }
+.soft .s-sheet button:focus-visible, .soft .s-sheet a:focus-visible, .soft .s-sheet input:focus-visible, .soft .s-sheet select:focus-visible, .soft .s-sheet textarea:focus-visible { box-shadow: 0 0 0 3px rgba(42,31,23,.28); }
 .soft .s-sheet-kicker { background: var(--s-item); border-radius: 999px; padding: 6px 12px; font-weight: 800; font-size: 12.5px; color: var(--s-fg); }
 .soft .s-sheet-kicker.new { background: var(--s-mint); }
 .soft .s-sheet .s-sheet-title { background: transparent; border-radius: 0; border-bottom: 2px solid var(--s-item); padding: 6px 0 10px; font-size: 26px; transition: border-color .15s; outline: none; }

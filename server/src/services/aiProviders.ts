@@ -1,4 +1,4 @@
-import { assertPublicHost } from '../utils/safeFetch.js';
+import { assertPublicHost, safeFetchFollow } from '../utils/safeFetch.js';
 import { hosted } from '../utils/ollamaPolicy.js';
 
 /*
@@ -117,7 +117,9 @@ export async function verifyConnection(providerId: string, key: string, baseUrl?
   if (providerId === 'anthropic') { headers['x-api-key'] = apiKey; headers['anthropic-version'] = '2023-06-01'; }
   try {
     // Redirects are not followed: an address that answers with one could be pointing somewhere the server must not go.
-    const res = await fetch(`${base}/models`, { headers, redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    const init = { headers, redirect: 'manual' as const, signal: AbortSignal.timeout(8000) };
+    // On a shared server connect to the validated address only (no DNS rebinding); redirects still come back unfollowed.
+    const res = hosted() ? (await safeFetchFollow(`${base}/models`, init, { maxRedirects: 0 })).response : await fetch(`${base}/models`, init);
     if (res.status === 400 || res.status === 401 || res.status === 403) return fail('key', `${info.label} did not accept that key.`, base);
     if (res.status >= 300 && res.status < 400) return fail('address', 'That address redirects somewhere else. Use the final address.', base);
     if (!res.ok) return fail('other', `${info.label} answered with HTTP ${res.status}.`, base);

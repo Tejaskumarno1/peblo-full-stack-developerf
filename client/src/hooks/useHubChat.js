@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import { sanitizeHtml } from '../utils/safeHtml';
 import { hubAPI, notesAPI } from '../api';
 import { authHeaders, signOutIfRejected } from '../api/token';
+import { useUndoToast } from '../utils/useUndoToast';
 
 /*
  * AI Hub chat state and streaming, shared by every style's AI Hub screen.
@@ -26,6 +27,10 @@ function load(key, fallback) {
 }
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full or blocked */ }
+}
+function loadChats() {
+  const v = load(STORE_KEY, []);
+  return Array.isArray(v) ? v.filter((c) => c && c.id && Array.isArray(c.messages)).map((c) => ({ ...c, title: String(c.title || 'Chat') })) : [];
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -56,14 +61,15 @@ export default function useHubChat() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const [chats, setChats] = useState(() => load(STORE_KEY, []));
-  const [activeId, setActiveId] = useState(() => load(STORE_KEY, [])[0]?.id || null);
+  const [chats, setChats] = useState(() => loadChats());
+  const [activeId, setActiveId] = useState(() => loadChats()[0]?.id || null);
   const [input, setInput] = useState('');
   const [attached, setAttached] = useState([]); // [{id,title}]
   const [streaming, setStreaming] = useState(false);
   const [focusedSource, setFocusedSource] = useState(null);
   const [modelChoice, setModelChoice] = useState(() => load(MODEL_KEY, null)); // {provider, model} | null = automatic
   const abortRef = useRef(null);
+  const { toast, say: notify, dismiss: dismissToast } = useUndoToast();
   const threadRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -87,7 +93,7 @@ export default function useHubChat() {
   // Model picker options
   const local = models?.local;
   const routing = models?.routing || 'auto';
-  const localModels = local?.enabled && local?.ok ? (local.models.length ? local.models : [local.chatModel]).filter((m) => !/embed/i.test(m)) : [];
+  const localModels = local?.enabled && local?.ok ? (local.models?.length ? local.models : [local.chatModel]).filter((m) => !/embed/i.test(m)) : [];
   const cloudModels = (models?.cloud || []).filter((c) => c.configured);
   const noAI = !localModels.length && !cloudModels.length;
 
@@ -186,6 +192,13 @@ export default function useHubChat() {
     }
   }, [input, streaming, activeId, active, attached, modelChoice, updateChat]);
 
+  // Stop a running answer when the screen is left. Tied to `streaming`, not to mount: React StrictMode's
+  // mount / unmount / mount check would otherwise abort the ?q= answer that starts on mount.
+  useEffect(() => {
+    if (!streaming) return undefined;
+    return () => abortRef.current?.abort();
+  }, [streaming]);
+
   // ?q=… from Home / command palette starts a new chat
   const handledQ = useRef(null);
   useEffect(() => {
@@ -219,16 +232,33 @@ export default function useHubChat() {
   const regenerate = (msg) => rerun(msg);
 
   const saveAsNote = async (msg) => {
+    if (!active) return;
     const idx = active.messages.findIndex((m) => m.id === msg.id);
     const question = active.messages.slice(0, idx).reverse().find((m) => m.role === 'user')?.content || 'AI answer';
     const refs = (msg.sources || []).map((s) => `${s.n}. ${s.title}`).join('\n');
-    const { data } = await notesAPI.create({
-      title: question.slice(0, 80),
-      content: msg.content + (refs ? `\n\n---\n**Sources**\n\n${refs}` : ''),
-      tags: ['ai'],
-    });
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    navigate(`/notes/${data.note.id}`);
+    try {
+      const { data } = await notesAPI.create({
+        title: question.slice(0, 80),
+        content: msg.content + (refs ? `\n\n---\n**Sources**\n\n${refs}` : ''),
+        tags: ['ai'],
+      });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      navigate(`/notes/${data.note.id}`);
+    } catch (err) {
+      console.error('Failed to save the answer as a note:', err);
+      notify('Could not save this answer as a note. Try again.');
+    }
+  };
+
+  /** Copy text to the clipboard; says so when the browser refuses. Resolves true when copied. */
+  const copyText = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      notify('Could not copy. Clipboard access is unavailable in this browser.');
+      return false;
+    }
   };
 
   const privacyLine = currentModelLabel.kind === 'local'
@@ -243,7 +273,7 @@ export default function useHubChat() {
     chats, activeId, setActiveId, active, input, setInput, attached, setAttached, streaming,
     focusedSource, setFocusedSource, modelChoice, setModelChoice, models, allNotes,
     local, routing, localModels, cloudModels, noAI, currentModelLabel, lastAssistant, panelSources,
-    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote, privacyLine,
-    threadRef, inputRef,
+    send, stop, newChat, deleteChat, retryWithCloud, regenerate, saveAsNote, copyText, privacyLine,
+    toast, dismissToast, notify, threadRef, inputRef,
   };
 }

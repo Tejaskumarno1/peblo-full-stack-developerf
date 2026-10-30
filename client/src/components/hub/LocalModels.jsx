@@ -24,6 +24,7 @@ export default function LocalModels({ variant = 'soft' }) {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['local-models'] });
   const hw = data.hardware || {};
+  const catalog = data.catalog || [];
   const pullOf = (id) => data.pulls?.find((j) => j.model === id);
   const chatModel = (settings?.ollamaModel || 'llama3.2').replace(/:latest$/, '');
   const embedModel = (settings?.ollamaEmbedModel || 'nomic-embed-text').replace(/:latest$/, '');
@@ -51,20 +52,22 @@ export default function LocalModels({ variant = 'soft' }) {
     try { await aiAPI.localRemove(m.id); } catch (e) { setError(e.response?.data?.error || 'Could not remove it.'); }
     refresh();
   };
-  const use = (m) => updateSettings(m.kind === 'search' ? { ollamaEnabled: true, ollamaEmbedModel: m.id } : { ollamaEnabled: true, ollamaModel: m.id });
+  const use = async (m) => {
+    try { await updateSettings(m.kind === 'search' ? { ollamaEnabled: true, ollamaEmbedModel: m.id } : { ollamaEnabled: true, ollamaModel: m.id }); } catch { setError('Could not save that choice.'); }
+  };
   const setUp = async () => {
     setError('');
-    for (const m of data.catalog.filter((x) => (x.id === data.recommendedChat || x.kind === 'search') && !x.installed)) {
+    for (const m of catalog.filter((x) => (x.id === data.recommendedChat || x.kind === 'search') && !x.installed)) {
       try { await aiAPI.localPull(m.id); } catch (e) { setError(e.response?.data?.error || 'Could not start the download.'); }
     }
-    await updateSettings({ ollamaEnabled: true, ollamaModel: data.recommendedChat });
+    try { await updateSettings({ ollamaEnabled: true, ollamaModel: data.recommendedChat }); } catch { setError('Could not save that choice.'); }
     refresh();
   };
   const busy = data.pulls?.some((j) => !j.done);
-  const todo = data.catalog.filter((m) => (m.id === data.recommendedChat || m.kind === 'search') && !m.installed);
+  const todo = catalog.filter((m) => (m.id === data.recommendedChat || m.kind === 'search') && !m.installed);
 
-  const rec = data.catalog.find((m) => m.id === data.recommendedChat);
-  const fmt = (n) => (n >= 10 ? Math.round(n) : n.toFixed(1));
+  const rec = catalog.find((m) => m.id === data.recommendedChat);
+  const fmt = (n) => (n >= 10 ? Math.round(n) : Number(n || 0).toFixed(1));
 
   return (
     <section className={`lm lm-${variant}`} aria-labelledby="lm-title" data-testid="local-models">
@@ -96,7 +99,7 @@ export default function LocalModels({ variant = 'soft' }) {
                 <div className="lm-act" style={{ flex: '1 1 220px', minWidth: 220 }}>
                   <div className="lm-bar" role="progressbar" aria-label="Installing Ollama" aria-valuenow={data.install.percent || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${data.install.status === 'installing' ? 100 : data.install.percent}%` }} /></div>
                   <span className="lm-pct">{data.install.status === 'installing' ? 'Installing…' : `${data.install.percent}%`}</span>
-                  {data.install.status === 'downloading' && <button type="button" className="lm-link" aria-label="Cancel install" onClick={() => aiAPI.localInstallCancel().then(refresh)}><X size={14} /></button>}
+                  {data.install.status === 'downloading' && <button type="button" className="lm-link" aria-label="Cancel install" onClick={() => aiAPI.localInstallCancel().catch(() => {}).then(refresh)}><X size={14} /></button>}
                 </div>
               )
               : data.canInstall
@@ -120,7 +123,7 @@ export default function LocalModels({ variant = 'soft' }) {
       {error && <p role="alert" className="lm-err">{error}</p>}
 
       <ul className="lm-grid">
-        {data.catalog.map((m) => {
+        {catalog.map((m) => {
           const job = pullOf(m.id);
           const pulling = job && !job.done;
           const failed = job?.done && job.error;

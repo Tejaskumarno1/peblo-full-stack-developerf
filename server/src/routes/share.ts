@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate, verifyToken } from '../middleware/auth.js';
 import { saveNoteMerged } from '../services/noteSave.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { accessFor, approvalOn, listWaiting, guestHash, SESSION_RE } from '../services/shareAccess.js';
 
 /*
@@ -20,6 +21,10 @@ const LIVE = () => ({ OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
   return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
+}
+/** A turned-off link leaves nothing behind: guests, presence, blocks, read stats, short code. */
+async function purgeToken(kind: string, token: string) {
+  await Promise.all(['share_viewers', 'share_guests', 'share_blocked', 'share_reads', 'share_settings'].map((t) => prisma.$executeRawUnsafe(`DELETE FROM ${t} WHERE kind = $1 AND share_token = $2`, kind, token))).catch(() => {});
 }
 async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false, expiresAt: Date | null = null) {
   const data = { shareToken: token, shareEdit: token ? edit : false, shareExpiresAt: token ? expiresAt : null };
@@ -143,7 +148,7 @@ shareRoutes.post('/:kind/:id/viewers/:vid/role', async (req, res, next) => {
 
 // GET /api/share/:kind/:id/short -> a short link (/l/abc123) for the same page, made once and kept
 const CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
-const newCode = () => Array.from(crypto.randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+const newCode = () => Array.from(crypto.randomBytes(10), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
 shareRoutes.get('/:kind/:id/short', async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
@@ -277,7 +282,9 @@ shareRoutes.delete('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
+    const old = row.shareToken;
     await setToken(kind, row.id, null);
+    if (old) await purgeToken(kind, old);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -301,7 +308,9 @@ const prunePresence = () => Promise.all([
   prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\''),
   prisma.$executeRawUnsafe('DELETE FROM share_blocked WHERE at < NOW() - INTERVAL \'7 days\''),
   prisma.$executeRawUnsafe("DELETE FROM share_guests WHERE status = 'waiting' AND at < NOW() - INTERVAL '1 hour'"),
-]).catch(() => {});
+  prisma.$executeRawUnsafe("DELETE FROM share_guests WHERE status = 'declined' AND role IS NULL AND at < NOW() - INTERVAL '1 day'"),
+  prisma.$executeRawUnsafe("DELETE FROM share_reads WHERE last_at < NOW() - INTERVAL '30 days'"),
+]).then(() => { const now = Date.now(); for (const [k, v] of viewerNames) if (v.expiresAt <= now) viewerNames.delete(k); }).catch(() => {});
 const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
@@ -377,14 +386,14 @@ publicRoutes.delete('/:kind/:token', authenticate, async (req, res, next) => {
     const row = await shareOwner(kind, String(req.params.token), req.user!.id);
     if (!row) return res.status(404).json({ error: 'This link is not yours to turn off.' });
     await setToken(kind, row.id, null);
-    await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2', kind, req.params.token);
+    await purgeToken(kind, String(req.params.token));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
 // Anonymous visitors are represented as Guests; signed-in visitors may appear by their Peblo display name.
 // No email, IP address, or other account detail is returned. Inactive sessions expire automatically.
-publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
+publicRoutes.post('/:kind/:token/presence', (req, res, next) => guestPresenceLimit(req, res, next), async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
@@ -409,6 +418,7 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
       else {
         const profile = await prisma.user.findUnique({ where: { id: user.id }, select: { name: true } });
         name = profile?.name?.trim().slice(0, 80) || 'Peblo member';
+        if (viewerNames.size >= 1000) viewerNames.delete(viewerNames.keys().next().value as string); // oldest entry out: the cache cannot grow without bound
         viewerNames.set(user.id, { name, expiresAt: Date.now() + 5 * 60_000 });
       }
     }
@@ -428,7 +438,7 @@ publicRoutes.post('/:kind/:token/presence', async (req, res, next) => {
 });
 
 // POST /api/public/:kind/:token/knock { sessionId, name } -> a guest asks to be let in (only matters when the owner asked for approval).
-publicRoutes.post('/:kind/:token/knock', async (req, res, next) => {
+publicRoutes.post('/:kind/:token/knock', (req, res, next) => guestKnockLimit(req, res, next), async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
@@ -441,6 +451,8 @@ publicRoutes.post('/:kind/:token/knock', async (req, res, next) => {
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     if (!(await approvalOn(kind, token))) return res.json({ status: 'admitted' });
+    const seen = await prisma.$queryRawUnsafe<{ n: number }[]>('SELECT COUNT(*)::int AS n FROM share_guests WHERE kind = $1 AND share_token = $2 AND status = \'waiting\' AND session_id <> $3', kind, token, sessionId);
+    if ((seen[0]?.n ?? 0) >= 500) return res.status(429).json({ error: 'Too many people are waiting. Try again later.' });
     const rows = await prisma.$queryRawUnsafe<{ status: string }[]>(
       "INSERT INTO share_guests (kind, share_token, session_id, name, status, at) VALUES ($1, $2, $3, $4, 'waiting', NOW()) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET name = EXCLUDED.name, at = NOW() RETURNING status",
       kind, token, sessionId, cleanName(req.body?.name));
@@ -454,12 +466,12 @@ publicRoutes.get('/note/:token/polls', async (req, res, next) => {
     const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
-    if (!acc.allowed) return res.json({ polls: [] });
+    if (!acc.allowed || (await isBlocked('note', req.params.token, req.query.sid))) return res.json({ polls: [] });
     const sid = typeof req.query.sid === 'string' && SESSION_RE.test(req.query.sid) ? req.query.sid : null;
     res.json({ polls: await pollsFor(note.id, sid, false) });
   } catch (e) { next(e); }
 });
-publicRoutes.post('/note/:token/polls/:pid/vote', async (req, res, next) => {
+publicRoutes.post('/note/:token/polls/:pid/vote', (req, res, next) => guestWriteLimit(req, res, next), async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const sid = req.body?.sessionId;
@@ -480,7 +492,7 @@ publicRoutes.post('/note/:token/polls/:pid/vote', async (req, res, next) => {
 });
 
 // POST /api/public/:kind/:token/extend-request { sessionId, name } -> "please keep this link going": the owner is told
-publicRoutes.post('/:kind/:token/extend-request', async (req, res, next) => {
+publicRoutes.post('/:kind/:token/extend-request', (req, res, next) => guestWriteLimit(req, res, next), async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
@@ -520,6 +532,7 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
     if (!acc.allowed) return res.json({ kind: 'note', waiting: acc.waiting || 'waiting' });
+    if (await isBlocked('note', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const st = (await prisma.$queryRawUnsafe<{ style: string | null }[]>('SELECT style FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0]?.style || null;
     res.json({ ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
   } catch (e) { next(e); }
@@ -539,6 +552,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
     const acc = await accessFor('todo', req.params.token, req.query.sid, !!t.shareEdit, await ownerReq(req, 'todo', req.params.token));
     if (!acc.allowed) return res.json({ kind: 'todo', waiting: acc.waiting || 'waiting' });
+    if (await isBlocked('todo', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     res.json({
       kind: 'todo', text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline,
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
@@ -548,10 +562,16 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
 });
 
 const MAX_NOTE = 8_000_000;
+// Unauthenticated writes: a tighter per-address cap than the global API limit (poll votes and extension requests).
+const guestWriteLimit = rateLimit({ windowMs: 60_000, max: 30, message: 'Too many requests. Wait a minute and try again.' });
+// Per-address caps for the public link handlers. Autosave through an edit link is frequent, so saves get a roomy limit.
+const guestSaveLimit = rateLimit({ windowMs: 60_000, max: 300, message: 'Saving too fast. Wait a moment and try again.' });
+const guestKnockLimit = rateLimit({ windowMs: 60_000, max: 30, message: 'Too many requests. Wait a minute and try again.' });
+const guestPresenceLimit = rateLimit({ windowMs: 60_000, max: 120, message: 'Too many requests. Wait a moment and try again.' });
 
 // PUT /api/public/note/:token { title?, content, baseUpdatedAt, force? } -> save an edit made through an "can edit" link.
 // If the owner (or someone else) saved after the editor opened the note, answer 409 with the latest copy instead of overwriting.
-publicRoutes.put('/note/:token', async (req, res, next) => {
+publicRoutes.put('/note/:token', (req, res, next) => guestSaveLimit(req, res, next), async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
@@ -566,7 +586,7 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
     // Both people's edits are merged; the write is conditional so two saves at the same moment cannot overwrite each other.
     const r = await saveNoteMerged(
       { id: note.id, shareToken: req.params.token, isDeleted: false },
-      { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true, by: String(req.body?.name || '').trim().slice(0, 40) || undefined },
+      { content, title: typeof title === 'string' ? title.slice(0, 500) : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true, by: req.body?.name ? cleanName(req.body.name) : undefined },
     );
     if (r.status === 'missing') return res.status(404).json({ error: 'This link is not shared any more.' });
     if (r.status === 'conflict') return res.status(409).json({ error: 'Someone else changed the same words while you were editing.', latest: r.latest });
@@ -578,7 +598,7 @@ publicRoutes.put('/note/:token', async (req, res, next) => {
 });
 
 // PUT /api/public/todo/:token { completed?, text? } -> an editor can tick the task off or reword it.
-publicRoutes.put('/todo/:token', async (req, res, next) => {
+publicRoutes.put('/todo/:token', (req, res, next) => guestSaveLimit(req, res, next), async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const t = await prisma.todo.findFirst({ where: { shareToken: req.params.token, ...LIVE() }, select: { id: true, shareEdit: true } });
@@ -586,6 +606,7 @@ publicRoutes.put('/todo/:token', async (req, res, next) => {
     const acc = await accessFor('todo', req.params.token, req.body?.sessionId, !!t.shareEdit);
     if (!acc.allowed) return res.status(403).json({ error: 'Waiting for the owner to let you in.', waiting: acc.waiting || 'waiting' });
     if (!acc.canEdit) return res.status(403).json({ error: 'This link is view only.' });
+    if (await isBlocked('todo', req.params.token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const data: { completed?: boolean; text?: string } = {};
     if (typeof req.body?.completed === 'boolean') data.completed = req.body.completed;
     if (typeof req.body?.text === 'string' && req.body.text.trim()) data.text = req.body.text.trim().slice(0, 500);

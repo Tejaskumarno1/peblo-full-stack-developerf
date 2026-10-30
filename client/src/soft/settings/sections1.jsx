@@ -174,8 +174,8 @@ export function AccountsSection() {
     setPwBusy(true); setPwMsg(null);
     try {
       const { data } = await authAPI.changePassword({ currentPassword: pw.current, newPassword: pw.next });
-      setToken(data.token); // this device stays signed in, every other device is signed out
-      if (user) { forgetAccount(me); const list = getSavedAccounts(); localStorage.setItem('peblo-accounts', JSON.stringify([{ id: me, email: user.email, name: user.name || '', token: getToken() }, ...list].slice(0, 3))); }
+      if (data?.token) setToken(data.token); // this device stays signed in, every other device is signed out
+      if (user) { forgetAccount(me); const list = getSavedAccounts(); localStorage.setItem('peblo-accounts', JSON.stringify([{ id: me, email: user.email, name: user.name || '', avatar: user.avatar || '', token: getToken() }, ...list].slice(0, 3))); }
       setAccounts(getSavedAccounts());
       setPw({ current: '', next: '', again: '' });
       setPwMsg({ ok: true, text: 'Password changed. Your other devices were signed out.' });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Link2, Copy, Check, Bot } from 'lucide-react';
 import api from '../api/client';
 import { usePublicUrl } from '../api/publicUrl';
@@ -17,6 +17,9 @@ export default function ShareDialog({ kind, id, title, onClose }) {
   const [copied, setCopied] = useState(false);
   const [botCopied, setBotCopied] = useState(false);
   const [error, setError] = useState('');
+  const dlg = useRef(null);
+  const timers = useRef([]);
+  useEffect(() => { dlg.current?.focus(); const t = timers.current; return () => t.forEach(clearTimeout); }, []); // focus inside so Escape works
 
   useEffect(() => {
     let live = true;
@@ -47,18 +50,18 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     setBusy(false);
   };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(url); } catch { /* the box is selectable as a fallback */ }
-    setCopied(true); setTimeout(() => setCopied(false), 1800);
+    try { await navigator.clipboard.writeText(url); } catch { setError('Could not copy. Select the link and copy it by hand.'); return; }
+    setError(''); setCopied(true); timers.current.push(setTimeout(() => setCopied(false), 1800));
   };
 
   const copyBot = async () => {
-    try { await navigator.clipboard.writeText(url + '.md'); } catch { /* selectable below */ }
-    setBotCopied(true); setTimeout(() => setBotCopied(false), 1800);
+    try { await navigator.clipboard.writeText(url + '.md'); } catch { setError('Could not copy. Select the link and copy it by hand.'); return; }
+    setError(''); setBotCopied(true); timers.current.push(setTimeout(() => setBotCopied(false), 1800));
   };
 
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="s-share" role="dialog" aria-label={`Share this ${kind === 'note' ? 'note' : 'task'}`}>
+      <div className="s-share" role="dialog" aria-modal="true" tabIndex={-1} ref={dlg} aria-label={`Share this ${kind === 'note' ? 'note' : 'task'}`}>
         <div className="s-share-head">
           <div><b>Share this {kind === 'note' ? 'note' : 'task'}</b><small>{title || (kind === 'note' ? 'Untitled' : 'Task')}</small></div>
           <button type="button" className="s-capture-close" aria-label="Close" onClick={onClose}><X size={16} strokeWidth={2.4} /></button>

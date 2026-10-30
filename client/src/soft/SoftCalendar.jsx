@@ -21,7 +21,7 @@ export default function SoftCalendar() {
   const from = gridStart < weekStart ? gridStart : weekStart;
   const to = addDays(from, 62);
 
-  const { data: todos = [] } = useQuery({
+  const { data: todos = [], isError } = useQuery({
     queryKey: ['todos', 'range', 'soft-cal', from.toDateString()],
     queryFn: () => todosAPI.getRange(from.toISOString(), to.toISOString()).then((r) => r.data.todos || []),
   });
@@ -139,6 +139,7 @@ export default function SoftCalendar() {
         </section>
       </div>
 
+      {isError && <p className="s-empty small" role="alert">Could not load your schedule. Check your connection and try again.</p>}
       <section className="s-week" aria-label="Schedule">
         {view === 'month' ? (
           <div className="s-month">

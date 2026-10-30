@@ -9,6 +9,7 @@ import { topicName, levelOf, levelVar, tagsOfNote, agoText } from './orbitUtils'
 import { snippetOf } from '../soft/softUtils';
 import useNoteSearch from '../hooks/useNoteSearch';
 import { downloadText, safeFileName } from '../utils/download';
+import { TopicIcon } from './OrbitIcons';
 
 // PEB-124/125/126/127/128/129/130/131/132/133/134/135: the Orbit "Every note" list.
 const BIG_GROUP = 12; // a group with more notes than this starts folded
@@ -19,6 +20,7 @@ const PIN_KEY = 'peblo-orbit-pinned';
 const RECENT_KEY = 'peblo-orbit-recent';
 
 const read = (key, fallback) => { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; } };
+const readList = (key) => { const v = read(key, []); return Array.isArray(v) ? v : []; }; // old or hand-edited storage must not break .includes()
 const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ } };
 
 const DAY = 86400000;
@@ -70,8 +72,8 @@ export default function OrbitNoteList({ onNew }) {
   const [range, setRange] = useState('any');
   const [openMap, setOpenMap] = useState({});
   const [shown, setShown] = useState({});
-  const [pinned, setPinned] = useState(() => read(PIN_KEY, []));
-  const [recent, setRecent] = useState(() => read(RECENT_KEY, []));
+  const [pinned, setPinned] = useState(() => readList(PIN_KEY));
+  const [recent, setRecent] = useState(() => readList(RECENT_KEY));
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState([]);
   const [tagDraft, setTagDraft] = useState('');
@@ -79,7 +81,7 @@ export default function OrbitNoteList({ onNew }) {
   const [msg, setMsg] = useState('');
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   // Saved searches are shared with the other styles (same storage key).
-  const [savedQ, setSavedQ] = useState(() => read('peblo-saved-searches', []));
+  const [savedQ, setSavedQ] = useState(() => readList('peblo-saved-searches'));
   const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); write('peblo-saved-searches', n); };
   const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); write('peblo-saved-searches', n); };
 
@@ -179,7 +181,7 @@ export default function OrbitNoteList({ onNew }) {
     setBusy(true);
     let failed = 0;
     const ids = special.map((n) => n.id);
-    for (const id of ids) { try { await notesAPI.delete(id); } catch { failed += 1; } }
+    for (const id of ids) { try { await notesAPI.delete(id, { permanent: true }); } catch { failed += 1; } }
     setBusy(false);
     setConfirmEmpty(false);
     refresh();
@@ -214,14 +216,16 @@ export default function OrbitNoteList({ onNew }) {
         </button>
       )}
       <Link to={`/notes/${n.id}`} className="o-note-tile" onClick={(e) => { if (picking) { e.preventDefault(); togglePick(n.id); } else opened(n.id); }}>
-        <span className="t"><LiveDot id={n.id} />{n.meta?.emoji ? `${n.meta.emoji} ` : ''}<Hit text={n.title || 'Untitled'} q={q} /></span>
+        <span className="t"><LiveDot id={n.id} />{n.meta?.emoji ? <><TopicIcon value={n.meta.emoji} size={14} />{' '}</> : null}<Hit text={n.title || 'Untitled'} q={q} /></span>
         <span className="s">{snippetFor(n.content, q) ? <Hit text={snippetFor(n.content, q)} q={q} /> : 'Empty note'}</span>
         <span className="m">{archived === 'trash' && n.deletedAt ? `DELETED ${agoText(n.deletedAt).toUpperCase()}` : sort === 'created' ? `CREATED ${agoText(n.createdAt).toUpperCase()}` : `EDITED ${agoText(n.updatedAt).toUpperCase()}`}</span>
       </Link>
       {archived && !picking && (
         <button type="button" className="o-chip o-restore" disabled={busy} aria-label={`${archived === 'trash' ? 'Restore' : 'Unarchive'} ${n.title || 'Untitled'}`}
           onClick={async () => {
-            try { await (archived === 'trash' ? notesAPI.restore(n.id) : notesAPI.archive(n.id)); setMsg(archived === 'trash' ? 'Restored.' : 'Moved back to your notes.'); refresh(); } catch (e) { console.error(e); setMsg("Couldn't do that. Try again."); }
+            if (busy) return;
+            setBusy(true);
+            try { await (archived === 'trash' ? notesAPI.restore(n.id) : notesAPI.archive(n.id)); setMsg(archived === 'trash' ? 'Restored.' : 'Moved back to your notes.'); refresh(); } catch (e) { console.error(e); setMsg("Couldn't do that. Try again."); } finally { setBusy(false); }
           }}>
           {archived === 'trash' ? 'Restore' : 'Unarchive'}
         </button>

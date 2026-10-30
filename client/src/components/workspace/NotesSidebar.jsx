@@ -159,7 +159,7 @@ function NotesSidebar({
                     aria-current={active ? 'true' : undefined}
                     className={`nl-row${active ? ' active' : ''}`}
                     onClick={() => selectNote(note)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNote(note); } }}
+                    onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectNote(note); } }}
                   >
                     <div className="nl-row-top">
                       <span className="nl-title">{note.title || 'Untitled'}</span>

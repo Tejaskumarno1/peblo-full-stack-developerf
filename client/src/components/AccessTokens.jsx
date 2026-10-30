@@ -32,9 +32,10 @@ export default function AccessTokens() {
   };
   const mcpUrl = `${publicUrl || window.location.origin}/mcp`;
   const configFor = (tok) => JSON.stringify({ mcpServers: { peblo: { command: 'npx', args: ['-y', 'mcp-remote', mcpUrl, '--header', `Authorization: Bearer ${tok}`] } } }, null, 2);
-  const copyConfig = async () => { try { await navigator.clipboard.writeText(configFor(fresh)); setCopied('config'); } catch { /* select by hand */ } };
+  const copyFailed = () => setMsg('Could not copy. Select the text and copy it by hand.');
+  const copyConfig = async () => { try { await navigator.clipboard.writeText(configFor(fresh)); setCopied('config'); } catch { copyFailed(); } };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { /* select the text by hand */ }
+    try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { copyFailed(); }
   };
 
   return (

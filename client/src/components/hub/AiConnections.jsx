@@ -66,28 +66,32 @@ export default function AiConnections({ theme }) {
   const [model, setModel] = useState('');
   const [state, setState] = useState({ busy: false, checking: false, error: '', note: '' });
   const [pickProvider, setPickProvider] = useState(false);
+  const seq = useRef(0);                          // bumped by every new check and every edit, so an older answer is ignored
   const checked = useRef('');                     // the key (and provider) already looked at, so it is not asked twice
 
   const connections = data?.connections || [];
   const providers = data?.providers || [];
   const isCustom = provider === 'custom';
   const refresh = () => { queryClient.invalidateQueries({ queryKey: ['ai-connections'] }); queryClient.invalidateQueries({ queryKey: ['hub-models'] }); };
-  const reset = () => { setKey(''); setProvider(''); setAddress(''); setFound(null); setModel(''); setPickProvider(false); checked.current = ''; };
+  const reset = () => { setKey(''); setProvider(''); setAddress(''); setFound(null); setModel(''); setPickProvider(false); checked.current = ''; seq.current += 1; };
 
   const check = async () => {
     const k = key.trim();
     checked.current = `${provider}|${k}`;
+    const mine = ++seq.current;
     setState({ busy: false, checking: true, error: '', note: '' }); setFound(null);
     try {
       const { data: r } = await aiConnectionsAPI.detect({ key: k, provider: provider || undefined, baseUrl: isCustom ? address : undefined });
+      if (mine !== seq.current) return;
       if (!r.ok) {
         if (r.needsProvider) setPickProvider(true);
         setState({ busy: false, checking: false, error: r.error || 'That key was not accepted.', note: '' });
         return;
       }
-      setFound(r); setModel(r.suggestedModel || r.models?.[0] || '');
+      setFound({ ...r, models: r.models || [] }); setModel(r.suggestedModel || r.models?.[0] || '');
       setState({ busy: false, checking: false, error: '', note: '' });
     } catch (e) {
+      if (mine !== seq.current) return;
       setState({ busy: false, checking: false, error: errText(e, 'Could not check that key.'), note: '' });
     }
   };
@@ -138,18 +142,18 @@ export default function AiConnections({ theme }) {
       <form className="ac-form" onSubmit={(e) => { e.preventDefault(); check(); }}>
         <label className="ac-sr" htmlFor="ac-key">API key</label>
         <input id="ac-key" type="password" value={key} placeholder={isCustom ? 'API key (leave empty if the server needs none)' : 'Paste an API key…'} autoComplete="off" spellCheck={false}
-          onChange={(e) => { setKey(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }} />
+          onChange={(e) => { seq.current += 1; setKey(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }} />
         {isCustom && <button type="submit" className="ac-btn" disabled={state.checking || !address.trim()}>{state.checking ? 'Checking…' : 'Check'}</button>}
       </form>
 
       {(pickProvider || provider) && (
         <div className="ac-pick">
           <label htmlFor="ac-provider">Company</label>
-          <select id="ac-provider" value={provider} onChange={(e) => { setProvider(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }}>
+          <select id="ac-provider" value={provider} onChange={(e) => { seq.current += 1; setProvider(e.target.value); setFound(null); setState({ busy: false, checking: false, error: '', note: '' }); }}>
             <option value="">Pick one…</option>
             {providers.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
-          {isCustom && <input aria-label="Server address" value={address} onChange={(e) => { setAddress(e.target.value); setFound(null); }} placeholder={data?.localAddressesAllowed ? 'http://127.0.0.1:1234/v1' : 'https://api.example.com/v1'} spellCheck={false} />}
+          {isCustom && <input aria-label="Server address" value={address} onChange={(e) => { seq.current += 1; setAddress(e.target.value); setFound(null); }} placeholder={data?.localAddressesAllowed ? 'http://127.0.0.1:1234/v1' : 'https://api.example.com/v1'} spellCheck={false} />}
           {hint && <span className="ac-sub">{isCustom ? hint : `Get a key at ${hint}`}{isCustom && !data?.localAddressesAllowed ? ' It must be a public https:// address.' : ''}</span>}
         </div>
       )}

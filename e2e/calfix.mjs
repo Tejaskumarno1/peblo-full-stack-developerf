@@ -17,8 +17,13 @@ try {
 
   await page.goto(base + '/notes');
   await page.locator('.s-note-row').first().waitFor({ timeout: 15000 });
-  await page.getByRole('button', { name: /^Group/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Tag' }).click();
+  // Group lives in the one View menu (dialog "View options", radiogroup "Group by")
+  const pickGroup = async (name) => {
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('dialog', { name: 'View options' }).getByRole('radio', { name, exact: true }).click();
+    await page.keyboard.press('Escape');
+  };
+  await pickGroup('Tag');
   await page.waitForTimeout(300);
   const heads = page.locator('.s-grp-toggle');
   check('each tag group has a collapse header', (await heads.count()) >= 2);
@@ -29,8 +34,7 @@ try {
   check('collapsing one tag hides only its notes', after < before && after > 0, `${before} -> ${after}`);
   await heads.first().click();
   check('expanding brings them back', (await page.locator('.s-note-row').count()) === before);
-  await page.getByRole('button', { name: /^Group/ }).click();
-  await page.getByRole('menuitemradio', { name: 'Date' }).click();
+  await pickGroup('Date');
   await page.waitForTimeout(300);
   const dh = page.locator('.s-grp-toggle');
   check('date groups have collapse headers', (await dh.count()) >= 1);

@@ -39,7 +39,7 @@ try {
 
   await page.goto(base + '/notes?filter=trash');
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
-  await page.getByRole('button', { name: 'Empty Trash' }).click();
+  await page.getByRole('button', { name: 'Empty', exact: true }).click();
   await page.waitForTimeout(1200);
   const left = (await api('GET', '/api/notes?deleted=true')).notes || [];
   check('Empty Trash deletes the notes for good', !left.some((x) => x.id === t1.id || x.id === t2.id), left.map((x) => x.title).join('|'));

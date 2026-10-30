@@ -815,7 +815,7 @@ export default function SharedPage() {
 
   useEffect(() => {
     const scrollFromHash = () => {
-      const id = decodeURIComponent(window.location.hash.slice(1));
+      let id = ''; try { id = decodeURIComponent(window.location.hash.slice(1)); } catch { /* a malformed #fragment is ignored */ }
       if (id) requestAnimationFrame(() => scrollToHeading(id, 'auto'));
     };
     window.addEventListener('hashchange', scrollFromHash);

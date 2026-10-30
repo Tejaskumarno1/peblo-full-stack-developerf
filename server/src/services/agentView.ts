@@ -20,18 +20,34 @@ export function origin(req: Request) {
 
 type Img = { id: string; url: string; description: string | null };
 
+// Anonymous readers must not be able to run up the owner's AI bill: a picture is tried once per 10 minutes (even when the AI fails),
+// and one owner's AI describes at most 30 pictures per hour through share links. Successful descriptions are stored and never redone.
+const tried = new Map<string, number>();
+const spent = new Map<string, { n: number; reset: number }>();
+const allowDescribe = (userId: string, id: string) => {
+  const now = Date.now();
+  if (tried.size > 2000) for (const [k, t] of tried) if (t < now - 600_000) tried.delete(k);
+  if ((tried.get(id) ?? 0) > now - 600_000) return false;
+  const s = spent.get(userId);
+  if (!s || s.reset < now) spent.set(userId, { n: 1, reset: now + 3_600_000 });
+  else if (s.n >= 30) return false;
+  else s.n++;
+  tried.set(id, now);
+  return true;
+};
+
 async function imagesOf(content: string, userId: string, base: string): Promise<Img[]> {
   const ids = [...new Set([...content.matchAll(MEDIA)].map((m) => m[1]))];
   const out: Img[] = [];
   for (const [i, id] of ids.entries()) {
-    const rows = (await prisma.$queryRaw`SELECT description, mime, size FROM media WHERE id = ${id}`.catch(() => [])) as any[];
+    const rows = (await prisma.$queryRaw`SELECT description, mime, size FROM media WHERE id = ${id} AND user_id = ${userId}`.catch(() => [])) as any[];
     if (!rows.length) continue;
     let description: string | null = rows[0].description || null;
-    if (!description && i < MAX_DESCRIBE && rows[0].size < 4_000_000) {
+    if (!description && i < MAX_DESCRIBE && rows[0].size < 4_000_000 && allowDescribe(userId, id)) {
       try {
-        const data: any[] = await prisma.$queryRaw`SELECT data FROM media WHERE id = ${id}`;
+        const data: any[] = await prisma.$queryRaw`SELECT data FROM media WHERE id = ${id} AND user_id = ${userId}`;
         description = await describeImage(userId, Buffer.from(data[0].data).toString('base64'), rows[0].mime);
-        if (description) await prisma.$executeRaw`UPDATE media SET description = ${description}, described_at = now() WHERE id = ${id}`;
+        if (description) await prisma.$executeRaw`UPDATE media SET description = ${description}, described_at = now() WHERE id = ${id} AND user_id = ${userId}`;
       } catch { /* no AI set up, or it failed: the picture is still listed with its address */ }
     }
     out.push({ id, url: `${base}/api/media/${id}`, description });

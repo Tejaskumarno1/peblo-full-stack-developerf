@@ -31,7 +31,7 @@ export default function DeckStage({ role, deck, lead, aw, laser, onLeave }) {
   const at = presenter ? i : (mine ?? leadAt);
   const n = count || (presenter ? 0 : lead?.deck?.n || 0);
 
-  useEffect(() => { if (!buf) return undefined; let off = false; readNotes(buf).then((r) => { if (!off) setNotes(r); }); return () => { off = true; }; }, [buf]);
+  useEffect(() => { if (!buf) return undefined; let off = false; readNotes(buf).then((r) => { if (!off) setNotes(r); }).catch(() => { /* no speaker notes in this file */ }); return () => { off = true; }; }, [buf]);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
 
   // the presenter's place, for everyone following

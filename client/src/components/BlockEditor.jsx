@@ -9,7 +9,7 @@ import {
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Presentation, FileText, FileSpreadsheet, File as FileGlyph } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Presentation, FileText, FileSpreadsheet, File as FileGlyph, Lightbulb, TriangleAlert, CircleCheck, Info, ListTree, Clock, CalendarDays, Link2, LayoutTemplate } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,6 +44,7 @@ const tell = (state, message) => window.dispatchEvent(new CustomEvent('pb-upload
 async function uploadFile(file) {
   tell('working', /^image\//.test(file.type) ? 'Converting the picture to WebP…' : 'Adding the file…');
   try {
+    if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name || 'That file'} is over 25 MB`); // refuse before the browser tries to decode it
     const a = await fileToAttachment(file);
     tell('done', a.isImage ? `Picture added (${Math.max(1, Math.round(a.size / 1024))} KB)` : 'File added');
     return a.url;
@@ -63,15 +64,16 @@ const textOf = (content) => (Array.isArray(content) ? content.map((c) => (c.type
 // A picture made smaller than the column floats to its side, so the text beside it uses the space.
 const withLayout = (p) => {
   const q = [];
-  if (p.previewWidth) q.push(`pw=${Math.round(p.previewWidth)}`);
+  const pwOk = Number.isFinite(p.previewWidth) && p.previewWidth > 0;
+  if (pwOk) q.push(`pw=${Math.round(p.previewWidth)}`);
   if (p.textAlignment && p.textAlignment !== 'left') q.push(`ta=${p.textAlignment}`);
-  const ar = /^crop=([\d.]+)$/.exec(p.name || '');
+  const ar = /^crop=(\d+(?:\.\d+)?)$/.exec(p.name || '');
   if (ar) q.push(`ar=${ar[1]}`);
   const g = groupOf(p.url);
   if (g.gl === 'grid') q.push('gl=grid', `gc=${g.gc}`); else if (g.gl === 'row') q.push('gl=row');
   // the width of the column the size was chosen in ("rc") lets other screens keep the same proportions; "rp" is the size it was chosen at
   const had = new URLSearchParams(String(p.url).split('#').slice(1).join('#'));
-  if (p.previewWidth) {
+  if (pwOk) {
     const col = document.querySelector('.bn-editor > .bn-block-group')?.clientWidth || document.querySelector('.bn-editor')?.clientWidth || 0;
     const same = Number(had.get('rp')) === Math.round(p.previewWidth) && Number(had.get('rc')) > 0;
     const rc = same ? Number(had.get('rc')) : col;
@@ -122,13 +124,15 @@ function fromStorage(blocks) {
     if (b.type === 'image' && typeof b.props?.url === 'string' && /#(?:pw|ta|ar|gl|gc|rc|rp)=/.test(b.props.url)) {
       const [u, ...h] = b.props.url.split('#');
       const q = new URLSearchParams(h.join('#'));
-      const pw = Number(q.get('pw'));
+      const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? n : 0; }; // NaN, negative, Infinity and absurd sizes count as unset
+      const pw = num(q.get('pw'), 1, 10000);
       const ta = q.get('ta');
-      const ar = Number(q.get('ar'));
+      const ar = num(q.get('ar'), 0.1, 10);
       const gl = q.get('gl');
       const kp = [];
       if (gl === 'grid') kp.push('gl=grid', `gc=${Math.min(4, Math.max(2, Number(q.get('gc')) || 2))}`); else if (gl === 'row') kp.push('gl=row');
-      if (Number(q.get('rc')) > 0 && Number(q.get('rp')) > 0) kp.push(`rc=${Math.round(Number(q.get('rc')))}`, `rp=${Math.round(Number(q.get('rp')))}`);
+      const rcN = num(q.get('rc'), 1, 20000); const rpN = num(q.get('rp'), 1, 10000);
+      if (rcN > 0 && rpN > 0) kp.push(`rc=${Math.round(rcN)}`, `rp=${Math.round(rpN)}`);
       const keep = kp.length ? `#${kp.join('&')}` : '';
       return { ...b, props: { ...b.props, url: u + keep, ...(ar > 0 ? { name: `crop=${ar}`, caption: b.props.caption || b.props.name || '' } : {}), ...(pw > 0 ? { previewWidth: pw } : {}), ...(['left', 'center', 'right'].includes(ta) ? { textAlignment: ta } : {}) }, children };
     }
@@ -143,10 +147,12 @@ function fromStorage(blocks) {
 // Callouts, cropped pictures and picture groups are drawn with decorations (the editor rewrites attributes it did not set itself, so a decoration is what it keeps).
 // The plugin is handed to the editor when it is created: registering it later rebuilds the editor's plugin views, which switched off Undo in a live note.
 function makeDecoPlugin() {
+  let lastDoc = null; let lastSet = null; // the walk below is the whole document: only redo it when the document itself changed (not on every cursor move)
   return new Plugin({
     key: new PluginKey('pb-callouts'),
     props: {
       decorations(state) {
+        if (state.doc === lastDoc && lastSet) return lastSet;
         const out = [];
         state.doc.descendants((node, pos) => {
           if (node.type.name === 'blockGroup') {
@@ -168,7 +174,7 @@ function makeDecoPlugin() {
             return true;
           }
           if (node.type.name === 'image') {
-            const m = /^crop=([\d.]+)$/.exec(node.attrs?.name || '');
+            const m = /^crop=(\d+(?:\.\d+)?)$/.exec(node.attrs?.name || '');
             if (m) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-crop': m[1], style: `--pb-ar:${m[1]}` }));
             return false;
           }
@@ -178,7 +184,8 @@ function makeDecoPlugin() {
           if (k) out.push(Decoration.node(pos, pos + node.nodeSize, { 'data-callout': k[1] }));
           return false;
         });
-        return DecorationSet.create(state.doc, out);
+        lastDoc = state.doc; lastSet = DecorationSet.create(state.doc, out);
+        return lastSet;
       },
     },
   });
@@ -298,6 +305,7 @@ const TEMPLATES = {
   'Project brief': '## Goal\n\n\n## Why it matters\n\n\n## Scope\n\n- \n\n## Milestones\n\n- [ ] \n\n## Risks\n\n- \n',
   'Study notes': '## Topic\n\n## Key ideas\n\n- \n\n## Examples\n\n## Questions to revisit\n\n- \n\n## Summary\n\n',
 };
+const CALLOUT_ICON = { tip: Lightbulb, warn: TriangleAlert, ok: CircleCheck, info: Info };
 const CALLOUTS = [['💡', 'tip', 'Callout: tip'], ['⚠️', 'warn', 'Callout: warning'], ['✅', 'ok', 'Callout: done'], ['ℹ️', 'info', 'Callout: info']];
 const RECENT_KEY = 'peblo-slash-recent';
 const readRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
@@ -361,7 +369,8 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         if (!id || !(w0 > 0)) return;
         // keep the owner's proportions on this screen: a picture half the owner's column is half of this one
         const q = new URLSearchParams(String(c.querySelector('img')?.getAttribute('src') || '').split('#').slice(1).join('#'));
-        const rc = Number(q.get('rc')) || (guest ? 1090 : 0);
+        const rcN = Number(q.get('rc'));
+        const rc = Number.isFinite(rcN) && rcN > 0 && rcN < 20000 ? rcN : (guest ? 1090 : 0);
         const w = rc > 0 && Math.abs(rc - col) > 8 ? Math.floor(Math.min(col, w0 * col / rc) * 0.92) : w0;
         const sel = `.block-editor-container .bn-block-outer[data-id="${id}"]`;
         if (w >= col * 0.66 || col - w < 295) parts.push(`${sel} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }`);
@@ -709,24 +718,24 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (empty) editor.removeBlocks([cur]);
     };
     const extra = [
-      ...CALLOUTS.map(([emoji, kind, title]) => ({ title, onItemClick: () => insertCallout(emoji), aliases: ['callout', 'box', 'note', kind], group: 'Callouts', icon: <span style={{ fontSize: 15 }}>{emoji}</span>, subtext: 'A highlighted box for something to notice.' })),
+      ...CALLOUTS.map(([emoji, kind, title]) => ({ title, onItemClick: () => insertCallout(emoji), aliases: ['callout', 'box', 'note', kind], group: 'Callouts', icon: (() => { const I = CALLOUT_ICON[kind]; return <I size={16} />; })(), subtext: 'A highlighted box for something to notice.' })),
       { title: 'Table of contents', onItemClick: () => {
         const heads = editor.document.filter((b) => b.type === 'heading').map((b) => textOf(b.content).trim()).filter(Boolean);
         const cur = editor.getTextCursorPosition().block;
         if (!heads.length) { editor.insertBlocks([{ type: 'paragraph', content: 'Add some headings first, then insert the table of contents.' }], cur, 'after'); return; }
         editor.insertBlocks(heads.map((h) => ({ type: 'bulletListItem', content: h })), cur, 'after');
-      }, aliases: ['toc', 'contents', 'outline'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📑</span>, subtext: 'A list of this note\'s headings.' },
+      }, aliases: ['toc', 'contents', 'outline'], group: 'Insert', icon: <ListTree size={16} />, subtext: 'A list of this note\'s headings.' },
       ...(guest || !noteId ? [] : [{ title: 'Task from this line', onItemClick: async () => {
         const cur = editor.getTextCursorPosition().block;
         const prev = editor.getTextCursorPosition().prevBlock;
         const text = (textOf(cur.content).trim() || textOf(prev?.content).trim()).slice(0, 200);
         if (!text) return;
         try { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
-      }, aliases: ['task', 'todo', 'to-do'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>✅</span>, subtext: 'Turn this line (or the one above) into a task linked to this note.' }]),
-      { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🕒</span>, subtext: 'Type the time as text.' },
-      { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>📅</span>, subtext: 'Type today as text.' },
-      ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <span style={{ fontSize: 15 }}>🔗</span>, subtext: 'Pick one of your notes (or type [[).' }]),
-      ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <span style={{ fontSize: 15 }}>📄</span>, subtext: 'A ready layout to fill in.' })),
+      }, aliases: ['task', 'todo', 'to-do'], group: 'Insert', icon: <CheckSquare size={16} />, subtext: 'Turn this line (or the one above) into a task linked to this note.' }]),
+      { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <Clock size={16} />, subtext: 'Type the time as text.' },
+      { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <CalendarDays size={16} />, subtext: 'Type today as text.' },
+      ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <Link2 size={16} />, subtext: 'Pick one of your notes (or type [[).' }]),
+      ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <LayoutTemplate size={16} />, subtext: 'A ready layout to fill in.' })),
     ];
     const all = [...mediaItems, ...fileItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
@@ -855,7 +864,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {lightbox && (
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" />
-          <button type="button" aria-label="Close picture" onClick={() => setLightbox(null)}>✕</button>
+          <button type="button" aria-label="Close picture" onClick={() => setLightbox(null)}><X size={18} /></button>
         </div>
       )}
 

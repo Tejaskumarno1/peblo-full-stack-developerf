@@ -65,7 +65,10 @@ export async function protectExistingKeys() {
     const s: any = u.settings || {};
     if (KEY_FIELDS.some((k) => k in s)) {
       for (const k of KEY_FIELDS) {
-        if (s[k]) await saveKeys(u.id, { [k]: s[k] }).catch(() => {});
+        // Only drop the plain-text copy once the encrypted copy is saved; otherwise the key would be lost for good.
+        if (s[k]) {
+          try { await saveKeys(u.id, { [k]: s[k] }); } catch (e: any) { console.warn(`[keys] could not move a saved key for one account: ${e?.message || e}`); continue; }
+        }
         delete s[k];
       }
       await prisma.user.update({ where: { id: u.id }, data: { settings: s } });

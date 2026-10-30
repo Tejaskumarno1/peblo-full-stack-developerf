@@ -118,7 +118,7 @@ export function useKeyboardShortcut(key, callback, modifiers = { ctrl: false, sh
       if (!!mods.ctrl !== (e.ctrlKey || e.metaKey)) return;
       if (!!mods.shift !== e.shiftKey) return;
       if (!!mods.alt !== e.altKey) return;
-      if (e.key.toLowerCase() === key.toLowerCase()) {
+      if ((e.key || '').toLowerCase() === key.toLowerCase()) {
         e.preventDefault();
         e.stopPropagation();
         cbRef.current();

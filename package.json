@@ -31,7 +31,8 @@
     "db:sql": "node scripts/make-sql.mjs",
     "seed": "tsx scripts/seed.ts",
     "test": "npm run build:server && node scripts/smoke-test.mjs && node scripts/connections-unit.mjs && node scripts/uninstall-unit.mjs && node scripts/connections-test.mjs && node scripts/account-test.mjs",
-    "check:canvas": "node scripts/run-canvas-check.mjs"
+    "check:canvas": "node scripts/run-canvas-check.mjs",
+    "e2e": "node scripts/run-e2e.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

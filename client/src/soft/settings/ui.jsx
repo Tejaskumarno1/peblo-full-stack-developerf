@@ -140,11 +140,12 @@ export function CopyButton({ text, label = 'Copy' }) {
 /** Two-step button: first click asks, second click does it. No browser dialogs. */
 export function Confirm({ label, ask, onYes, danger, busy }) {
   const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
   if (!open) return <button type="button" className={`s-outline s-set-btn${danger ? ' danger' : ''}`} onClick={() => setOpen(true)}>{label}</button>;
   return (
     <span className="s-set-confirm" role="group" aria-label={ask}>
       <span>{ask}</span>
-      <button type="button" className={`s-set-btn ${danger ? 'danger-fill' : 's-accent-btn'}`} disabled={busy} onClick={async () => { await onYes(); setOpen(false); }}>Yes</button>
+      <button type="button" className={`s-set-btn ${danger ? 'danger-fill' : 's-accent-btn'}`} disabled={busy || working} onClick={async () => { if (working) return; setWorking(true); try { await onYes(); setOpen(false); } finally { setWorking(false); } }}>Yes</button>
       <button type="button" className="s-link-btn" onClick={() => setOpen(false)}>Cancel</button>
     </span>
   );

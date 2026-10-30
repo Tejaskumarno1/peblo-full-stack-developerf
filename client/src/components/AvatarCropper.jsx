@@ -30,6 +30,13 @@ export default function AvatarCropper({ file, onCancel, onSave }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Escape closes the dialog even when focus is still on the page behind it
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   const W = aspect.r >= 1 ? BOX : Math.round(BOX * aspect.r);
   const H = aspect.r >= 1 ? Math.round(BOX / aspect.r) : BOX;
   const rotated = turns % 2 === 1;
@@ -75,7 +82,7 @@ export default function AvatarCropper({ file, onCancel, onSave }) {
   };
 
   return createPortal(
-    <div className="pb-crop-back" role="dialog" aria-modal="true" aria-label="Crop your picture" onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
+    <div className="pb-crop-back" role="dialog" aria-modal="true" aria-label="Crop your picture">
       <div className="pb-crop">
         <div className="pb-crop-head"><b>Crop your picture</b><button type="button" aria-label="Close" onClick={onCancel}><X size={18} /></button></div>
         <div className="pb-crop-stage">

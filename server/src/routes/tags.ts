@@ -45,22 +45,35 @@ router.post('/rename', async (req, res, next) => {
     const src = await prisma.tag.findUnique({ where: { userId_name: { userId, name: from } } });
     const dst = await prisma.tag.findUnique({ where: { userId_name: { userId, name: to } } });
     let merged = false;
+    // Every write below goes in one transaction, so a merge never stops half way (notes moved but tasks not, or the reverse).
+    const ops: any[] = [];
     if (src && !dst) {
-      await prisma.tag.update({ where: { id: src.id }, data: { name: to } });
+      ops.push(prisma.tag.update({ where: { id: src.id }, data: { name: to } }));
     } else if (src && dst) {
       merged = true;
       const onDst = (await prisma.noteTag.findMany({ where: { tagId: dst.id }, select: { noteId: true } })).map((x) => x.noteId);
-      await prisma.noteTag.deleteMany({ where: { tagId: src.id, noteId: { in: onDst } } });
-      await prisma.noteTag.updateMany({ where: { tagId: src.id }, data: { tagId: dst.id } });
-      await prisma.tag.delete({ where: { id: src.id } });
+      ops.push(
+        prisma.noteTag.deleteMany({ where: { tagId: src.id, noteId: { in: onDst } } }),
+        prisma.noteTag.updateMany({ where: { tagId: src.id }, data: { tagId: dst.id } }),
+        prisma.tag.delete({ where: { id: src.id } }),
+      );
     }
 
-    const todos = await prisma.todo.findMany({ where: { userId }, select: { id: true, todoTags: true } });
+    // Only tasks that carry the topic are read; repeating series keep a copy for the tasks they will still create.
+    const has = { array_contains: [from] } as any;
+    const todos = await prisma.todo.findMany({ where: { userId, todoTags: has }, select: { id: true, todoTags: true } });
     for (const t of todos) {
       const tags = tagList(t.todoTags);
       if (!tags.includes(from)) continue;
-      await prisma.todo.update({ where: { id: t.id }, data: { todoTags: [...new Set(tags.map((x) => (x === from ? to : x)))] } });
+      ops.push(prisma.todo.update({ where: { id: t.id }, data: { todoTags: [...new Set(tags.map((x) => (x === from ? to : x)))] } }));
     }
+    const series = await prisma.todoSeries.findMany({ where: { userId, endedAt: null, todoTags: has }, select: { id: true, todoTags: true } });
+    for (const s of series) {
+      const tags = tagList(s.todoTags);
+      if (!tags.includes(from)) continue;
+      ops.push(prisma.todoSeries.update({ where: { id: s.id }, data: { todoTags: [...new Set(tags.map((x) => (x === from ? to : x)))] } }));
+    }
+    if (ops.length) await prisma.$transaction(ops);
     try {
       const other = await prisma.topicMastery.findFirst({ where: { userId, topic: to } });
       if (other) await prisma.topicMastery.deleteMany({ where: { userId, topic: from } });
@@ -80,13 +93,21 @@ router.post('/delete', async (req, res, next) => {
     if (!name) return res.status(400).json({ error: 'Which topic?' });
     if (PROTECTED.includes(name)) return res.status(400).json({ error: 'inbox and private are built in and cannot be deleted.' });
     const tag = await prisma.tag.findUnique({ where: { userId_name: { userId, name } } });
-    if (tag) await prisma.tag.delete({ where: { id: tag.id } });
-    const todos = await prisma.todo.findMany({ where: { userId }, select: { id: true, todoTags: true } });
+    const ops: any[] = [];
+    if (tag) ops.push(prisma.tag.delete({ where: { id: tag.id } }));
+    const has = { array_contains: [name] } as any;
+    const todos = await prisma.todo.findMany({ where: { userId, todoTags: has }, select: { id: true, todoTags: true } });
     for (const t of todos) {
       const tags = tagList(t.todoTags);
-      if (tags.includes(name)) await prisma.todo.update({ where: { id: t.id }, data: { todoTags: tags.filter((x) => x !== name) } });
+      if (tags.includes(name)) ops.push(prisma.todo.update({ where: { id: t.id }, data: { todoTags: tags.filter((x) => x !== name) } }));
     }
-    await prisma.topicMastery.deleteMany({ where: { userId, topic: name } });
+    const series = await prisma.todoSeries.findMany({ where: { userId, endedAt: null, todoTags: has }, select: { id: true, todoTags: true } });
+    for (const s of series) {
+      const tags = tagList(s.todoTags);
+      if (tags.includes(name)) ops.push(prisma.todoSeries.update({ where: { id: s.id }, data: { todoTags: tags.filter((x) => x !== name) } }));
+    }
+    ops.push(prisma.topicMastery.deleteMany({ where: { userId, topic: name } }));
+    await prisma.$transaction(ops);
     res.json({ ok: true });
   } catch (error) {
     next(error);

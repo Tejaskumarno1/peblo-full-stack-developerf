@@ -18,6 +18,7 @@ export default function SoftHome() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [ask, setAsk] = useState('');
+  const [err, setErr] = useState('');
 
   const today = startOfDay();
   const { data: todayData } = useQuery({ queryKey: ['todos', 'today'], queryFn: () => todosAPI.getToday().then((r) => r.data) });
@@ -36,7 +37,7 @@ export default function SoftHome() {
   const todayTasks = useMemo(() => {
     const list = [...(todayData?.todayTasks || [])].filter((t) => !t.completed);
     const rank = { high: 0, medium: 1, low: 2 };
-    return list.sort((a, b) => (rank[a.priority] - rank[b.priority]) || String(timeOf(a)).localeCompare(String(timeOf(b))));
+    return list.sort((a, b) => ((rank[a.priority] ?? 1) - (rank[b.priority] ?? 1)) || String(timeOf(a)).localeCompare(String(timeOf(b))));
   }, [todayData]);
   const overdue = todayData?.overdueTasks || [];
 
@@ -85,8 +86,13 @@ export default function SoftHome() {
   const aiLine = local?.enabled && local.ok ? 'AI runs on this computer' : cloudReady && models?.routing !== 'ollama' ? 'Cloud AI · you choose when' : 'Set up AI in Your AI';
 
   const toggle = async (t) => {
-    queryClient.setQueryData(['todos', 'today'], (old) => old && ({ ...old, todayTasks: old.todayTasks.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)) }));
-    await todosAPI.update(t.id, { completed: !t.completed });
+    setErr('');
+    queryClient.setQueryData(['todos', 'today'], (old) => old && ({ ...old, todayTasks: (old.todayTasks || []).map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)) }));
+    try {
+      await todosAPI.update(t.id, { completed: !t.completed });
+    } catch {
+      setErr('Could not update that task. Please try again.'); // the refetch below puts the real state back
+    }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
@@ -124,6 +130,7 @@ export default function SoftHome() {
             <h2 id="s-today" className="s-h2">Today</h2>
             <span className="s-count">{n} left</span>
           </div>
+          {err && <p className="s-empty small" role="alert">{err}</p>}
           {todayTasks.length === 0 && <p className="s-empty">Nothing due today. Press Capture to add something.</p>}
           {todayTasks.slice(0, 3).map((t, i) => (
             <label key={t.id} className="s-home-task">

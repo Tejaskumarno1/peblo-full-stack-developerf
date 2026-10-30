@@ -283,11 +283,11 @@ export default function SoftCapture({ onClose, windowMode = false }) {
             <button key={n} type="button" className={due === v ? 'on' : ''} aria-pressed={due === v} onClick={() => setDue(due === v ? null : v)}>{n}</button>
           ))}
           <button type="button" className={prio === 'high' ? 'on' : ''} aria-pressed={prio === 'high'} onClick={() => setPrio(prio === 'high' ? null : 'high')}>High</button>
-          {extraTags.map((t) => <button key={t} type="button" className="on tag" onClick={() => setExtraTags(extraTags.filter((x) => x !== t))}>#{t} ✕</button>)}
+          {extraTags.map((t) => <button key={t} type="button" className="on tag" onClick={() => setExtraTags(extraTags.filter((x) => x !== t))}>#{t}<X size={12} aria-hidden="true" /></button>)}
           {tagOpen ? (
             <input className="s-cap-tag" autoFocus aria-label="Add a tag" placeholder="tag" value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addTag(tagDraft); setTagOpen(false); } if (e.key === 'Escape') { e.stopPropagation(); setTagOpen(false); } }} onBlur={() => { if (tagDraft.trim()) addTag(tagDraft); setTagOpen(false); }} />
           ) : <button type="button" className="ghost" onClick={() => setTagOpen(true)}>+ tag</button>}
-          {linkNote ? <button type="button" className="on note" onClick={() => setLinkNote(null)}>Note: {linkNote.title || 'Untitled'} ✕</button>
+          {linkNote ? <button type="button" className="on note" onClick={() => setLinkNote(null)}>Note: {linkNote.title || 'Untitled'}<X size={12} aria-hidden="true" /></button>
             : <button type="button" className="ghost" onClick={() => setPicking((p) => !p)} aria-expanded={picking}>+ Link a note</button>}
           {suggestion && !linkNote && <button type="button" className="ghost" onClick={() => setLinkNote(suggestion)}>Link “{suggestion.title || 'Untitled'}”?</button>}
         </div>
@@ -319,7 +319,7 @@ export default function SoftCapture({ onClose, windowMode = false }) {
         <div className="s-cap-quick" role="group" aria-label="Save options">
           <span className="s-cap-lab">Save to</span>
           <button type="button" className={inbox ? 'on' : ''} aria-pressed={inbox} onClick={() => setInbox(!inbox)}>Inbox</button>
-          {extraTags.map((t) => <button key={t} type="button" className="on tag" onClick={() => setExtraTags(extraTags.filter((x) => x !== t))}>#{t} ✕</button>)}
+          {extraTags.map((t) => <button key={t} type="button" className="on tag" onClick={() => setExtraTags(extraTags.filter((x) => x !== t))}>#{t}<X size={12} aria-hidden="true" /></button>)}
           {tagOpen ? (
             <input className="s-cap-tag" autoFocus aria-label="Add a tag" placeholder="tag" value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addTag(tagDraft); setTagOpen(false); } if (e.key === 'Escape') { e.stopPropagation(); setTagOpen(false); } }} onBlur={() => { if (tagDraft.trim()) addTag(tagDraft); setTagOpen(false); }} />
           ) : <button type="button" className="ghost" onClick={() => setTagOpen(true)}>+ tag</button>}

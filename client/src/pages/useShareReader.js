@@ -30,6 +30,7 @@ export default function useShareReader({ enabled, scope, articleRef, deps }) {
   const hover = useRef(null);
   const baseline = useRef(null); // hashes of the lines as I last saw them
   const decided = useRef(false);
+  const snapRef = useRef(null); // the leave-page snapshot function, so its listeners can be removed on unmount
 
   const scrollerTopBlock = useCallback(() => {
     const art = articleRef.current; if (!art) return null;
@@ -118,12 +119,21 @@ export default function useShareReader({ enabled, scope, articleRef, deps }) {
       }
       // the snapshot a reader compares against next time: what they were shown now, refreshed when they leave
       const snap = () => { const a = articleRef.current; if (!a) return; const hs = blocksOf(a).filter((b) => textOf(b)).map((b) => hash(textOf(b))); if (hs.length) save(seenKey, { at: Date.now(), hashes: hs }); };
+      snapRef.current = snap;
       snap();
       window.addEventListener('pagehide', snap);
       window.addEventListener('beforeunload', snap);
     }, 400);
     return () => clearInterval(iv);
   }, [enabled, articleRef, seenKey, deps]);
+
+  // remove the leave-page listeners when the reader goes away
+  useEffect(() => () => {
+    const s = snapRef.current;
+    if (!s) return;
+    window.removeEventListener('pagehide', s);
+    window.removeEventListener('beforeunload', s);
+  }, []);
 
   // mark the lines (the editor redraws its blocks, so this repeats)
   useEffect(() => {

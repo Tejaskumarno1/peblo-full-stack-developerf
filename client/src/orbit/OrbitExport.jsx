@@ -44,15 +44,20 @@ export default function DownloadMenu({ label = 'Download', name, docs, className
 /** Tasks to a calendar file or a spreadsheet (PEB-164). `tasks` is a function so it is read when you click. */
 export function TaskExportMenu({ tasks, label = 'Export' }) {
   const [open, setOpen] = useState(false);
+  const [err, setErr] = useState('');
   const ref = useDismiss(open, () => setOpen(false));
   const stamp = new Date().toISOString().slice(0, 10);
+  const save = (name, make, type) => {
+    try { downloadText(name, make(tasks()), type); setErr(''); setOpen(false); } catch (e) { console.error('Task export failed', e); setErr('Could not export. Try again.'); }
+  };
   return (
     <span className="o-menu-wrap o-dl" ref={ref}>
       <button type="button" className="o-chip" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}><Download size={13} strokeWidth={2.2} /> {label}</button>
       {open && (
         <div className="o-pop right" role="menu" style={{ width: 230 }}>
-          <button type="button" role="menuitem" onClick={() => { downloadText(`peblo-tasks-${stamp}.ics`, tasksToIcs(tasks()), 'text/calendar'); setOpen(false); }}>Calendar file (.ics)</button>
-          <button type="button" role="menuitem" onClick={() => { downloadText(`peblo-tasks-${stamp}.csv`, tasksToCsv(tasks()), 'text/csv'); setOpen(false); }}>Spreadsheet (.csv)</button>
+          <button type="button" role="menuitem" onClick={() => save(`peblo-tasks-${stamp}.ics`, tasksToIcs, 'text/calendar')}>Calendar file (.ics)</button>
+          <button type="button" role="menuitem" onClick={() => save(`peblo-tasks-${stamp}.csv`, tasksToCsv, 'text/csv')}>Spreadsheet (.csv)</button>
+          {err && <span className="o-err" role="alert" style={{ padding: '4px 10px', fontSize: 12.5 }}>{err}</span>}
         </div>
       )}
     </span>

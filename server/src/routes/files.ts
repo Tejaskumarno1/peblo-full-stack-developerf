@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth.js';
 // and the desktop app without any sign-in. Writing needs the person to be signed in. The original bytes always come back unchanged.
 const router = Router();
 export const MAX_FILE = 25 * 1024 * 1024;
+const MAX_TOTAL = 500 * 1024 * 1024;
 const SAFE_MIME = /^[\w.+-]+\/[\w.+-]+$/;
 const RISKY = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml|text\/javascript|application\/javascript)/i;
 
@@ -37,6 +38,8 @@ router.post('/', authenticate, raw({ type: () => true, limit: MAX_FILE + 1024 })
     const body: Buffer = req.body;
     if (!Buffer.isBuffer(body) || !body.length) return res.status(400).json({ error: 'No file came with the request.' });
     if (body.length > MAX_FILE) return res.status(413).json({ error: 'That file is over 25 MB.' });
+    const used: any[] = await prisma.$queryRaw`SELECT COALESCE(SUM(size), 0)::float8 AS n FROM files WHERE user_id = ${req.user.id}`;
+    if (Number(used[0]?.n || 0) + body.length > MAX_TOTAL) return res.status(413).json({ error: 'Your file storage is full (500 MB). Delete some files first.' });
     let name = 'file';
     try { name = clean(decodeURIComponent(String(req.headers['x-file-name'] || 'file'))); } catch { /* keep the default */ }
     const asked = String(req.headers['x-file-type'] || '').split(';')[0].trim().toLowerCase();

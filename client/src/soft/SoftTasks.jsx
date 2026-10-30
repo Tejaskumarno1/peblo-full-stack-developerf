@@ -20,6 +20,7 @@ export default function SoftTasks() {
   const [view, setView] = useState('board');
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
   const inputRef = useRef(null);
   const [sheet, setSheet] = useState(null); // { task, isNew }
 
@@ -64,20 +65,28 @@ export default function SoftTasks() {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
   const setDone = async (t, completed) => {
+    setErr('');
     queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed, updatedAt: new Date().toISOString() } : x)));
-    await todosAPI.update(t.id, { completed });
+    try {
+      await todosAPI.update(t.id, { completed });
+    } catch {
+      queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed: !completed } : x)));
+      setErr('Could not update that task. Please try again.');
+      return false;
+    }
     refresh();
+    return true;
   };
   const toggle = async (t) => {
     const next = !t.completed;
-    await setDone(t, next);
+    if (!(await setDone(t, next))) return;
     say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
   };
   const remove = async (t) => {
     if (t.seriesId) { // a repeating task asks which ones, so that stays a direct question
       const scope = await askScope(t, 'delete');
       if (!scope) return;
-      await todosAPI.delete(t.id, scope);
+      try { await todosAPI.delete(t.id, scope); } catch { setErr('Could not delete that task. Please try again.'); return; }
       refresh();
       return;
     }
@@ -89,6 +98,7 @@ export default function SoftTasks() {
     e.preventDefault();
     if (!parsed || saving) return;
     setSaving(true);
+    setErr('');
     try {
       const { data } = await todosAPI.create({ text: parsed.text || draft.trim(), priority: parsed.priority, tags: parsed.tags, deadline: parsed.deadline ? parsed.deadline.toISOString() : null });
       setDraft('');
@@ -96,6 +106,8 @@ export default function SoftTasks() {
       const made = data.todo || data.todos?.[0] || null;
       if (made?.id) setSheet({ task: made, isNew: true });
       else inputRef.current?.focus();
+    } catch {
+      setErr('Could not add the task. Your text is kept, please try again.');
     } finally {
       setSaving(false);
     }
@@ -157,6 +169,7 @@ export default function SoftTasks() {
         {parsed?.tags.map((t) => <span key={t} className="s-tag" style={{ background: 'var(--s-butter)', padding: '7px 12px' }}>#{t}</span>)}
         <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
       </form>
+      {err && <p className="s-empty small" role="alert" style={{ margin: '4px 0' }}>{err}</p>}
 
       <div className="s-tasktools">
         <label htmlFor="s-task-search" className="s-sr">Search tasks</label>

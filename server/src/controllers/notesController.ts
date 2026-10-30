@@ -5,7 +5,7 @@ import * as aiService from '../services/aiService.js';
 import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { invalidateNote } from '../services/collab.js';
-import { cleanNoteMeta } from '../utils/meta.js';
+import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
 
 // prisma imported from db.js
 
@@ -45,7 +45,8 @@ export async function syncTags(userId: any, noteId: any, tagNames: any) {
   if (missingTagNames.length > 0) {
     // Bulk create missing tags (Prisma createMany returns count, not records, so we re-fetch)
     await prisma.tag.createMany({
-      data: missingTagNames.map((name: any) => ({ userId, name }))
+      data: missingTagNames.map((name: any) => ({ userId, name })),
+      skipDuplicates: true // two saves at once may both try to make the same tag
     });
     newTags = await prisma.tag.findMany({
       where: { userId, name: { in: missingTagNames } }
@@ -56,7 +57,8 @@ export async function syncTags(userId: any, noteId: any, tagNames: any) {
 
   // Bulk associate tags with the note
   await prisma.noteTag.createMany({
-    data: allResolvedTags.map((tag: any) => ({ noteId, tagId: tag.id }))
+    data: allResolvedTags.map((tag: any) => ({ noteId, tagId: tag.id })),
+    skipDuplicates: true
   });
 }
 
@@ -144,6 +146,7 @@ export async function linkMention(req: any, res: any, next: any) {
     await saveVersion(otherId, content, { force: true }).catch(() => {});
     await prisma.note.update({ where: { id: otherId }, data: { content: next2 }, select: { id: true } });
     await syncLinks(req.user.id, otherId, next2);
+    invalidateNote(otherId, next2); // an open live room would otherwise write its old text back over the new link
     notify(req, 'notes_changed');
     res.json({ ok: true });
   } catch (error) {
@@ -229,19 +232,19 @@ export async function getNotes(req: any, res: any, next: any) {
     where.isDeleted = deleted === 'true';
 
     // Category filter
-    if (category) {
+    if (typeof category === 'string' && category) {
       where.category = category;
     }
 
     // Tag filter
-    if (tag) {
+    if (typeof tag === 'string' && tag) {
       where.tags = {
         some: { tag: { name: tag.toLowerCase() } }
       };
     }
 
     // Search filter
-    if (search) {
+    if (typeof search === 'string' && search) {
       // Title, text and tags, ignoring case.
       const q = String(search).trim();
       const words = searchWords(q);
@@ -294,7 +297,7 @@ export async function getNotes(req: any, res: any, next: any) {
 
     let found: any[] = notes;
     const fuzzy = new Set<string>();
-    const sq = search ? String(search).trim() : '';
+    const sq = typeof search === 'string' ? search.trim() : '';
     if (sq && found.length < 3 && sq.length >= 4) {
       // Few hits: also look for titles that are one or two letters off (typing "meetng" finds "Meeting").
       const words = searchWords(sq);
@@ -342,13 +345,14 @@ export async function getNote(req: any, res: any, next: any) {
 
 export async function createNote(req: any, res: any, next: any) {
   try {
+    scrubBody(req.body, ['title', 'content', 'category']);
     const { title, content, category, tags, meta } = req.body;
     const cleanMeta = cleanNoteMeta(meta);
 
     const note = await prisma.note.create({
       data: {
         userId: req.user.id,
-        title: title || 'Untitled',
+        title: (typeof title === 'string' ? title.slice(0, 300) : '') || 'Untitled',
         content: content || '',
         category: category || null,
         ...(Object.keys(cleanMeta).length ? { meta: cleanMeta } : {})
@@ -384,12 +388,14 @@ async function nameOf(userId: string): Promise<string | undefined> {
   const hit = ownerNames.get(userId);
   if (hit && Date.now() - hit.at < 60000) return hit.name || undefined;
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null);
+  if (ownerNames.size >= 1000) ownerNames.delete(ownerNames.keys().next().value as string); // oldest entry out: the cache cannot grow without bound
   ownerNames.set(userId, { name: u?.name?.trim() || '', at: Date.now() });
   return u?.name?.trim() || undefined;
 }
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
+    scrubBody(req.body, ['title', 'content', 'category', 'baseContent']);
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
     // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.
     const force = req.body.force || collab === true;
@@ -409,7 +415,7 @@ export async function updateNote(req: any, res: any, next: any) {
     }
 
     const data: any = {};
-    if (title !== undefined && !merged) data.title = title;
+    if (title !== undefined && !merged) data.title = (typeof title === 'string' ? title.slice(0, 300) : '') || 'Untitled';
     if (content !== undefined && !merged) data.content = content;
     if (category !== undefined) data.category = category || null;
     if (isArchived !== undefined) data.isArchived = isArchived;
@@ -457,6 +463,23 @@ export async function updateNote(req: any, res: any, next: any) {
   }
 }
 
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const TRASH_PURGE_BATCH = 200;
+
+/** Permanently removes notes that have sat in the trash for over 30 days (at most 200 per call). Returns how many were removed. */
+export async function purgeExpiredTrash(): Promise<number> {
+  const old = await prisma.note.findMany({
+    where: { isDeleted: true, deletedAt: { not: null, lt: new Date(Date.now() - TRASH_RETENTION_MS) } },
+    select: { id: true },
+    take: TRASH_PURGE_BATCH,
+  });
+  if (!old.length) return 0;
+  const { count } = await prisma.note.deleteMany({
+    where: { id: { in: old.map((n) => n.id) }, isDeleted: true, deletedAt: { not: null, lt: new Date(Date.now() - TRASH_RETENTION_MS) } },
+  });
+  return count;
+}
+
 export async function deleteNote(req: any, res: any, next: any) {
   try {
     const noteId = req.params.id;
@@ -473,7 +496,15 @@ export async function deleteNote(req: any, res: any, next: any) {
       return res.json({ message: 'Note moved to trash' });
     }
 
-    // If not soft-deleted, it might already be in trash — permanently delete
+    // Already in the trash. Only an explicit ?permanent=1 hard-deletes; a repeated or retried plain DELETE is a no-op.
+    const flag = String(req.query?.permanent ?? '').toLowerCase();
+    const permanent = flag === '1' || flag === 'true';
+    if (!permanent) {
+      const inTrash = await prisma.note.count({ where: { id: noteId, userId, isDeleted: true } });
+      if (inTrash > 0) return res.json({ message: 'Note already in trash' });
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
     const { count: hardDeleted } = await prisma.note.deleteMany({
       where: { id: noteId, userId, isDeleted: true }
     });

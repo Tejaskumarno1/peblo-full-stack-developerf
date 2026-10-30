@@ -8,6 +8,8 @@ import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/not
 import { stripMarkdown, formatRelativeDate, stringToColorClass } from '../utils/helpers';
 import { useAuth } from '../context/AuthContext';
 import TodoListPanel from '../components/TodoListPanel';
+import UndoToast from '../components/UndoToast';
+import { useUndoToast } from '../utils/useUndoToast';
 import { renderMarkdown, escapeHtml } from '../utils/safeHtml';
 import { extractUrls, hostOf } from '../utils/linkUrls';
 import {
@@ -83,7 +85,7 @@ function getYouTubeEmbedUrl(rawUrl) {
       }
     }
 
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+    return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : '';
   } catch {
     return '';
   }
@@ -94,6 +96,7 @@ export default function WorkspacePage() {
   const navigate = useNavigate();
   const { user, settings } = useAuth();
   const queryClient = useQueryClient();
+  const { toast: errorToast, say: sayToast, dismiss: dismissToast } = useUndoToast();
 
   const {
     searchQuery, setSearchQuery,
@@ -126,7 +129,7 @@ export default function WorkspacePage() {
       if (filterTag) params.tag = filterTag;
       return notesAPI.getAll(params).then(res => {
         if (!showArchived && !showDeleted && !filterTag) {
-          localStorage.setItem('peblo_cached_notes', JSON.stringify(res.data.notes));
+          try { localStorage.setItem('peblo_cached_notes', JSON.stringify(res.data.notes)); } catch { /* storage full or blocked: the list still loads */ }
         }
         return res.data.notes;
       });
@@ -135,7 +138,8 @@ export default function WorkspacePage() {
       if (!showArchived && !showDeleted && !filterTag) {
         try {
           const cached = localStorage.getItem('peblo_cached_notes');
-          return cached ? JSON.parse(cached) : undefined;
+          const parsed = cached ? JSON.parse(cached) : undefined;
+          return Array.isArray(parsed) ? parsed : undefined;
         } catch {
           return undefined;
         }
@@ -181,11 +185,19 @@ export default function WorkspacePage() {
         setMoreMenuOpen(false);
       }
     };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        setExportDropdownOpen(false);
+        setMoreMenuOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, []);
 
@@ -355,6 +367,7 @@ export default function WorkspacePage() {
       setBackupsList(res.data.backups || []);
     } catch (err) {
       console.error('Failed to load backups', err);
+      sayToast('Could not load the saved versions. Try again.');
     } finally {
       setLoadingBackups(false);
     }
@@ -366,6 +379,7 @@ export default function WorkspacePage() {
       setSelectedBackupForDiff({ ...backup, content: res.data.backup.content });
     } catch (err) {
       console.error('Failed to load version', err);
+      sayToast('Could not load that version. Try again.');
     }
   };
 
@@ -381,6 +395,7 @@ export default function WorkspacePage() {
       setShowBackups(false);
     } catch (err) {
       console.error('Failed to restore backup', err);
+      sayToast('Could not restore that version. Try again.');
     }
   };
 
@@ -587,7 +602,7 @@ export default function WorkspacePage() {
 
     try {
       ignoredNoteIdsRef.current.add(noteId);
-      await notesAPI.delete(noteId);
+      await notesAPI.delete(noteId, { permanent: !!isAlreadyDeleted });
       queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => {
         if (!old) return old;
         return old.filter((n) => n.id !== noteId);
@@ -598,6 +613,8 @@ export default function WorkspacePage() {
       }
     } catch (err) {
       console.error('Failed to delete note:', err);
+      ignoredNoteIdsRef.current.delete(noteId); // it still exists: let the route open it again
+      sayToast(isAlreadyDeleted ? 'Could not delete the note. Try again.' : 'Could not move the note to the trash. Try again.');
     }
   };
 
@@ -616,6 +633,8 @@ export default function WorkspacePage() {
       }
     } catch (err) {
       console.error('Failed to restore note:', err);
+      ignoredNoteIdsRef.current.delete(noteId);
+      sayToast('Could not restore the note. Try again.');
     }
   };
 
@@ -634,6 +653,8 @@ export default function WorkspacePage() {
       }
     } catch (err) {
       console.error('Failed to archive note:', err);
+      ignoredNoteIdsRef.current.delete(noteId);
+      sayToast('Could not archive the note. Try again.');
     }
   };
 
@@ -916,7 +937,7 @@ export default function WorkspacePage() {
   // Global Keyboard Hotkeys
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+      if ((e.ctrlKey || e.metaKey) && (e.key || '').toLowerCase() === 'n') {
         e.preventDefault();
         handleCreateNote();
       }
@@ -1199,6 +1220,7 @@ export default function WorkspacePage() {
         </main>
       </div>
 
+      <UndoToast toast={errorToast} dismiss={dismissToast} />
     </div>
   );
 }

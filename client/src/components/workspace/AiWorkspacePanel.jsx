@@ -191,28 +191,28 @@ function AiWorkspacePanel({
                       className="chat-suggestion-chip"
                       onClick={() => setWsChatInput("Summarize my note and list the core takeaways.")}
                     >
-                      ✨ Summarize Takeaways
+                      Summarize Takeaways
                     </button>
                     <button
                       type="button"
                       className="chat-suggestion-chip"
                       onClick={() => setWsChatInput("Convert this note into a clean checklist.")}
                     >
-                      ✅ Make Checklist
+                      Make Checklist
                     </button>
                     <button
                       type="button"
                       className="chat-suggestion-chip"
                       onClick={() => setWsChatInput("Fix any grammar errors and make the tone professional.")}
                     >
-                      ✍️ Improve Grammar
+                      Improve Grammar
                     </button>
                     <button
                       type="button"
                       className="chat-suggestion-chip"
                       onClick={() => setWsChatInput("Brainstorm 3 creative follow-up topics based on this.")}
                     >
-                      💡 Brainstorm Ideas
+                      Brainstorm Ideas
                     </button>
                   </div>
                 </div>
@@ -240,7 +240,7 @@ function AiWorkspacePanel({
                   onChange={e => setWsChatInput(e.target.value)}
                   disabled={wsChatLoading}
                 />
-                <button type="submit" className="ws-ai-chat-send" disabled={wsChatLoading || !wsChatInput.trim()}>
+                <button type="submit" aria-label="Send" className="ws-ai-chat-send" disabled={wsChatLoading || !wsChatInput.trim()}>
                   <Sparkles size={14} />
                 </button>
               </div>

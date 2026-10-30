@@ -143,7 +143,9 @@ export default function AiChatPanel() {
       };
 
       setRecognition(rec);
+      return () => { rec.onresult = null; rec.onerror = null; rec.onend = null; try { rec.abort(); } catch { /* not running */ } };
     }
+    return undefined;
   }, []);
 
   const toggleRecording = () => {
@@ -286,7 +288,7 @@ export default function AiChatPanel() {
     setHasChatted(true);
     
     const userMessageText = fileToUpload 
-      ? `📄 **${fileToUpload.name}**\n\n${trimmed}`.trim()
+      ? `**${fileToUpload.name}**\n\n${trimmed}`.trim()
       : trimmed;
       
     addAiChatMessage({ role: 'user', text: userMessageText });
@@ -349,12 +351,15 @@ export default function AiChatPanel() {
         let accumulatedJsonStr = '';
         let streamedReply = '';
         let finalData = null;
+        let streamError = '';
+        let pendingLine = ''; // a data line can be split between two network chunks
 
         while (!done) {
           const { value, done: readerDone } = await reader.read();
           if (value) {
-            const chunk = decoder.decode(value, { stream: true });
+            const chunk = pendingLine + decoder.decode(value, { stream: true });
             const lines = chunk.split('\n');
+            pendingLine = lines.pop();
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const dataStr = line.replace('data: ', '');
@@ -362,9 +367,8 @@ export default function AiChatPanel() {
                 try {
                   const dataObj = JSON.parse(dataStr);
                   if (dataObj.error) {
-                    throw new Error(dataObj.error);
-                  }
-                  if (dataObj.done) {
+                    streamError = typeof dataObj.error === 'string' ? dataObj.error : 'The AI reported an error.';
+                  } else if (dataObj.done) {
                     finalData = dataObj;
                   } else if (dataObj.chunk) {
                     accumulatedJsonStr += dataObj.chunk;
@@ -381,6 +385,7 @@ export default function AiChatPanel() {
           }
           done = readerDone;
         }
+        if (streamError) throw new Error(streamError);
 
         const { reply, notes, updatedNote } = finalData || { reply: streamedReply, notes: [] };
         const links = [];
@@ -410,6 +415,7 @@ export default function AiChatPanel() {
       if (typeof msg !== 'string') {
         try { msg = JSON.stringify(msg); } catch(e) { msg = 'An unknown error occurred'; }
       }
+      setMessages(prev => prev.filter(m => !m.isStreaming)); // drop the empty streaming bubble
       setError(msg);
       addAiChatMessage({ role: 'assistant', text: msg, isError: true });
     } finally {
@@ -706,7 +712,7 @@ export default function AiChatPanel() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'var(--ai-message-bot)', borderRadius: '4px', fontSize: '12px', marginBottom: '8px', width: 'fit-content', border: '1px solid var(--ai-border)' }}>
                       <Paperclip size={12} />
                       <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
-                      <button type="button" onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}>
+                      <button type="button" aria-label="Remove attached file" onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'inherit' }}>
                         <X size={14}/>
                       </button>
                     </div>

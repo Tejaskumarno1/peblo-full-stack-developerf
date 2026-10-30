@@ -1,5 +1,6 @@
 import { accessFor } from '../services/shareAccess.js';
 import { Router } from 'express';
+import { rateLimit } from '../middleware/rateLimit.js';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { liveRoomIds, presenceOf } from '../services/collab.js';
@@ -108,7 +109,9 @@ collabPublic.get('/:token/comments', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-collabPublic.post('/:token/comments', async (req, res, next) => {
+// Anonymous writes: a tighter per-address cap than the global API limit (each comment also notifies the owner).
+const guestComments = rateLimit({ windowMs: 60_000, max: 20, message: 'Too many comments. Wait a minute and try again.' });
+collabPublic.post('/:token/comments', guestComments, async (req, res, next) => {
   try {
     const g = await guestNote(req);
     if (!g) return res.status(404).json({ error: 'This link is not available.' });

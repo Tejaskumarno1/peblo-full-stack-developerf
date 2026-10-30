@@ -69,18 +69,21 @@ export async function retrieve(
   query: string,
   opts: { noteIds?: string[]; maxNotes?: number } = {}
 ): Promise<RetrievalResult> {
-  const words = [...new Set(tokens(query))];
+  const words = [...new Set(tokens(query))].slice(0, 24); // a pasted essay must not turn into thousands of scans per note
   const maxNotes = opts.maxNotes ?? 5;
 
   const [notes, tasks] = await Promise.all([
     prisma.note.findMany({
       where: { userId, isDeleted: false },
       select: { id: true, title: true, content: true, updatedAt: true, tags: { select: { tag: { select: { name: true } } } } },
+      orderBy: { updatedAt: 'desc' },
+      take: 1500, // newest notes first; far above what a normal person has, but bounds memory and time per question
     }),
     prisma.todo.findMany({
       where: { userId, completed: false },
       select: { id: true, text: true, deadline: true, priority: true, todoTags: true },
       orderBy: { deadline: 'asc' },
+      take: 1500,
     }),
   ]);
 

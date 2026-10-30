@@ -6,7 +6,7 @@ import { cleanTodoMeta } from '../utils/meta.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
-    const { date, from, to, priority, completed, noteId } = req.query;
+    const { date, from, to, priority, completed, noteId, limit } = req.query;
     await topUpSeries(req.user!.id); // repeating tasks never run out
     const where: any = { userId: req.user!.id };
     if (typeof noteId === 'string' && noteId) where.noteId = noteId;
@@ -28,12 +28,14 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
 
     // Filter by date range
     if (from && to) {
-      where.deadline = { gte: new Date(from as string), lte: new Date(to as string) };
+      const f = new Date(String(from)); const t = new Date(String(to));
+      if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return res.status(400).json({ error: 'Invalid date' });
+      where.deadline = { gte: f, lte: t };
     }
 
     // Filter by priority
-    if (priority) {
-      where.priority = priority as string;
+    if (typeof priority === 'string' && priority) {
+      where.priority = priority;
     }
 
     // Filter by completion status
@@ -50,7 +52,8 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
         { completed: 'asc' },
         { deadline: 'asc' },
         { createdAt: 'desc' }
-      ]
+      ],
+      take: Math.min(Math.max(parseInt(String(limit), 10) || 1000, 1), 2000), // paging cap: open tasks come first, old finished ones are what gets cut
     });
     res.json({ todos });
   } catch (error) {
@@ -74,6 +77,7 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
       where: { userId, completed: false, deadline: { not: null, lte: new Date(threeDaysLater) } },
       include: { note: { select: { id: true, title: true } } },
       orderBy: { deadline: 'asc' },
+      take: 1000,
     }) as any[];
 
     const todayStartDate = new Date(todayStart);
@@ -108,15 +112,18 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
     if (!from || !to) {
       return res.status(400).json({ error: 'from and to query params are required' });
     }
+    const rf = new Date(String(from)); const rt = new Date(String(to));
+    if (Number.isNaN(rf.getTime()) || Number.isNaN(rt.getTime())) return res.status(400).json({ error: 'Invalid date' });
     await topUpSeries(req.user!.id);
 
     const todos = await prisma.todo.findMany({
       where: {
         userId: req.user!.id,
-        deadline: { gte: new Date(from as string), lte: new Date(to as string) }
+        deadline: { gte: rf, lte: rt }
       },
       include: { note: { select: { id: true, title: true } } },
-      orderBy: [{ deadline: 'asc' }, { priority: 'asc' }]
+      orderBy: [{ deadline: 'asc' }, { priority: 'asc' }],
+      take: 2000,
     });
 
     res.json({ todos });
@@ -132,9 +139,10 @@ const scopeOf = (v: unknown) => (typeof v === 'string' && SCOPES.includes(v) ? v
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
     const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
-    if (!text || text.trim() === '') {
+    if (typeof text !== 'string' || text.trim() === '') {
       return res.status(400).json({ error: 'Text is required' });
     }
+    if (deadline && Number.isNaN(new Date(deadline).getTime())) return res.status(400).json({ error: 'Invalid date' });
 
     const validPriorities = ['high', 'medium', 'low'];
     const safePriority = validPriorities.includes(priority) ? priority : 'medium';
@@ -151,7 +159,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const userId = req.user!.id;
     const when = deadline ? new Date(deadline) : null;
-    const cleanTags = Array.isArray(tags) ? tags.map((t: any) => t.trim()).filter(Boolean) : [];
+    const cleanTags = Array.isArray(tags) ? tags.filter((t: any) => typeof t === 'string').map((t: string) => t.trim()).filter(Boolean) : [];
     const base = {
       text: text.trim(), priority: safePriority, startTime: startTime || null, endTime: endTime || null,
       recurrence: safeRecurrence, todoTags: cleanTags, noteId: noteId || null, userId,
@@ -199,17 +207,23 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     }
 
     const data: any = {};
-    if (text !== undefined) data.text = text.trim();
-    if (completed !== undefined) data.completed = completed;
+    if (text !== undefined) {
+      if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'Text is required' });
+      data.text = text.trim();
+    }
+    if (completed !== undefined) data.completed = completed === true || completed === 'true';
     if (meta !== undefined) data.meta = cleanTodoMeta(meta, todo.meta);
     if (priority !== undefined) {
       const validPriorities = ['high', 'medium', 'low'];
       data.priority = validPriorities.includes(priority) ? priority : todo.priority;
     }
-    if (deadline !== undefined) data.deadline = deadline ? new Date(deadline) : null;
+    if (deadline !== undefined) {
+      if (deadline && Number.isNaN(new Date(deadline).getTime())) return res.status(400).json({ error: 'Invalid date' });
+      data.deadline = deadline ? new Date(deadline) : null;
+    }
     if (startTime !== undefined) data.startTime = startTime || null;
     if (endTime !== undefined) data.endTime = endTime || null;
-    if (tags !== undefined) data.todoTags = Array.isArray(tags) ? tags.map((t: any) => t.trim()).filter(Boolean) : [];
+    if (tags !== undefined) data.todoTags = Array.isArray(tags) ? tags.filter((t: any) => typeof t === 'string').map((t: string) => t.trim()).filter(Boolean) : [];
     if (noteId !== undefined) {
       if (noteId) {
         const note = await prisma.note.findFirst({
@@ -259,8 +273,10 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       if (Object.keys(shared).length) {
         const where: any = { seriesId: todo.seriesId, completed: false, id: { not: todo.id } };
         if (scope === 'following' && todo.deadline) where.deadline = { gte: todo.deadline };
-        await prisma.todo.updateMany({ where, data: shared });
-        await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: shared });
+        await prisma.$transaction([
+          prisma.todo.updateMany({ where, data: shared }),
+          prisma.todoSeries.update({ where: { id: todo.seriesId }, data: shared }),
+        ]);
       }
     }
 
@@ -288,12 +304,16 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
     }
 
     if (todo.seriesId && scope === 'all') {
-      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId } });
-      await prisma.todoSeries.deleteMany({ where: { id: todo.seriesId, userId } });
+      await prisma.$transaction([
+        prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId } }),
+        prisma.todoSeries.deleteMany({ where: { id: todo.seriesId, userId } }),
+      ]);
     } else if (todo.seriesId && scope === 'following') {
       // Delete this one and every later one, and stop the series so it does not start again.
-      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId, ...(todo.deadline ? { deadline: { gte: todo.deadline } } : { id: todo.id }) } });
-      await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { endedAt: new Date() } });
+      await prisma.$transaction([
+        prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, userId, ...(todo.deadline ? { deadline: { gte: todo.deadline } } : { id: todo.id }) } }),
+        prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { endedAt: new Date() } }),
+      ]);
     } else {
       await prisma.todo.delete({ where: { id: id as string } });
     }

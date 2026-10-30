@@ -5,6 +5,7 @@ import { Archive, Copy, FileDown, FileText, History, Link2, Lock, Printer, Repla
 import { notesAPI, todosAPI, hubAPI, studyAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
+import UndoToast from '../components/UndoToast';
 import { useOrbit, useDismiss } from './OrbitShell';
 import { topicName, levelOf, levelVar, tagsOfNote, agoText, shortDate } from './orbitUtils';
 import { snippetOf } from '../soft/softUtils';
@@ -15,6 +16,7 @@ import ShareDialog from '../soft/ShareDialog';
 import '../soft/dialogs.css';
 import { exportDocs } from '../utils/exporters';
 import { TEMPLATES, outlineOf, countMatches, replaceAll } from './noteTemplates';
+import { IconPicker, NOTE_CHOICES } from './OrbitIcons';
 
 const words = (s) => [...new Set((s || '').toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) || [])];
 
@@ -53,7 +55,6 @@ function OrbitNote({ note }) {
   const [dismissed, setDismissed] = useState([]);
   // Round 6: focus mode, emoji picker, copied message
   const [zen, setZen] = useState(false);
-  const [emojiOpen, setEmojiOpen] = useState(false);
   const [flash, setFlash] = useState('');
   // Round 10: find & replace bar
   const [findOpen, setFindOpen] = useState(false);
@@ -95,7 +96,8 @@ function OrbitNote({ note }) {
     staleTime: 60000,
   });
 
-  const tags = doc ? doc.tags.filter((t) => t !== 'inbox') : [];
+  const docTags = Array.isArray(doc?.tags) ? doc.tags : []; // a note without a tags list must not crash the sheet
+  const tags = docTags.filter((t) => t !== 'inbox');
   const allNotes = note.allNotes;
 
   // Suggestions: a related note on a topic this note isn't on, and an open task this note could help with
@@ -136,7 +138,7 @@ function OrbitNote({ note }) {
   };
   const duplicate = async () => {
     try {
-      const r = await notesAPI.create({ title: `${doc.title || 'Untitled'} (copy)`, content: doc.content || '', tags: doc.tags });
+      const r = await notesAPI.create({ title: `${doc.title || 'Untitled'} (copy)`, content: doc.content || '', tags: docTags });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate(`/notes/${(r.data.note || r.data).id}`);
     } catch (e) { console.error('Could not duplicate', e); setFlash("Couldn't duplicate the note."); }
@@ -158,7 +160,6 @@ function OrbitNote({ note }) {
     const el = els.find((x) => (x.textContent || '').replace(/[*_`]/g, '').trim() === h.text);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  const EMOJIS = ['📘', '📝', '🧠', '💡', '🔬', '📐', '💻', '🧮', '📊', '🎯', '⭐', '🔥', '✅', '📅', '🌱', '🧪'];
   const topic = tags[0];
   const created = new Date(doc.createdAt);
   const edited = new Date(doc.updatedAt || doc.createdAt);
@@ -168,12 +169,13 @@ function OrbitNote({ note }) {
   const addTag = (raw) => { note.addTag(raw); setTagDraft(null); };
 
   const accept = async (s) => {
-    if (s.kind === 'tag') patch({ tags: [...doc.tags, s.tag] });
+    if (s.kind === 'tag') patch({ tags: [...docTags, s.tag] });
     else {
       try {
         await todosAPI.update(s.task.id, { noteId });
       } catch (e) {
         console.error('Could not link the task', e);
+        setFlash("Couldn't attach that task. Try again.");
         return; // keep the suggestion visible so it can be accepted again
       } finally {
         queryClient.invalidateQueries({ queryKey: ['todos'] });
@@ -219,9 +221,9 @@ function OrbitNote({ note }) {
                 {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" onClick={() => { setMenu(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>}
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}><Link2 size={15} />Copy link</button>
                 <button type="button" role="menuitem" onClick={() => { setMenu(false); note.exportMd(); }}><FileText size={15} />Export as Markdown</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => console.error('PDF export failed', e)); }}><FileDown size={15} />Download as PDF</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => console.error('Word export failed', e)); }}><FileDown size={15} />Download as Word</button>
-                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'print').catch((e) => console.error('Print failed', e)); }}><Printer size={15} />Print</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'pdf').catch((e) => { console.error('PDF export failed', e); setFlash("Couldn't make the PDF. Try again."); }); }}><FileDown size={15} />Download as PDF</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'doc').catch((e) => { console.error('Word export failed', e); setFlash("Couldn't make the Word file. Try again."); }); }}><FileDown size={15} />Download as Word</button>
+                <button type="button" role="menuitem" onClick={() => { setMenu(false); exportDocs([doc], 'print').catch((e) => { console.error('Print failed', e); setFlash("Couldn't open the print view. Try again."); }); }}><Printer size={15} />Print</button>
                 <button type="button" role="menuitem" style={{ color: 'var(--o-weak-ink)' }} onClick={() => { setMenu(false); note.trash('/notes'); }}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
               </div>
             )}
@@ -237,21 +239,13 @@ function OrbitNote({ note }) {
           <label htmlFor="o-note-title" className="o-sr">Title</label>
           <div className="o-title-row">
             {!doc.isDraft && (
-              <span className="o-menu-wrap">
-                <button type="button" className="o-emoji" aria-label={meta.emoji ? `Icon ${meta.emoji}, change` : 'Add an icon'} aria-expanded={emojiOpen} disabled={readOnly} onClick={() => setEmojiOpen(!emojiOpen)}>{meta.emoji || '＋'}</button>
-                {emojiOpen && (
-                  <div className="o-pop o-emojis" role="menu">
-                    {EMOJIS.map((e) => <button key={e} type="button" role="menuitem" aria-label={`Use ${e}`} onClick={() => { setEmojiOpen(false); setMeta({ emoji: e }); }}>{e}</button>)}
-                    {meta.emoji && <button type="button" role="menuitem" onClick={() => { setEmojiOpen(false); setMeta({ emoji: null }); }}>Remove</button>}
-                  </div>
-                )}
-              </span>
+              <IconPicker value={meta.emoji} choices={NOTE_CHOICES} subject="icon" disabled={readOnly} triggerClassName="o-emoji" onChange={(v) => setMeta({ emoji: v || null })} />
             )}
             <input id="o-note-title" className="o-title-input" value={doc.title} placeholder="Untitled note" onChange={(e) => patch({ title: e.target.value })} disabled={readOnly} />
           </div>
           {locked && <p className="o-quiet" role="note">This note is locked. Unlock it from the ··· menu to edit.</p>}
           <div className="o-tags">
-            {doc.tags.map((t) => (
+            {docTags.map((t) => (
               <span key={t} className="o-chip">
                 <i style={{ background: levelVar(levelOf(mastery.get(t)?.score)) }} />{topicName(t)}
                 {!doc.isDeleted && <button type="button" aria-label={`Take off ${t}`} onClick={() => note.removeTag(t)}><X size={12} strokeWidth={2.6} /></button>}
@@ -327,7 +321,7 @@ function OrbitNote({ note }) {
               <h2 className="o-h3">TASKS ON THIS NOTE</h2>
               {linked.map((t) => (
                 <label key={t.id} className="o-linked-task">
-                  <input type="checkbox" checked={!!t.completed} onChange={async () => { try { await todosAPI.update(t.id, { completed: !t.completed }); } catch (e) { console.error(e); } finally { queryClient.invalidateQueries({ queryKey: ['todos'] }); } }} aria-label={`Done: ${t.text}`} />
+                  <input type="checkbox" checked={!!t.completed} onChange={async () => { try { await todosAPI.update(t.id, { completed: !t.completed }); } catch (e) { console.error(e); setFlash("Couldn't update that task. Try again."); } finally { queryClient.invalidateQueries({ queryKey: ['todos'] }); } }} aria-label={`Done: ${t.text}`} />
                   <span className={t.completed ? 'done' : ''}>{t.text}</span>
                 </label>
               ))}
@@ -359,6 +353,7 @@ function OrbitNote({ note }) {
           </section>
         </aside>
       </div>
+      <UndoToast toast={note.actionToast} dismiss={note.dismissActionToast} />
     </article>
   );
 }

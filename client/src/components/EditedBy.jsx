@@ -31,6 +31,9 @@ export default function EditedBy({ rt, editor, ready }) {
   const [cmp, setCmp] = useState(false);
   const [quiet, setQuiet] = useState(readSmall);
   const [msg, setMsg] = useState('');
+  const keeping = useRef(false);
+  const dlgRef = useRef(null);
+  useEffect(() => { if (dlg) dlgRef.current?.focus(); }, [dlg]); // focus inside so Escape works
   const st = useRef({ prev: null, base: null, timer: null, snap: null, live: false, since: 0, edit: null });
   st.current.edit = edit;
 
@@ -73,10 +76,12 @@ export default function EditedBy({ rt, editor, ready }) {
   const ack = useCallback(() => { setEdit(null); setDlg(false); setCmp(false); st.current.base = null; }, []);
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 2600); };
   const keepMine = useCallback(async () => {
-    if (!edit) return false;
+    if (!edit || keeping.current) return false;
     if (!getToken()) { flash('Sign in to keep a copy as a note'); return false; }
+    keeping.current = true;
     try { await notesAPI.create({ title: `${firstLine(edit.base)} (my version)`, content: edit.base, tags: [] }); flash('Saved your version as its own note'); return true; }
     catch { flash('Could not save a copy'); return false; }
+    finally { keeping.current = false; }
   }, [edit]);
   const setSmall = (v) => { setQuiet(v); try { localStorage.setItem(SMALL_KEY, v ? '1' : '0'); } catch { /* not remembered */ } };
   const go = async () => {
@@ -106,7 +111,7 @@ export default function EditedBy({ rt, editor, ready }) {
       </div>}
       {msg && <div className="eb-flash" role="status">{msg}</div>}
       {edit && dlg && <div className="eb-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setDlg(false); }}>
-        <div className="eb-dlg" role="dialog" aria-label={`${edit.who} updated this note`} data-testid="edited-dialog" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setDlg(false); } }}>
+        <div className="eb-dlg" role="dialog" aria-modal="true" tabIndex={-1} ref={dlgRef} aria-label={`${edit.who} updated this note`} data-testid="edited-dialog" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setDlg(false); } }}>
           <div className="eb-dh"><span className="eb-av lg" style={{ background: edit.color }}>{(edit.who[0] || '?').toUpperCase()}</span><div><h3>{edit.who} updated this note</h3><small>Just now · the public page stays open for everyone</small></div>
             <button type="button" className="eb-x" aria-label="Close" onClick={() => setDlg(false)}><X size={18} /></button></div>
           <div className="eb-panes">

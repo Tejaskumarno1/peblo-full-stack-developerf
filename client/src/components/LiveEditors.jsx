@@ -70,12 +70,13 @@ export default function LiveEditors() {
     return () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('selectionchange', onSel); };
   }, [noteId]);
 
-  const poll = useCallback(async (id) => {
+  const poll = useCallback(async (id, isStale) => {
     const params = {};
     if (['soft', 'river', 'orbit'].includes(styleRef.current)) params.style = styleRef.current;
     if (Date.now() - typedAt.current < 3000) params.typing = 1;
     if (cursorRef.current !== null) { params.cursor = cursorRef.current; if (selRef.current) { params.selStart = selRef.current.start; params.selEnd = selRef.current.end; } }
     const { data } = await api.get(`/share/note/${id}/live`, { params });
+    if (isStale?.()) return; // the person moved to another note while this was in flight
     sharedRef.current = !!data.shared;
     setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [], extendRequest: data.extendRequest || null });
     const exAt = data.extendRequest?.at || null;
@@ -97,7 +98,7 @@ export default function LiveEditors() {
     let timer;
     const tick = async () => {
       try {
-        await poll(noteId);
+        await poll(noteId, () => stop);
         if (stop) return;
         if (fails.current >= 2) { setSynced(true); collab.note('back'); window.setTimeout(() => setSynced(false), 4000); }
         fails.current = 0;

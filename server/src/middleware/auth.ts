@@ -33,7 +33,7 @@ export interface AuthedUser {
 }
 
 export function signToken(user: { id: string; email: string; tokenVersion?: number }): string {
-  return jwt.sign({ sub: user.id, email: user.email, v: user.tokenVersion ?? 0 }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ sub: user.id, email: user.email, v: user.tokenVersion ?? 0 }, JWT_SECRET, { expiresIn: '30d', algorithm: 'HS256' });
 }
 
 /** Who a token belongs to, or null if it is missing, forged, expired or signed out since. */
@@ -50,7 +50,7 @@ export async function verifyToken(token: string | null | undefined): Promise<Aut
     }
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; email: string; v?: number };
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { sub: string; email: string; v?: number };
     const row = await prisma.user.findUnique({
       where: { id: payload.sub },
       select: { email: true, tokenVersion: true },
@@ -71,7 +71,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const user = await verifyToken(token);
     if (!user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
     // A token is for notes and tasks. Account settings, passwords, keys and the tokens themselves need a real sign-in.
-    if (user.viaToken && /^\/api\/(auth|tokens|profile)(\/|\?|$)/.test(req.originalUrl)) {
+    if (user.viaToken && /^\/api\/(auth|tokens|profile)(\/|\?|$)/i.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot change account settings. Sign in to do that.' });
     }
     if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {

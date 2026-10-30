@@ -37,8 +37,15 @@ export default function ConnectionsScreen({ p, extra }) {
   const embedModel = settings?.ollamaEmbedModel || 'nomic-embed-text';
   const isSame = (m, want) => m === want || m === `${want}:latest`;
 
+  const [applyError, setApplyError] = useState('');
   const apply = async (patch) => {
-    await updateSettings(patch);
+    setApplyError('');
+    try {
+      await updateSettings(patch);
+    } catch (err) {
+      console.error('Could not save the AI setting', err);
+      setApplyError('Could not save that setting. Try again.');
+    }
     setTimeout(() => queryClient.invalidateQueries({ queryKey: ['hub-models'] }), 400);
   };
   const test = async () => {
@@ -64,6 +71,8 @@ export default function ConnectionsScreen({ p, extra }) {
         <h1>{hosted ? 'Connect your AI' : 'How Peblo uses AI'}</h1>
         <p>{hosted ? 'Add a key from OpenAI or Google. You can change it any time, and every answer shows what it read.' : 'Pick one. You can change it any time, and every answer shows what it read.'}</p>
       </div>
+
+      {applyError && <p role="alert" className={c('quiet')}>{applyError}</p>}
 
       {showLocal && <fieldset className={c('choices')}>
         <legend className={c('sr')}>When Peblo needs AI</legend>

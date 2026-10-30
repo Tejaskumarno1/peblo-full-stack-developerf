@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search } from 'lucide-react';
 
 const IMG = /!\[([^\]]*)\]\(([^)\s]+)\)|<img[^>]*?src="([^"]+)"[^>]*>(?:\s*<figcaption>([^<]*)<\/figcaption>)?/g;
@@ -6,6 +6,8 @@ const IMG = /!\[([^\]]*)\]\(([^)\s]+)\)|<img[^>]*?src="([^"]+)"[^>]*>(?:\s*<figc
 // Every picture across your notes in one grid. Click one to open the note it lives in.
 export default function Gallery({ notes, onOpen, onClose }) {
   const [q, setQ] = useState('');
+  const dlg = useRef(null);
+  useEffect(() => { dlg.current?.focus(); }, []); // focus inside so Escape works
   const pics = useMemo(() => {
     const out = [];
     for (const n of notes) {
@@ -22,7 +24,7 @@ export default function Gallery({ notes, onOpen, onClose }) {
   const shown = useMemo(() => { const s = q.trim().toLowerCase(); return s ? pics.filter((p) => p.title.toLowerCase().includes(s) || p.caption.toLowerCase().includes(s)) : pics; }, [pics, q]);
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="s-share s-gal" role="dialog" aria-label="Pictures in your notes">
+      <div className="s-share s-gal" role="dialog" aria-modal="true" tabIndex={-1} ref={dlg} aria-label="Pictures in your notes">
         <div className="s-share-head">
           <div><b>Pictures</b><small>{pics.length} in your notes</small></div>
           <button type="button" className="s-capture-close" aria-label="Close" onClick={onClose}><X size={16} strokeWidth={2.4} /></button>

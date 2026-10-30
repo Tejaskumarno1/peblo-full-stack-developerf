@@ -37,6 +37,8 @@ export default function FileTools({ editor, rootRef, editable }) {
   const ctl = useRef(new Map());
   const jobId = useRef(0);
 
+  useEffect(() => { const m = ctl.current; return () => { m.forEach((a) => a.abort()); }; }, []); // leaving the note stops uploads still in flight
+
   const patch = (id, p) => setJobs((j) => j.map((x) => (x.id === id ? { ...x, ...p } : x)));
   const drop = (id) => setJobs((j) => j.filter((x) => x.id !== id));
 

@@ -27,9 +27,11 @@ async function syncTags(userId: string, noteId: string, tagNames: string[] | und
   await prisma.noteTag.deleteMany({ where: { noteId } });
   if (!tagNames?.length) return;
 
+  const seen = new Set<string>();
   for (const name of tagNames) {
-    const trimmed = name.trim().toLowerCase();
-    if (!trimmed) continue;
+    const trimmed = typeof name === 'string' ? name.trim().toLowerCase() : '';
+    if (!trimmed || seen.has(trimmed)) continue; // a repeated tag would break the (note, tag) pair
+    seen.add(trimmed);
     let tag = await prisma.tag.findUnique({ where: { userId_name: { userId, name: trimmed } } });
     if (!tag) tag = await prisma.tag.create({ data: { userId, name: trimmed } });
     await prisma.noteTag.create({ data: { noteId, tagId: tag.id } });

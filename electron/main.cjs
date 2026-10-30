@@ -217,6 +217,8 @@ function secureWebContents(win) {
     if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
     return { action: 'deny' };
   });
+  // A window Peblo opens for itself gets the same rules, so it cannot be steered to another site inside the app.
+  win.webContents.on('did-create-window', (child) => secureWebContents(child));
   win.webContents.on('will-navigate', (event, target) => {
     if (!isInternal(target)) {
       event.preventDefault();

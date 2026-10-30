@@ -14,6 +14,7 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
     method,
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
   });
   const text = await res.text();
   let data: any = {};
@@ -162,7 +163,7 @@ server.registerTool('get_calendar', {
 server.registerTool('create_share_link', {
   description: 'Make a public link to one note or task, so anyone with the link can open it. edit=true lets them edit too. The link is returned.',
   inputSchema: { kind: z.enum(['note', 'todo']), id: z.string(), edit: z.boolean().optional() },
-  annotations: { ...writes, idempotentHint: true },
+  annotations: { ...writes, idempotentHint: true, openWorldHint: true }, // makes content public: clients should ask first, so text inside a note cannot trigger it silently
 }, ({ kind, id, edit }) => run(async () => {
   const { token, edit: canEdit } = await api('POST', `/share/${kind}/${encodeURIComponent(id)}`, { edit: !!edit });
   const cfg = await api('GET', '/config').catch(() => ({}));

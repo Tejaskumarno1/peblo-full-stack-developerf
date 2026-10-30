@@ -90,10 +90,9 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     queryClient.setQueryData(['todos', 'orbit-all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, completed } : x)));
     await todosAPI.update(t.id, { completed });
   }, 'Could not update that task.');
-  const toggle = (t) => {
+  const toggle = async (t) => {
     const next = !t.completed;
-    setDone(t, next);
-    say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
+    if (await setDone(t, next)) say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next)); // on failure the error shows and the tick rolls back
   };
   const remove = async (t) => {
     if (t.seriesId) { // a repeating task asks which ones, so that stays a direct question
@@ -101,11 +100,13 @@ export default function OrbitDue({ view: initialView = 'list' }) {
       if (scope) await run(() => todosAPI.delete(t.id, scope), 'Could not delete that task.');
       return;
     }
+    if (pending.current.has(t.id)) return; // a second click while the undo time is running
     // any other task goes away on screen at once and is really deleted after the undo time
     setGone((g) => [...g, t.id]);
     const finish = () => { pending.current.delete(t.id); return run(() => todosAPI.delete(t.id, 'this'), 'Could not delete that task.').then(() => setGone((g) => g.filter((x) => x !== t.id))); };
     pending.current.set(t.id, { timer: setTimeout(finish, UNDO_MS), run: finish });
-    say('Deleted "' + (t.text.length > 40 ? t.text.slice(0, 40) + '…' : t.text) + '"', () => {
+    const lbl = String(t.text || 'task');
+    say('Deleted "' + (lbl.length > 40 ? lbl.slice(0, 40) + '…' : lbl) + '"', () => {
       const p = pending.current.get(t.id);
       if (p) { clearTimeout(p.timer); pending.current.delete(t.id); }
       setGone((g) => g.filter((x) => x !== t.id));
@@ -134,16 +135,27 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   // Round 8: focus timer that logs minutes on the task (meta.spentMin)
   const [focus, setFocus] = useState(null); // { task, startedAt, mins }
   const [, setTick] = useState(0);
+  const focusRef = useRef(null); // the running timer, readable from the interval without a stale copy
+  const todosRef = useRef(todos);
+  todosRef.current = todos;
   const stopFocus = async () => {
-    if (!focus) return;
-    const f = focus;
+    const f = focusRef.current;
+    if (!f) return;
+    focusRef.current = null;
     setFocus(null);
     const mins = Math.min(f.mins, Math.round((Date.now() - f.startedAt) / 60000));
     if (mins < 1) { say('Focus stopped. Under a minute, so nothing was logged.'); return; }
-    const cur = todos.find((x) => x.id === f.task.id) || f.task;
-    if (await setMeta(cur, { spentMin: (metaOf(cur).spentMin || 0) + mins })) say(`Logged ${mins} min on "${f.task.text.length > 30 ? f.task.text.slice(0, 30) + '…' : f.task.text}"`);
+    const cur = todosRef.current.find((x) => x.id === f.task.id) || f.task;
+    const ft = String(f.task.text || 'task');
+    if (await setMeta(cur, { spentMin: (metaOf(cur).spentMin || 0) + mins })) say(`Logged ${mins} min on "${ft.length > 30 ? ft.slice(0, 30) + '…' : ft}"`);
   };
-  const startFocus = (t) => { setFocus({ task: t, startedAt: Date.now(), mins: 25 }); setOpenId(null); };
+  const startFocus = (t) => {
+    if (focusRef.current) { say('A focus timer is already running. Stop it first.'); return; }
+    const f = { task: t, startedAt: Date.now(), mins: 25 };
+    focusRef.current = f;
+    setFocus(f);
+    setOpenId(null);
+  };
   useEffect(() => {
     if (!focus) return undefined;
     const i = setInterval(() => { setTick((n) => n + 1); if (Date.now() >= focus.startedAt + focus.mins * 60000) stopFocus(); }, 1000);
@@ -205,15 +217,20 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     setMenuId(null);
     setEditId(t.id);
     setDraft({
-      text: t.text,
+      text: t.text || '',
       date: d ? dateValue(d) : '',
       time: d && !isAllDay(t) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '',
       priority: t.priority || 'medium',
       topic: tagsOfTodo(t)[0] || '',
     });
   };
+  const busyRef = useRef(false); // stops a double click from saving or adding twice
   const saveEdit = async (t) => {
-    if (!draft.text.trim()) return;
+    if (busyRef.current || !draft || !draft.text.trim()) return;
+    busyRef.current = true;
+    try { await saveEditNow(t); } finally { busyRef.current = false; }
+  };
+  const saveEditNow = async (t) => {
     const scope = t.seriesId ? await askScope(t, 'edit') : 'this';
     if (!scope) return;
     const body = { text: draft.text.trim(), priority: draft.priority, scope };
@@ -234,14 +251,17 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const add = async (e) => {
     e.preventDefault();
     const raw = text.trim();
-    if (!raw) return;
+    if (!raw || busyRef.current) return;
     const p = parseTask(raw);
     const deadline = p.deadline ? new Date(p.deadline) : null;
     const tags = [...new Set([...(space ? [space] : []), ...p.tags])];
-    await run(async () => {
-      await todosAPI.create({ text: p.text || raw, priority: p.priority, tags, deadline: deadline ? deadline.toISOString() : null });
-      setText('');
-    }, 'Could not add the task. Your text is still here, try again.');
+    busyRef.current = true;
+    try {
+      await run(async () => {
+        await todosAPI.create({ text: p.text || raw, priority: p.priority, tags, deadline: deadline ? deadline.toISOString() : null });
+        setText('');
+      }, 'Could not add the task. Your text is still here, try again.');
+    } finally { busyRef.current = false; }
   };
 
   const allTopics = useMemo(() => [...new Set(todos.flatMap(tagsOfTodo))].sort(), [todos]);
@@ -529,7 +549,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                 <button type="button" className="o-btn ghost small" onClick={() => setWeek(mondayOf(new Date()))}>This week</button>
                 <button type="button" className="o-btn ghost small" aria-label="Next week" onClick={() => setWeek(addDays(week, 7))}><ChevronRight size={16} /></button>
                 <span className="o-eyebrow" style={{ marginLeft: 8 }}>{week.getDate()} {week.toLocaleDateString('en-GB', { month: 'short' })} – {addDays(week, 6).getDate()} {addDays(week, 6).toLocaleDateString('en-GB', { month: 'short' })}</span>
-                <span className="o-quiet" style={{ marginLeft: 'auto', fontSize: 12.5 }}>Drag a task to another day to move it</span>
+                <span className="o-quiet" style={{ marginLeft: 'auto', fontSize: 12.5 }}>Drag a task to another day to move it, or focus it and press Shift+Left or Right</span>
               </div>
               <div className="o-week">
                 {days.map((d) => {
@@ -548,7 +568,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                     >
                       <div className="h"><b>{d.getDate()}</b><span>{DOW[d.getDay()].toUpperCase()}</span></div>
                       {items.map((t) => (
-                        <button key={t.id} type="button" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)} className={`o-week-item${t.startTime ? ' meet' : ''}${t.completed ? ' done' : ''}`} onClick={() => toggle(t)} title={t.completed ? 'Mark not done' : 'Mark done'}>
+                        <button key={t.id} type="button" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)} className={`o-week-item${t.startTime ? ' meet' : ''}${t.completed ? ' done' : ''}`} onClick={() => toggle(t)} onKeyDown={(e) => { if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = addDays(d, e.key === 'ArrowLeft' ? -1 : 1); reschedule(t, to, dayWord(to).toLowerCase()); } }} title={t.completed ? 'Mark not done' : 'Mark done'}>
                           <span>{t.text}</span>
                           {timeOf(t) && <span className="m">{timeOf(t)}</span>}
                         </button>

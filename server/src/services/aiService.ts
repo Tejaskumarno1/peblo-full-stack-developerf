@@ -1,6 +1,7 @@
 import { decryptSecret, isUnreadable } from '../secrets.js';
 import { effectiveOllamaUrl, ollamaUrlProblem, hosted } from '../utils/ollamaPolicy.js';
 import { usableConnections, providerById } from './aiProviders.js';
+import { safeFetch } from '../utils/safeFetch.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
 import prisma from '../db.js';
@@ -57,7 +58,9 @@ function connectionProviders(user: any): Record<string, OAIProvider> {
     const name = `conn:${c.id}`;
     out[name] = {
       name, label: c.label, local: !hosted() && isLoopbackUrl(c.baseUrl),
-      client: new OpenAI({ apiKey: key || 'none', baseURL: c.baseUrl, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 }),
+      // On a shared server every request goes to the address validated just before connecting and redirects are re-checked (PEB-24: DNS rebinding).
+      // Desktop keeps the normal client so local servers (Ollama, LM Studio) still work.
+      client: new OpenAI({ apiKey: key || 'none', baseURL: c.baseUrl, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1, ...(hosted() ? { fetch: safeFetch as any } : {}) }),
       model: c.model, embedModel: providerById(c.provider)?.embedModel || '',
     };
   }
@@ -287,6 +290,7 @@ async function runWithCascade(
     ? 'The AI took too long to answer. Try again, or pick a faster model in AI Hub → Connections.'
     : 'The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
   err.statusCode = 502;
+  err.public = true; // the text above is written for people
   err.code = timedOut ? 'TIMEOUT' : 'PROVIDER_ERROR';
   throw err;
 }
@@ -356,7 +360,7 @@ export async function checkOllama(url?: string): Promise<{ ok: boolean; models: 
   const base = effectiveOllamaUrl(asked, DEFAULT_OLLAMA_URL);
   if (!base) return { ok: false, models: [], error: 'Local AI is not available on this server.' };
   try {
-    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(`${base}/api/tags`, { redirect: 'manual', signal: AbortSignal.timeout(4000) });
     if (!res.ok) return { ok: false, models: [], error: `Ollama answered with HTTP ${res.status}` };
     const data: any = await res.json();
     return { ok: true, models: (data.models || []).map((m: any) => m.name) };
@@ -578,7 +582,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
 
   const user = await getUserSettings(userId);
   const providers = buildProviders(user);
-  const chosen = providerOrder(user).find((n) => providers[n]);
+  const chosen = providerOrder(user, 'ask').find((n) => providers[n]); // same feature pin as the non-streaming chat
   if (!chosen) throw noKeyError(user);
 
   res.writeHead(200, {

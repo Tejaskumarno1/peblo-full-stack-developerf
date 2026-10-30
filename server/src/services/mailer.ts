@@ -25,7 +25,12 @@ export function publicBase(req: Request): string {
   const configured = (process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
   const host = req.get('host') || '';
   const local = /^(localhost|127\.|\[::1\])/.test(host);
-  return configured || (local ? 'https://peblo-stxo.onrender.com' : `${req.protocol}://${host}`);
+  if (configured) return configured;
+  // Without PUBLIC_URL the Host header is attacker-controlled (password-style link forging), so in production, or for a
+  // malformed host, fall back to the hosted app. Only a plausible non-local host outside production is used as-is (dev/LAN).
+  const plausible = /^[a-z0-9.-]+(:\d{1,5})?$/i.test(host);
+  if (local || !plausible || process.env.NODE_ENV === 'production') return 'https://peblo-stxo.onrender.com';
+  return `${req.protocol}://${host}`;
 }
 
 const clean = (s: string) => String(s).replace(/[\r\n]+/g, ' ').trim();

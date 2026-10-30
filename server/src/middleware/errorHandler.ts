@@ -23,7 +23,9 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
   // Anything else is unexpected (database, library, bug): keep its text in the log, not in the reply.
   if (typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600) {
     console.error('Error:', err.message);
-    return res.status(err.statusCode).json({ error: err.message || 'Request failed', ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}) });
+    // 5xx messages come from databases, libraries and providers: show them only when the code that raised the error flagged the text as written for people (err.public).
+    const text = err.statusCode >= 500 && err.public !== true ? 'Something went wrong. Try again in a moment.' : (err.message || 'Request failed');
+    return res.status(err.statusCode).json({ error: text, ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}) });
   }
   const requestId = crypto.randomBytes(4).toString('hex');
   console.error(`Error [${requestId}] ${req.method} ${req.originalUrl}:`, err.stack || err.message || err);

@@ -59,7 +59,7 @@ router.post('/quiz', ...aiLimit, async (req, res, next) => {
     const questions = await makeQuiz(userId, topic, usable.map((n) => ({ title: n.title, content: n.content })), count);
     if (!questions.length) return res.status(502).json({ error: 'The AI did not write any questions. Try again.' });
 
-    const stored = questions.map((q) => ({ ...q, noteId: q.note ? usable[q.note - 1].id : null, noteTitle: q.note ? usable[q.note - 1].title : null }));
+    const stored = questions.map((q) => ({ ...q, noteId: usable[(q.note ?? 0) - 1]?.id ?? null, noteTitle: usable[(q.note ?? 0) - 1]?.title ?? null }));
     const run = await prisma.quizRun.create({
       data: { userId, topic, questions: JSON.stringify(stored), total: stored.length },
     });
@@ -134,7 +134,7 @@ router.get('/activity', async (req, res, next) => {
 // GET /api/study/notes/:id/questions: how many quiz questions came from one note
 router.get('/notes/:id/questions', async (req, res, next) => {
   try {
-    const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id }, select: { questions: true } });
+    const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id, questions: { contains: String(req.params.id) } }, select: { questions: true } }); // only runs that mention this note id at all
     let count = 0;
     for (const r of runs) for (const q of parse(r.questions, [])) if (q.noteId === req.params.id) count++;
     res.json({ count });

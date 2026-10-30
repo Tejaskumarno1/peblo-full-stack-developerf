@@ -39,7 +39,7 @@ function WelcomeScreen({
             <button type="button" className="btn btn-primary" onClick={handleCreateNote}>
               <Plus size={16} /> New Note
             </button>
-            <button type="button" className="btn btn-outline" onClick={() => notes.length > 0 && selectNote(notes[0])}>
+            <button type="button" className="btn btn-outline" onClick={() => notes?.length > 0 && selectNote(notes[0])}>
               Open latest
             </button>
           </div>
@@ -50,7 +50,7 @@ function WelcomeScreen({
           </div>
         </div>
 
-        {quickPickNotes.length > 0 && (
+        {quickPickNotes?.length > 0 && (
           <div className="ws-quick-pick">
             <h3>Recent Notes</h3>
             <div className="ws-quick-pick-grid">
@@ -58,7 +58,10 @@ function WelcomeScreen({
                 <div
                   key={note.id}
                   className="ws-quick-card"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => selectNote(note)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNote(note); } }}
                 >
                   <div className="ws-quick-card-title">{note.title || 'Untitled'}</div>
                   <div className="ws-quick-card-snippet">

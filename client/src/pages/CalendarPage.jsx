@@ -44,6 +44,7 @@ export default function CalendarPage() {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTaskText, setEditTaskText] = useState('');
   const savingEditRef = useRef(null);
+  const loadSeq = useRef(0); // only the newest month request may fill the grid
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -55,16 +56,18 @@ export default function CalendarPage() {
   }, [year, month]);
 
   const loadMonthTodos = async (silent = false) => {
+    const seq = ++loadSeq.current;
     if (silent !== true) setLoading(true);
     try {
       const from = new Date(year, month, 1).toISOString();
       const to = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
       const res = await todosAPI.getRange(from, to);
-      setTodos(res.data.todos);
+      if (seq !== loadSeq.current) return;
+      setTodos(res.data.todos || []);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   };
 
@@ -102,7 +105,7 @@ export default function CalendarPage() {
         endTime: newTaskEndTime || null,
         recurrence: newTaskRecurrence
       });
-      setTodos([...todos, res.data.todo]);
+      setTodos((prev) => [...prev, res.data.todo]);
       setNewTaskText('');
       setNewTaskStartTime('');
       setNewTaskEndTime('');
@@ -191,7 +194,7 @@ export default function CalendarPage() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return;
       if (!selectedDay) return;
 
       if (e.key === 'ArrowLeft') {
@@ -504,6 +507,10 @@ export default function CalendarPage() {
               return (
                 <div
                   key={i}
+                  role={cell.outside ? undefined : 'button'}
+                  tabIndex={cell.outside ? undefined : 0}
+                  aria-label={cell.date ? `${cell.date.toDateString()}, ${activeCount} open task${activeCount === 1 ? '' : 's'}` : undefined}
+                  onKeyDown={(e) => { if (!cell.outside && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleCellClick(cell); setIsAddingTask(false); } }}
                   className={`cal-cell ${cell.outside ? 'outside' : ''} ${cellIsToday ? 'today' : ''} ${cellIsSelected ? 'selected' : ''} ${isOverdue ? 'overdue' : ''}`}
                   onClick={() => { handleCellClick(cell); setIsAddingTask(false); }}
                   onDragOver={(e) => {
@@ -613,7 +620,7 @@ export default function CalendarPage() {
                             <div className="cal-task-body">
                               {editingTaskId === task.id ? (
                                 <form className="cal-edit-form" onSubmit={(e) => handleUpdateTask(e, task.id)}>
-                                  <input 
+                                  <input aria-label="Edit task text" 
                                     type="text" 
                                     value={editTaskText} 
                                     onChange={(e) => setEditTaskText(e.target.value)} 
@@ -718,7 +725,7 @@ export default function CalendarPage() {
                       <span className="cal-time-separator">-</span>
                       <input type="time" value={newTaskEndTime} onChange={e => setNewTaskEndTime(e.target.value)} className="cal-time-input" aria-label="End time" />
                     </div>
-                    <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
+                    <select aria-label="Repeat" value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
                       <option value="weekdays">Every weekday</option>
@@ -764,7 +771,7 @@ export default function CalendarPage() {
                   <span className="cal-sidebar-relative">{getRelativeLabel()}</span>
                   <h3 className="cal-sidebar-date">{selectedDayLabel}</h3>
                 </div>
-                <button className="cal-mobile-close" onClick={() => setSelectedDay(null)}>✕</button>
+                <button className="cal-mobile-close" aria-label="Close" onClick={() => setSelectedDay(null)}>✕</button>
               </div>
 
               <div className="cal-sidebar-tasks" style={{ maxHeight: 'calc(var(--pb-canvas-h) * 50 / 100)', overflowY: 'auto' }}>
@@ -782,6 +789,7 @@ export default function CalendarPage() {
                             <button
                               className="cal-task-check"
                               onClick={() => handleToggle(task)}
+                              aria-label="Mark complete"
                             >
                               <div className="cal-check-ring" />
                             </button>
@@ -824,6 +832,7 @@ export default function CalendarPage() {
                             <button
                               className="cal-task-check checked"
                               onClick={() => handleToggle(task)}
+                              aria-label="Mark incomplete"
                             >
                               <Check size={11} strokeWidth={3} />
                             </button>
@@ -855,7 +864,7 @@ export default function CalendarPage() {
                       <span className="cal-time-separator">-</span>
                       <input type="time" value={newTaskEndTime} onChange={e => setNewTaskEndTime(e.target.value)} className="cal-time-input" aria-label="End time" />
                     </div>
-                    <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
+                    <select aria-label="Repeat" value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)} className="cal-recurrence-select">
                       <option value="none">Does not repeat</option>
                       <option value="daily">Daily</option>
                       <option value="weekdays">Every weekday</option>

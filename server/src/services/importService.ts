@@ -88,12 +88,12 @@ export function parseMarkdownPage(fileName: string, raw: string, result: ImportR
   if (kept.length) body = `${kept.join('  \n')}\n\n${body}`;
 
   // Images live as separate files in the export; they aren't imported yet.
-  body = body.replace(/!\[[^\]]*\]\((?!https?:)[^)]*\)\n?/g, () => {
+  body = body.replace(/!\[[^\]\n]{0,500}\]\((?!https?:)[^)\n]{0,2000}\)\n?/g, () => {
     result.skippedImages++;
     return '';
   });
   // Links to other exported pages ("Other%20Page%20<id>.md") become plain text.
-  body = body.replace(/\[([^\]]+)\]\((?!https?:)[^)]*\.(md|csv)\)/gi, '$1');
+  body = body.replace(/\[([^\]\n]{1,500})\]\((?!https?:)[^)\n]{0,2000}\.(md|csv)\)/gi, '$1');
 
   return {
     title: title.slice(0, 300),
@@ -132,7 +132,7 @@ export function parseCSV(text: string): string[][] {
 export function csvToNote(fileName: string, text: string): ImportedNote | null {
   const rows = parseCSV(text);
   if (rows.length === 0) return null;
-  const width = Math.max(...rows.map((r) => r.length));
+  const width = rows.reduce((m, r) => Math.max(m, r.length), 0);
   const cell = (v: string | undefined) => (v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
   const header = rows[0];
   const lines = [
@@ -168,7 +168,9 @@ function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResu
 
     if (ext === '.zip') {
       if (depth > 3) { result.skippedFiles.push(file.name); continue; }
-      const entries = new AdmZip(file.data).getEntries().filter((e) => !e.isDirectory);
+      let entries;
+      try { entries = new AdmZip(file.data).getEntries().filter((e) => !e.isDirectory); }
+      catch { throw Object.assign(new Error(`"${path.basename(file.name)}" is not a readable .zip file.`), { statusCode: 400 }); }
       // Zip-bomb guard (PEB-62): a tiny zip can declare gigabytes. Count what it *declares* before inflating anything.
       budget.entries += entries.length;
       if (budget.entries > MAX_ZIP_ENTRIES) throw new ImportLimitError(`This archive has too many files (limit ${MAX_ZIP_ENTRIES}).`);
@@ -180,7 +182,9 @@ function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResu
         if (declared > MAX_ENTRY_BYTES) throw new ImportLimitError(`"${path.basename(e.entryName)}" is too large to import (limit ${MAX_ENTRY_BYTES / 1048576} MB per file).`);
         budget.bytes += declared;
         if (budget.bytes > MAX_UNZIPPED_BYTES) throw new ImportLimitError(`This archive unpacks to more than ${MAX_UNZIPPED_BYTES / 1048576} MB.`);
-        return { name: e.entryName, data: e.getData() };
+        const data = e.getData();
+        if (data.length > MAX_ENTRY_BYTES) throw new ImportLimitError(`"${path.basename(e.entryName)}" is too large to import (limit ${MAX_ENTRY_BYTES / 1048576} MB per file).`); // the declared size can lie
+        return { name: e.entryName, data };
       });
       ingestFiles(inner, result, depth + 1);
     } else if (TEXT_EXT.has(ext)) {

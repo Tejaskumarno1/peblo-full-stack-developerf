@@ -6,6 +6,7 @@ import { Undo2, Archive, Copy, FileDown, FileText, History, Layers, ListChecks, 
 import { notesAPI, todosAPI, riverAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
 import useNoteDoc from '../hooks/useNoteDoc';
+import UndoToast from '../components/UndoToast';
 import { RiverHeader, useDismiss } from './RiverShell';
 import { snippetOf } from '../soft/softUtils';
 import ShareDialog from '../soft/ShareDialog';
@@ -418,6 +419,7 @@ function RiverNote({ note }) {
         </aside>
       </div>
       {toast && <div className="r-toast" role="status">{toast}</div>}
+      <UndoToast toast={note.actionToast} dismiss={note.dismissActionToast} />
     </>
   );
 }
@@ -609,7 +611,7 @@ function RiverNoteList({ onNew }) {
       for (const id of picked) {
         if (kind === 'archive' || kind === 'unarchive') await notesAPI.archive(id);
         else if (kind === 'restore') await notesAPI.restore(id);
-        else await notesAPI.delete(id);
+        else await notesAPI.delete(id, kind === 'forever' ? { permanent: true } : undefined);
       }
       flash(({ archive: 'Archived', unarchive: 'Unarchived', restore: 'Restored', trash: 'Moved to the Trash', forever: 'Deleted' })[kind]);
       refresh();
@@ -640,12 +642,12 @@ function RiverNoteList({ onNew }) {
     : filter === 'trash'
       ? [
           { label: 'Restore', run: async (n) => { await notesAPI.restore(n.id); refresh(); } },
-          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await notesAPI.delete(n.id); refresh(); } },
+          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await notesAPI.delete(n.id, { permanent: true }); refresh(); } },
         ]
       : null;
   const emptyTrash = async () => {
     if (!window.confirm(`Delete ${listed.length} note${listed.length === 1 ? '' : 's'} in the Trash forever? This cannot be undone.`)) return;
-    for (const n of listed) await notesAPI.delete(n.id);
+    for (const n of listed) await notesAPI.delete(n.id, { permanent: true });
     refresh();
   };
   const shownTags = moreTags || tags.findIndex(([t]) => t === filter) >= 10 ? tags : tags.slice(0, 10);

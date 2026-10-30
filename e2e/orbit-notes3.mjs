@@ -21,8 +21,8 @@ try {
   check('favouriting is saved on the note', (await notes()).find((x) => x.id === n.id)?.meta?.favourite === true);
   check('..and the star shows it is on', (await page.getByRole('button', { name: 'Remove from favourites' }).getAttribute('aria-pressed')) === 'true');
 
-  await page.getByRole('button', { name: 'Add an icon' }).click();
-  await page.getByRole('menuitem', { name: 'Use 🧠' }).click();
+  await page.getByRole('button', { name: 'Add icon' }).click();
+  await page.getByRole('menuitem', { name: 'Use Brain' }).click();
   await page.waitForTimeout(700);
   check('an icon is saved', (await notes()).find((x) => x.id === n.id)?.meta?.emoji === '🧠');
 

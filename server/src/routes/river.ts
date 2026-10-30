@@ -81,6 +81,7 @@ router.get('/promises', async (req, res, next) => {
       where: { userId, type: 'promises', ...(noteId ? { noteId } : { createdAt: { gte: new Date(Date.now() - 30 * 86400000) } }) },
       include: { note: { select: { title: true, isDeleted: true } } },
       orderBy: { createdAt: 'desc' },
+      take: 500,
     });
     const latest = new Map<string, any>();
     for (const g of gens) if (!latest.has(g.noteId) && !g.note.isDeleted) latest.set(g.noteId, g);
