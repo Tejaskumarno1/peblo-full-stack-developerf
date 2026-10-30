@@ -10,6 +10,7 @@ const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric
 // Turns a public link on or off for one note or task: read only or editable, with an optional end date.
 export default function ShareDialog({ kind, id, title, onClose }) {
   const [edit, setEdit] = useState(false);
+  const [withNote, setWithNote] = useState(false); // tasks only: show the linked note on the link
   const [expiry, setExpiry] = useState('never');
   const [expiresAt, setExpiresAt] = useState(null);
   const [token, setToken] = useState(undefined); // undefined = loading, null = not shared
@@ -25,7 +26,7 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     let live = true;
     api.get(`/share/${kind}/${id}`).then((r) => {
       if (!live) return;
-      setToken(r.data.token); setEdit(!!r.data.edit); setExpiresAt(r.data.expiresAt || null);
+      setToken(r.data.token); setEdit(!!r.data.edit); setWithNote(!!r.data.shareNote); setExpiresAt(r.data.expiresAt || null);
     }).catch(() => { if (live) setError('Could not check the link. Try again.'); });
     return () => { live = false; };
   }, [kind, id]);
@@ -41,8 +42,9 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     try { const r = await api.post(`/share/${kind}/${id}`, body); after(r.data); } catch { setError('Could not save that. Try again.'); }
     setBusy(false);
   };
-  const turnOn = () => save({ edit, expiresInDays: daysOf(expiry) }, (d) => { setToken(d.token); setEdit(!!d.edit); setExpiresAt(d.expiresAt || null); });
+  const turnOn = () => save({ edit, expiresInDays: daysOf(expiry), ...(kind === 'todo' ? { shareNote: withNote } : {}) }, (d) => { setToken(d.token); setEdit(!!d.edit); setExpiresAt(d.expiresAt || null); });
   const setMode = (next) => save({ edit: next }, (d) => setEdit(!!d.edit));
+  const setNote = (on) => { setWithNote(on); if (token) save({ shareNote: on }, (d) => setWithNote(!!d.shareNote)); };
   const setEnds = (key) => { setExpiry(key); save({ expiresInDays: daysOf(key) }, (d) => setExpiresAt(d.expiresAt || null)); };
   const turnOff = async () => {
     setBusy(true); setError('');
@@ -69,8 +71,9 @@ export default function ShareDialog({ kind, id, title, onClose }) {
         {token === undefined && !error && <p className="s-share-msg">Checking…</p>}
         {token === null && (
           <>
-            <p className="s-share-msg">Anyone with the link can open it without signing in.{kind === 'todo' ? ' The note linked to this task is shown too.' : ''}</p>
+            <p className="s-share-msg">Anyone with the link can open it without signing in.</p>
             <Mode edit={edit} onPick={setEdit} kind={kind} />
+            {kind === 'todo' && <NoteToggle on={withNote} onChange={setNote} />}
             <Expiry value={expiry} onPick={setExpiry} />
             <button type="button" className="s-share-go" onClick={turnOn} disabled={busy}><Link2 size={15} /> {busy ? 'Creating…' : 'Create link'}</button>
           </>
@@ -78,6 +81,7 @@ export default function ShareDialog({ kind, id, title, onClose }) {
         {token && (
           <>
             <Mode edit={edit} onPick={setMode} kind={kind} disabled={busy} />
+            {kind === 'todo' && <NoteToggle on={withNote} onChange={setNote} disabled={busy} />}
             <Expiry value={expiresAt ? 'custom' : 'never'} onPick={setEnds} disabled={busy} note={expiresAt ? (expired ? `This link stopped working on ${fmtDate(expiresAt)}. Pick a new end date to turn it back on.` : `The link stops working on ${fmtDate(expiresAt)}.`) : ''} custom={!!expiresAt} />
             <div className="s-share-row">
               <input readOnly aria-label="Share link" value={url} onFocus={(e) => e.target.select()} />
@@ -102,6 +106,15 @@ function Mode({ edit, onPick, kind, disabled }) {
       <button type="button" role="radio" aria-checked={edit} className={edit ? 'on' : ''} disabled={disabled} onClick={() => onPick(true)}>Can edit</button>
       <small>{edit ? (kind === 'note' ? 'They can change the text. They cannot delete the note or see your other notes.' : 'They can tick it off or reword it.') : 'They can only read it.'}</small>
     </div>
+  );
+}
+
+function NoteToggle({ on, onChange, disabled }) {
+  return (
+    <label className="s-share-note" htmlFor="s-share-note">
+      <input id="s-share-note" type="checkbox" checked={on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span>Also show the note linked to this task</span>
+    </label>
   );
 }
 

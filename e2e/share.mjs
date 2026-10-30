@@ -37,8 +37,16 @@ try {
   const t = (await api('POST', `/api/share/todo/${todo.id}`)).token;
   await g.goto(`${base}/s/task/${t}`);
   await g.getByRole('heading', { name: 'Share this task' }).waitFor({ timeout: 10000 });
+  const plain = await g.textContent('body');
+  check('task link shows priority but NOT the linked note by default', /high priority/.test(plain) && !/Secret-free body text/.test(plain), plain.slice(0, 200));
+  const apiPlain = await (await g.request.get(`${base}/api/public/todo/${t}`)).json();
+  check('public task API has no note unless the owner allows it', apiPlain.note === null, JSON.stringify(apiPlain.note));
+  const on = await api('POST', `/api/share/todo/${todo.id}`, { shareNote: true });
+  check('owner can turn the linked note on', on.shareNote === true);
+  await g.goto(`${base}/s/task/${t}`);
+  await g.getByRole('heading', { name: 'Share this task' }).waitFor({ timeout: 10000 });
   const body = await g.textContent('body');
-  check('task link shows priority and linked note', /high priority/.test(body) && /Shared plan/.test(body) && /Secret-free body text/.test(body), body.slice(0, 200));
+  check('task link shows priority and linked note once allowed', /high priority/.test(body) && /Shared plan/.test(body) && /Secret-free body text/.test(body), body.slice(0, 200));
   await g.screenshot({ path: 'C:/Users/tejas/peblo-e2e/share-task.png' });
 
   // other people's notes cannot be shared, and a wrong link shows a calm message

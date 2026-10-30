@@ -149,6 +149,7 @@ model Todo {
   meta       Json?
   shareToken String? @unique @map("share_token")
   shareEdit  Boolean  @default(false) @map("share_edit")
+  shareNote  Boolean  @default(false) @map("share_note")
   shareExpiresAt DateTime? @map("share_expires_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

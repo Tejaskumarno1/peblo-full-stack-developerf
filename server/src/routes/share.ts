@@ -20,16 +20,16 @@ const LIVE = () => ({ OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new
 
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
-  return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
+  return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } });
 }
 /** A turned-off link leaves nothing behind: guests, presence, blocks, read stats, short code. */
 async function purgeToken(kind: string, token: string) {
   await Promise.all(['share_viewers', 'share_guests', 'share_blocked', 'share_reads', 'share_settings'].map((t) => prisma.$executeRawUnsafe(`DELETE FROM ${t} WHERE kind = $1 AND share_token = $2`, kind, token))).catch(() => {});
 }
-async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false, expiresAt: Date | null = null) {
+async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false, expiresAt: Date | null = null, shareNote = false) {
   const data = { shareToken: token, shareEdit: token ? edit : false, shareExpiresAt: token ? expiresAt : null };
   if (kind === 'note') await prisma.note.update({ where: { id }, data, select: { id: true } });
-  else await prisma.todo.update({ where: { id }, data, select: { id: true } });
+  else await prisma.todo.update({ where: { id }, data: { ...data, shareNote: token ? shareNote : false }, select: { id: true } });
 }
 
 // GET /api/share -> everything this person has shared: [{ kind, id, title, token, edit }]
@@ -55,7 +55,7 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null });
+    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, shareNote: 'shareNote' in row ? !!row.shareNote : false });
   } catch (e) { next(e); }
 });
 
@@ -269,9 +269,11 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     let expiresAt: Date | null = row.shareExpiresAt && row.shareExpiresAt.getTime() > Date.now() ? row.shareExpiresAt : null;
     if (days === null || days === 0) expiresAt = null;
     else if (typeof days === 'number' && days > 0 && days <= 3650) expiresAt = new Date(Date.now() + days * 86400000);
-    await setToken(kind, row.id, token, edit, expiresAt);
+    // Tasks only: whether the linked note is shown on the link. Off unless the owner turns it on.
+    const shareNote = typeof req.body?.shareNote === 'boolean' ? req.body.shareNote : ('shareNote' in row ? !!row.shareNote : false);
+    await setToken(kind, row.id, token, edit, expiresAt, shareNote);
     await prisma.$executeRawUnsafe('UPDATE share_settings SET extend_at = NULL, extend_by = NULL WHERE kind = $1 AND share_token = $2', kind, token).catch(() => {});
-    res.status(201).json({ token, edit, expiresAt });
+    res.status(201).json({ token, edit, expiresAt, shareNote: kind === 'todo' ? shareNote : false });
   } catch (e) { next(e); }
 });
 
@@ -544,7 +546,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     const t = await prisma.todo.findFirst({
       where: { shareToken: req.params.token, ...LIVE() },
       select: {
-        text: true, completed: true, priority: true, deadline: true, todoTags: true, updatedAt: true, shareEdit: true,
+        text: true, completed: true, priority: true, deadline: true, todoTags: true, updatedAt: true, shareEdit: true, shareNote: true,
         note: { select: { title: true, content: true, isDeleted: true } },
         user: { select: { name: true } },
       },
@@ -556,7 +558,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     res.json({
       kind: 'todo', text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline,
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
-      note: t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
+      note: t.shareNote && t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
     });
   } catch (e) { next(e); }
 });
