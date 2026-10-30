@@ -16,11 +16,13 @@ export const getNoteBase = (id) => bases.get(id);
 const live = new Map();
 export const setNoteLive = (id, state) => { if (id) { if (state) live.set(id, state); else live.delete(id); } };
 export const isNoteLive = (id) => live.has(id);
-// Text put into a note from outside the editor (a template, find and replace) is not in the live room. The next save of that
-// note must go through the ordinary route, which makes the server reset the room from the new text; a live-room save
-// ("collab: true") would leave the room, and with it the editor, on the old text, and the editor would then write that back.
-const external = new Set();
-export const markExternalEdit = (id) => { if (id) external.add(id); };
+// Text put into a note from outside the editor (a template, find and replace, a restored version) is not in the live room,
+// and the editor that is mounted next shows the room's text, not the page's. The page leaves the new text here; the editor
+// puts it into the room once the room is ready, as an ordinary edit everyone sees, and it is then saved like any typing.
+const external = new Map();
+export const markExternalEdit = (id, content) => { if (id && typeof content === 'string') external.set(id, { content, at: Date.now() }); };
+export const peekExternalEdit = (id) => { const e = external.get(id); return e && Date.now() - e.at < 30000 ? e.content : null; };
+export const clearExternalEdit = (id) => { external.delete(id); };
 /** While the room is not ready, a save would write a copy that is not in step with it: wait (up to 20 s) until it is. */
 async function whileWaiting(id) {
   for (let i = 0; i < 130 && live.get(id) === 'wait'; i++) await new Promise((r) => setTimeout(r, 150));
@@ -30,8 +32,7 @@ export async function saveNoteSafe(id, payload) {
   if (typeof payload.content === 'string') await whileWaiting(id);
   const base = bases.get(id);
   const hasText = typeof payload.content === 'string';
-  const fromOutside = hasText && external.delete(id);
-  const body = live.get(id) === 'live' && hasText && !fromOutside
+  const body = live.get(id) === 'live' && hasText
     ? { ...payload, collab: true, baseUpdatedAt: base?.updatedAt || new Date().toISOString() }
     : base && hasText ? { ...payload, baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : payload;
   const { data } = await notesAPI.update(id, body);

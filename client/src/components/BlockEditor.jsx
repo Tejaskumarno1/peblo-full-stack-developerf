@@ -32,7 +32,7 @@ import './docfile.css';
 import FindBar from './FindBar';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
-import { setNoteLive } from '../utils/noteSync';
+import { setNoteLive, peekExternalEdit, clearExternalEdit } from '../utils/noteSync';
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
@@ -480,6 +480,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       try { const md = await editor.blocksToMarkdownLossy(toStorage(editor.document)); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
     };
     let everReady = false;
+    let pushedExternal = false;
     const markReady = () => {
       loadingRef.current = true; // what arrives from the server is not an edit to save
       everReady = true;
@@ -488,12 +489,29 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       readyTimer = setTimeout(() => {
         loadingRef.current = false;
         // After the room was reset (the note was changed another way) the page still holds the old text: tell it the new one.
-        if (resetEpochRef.current > 0) void flush();
+        if (resetEpochRef.current > 0 || pushedExternal) void flush();
       }, 400);
+    };
+    // Text put in from outside (a template, find and replace, a restored version): the room still holds the old text, so
+    // write the new text into it now. It then reaches everyone in the room and is saved like any other edit.
+    const pushExternal = async () => {
+      const text = noteId ? peekExternalEdit(noteId) : null;
+      if (text === null) return;
+      clearExternalEdit(noteId);
+      loadingRef.current = true;
+      const blocks = text.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(text)) : [];
+      if (dead || !blocks.length) return;
+      editor.replaceBlocks(editor.document, blocks);
+      pushedExternal = true;
     };
     const check = async () => {
       if (dead || busy || !provider.synced) return;
-      if (meta.get('seeded') === true) { markReady(); busy = true; return; }
+      if (meta.get('seeded') === true) {
+        busy = true;
+        try { await pushExternal(); } catch (err) { console.error('Could not put the new text into the shared document:', err); }
+        if (!dead) markReady();
+        return;
+      }
       if (seedText === null) return;
       busy = true;
       try {
@@ -504,6 +522,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
           if (blocks && blocks.length) editor.replaceBlocks(editor.document, blocks);
           doc.transact(() => meta.set('seeded', true));
         }
+        await pushExternal();
         markReady();
       } catch (err) {
         console.error('Could not fill the shared document:', err);
@@ -557,6 +576,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   useEffect(() => {
     async function loadContent() {
       if (rt) return; // a live document is filled from the server's copy instead
+      if (noteId) clearExternalEdit(noteId); // no room to put outside text into: initialContent already has it
       if (!initialContent) return;
       try {
         const parsed = await editor.tryParseMarkdownToBlocks(initialContent);

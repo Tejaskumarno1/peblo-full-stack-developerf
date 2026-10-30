@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -516,7 +516,10 @@ function RiverNoteList({ onNew }) {
   const goNote = useNavigate();
   const [msg, setMsg] = useState('');
   const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
-  const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 3000); };
+  const msgTimer = useRef(null);
+  // a newer message restarts the clock, so an older message's timer can never wipe it early
+  const flash = (t) => { clearTimeout(msgTimer.current); setMsg(t); msgTimer.current = setTimeout(() => setMsg(''), 3000); };
+  useEffect(() => () => clearTimeout(msgTimer.current), []);
   const setOpt = (k, v) => setOpts((o) => { const n = { ...o, [k]: v }; saveOpts(n); return n; });
   const [q, setQ] = useState('');
   const params = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };

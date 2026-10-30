@@ -142,7 +142,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const patch = (p) => setDoc((d) => (d ? { ...d, ...p } : d));
   // Replace the text from outside the editor (templates, find & replace): remounts the editor with the new content
-  const applyContent = (p) => { if (!docRef.current) return; if (typeof p.content === 'string') markExternalEdit(docRef.current.id); setDoc((d) => (d ? { ...d, ...p } : d)); setEditorKey(`apply-${Date.now()}`); };
+  const applyContent = (p) => { if (!docRef.current) return; if (typeof p.content === 'string') markExternalEdit(docRef.current.id, p.content); setDoc((d) => (d ? { ...d, ...p } : d)); setEditorKey(`apply-${Date.now()}`); };
 
   const refreshLists = () => {
     queryClient.invalidateQueries({ queryKey: ['notes'] });

@@ -138,7 +138,7 @@ await section('notes archive and trash lists', async () => {
   await page.locator('.r-rowx', { hasText: 'List trash me too' }).getByRole('button', { name: 'Restore' }).click();
   check('Restore in the Trash list', await until(async () => (await getNote(c.id)).isDeleted === false));
   deletes.length = 0;
-  await page.locator('.r-rowx', { hasText: 'List trash me' }).first().getByRole('button', { name: 'Delete forever' }).click();
+  await page.locator('.r-rowx', { hasText: /List trash me(?! too)/ }).first().getByRole('button', { name: 'Delete forever' }).click(); // not 'List trash me too', which may not have left the list yet
   check('Delete forever in the Trash list erases the note', await until(async () => !(await getNote(b.id))));
   check('and sends ?permanent=1', deletes.some((u) => /permanent=1/.test(u)), deletes.join(','));
   await api('DELETE', `/api/notes/${c.id}`);
@@ -216,9 +216,9 @@ await section('notes search and shortcuts while typing', async () => {
   check('plain letter keys typed in search do not open capture or navigate', (await page.locator('#r-capture-input').count()) === 0 && /\/notes$/.test(page.url()) && (await box.inputValue()) === 'ncj?/ gt', await box.inputValue());
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+Shift+Space');
-  check('Ctrl+Shift+Space opens capture on Notes', await page.locator('#r-capture-input').isVisible().catch(() => false));
+  check('Ctrl+Shift+Space opens capture on Notes', await page.locator('#r-capture-input').waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false));
   await page.keyboard.press('Escape');
-  check('Escape closes capture', (await page.locator('#r-capture-input').count()) === 0);
+  check('Escape closes capture', await page.locator('#r-capture-input').waitFor({ state: 'detached', timeout: 4000 }).then(() => true).catch(() => false));
   const z = (await api('GET', '/api/notes')).notes.find((x) => x.title === 'Zebra crossing');
   await goto('/notes/' + z.id);
   await page.locator('#r-note-title').waitFor({ timeout: 12000 });
@@ -243,7 +243,7 @@ await section('tasks add, done, undo, delete', async () => {
   const rowA = page.locator('.r-tl-row', { hasText: 'TL alpha' });
   await rowA.locator('input[type=checkbox]').click();
   check('ticking a task completes it', await until(async () => (await byText('TL alpha'))[0]?.completed === true));
-  check('and shows a Marked done toast', await page.locator('.pb-undo', { hasText: 'Marked done' }).isVisible());
+  check('and shows a Marked done toast', await page.locator('.pb-undo', { hasText: 'Marked done' }).waitFor({ timeout: 4000 }).then(() => true).catch(() => false));
   await page.locator('.pb-undo button', { hasText: 'Undo' }).click();
   check('Undo reopens it', await until(async () => (await byText('TL alpha'))[0]?.completed === false));
   // delete + undo
@@ -413,7 +413,7 @@ await section('river drag and drop and move', async () => {
   await page.getByRole('button', { name: 'Move', exact: true }).click();
   const un2 = await failing('**/api/todos/*', 'PATCH');
   await page.locator('.r-move button[type="submit"]').click();
-  check('Move form shows an error when the server fails', await page.locator('.r-move [role=alert]').isVisible().catch(() => false));
+  check('Move form shows an error when the server fails', await page.locator('.r-move [role=alert]').waitFor({ timeout: 4000 }).then(() => true).catch(() => false));
   await un2();
 });
 
@@ -546,11 +546,12 @@ await section('notes api failures', async () => {
   await sleep(1000);
   check('Unarchive from the note menu failing shows an error', await visibleErr());
   await un();
+  await mkNote('Fail bulk archive'); // a live note must be on the All list (the two above are archived and trashed)
   await goto('/notes');
   await page.locator('#r-note-search').waitFor({ timeout: 12000 });
   un = await failing('**/api/notes/*/archive', 'POST');
   await page.getByRole('button', { name: 'Select', exact: true }).click();
-  await page.locator('.r-row', { hasText: 'Fail' }).first().click().catch(() => {});
+  await page.locator('.r-bulk').getByRole('button', { name: 'All', exact: true }).click(); // the newest four notes are cards, not rows, so pick them all
   await page.locator('.r-bulk').getByRole('button', { name: 'Archive', exact: true }).click().catch(() => {});
   await sleep(800);
   check('bulk Archive failing says something went wrong', await page.getByText('Something went wrong').isVisible().catch(() => false));
