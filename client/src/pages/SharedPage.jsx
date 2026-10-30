@@ -651,7 +651,7 @@ export default function SharedPage() {
   const wasOthers = useRef(0);
   useEffect(() => {
     const n = others.length;
-    const wide = typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1200px)').matches;
+    const wide = typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1281px)').matches;
     if (wasOthers.current === 0 && n > 0 && wide) setPanelOpen(true);
     if (wasOthers.current > 0 && n === 0) setPanelOpen(false);
     wasOthers.current = n;

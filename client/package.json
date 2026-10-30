@@ -47,7 +47,7 @@
     "react-window": "^2.2.7",
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.3.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "y-websocket": "^2.1.0",
     "yjs": "^13.6.33",
     "zustand": "^5.0.14"

@@ -219,12 +219,16 @@ function secureWebContents(win) {
   });
   // A window Peblo opens for itself gets the same rules, so it cannot be steered to another site inside the app.
   win.webContents.on('did-create-window', (child) => secureWebContents(child));
-  win.webContents.on('will-navigate', (event, target) => {
+  const keepInside = (event, target) => {
     if (!isInternal(target)) {
       event.preventDefault();
       if (/^https?:|^mailto:/.test(target)) shell.openExternal(target);
     }
-  });
+  };
+  win.webContents.on('will-navigate', keepInside);
+  // A server-side redirect from the app to another site is stopped the same way (will-navigate does not see redirects).
+  win.webContents.on('will-redirect', keepInside);
+  win.webContents.on('will-frame-navigate', (event) => keepInside(event, event.url));
 }
 
 /** Path inside the app bundle, pointing at the unpacked copy for files that must live on disk. */

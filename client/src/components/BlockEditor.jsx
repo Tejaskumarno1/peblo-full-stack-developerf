@@ -507,10 +507,13 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const check = async () => {
       if (dead || busy || !provider.synced) return;
       if (meta.get('seeded') === true) {
-        busy = true;
-        try { await pushExternal(); } catch (err) { console.error('Could not put the new text into the shared document:', err); }
-        if (!dead) markReady();
-        return;
+        if (noteId && peekExternalEdit(noteId) !== null) {
+          busy = true;
+          try { await pushExternal(); } catch (err) { console.error('Could not put the new text into the shared document:', err); }
+          if (!dead) markReady();
+          return;
+        }
+        markReady(); busy = true; return; // nothing from outside: the room is ready as it is
       }
       if (seedText === null) return;
       busy = true;
@@ -522,7 +525,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
           if (blocks && blocks.length) editor.replaceBlocks(editor.document, blocks);
           doc.transact(() => meta.set('seeded', true));
         }
-        await pushExternal();
+        if (noteId && peekExternalEdit(noteId) !== null) await pushExternal();
         markReady();
       } catch (err) {
         console.error('Could not fill the shared document:', err);

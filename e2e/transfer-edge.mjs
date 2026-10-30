@@ -207,6 +207,8 @@ try {
   check('loose files: titles/content right (BOM stripped, CRLF normalised, image dropped, page link flattened)', named('Fancy') && named('noheading') && named('Bom title')?.content === 'bom body' && named('Crlf title')?.content === 'line1\nline2' && named('Pic')?.content === 'text link', JSON.stringify(['Fancy', 'noheading', 'Bom title', 'Crlf title', 'Pic'].map((t) => named(t)?.content)));
   const uniName = await upload(tokenA, [{ name: 'ünï 日本語 😀.md', data: Buffer.from('plain body without heading') }]);
   check('multipart file name with unicode/emoji decoded as UTF-8 for the title', uniName.status === 200 && (await listNotes(tokenA)).some((n) => n.title === 'ünï 日本語 😀'));
+  const nulUp = await upload(tokenA, [{ name: 'nul.md', data: Buffer.from('before\u0000after text') }]);
+  check('a file with NUL characters imports with them stripped', nulUp.status === 200 && (await listNotes(tokenA)).some((n) => n.title === 'nul' && n.content === 'beforeafter text'), JSON.stringify(nulUp));
   const evilFm = await upload(tokenA, [{ name: 'fm.md', data: Buffer.from('---\ntitle: "=HYPERLINK(\\"http://evil\\",\\"x\\")"\ntags: [a, "b c"]\ncreated: 2020-01-02\n---\nbody') }]);
   const fmNote = (await listNotes(tokenA)).find((n) => n.title === '=HYPERLINK("http://evil","x")' && n.content === 'body');
   check('front matter title with JSON escapes (quotes) is read back exactly', evilFm.status === 200 && !!fmNote && fmNote.tags.includes('a') , JSON.stringify(fmNote));

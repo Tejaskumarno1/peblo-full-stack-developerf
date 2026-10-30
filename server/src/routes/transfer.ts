@@ -4,7 +4,7 @@ import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { syncTags } from '../controllers/notesController.js';
 import { parseUploads, buildMarkdownExport } from '../services/importService.js';
-import { cleanNoteMeta, cleanTodoMeta } from '../utils/meta.js';
+import { cleanNoteMeta, cleanTodoMeta, scrub } from '../utils/meta.js';
 
 const router = Router();
 
@@ -29,8 +29,8 @@ router.post('/import', authenticate, capTotal, upload.array('files'), async (req
       const note = await prisma.note.create({
         data: {
           userId,
-          title: n.title || 'Untitled',
-          content: n.content,
+          title: scrub(n.title || 'Untitled') || 'Untitled',
+          content: scrub(n.content),
           ...(n.archived ? { isArchived: true } : {}),
           ...(n.createdAt ? { createdAt: n.createdAt } : {}),
         },
@@ -132,8 +132,8 @@ router.post('/restore', authenticate, async (req, res, next) => {
       const created = await prisma.note.create({
         data: {
           userId,
-          title: typeof n.title === 'string' && n.title.trim() ? n.title.slice(0, 500) : 'Untitled',
-          content: typeof n.content === 'string' ? n.content : '',
+          title: typeof n.title === 'string' && n.title.trim() ? scrub(n.title).slice(0, 500) || 'Untitled' : 'Untitled',
+          content: typeof n.content === 'string' ? scrub(n.content) : '',
           isArchived: n.isArchived === true,
           meta: cleanNoteMeta(n.meta, {}),
           ...(asDate(n.createdAt) ? { createdAt: asDate(n.createdAt) } : {}),

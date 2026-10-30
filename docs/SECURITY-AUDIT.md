@@ -4,12 +4,9 @@ CI runs `node scripts/audit-gate.mjs` (weekly, on pushes and on pull requests). 
 
 To accept an advisory: check whether Peblo reaches the vulnerable code, add a mitigation if it does, then add an entry with the advisory link, the reason and a short expiry.
 
-## Accepted: xlsx 0.18.5 (client, direct)
+## Resolved: xlsx
 
-- [GHSA-4r6h-8v6p-xvw6](https://github.com/advisories/GHSA-4r6h-8v6p-xvw6) prototype pollution, [GHSA-5pgg-2g8v-p4x9](https://github.com/advisories/GHSA-5pgg-2g8v-p4x9) ReDoS. The npm package is frozen at 0.18.5; fixed versions (0.20.x) are published only on cdn.sheetjs.com.
-- Reachable: yes, in the browser only. A spreadsheet in a note (possibly from a shared note) is previewed through `client/src/utils/sheetRead.js`. The server stores files and never parses them.
-- Mitigation: 10 MB cap, 2000 rows, 50 sheets and 40 columns per read, a prototype check after each read, and the read runs in a Web Worker stopped after 20 s.
-- Exit plan: move to the SheetJS 0.20.x tarball (see the package notes below), then remove the allowlist entries.
+- The client uses the SheetJS 0.20.3 tarball from cdn.sheetjs.com, which fixes GHSA-4r6h-8v6p-xvw6 and GHSA-5pgg-2g8v-p4x9. The npm registry copy is frozen at 0.18.5. The allowlist is empty. Reads still go through `client/src/utils/sheetRead.js` (size, row and sheet caps, Web Worker with a 20 s limit).
 
 ## Not reachable or dev-only
 

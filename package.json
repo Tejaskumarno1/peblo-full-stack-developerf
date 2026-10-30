@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "description": "Peblo — AI-powered notes, to-dos and calendar that runs on your computer",
+  "license": "MIT",
   "author": {
     "name": "Boddu Tejas Kumar",
     "email": "boddutejaskumar@gmail.com"

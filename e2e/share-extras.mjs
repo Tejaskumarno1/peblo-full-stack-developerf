@@ -28,7 +28,7 @@ try {
   await page.screenshot({ path: `${SHOTS}/extras-1-expiry-reminder.png` });
 
   // 2. a guest gives a name; the link's end date is visible to them
-  const gctx = await ctx.browser().newContext({ viewport: { width: 1280, height: 800 } });
+  const gctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 800 } });
   await gctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   await gctx.addInitScript(() => { try { localStorage.setItem('peblo-debug', '1'); } catch { /* ignore */ } });
   const g = await gctx.newPage();
