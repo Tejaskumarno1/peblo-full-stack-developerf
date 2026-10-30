@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../db.js';
+import { aadOf, decryptText, encryptText } from '../dataCrypto.js';
 import { authenticate } from '../middleware/auth.js';
 import { aiLimit } from '../middleware/rateLimit.js';
 import { findPromises, meetingBrief } from '../services/aiService.js';
@@ -112,8 +113,12 @@ router.patch('/promises/:id', async (req, res, next) => {
       if (!data.items?.[i]) return res.status(400).json({ error: 'Bad request' });
       data.items[i] = { ...data.items[i], status, todoId: wantedTodo || data.items[i].todoId || null };
       const next = JSON.stringify(data);
-      const won = await prisma.aiGeneration.updateMany({ where: { id: gen.id, result: gen.result }, data: { result: next } });
-      if (won.count === 1) return res.json(promiseView({ ...gen, result: next }));
+      // The result is encrypted at rest (a new random IV on every write), so "unchanged" is checked on the stored value itself.
+      const aad = aadOf('ai_generations', 'result', gen.id);
+      const stored = await prisma.$queryRaw<{ result: string }[]>`SELECT result FROM ai_generations WHERE id = ${gen.id}`;
+      if (!stored.length || decryptText(stored[0].result, aad) !== gen.result) continue; // changed meanwhile: read again
+      const won = await prisma.$executeRaw`UPDATE ai_generations SET result = ${encryptText(next, aad)} WHERE id = ${gen.id} AND result = ${stored[0].result}`;
+      if (won === 1) return res.json(promiseView({ ...gen, result: next }));
     }
     res.status(409).json({ error: 'That changed while you were saving it. Try again.' });
   } catch (error) {

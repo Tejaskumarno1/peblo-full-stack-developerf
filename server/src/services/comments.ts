@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import prisma from '../db.js';
+import { decField, encField } from '../dataCrypto.js';
 
 /*
  * Comments and suggestions on a note. A comment points at a quoted piece of the note's text (not a position), so it
@@ -33,9 +34,9 @@ export async function listComments(noteId: string, me: { userId?: string | null;
       owner: !!r.author_user_id,
       self: (!!me.userId && r.author_user_id === me.userId) || (!!me.session && r.author_session === me.session),
     },
-    body: r.body,
-    quote: r.quote,
-    replacement: r.replacement,
+    body: decField('note_comments', 'body', r.id, r.body) ?? '',
+    quote: decField('note_comments', 'quote', r.id, r.quote),
+    replacement: decField('note_comments', 'replacement', r.id, r.replacement),
     mentions: Array.isArray(r.mentions) ? r.mentions.filter((m: unknown) => typeof m === 'string') : [],
     createdAt: new Date(r.created_at).toISOString(),
   }));
@@ -61,7 +62,8 @@ export async function addComment(noteId: string, author: Author, input: any): Pr
   const color = COLOR.test(author.color) ? author.color : '#2563eb';
   await prisma.$executeRawUnsafe(
     'INSERT INTO note_comments (id, note_id, parent_id, kind, author_name, author_color, author_user_id, author_session, body, quote, replacement, mentions) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)',
-    id, noteId, parentId, kind, clean(author.name, 40) || 'Someone', color, author.userId ?? null, author.session ?? null, body, quote, replacement, JSON.stringify(mentions),
+    id, noteId, parentId, kind, clean(author.name, 40) || 'Someone', color, author.userId ?? null, author.session ?? null,
+    encField('note_comments', 'body', id, body), encField('note_comments', 'quote', id, quote), encField('note_comments', 'replacement', id, replacement), JSON.stringify(mentions),
   );
   return { ok: true, id };
 }
@@ -84,9 +86,10 @@ export async function removeComment(noteId: string, id: string, who: { userId?: 
 
 /** Tell the note's owner something happened (a stored notification plus a live nudge to their open windows). */
 export async function notifyOwner(app: any, ownerId: string, n: { kind: string; noteId: string; title: string; body?: string; from: string }) {
+  const nid = crypto.randomUUID();
   await prisma.$executeRawUnsafe(
     'INSERT INTO user_notifications (id, user_id, kind, note_id, title, body, from_name) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-    crypto.randomUUID(), ownerId, n.kind, n.noteId, n.title.slice(0, 200), (n.body || '').slice(0, 300), n.from.slice(0, 40),
+    nid, ownerId, n.kind, n.noteId, n.title.slice(0, 200), encField('user_notifications', 'body', nid, (n.body || '').slice(0, 300)), n.from.slice(0, 40),
   );
   // keep the list short
   await prisma.$executeRawUnsafe('DELETE FROM user_notifications WHERE user_id = $1 AND id NOT IN (SELECT id FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100)', ownerId);

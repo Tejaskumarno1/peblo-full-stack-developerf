@@ -5,7 +5,8 @@ import { authenticate, signToken } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { loadProfile } from '../services/profile.js';
 import { cancelChange, consumeToken, sendVerification } from '../services/emailAccount.js';
-import { mailConfigured } from '../services/mailer.js';
+import { finishSignupMail, mailConfigured, passwordResetMail, publicBase, sendMail, signupAttemptNotice } from '../services/mailer.js';
+import { completeSignup, consumeReset, dropPendingSignup, issueReset, storePendingSignup } from '../services/accountSafety.js';
 
 /*
  * Real accounts: anyone can sign up, and their notes/tasks/quizzes are theirs alone.
@@ -29,23 +30,55 @@ const signupLimit = rateLimit({ windowMs: 60 * 60_000, max: Number(process.env.S
 // Counted per signed-in account (not just per address) and only on failures, so a stolen session cannot guess the current password from many addresses.
 const passwordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, skipSuccessful: true, key: userKeyOf, message: 'Too many attempts. Wait a few minutes and try again.' });
 
+// Password reset and mail-confirmed sign-up. Both count every request (not only failures), because each one can send an email:
+// per address of the caller, and per email address asked about (the same answer whether or not it has an account).
+const envNum = (name: string, fallback: number) => { const n = Number(process.env[name]); return Number.isFinite(n) && n > 0 ? n : fallback; };
+const forgotIpLimit = rateLimit({ windowMs: 15 * 60_000, max: envNum('PEBLO_FORGOT_IP_MAX', 10), message: 'Too many requests. Wait a few minutes and try again.' });
+const forgotEmailLimit = rateLimit({ windowMs: 15 * 60_000, max: envNum('PEBLO_FORGOT_EMAIL_MAX', 3), key: (req) => { const e = emailOf(req); return e ? `forgot:${e}` : ''; }, message: 'Too many requests. Wait a few minutes and try again.' });
+const resetLimit = rateLimit({ windowMs: 15 * 60_000, max: envNum('PEBLO_RESET_RATE_MAX', 20), message: 'Too many attempts. Wait a few minutes and try again.' });
+const signupEmailLimit = rateLimit({ windowMs: 60 * 60_000, max: envNum('PEBLO_SIGNUP_EMAIL_MAX', 5), key: (req) => { const e = emailOf(req); return e ? `signup:${e}` : ''; }, message: 'Too many sign-ups from this address. Try again later.' });
+
+/** The rules for a new password, shared by sign-up, change and reset. null = fine. */
+function passwordProblem(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (Buffer.byteLength(password, 'utf8') > 72) return 'Password is too long (72 bytes at most; some characters count as more than one).';
+  return null;
+}
+const FORGOT_REPLY = { message: 'If an account exists for that email, a reset link is on its way. It works once and expires in 30 minutes.' };
+const SIGNUP_PENDING_REPLY = { pending: true, message: 'Check your email. If this address can be used to sign up, a link to finish is on its way.' };
+
 const mailLimit = rateLimit({ windowMs: 15 * 60_000, max: 6, key: userKeyOf, message: 'Too many emails requested. Wait a few minutes and try again.' });
 const linkLimit = rateLimit({ windowMs: 15 * 60_000, max: 30, message: 'Too many attempts. Wait a few minutes and try again.' });
 
-router.post('/signup', signupLimit, async (req, res, next) => {
+router.post('/signup', signupLimit, signupEmailLimit, async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
     const name = String(req.body?.name || '').trim().slice(0, 80) || email.split('@')[0];
 
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
-    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
-    if (Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Password is too long (72 bytes at most; some characters count as more than one).' });
+    const problem = passwordProblem(password);
+    if (problem) return res.status(400).json({ error: problem });
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return res.status(409).json({ error: 'An account with that email already exists.' });
-
+    // Where this server can send mail, sign-up gives the same answer whether or not the address has an account (so it cannot be
+    // used to find out who is registered): new addresses get a "finish signing up" link, existing ones a "someone tried" notice.
+    // Without a mail transport that cannot work (nobody could ever finish), so the older behaviour stays: the account is
+    // created at once, and a taken address is answered with 409. Both paths pay one bcrypt hash and one mail, so timing matches.
     const passwordHash = await bcrypt.hash(password, 12);
+    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+
+    if (mailConfigured()) {
+      if (existing) {
+        if (await sendMail(signupAttemptNotice(email, `${publicBase(req)}/`))) return res.status(202).json(SIGNUP_PENDING_REPLY);
+        return res.status(409).json({ error: 'An account with that email already exists.' }); // mail is down: the older behaviour
+      }
+      const raw = await storePendingSignup(email, name, passwordHash);
+      if (await sendMail(finishSignupMail(email, `${publicBase(req)}/verify-email?token=${raw}`))) return res.status(202).json(SIGNUP_PENDING_REPLY);
+      await dropPendingSignup(email).catch(() => {}); // mail is down: do not lock people out, create the account at once like before
+    } else if (existing) {
+      return res.status(409).json({ error: 'An account with that email already exists.' });
+    }
+
     let user;
     try {
       user = await prisma.user.create({ data: { email, name, passwordHash, settings: {} } });
@@ -96,7 +129,11 @@ router.post('/send-verification', authenticate, mailLimit, async (req, res, next
 // Open a link from an email (confirm an address, or finish an address change). No sign-in needed: the secret is the proof.
 router.post('/verify-email', linkLimit, async (req, res, next) => {
   try {
-    const result = await consumeToken(String(req.body?.token || ''));
+    const raw = String(req.body?.token || '');
+    const signup = await completeSignup(raw); // a link from a "finish signing up" email
+    if (signup === 'bad') return res.status(400).json({ error: 'This link is not valid or has expired. Sign up again to get a new one.' });
+    if (signup) return res.json({ ok: true, kind: 'signup', email: signup.email });
+    const result = await consumeToken(raw);
     if (!result.ok) return res.status(400).json({ error: result.error });
     res.json({ ok: true, kind: result.kind, email: result.email });
   } catch (error) {
@@ -120,8 +157,8 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
   try {
     const current = String(req.body?.currentPassword || '').slice(0, 200);
     const next_ = String(req.body?.newPassword || '');
-    if (next_.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
-    if (Buffer.byteLength(next_, 'utf8') > 72) return res.status(400).json({ error: 'Password is too long (72 bytes at most; some characters count as more than one).' });
+    const problem = passwordProblem(next_);
+    if (problem) return res.status(400).json({ error: problem.replace(/^Password/, 'New password') });
 
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user || !(await bcrypt.compare(current, user.passwordHash))) {
@@ -131,8 +168,55 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
       where: { id: user.id },
       data: { passwordHash: await bcrypt.hash(next_, 12), tokenVersion: { increment: 1 } },
     });
+    await prisma.$executeRawUnsafe('DELETE FROM password_resets WHERE user_id = $1', user.id).catch(() => {}); // a reset link sent earlier is now pointless
     (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
     res.json({ token: signToken(updated), message: 'Password changed. Other devices were signed out.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Forgot password. Always the same answer and (almost) the same time, whether or not the address has an account: the lookup is
+// the only work done before replying; the token and the email happen afterwards.
+router.post('/forgot-password', forgotIpLimit, forgotEmailLimit, async (req, res, next) => {
+  try {
+    const email = emailOf(req);
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true } });
+    res.json(FORGOT_REPLY);
+    void (async () => {
+      if (!mailConfigured()) {
+        console.warn('[auth] A password reset was asked for, but this server has no mail transport (set SMTP_HOST, SMTP_USER and SMTP_PASS, or RESEND_API_KEY), so no email was sent.');
+        return;
+      }
+      if (!user) return;
+      const raw = await issueReset(user.id);
+      if (!(await sendMail(passwordResetMail(user.email, `${publicBase(req)}/reset-password?token=${raw}`)))) console.error('[auth] The password reset email could not be sent.');
+    })().catch((e) => console.error('[auth] password reset failed:', e?.message || 'error'));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Choose a new password with the emailed link. Signs everyone out (tokenVersion), revokes access tokens (a reset can mean the account
+// was taken over), and uses up every reset link of that person. They sign in again afterwards: nothing here hands out a session.
+router.post('/reset-password', resetLimit, async (req, res, next) => {
+  try {
+    const raw = String(req.body?.token || '');
+    const password = String(req.body?.password || '');
+    const problem = passwordProblem(password);
+    if (problem) return res.status(400).json({ error: problem });
+    const passwordHash = await bcrypt.hash(password, 12); // before the link is checked, so a bad link costs the same time
+    const userId = await consumeReset(raw);
+    if (!userId) return res.status(400).json({ error: 'This link is not valid or has expired. Ask for a new one.' });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 } } }),
+      prisma.apiToken.deleteMany({ where: { userId } }),
+      prisma.$executeRawUnsafe('DELETE FROM password_resets WHERE user_id = $1', userId),
+      prisma.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } }), // opening a link sent to the address proves it is theirs
+    ]);
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(userId);
+    res.json({ ok: true, message: 'Password changed. Sign in with your new password.' });
   } catch (error) {
     next(error);
   }

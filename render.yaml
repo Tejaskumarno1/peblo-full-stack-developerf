@@ -30,3 +30,7 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Encryption at rest for note text: a base64 32-byte key (node -e "console.log(require('crypto').randomBytes(32).toString('base64'))").
+      # Keep a copy outside Render: without it the encrypted notes cannot be read. See docs/DEPLOYMENT.md.
+      - key: PEBLO_DATA_KEY
+        sync: false

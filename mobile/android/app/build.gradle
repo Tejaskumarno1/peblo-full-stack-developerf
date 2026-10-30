@@ -1,8 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "app.peblo.mobile"
-    compileSdk rootProject.ext.compileSdkVersion
+    namespace = "app.peblo.mobile"
+    compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "app.peblo.mobile"
         minSdkVersion rootProject.ext.minSdkVersion

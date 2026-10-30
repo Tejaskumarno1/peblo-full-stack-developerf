@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
+import { decField } from '../dataCrypto.js';
 import { authenticate, TOKEN_PREFIX, hashToken } from '../middleware/auth.js';
 
 /*
@@ -28,7 +29,7 @@ router.get('/', async (req, res, next) => {
 router.get('/activity', async (req, res, next) => {
   try {
     const rows = await prisma.$queryRaw<any[]>`SELECT id, app, tool, summary, ok, at FROM mcp_activity WHERE user_id = ${req.user!.id} ORDER BY at DESC LIMIT 100`;
-    res.json({ activity: rows });
+    res.json({ activity: rows.map((r) => ({ ...r, summary: decField('mcp_activity', 'summary', r.id, r.summary) ?? '' })) });
   } catch (error) { next(error); }
 });
 

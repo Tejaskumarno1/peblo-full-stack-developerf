@@ -166,6 +166,26 @@
   cursor: pointer;
 }
 
+.pb-auth-forgot { display: flex; justify-content: flex-end; margin: -6px 0 -2px; }
+.pb-auth-forgot button {
+  border: 0;
+  padding: 0 2px;
+  min-height: 28px;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--pb-accent);
+  cursor: pointer;
+}
+.pb-auth-forgot button:hover { text-decoration: underline; }
+.pb-auth-done { align-items: flex-start; color: var(--pb-fg); }
+.pb-auth-done > svg { color: var(--pb-accent); }
+.pb-auth-done .pb-auth-submit { align-self: stretch; margin-top: 8px; }
+.pb-auth-linkbtn { display: grid; place-items: center; text-decoration: none; box-sizing: border-box; }
+.pb-auth-link { display: inline-block; font-weight: 600; color: var(--pb-accent); text-decoration: none; }
+.pb-auth-link:hover { text-decoration: underline; }
+
 /* A narrow window: drop the side panel, keep the brand above the form. */
 @media (max-width: 900px) {
   /* The app canvas is at least 1440px wide, so on a narrow browser window the screen is pinned to the real window instead (otherwise the form is cut off). */

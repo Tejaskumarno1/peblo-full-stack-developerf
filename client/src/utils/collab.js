@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { WebsocketProvider } from 'y-websocket';
-import { getToken } from '../api/token';
+import api from '../api/client';
 
 /*
  * Live co-editing: one Yjs document per open note, kept in step with the server over a WebSocket (/collab).
@@ -43,6 +43,52 @@ function serverUrl() {
 }
 
 /**
+ * The sign-in token must not travel in the WebSocket address (addresses end up in logs and history). Each connection first asks
+ * the server for a 30-second, single-use ticket for this note and puts only that in the address. y-websocket builds a new
+ * WebSocket for every (re)connect, so this stand-in does the asking each time and then behaves like the real socket.
+ */
+function ticketSocketFor(noteId) {
+  return class TicketSocket {
+    // y-websocket compares readyState with ws.OPEN etc. on the instance, as the browser's own WebSocket allows
+    get CONNECTING() { return 0; }
+    get OPEN() { return 1; }
+    get CLOSING() { return 2; }
+    get CLOSED() { return 3; }
+    constructor(url) {
+      this.url = url;
+      this.binaryType = 'arraybuffer';
+      this.onopen = this.onmessage = this.onclose = this.onerror = null;
+      this._ws = null;
+      this._closed = false;
+      this._state = 0;
+      api.post('/collab/ticket', { noteId }).then((r) => {
+        if (this._closed) return;
+        const ws = new WebSocket(`${url}${url.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(r.data.ticket)}`);
+        ws.binaryType = this.binaryType;
+        ws.onopen = (e) => this.onopen?.(e);
+        ws.onmessage = (e) => this.onmessage?.(e);
+        ws.onerror = (e) => this.onerror?.(e);
+        ws.onclose = (e) => { this._state = 3; this.onclose?.(e); };
+        this._ws = ws;
+      }).catch(() => {
+        if (this._closed) return;
+        this._state = 3;
+        this.onerror?.(new Event('error'));
+        this.onclose?.({ code: 1006, reason: 'ticket' });
+      });
+    }
+    get readyState() { return this._ws ? this._ws.readyState : this._state; }
+    get bufferedAmount() { return this._ws ? this._ws.bufferedAmount : 0; }
+    send(data) { if (this._ws) this._ws.send(data); }
+    close(code, reason) {
+      this._closed = true;
+      if (this._ws) { try { this._ws.close(code, reason); } catch { /* gone */ } }
+      else { this._state = 3; setTimeout(() => this.onclose?.({ code: 1000, reason: '' }), 0); } // y-websocket relies on the close event to reset itself
+    }
+  };
+}
+
+/**
  * @param {{ noteId?: string, share?: string, sid?: string, name?: string, color?: string }} opts
  *   the owner passes noteId (their sign-in is used); a person on a share link passes share (and a session id)
  */
@@ -50,8 +96,8 @@ export function createCollab(opts) {
   const doc = new Y.Doc();
   const params = opts.share
     ? { share: opts.share, ...(opts.sid ? { sid: opts.sid } : {}) }
-    : { note: opts.noteId, token: getToken() || '' };
-  const provider = new WebsocketProvider(serverUrl(), 'collab', doc, { connect: false, params, disableBc: true, maxBackoffTime: 8000 });
+    : { note: opts.noteId };
+  const provider = new WebsocketProvider(serverUrl(), 'collab', doc, { connect: false, params, disableBc: true, maxBackoffTime: 8000, ...(opts.share ? {} : { WebSocketPolyfill: ticketSocketFor(opts.noteId) }) });
   // the server's offer: "this document is empty, fill it from the saved text"
   provider.messageHandlers[MSG_SEED] = (_enc, dec, p) => { p.emit('seed', [decoding.readVarString(dec)]); };
   const name = (opts.name || 'Someone').slice(0, 40);

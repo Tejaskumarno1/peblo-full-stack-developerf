@@ -37,6 +37,8 @@ import { rejectNulInUrl, cleanBody, inputErrors } from './middleware/cleanInput.
 import { apiLimiter } from './middleware/rateLimit.js';
 import { agentNote, origin as reqOrigin } from './services/agentView.js';
 import { protectExistingKeys, migrateLegacyKeys } from './services/profile.js';
+import { initDataCrypto } from './dataCrypto.js';
+import { runStartupEncryption } from './services/encryptExisting.js';
 
 export interface StartOptions {
   /** Port to listen on. 0 picks a free port (what the desktop app uses). */
@@ -166,6 +168,8 @@ export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: S
   await initDatabase();
   await protectExistingKeys().catch((e) => console.error('[keys] could not protect existing keys:', e));
   await migrateLegacyKeys().catch((e) => console.error('[keys] could not move saved keys to AI connections:', e));
+  await initDataCrypto(prisma); // checks PEBLO_DATA_KEY against the stored data (locks writes on a missing or wrong key)
+  void runStartupEncryption(); // only when PEBLO_ENCRYPT_EXISTING=1 and a key is set; runs in the background
 
   const app = createApp(staticDir);
   const httpServer = createServer(app);

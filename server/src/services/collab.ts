@@ -8,7 +8,8 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import prisma from '../db.js';
-import { verifyToken } from '../middleware/auth.js';
+import { aadOf, decryptBytes, decryptText, encryptBytes, encryptText, DataCryptoError } from '../dataCrypto.js';
+import { consumeTicket } from './accountSafety.js';
 
 /*
  * Live co-editing. Every open note is a "room": one Yjs document on the server that all the people editing it talk to
@@ -113,8 +114,17 @@ class Room {
     const rows = await prisma.$queryRawUnsafe<{ state: Uint8Array; md_hash: string | null }[]>('SELECT state, md_hash FROM note_ydocs WHERE note_id = $1', this.id);
     const row = rows[0];
     if (!row) return;
-    if (row.md_hash === this.mdHash) {
-      try { Y.applyUpdate(this.doc, new Uint8Array(row.state)); } catch { await this.forget(); }
+    // Stored encrypted. A missing or wrong key must not delete anything: let the error reach the caller (the room does not open).
+    // A value that is merely damaged is a cache that can be rebuilt from the note text, like any other stale state.
+    let savedHash: string | null = null; let bytes: Uint8Array | null = null;
+    try {
+      savedHash = row.md_hash == null ? null : decryptText(row.md_hash, aadOf('note_ydocs', 'md_hash', this.id));
+      bytes = decryptBytes(row.state, aadOf('note_ydocs', 'state', this.id));
+    } catch (e) {
+      if (!(e instanceof DataCryptoError) || e.code !== 'BAD_VALUE') throw e;
+    }
+    if (bytes && savedHash === this.mdHash) {
+      try { Y.applyUpdate(this.doc, new Uint8Array(bytes)); } catch { await this.forget(); }
     } else {
       await this.forget(); // the text was changed another way since this state was saved
     }
@@ -138,9 +148,10 @@ class Room {
     this.dirty = false;
     const state = Buffer.from(Y.encodeStateAsUpdate(this.doc));
     try {
+      // the document holds the whole note text: it is stored encrypted like the note itself
       await prisma.$executeRawUnsafe(
         'INSERT INTO note_ydocs (note_id, state, md_hash, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT (note_id) DO UPDATE SET state = EXCLUDED.state, md_hash = EXCLUDED.md_hash, updated_at = NOW()',
-        this.id, state, this.mdHash,
+        this.id, encryptBytes(state, aadOf('note_ydocs', 'state', this.id)), encryptText(this.mdHash, aadOf('note_ydocs', 'md_hash', this.id)),
       );
     } catch (e) {
       this.dirty = true;
@@ -357,7 +368,7 @@ function send(ws: WebSocket, buf: Uint8Array) {
 async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean; userId: string | null; share: string | null; session: string | null } | null> {
   const share = url.searchParams.get('share');
   const session = url.searchParams.get('sid');
-  const token = url.searchParams.get('token');
+  const ticket = url.searchParams.get('ticket');
   const noteParam = url.searchParams.get('note');
   if (share) {
     if (!validShare.test(share)) return null;
@@ -375,13 +386,13 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
     // a signed-in owner opening their own link still counts as the owner
     return { noteId: note.id, readOnly: !canEdit, userId: null, share, session };
   }
-  if (!token || !noteParam || !/^[A-Za-z0-9-]{8,64}$/.test(noteParam)) return null;
-  const user = await verifyToken(token);
-  if (!user) return null;
-  if (user.viaToken && user.readOnly) return null;
-  const note = await prisma.note.findFirst({ where: { id: noteParam, userId: user.id, isDeleted: false }, select: { id: true } });
+  // The owner proves who they are with a single-use ticket (POST /api/collab/ticket), never with the sign-in token in the address.
+  if (!ticket || !noteParam || !/^[A-Za-z0-9-]{8,64}$/.test(noteParam)) return null;
+  const userId = consumeTicket(ticket, noteParam);
+  if (!userId) return null;
+  const note = await prisma.note.findFirst({ where: { id: noteParam, userId, isDeleted: false }, select: { id: true } });
   if (!note) return null;
-  return { noteId: note.id, readOnly: false, userId: user.id, share: null, session: null };
+  return { noteId: note.id, readOnly: false, userId, share: null, session: null };
 }
 
 /**

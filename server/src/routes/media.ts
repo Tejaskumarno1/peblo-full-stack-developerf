@@ -1,5 +1,6 @@
 import { Router, raw } from 'express';
 import prisma from '../db.js';
+import { decField, encField } from '../dataCrypto.js';
 import { authenticate } from '../middleware/auth.js';
 import { describeImage } from '../services/aiService.js';
 import { aiLimit } from '../middleware/rateLimit.js';
@@ -34,7 +35,7 @@ router.get('/:id/text', async (req, res, next) => {
     if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();
     const rows: any[] = await prisma.$queryRaw`SELECT description FROM media WHERE id = ${id}`;
     if (!rows.length) return res.status(404).end();
-    res.json({ id, description: rows[0].description || null });
+    res.json({ id, description: decField('media', 'description', id, rows[0].description) || null });
   } catch (e) { next(e); }
 });
 
@@ -46,7 +47,7 @@ router.post('/:id/describe', authenticate, ...aiLimit, async (req: any, res, nex
     const rows: any[] = await prisma.$queryRaw`SELECT mime, data FROM media WHERE id = ${id} AND user_id = ${req.user.id}`;
     if (!rows.length) return res.status(404).json({ error: 'Picture not found.' });
     const description = await describeImage(req.user.id, Buffer.from(rows[0].data).toString('base64'), rows[0].mime);
-    await prisma.$executeRaw`UPDATE media SET description = ${description}, described_at = now() WHERE id = ${id}`;
+    await prisma.$executeRaw`UPDATE media SET description = ${encField('media', 'description', id, description)}, described_at = now() WHERE id = ${id}`;
     res.json({ id, description });
   } catch (e: any) { if (e?.status) return res.status(e.status).json({ error: e.message }); next(e); }
 });

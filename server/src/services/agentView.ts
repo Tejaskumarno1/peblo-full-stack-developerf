@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
+import { decField, encField } from '../dataCrypto.js';
 import { accessFor } from './shareAccess.js';
 import { describeImage } from './aiService.js';
 
@@ -42,12 +43,12 @@ async function imagesOf(content: string, userId: string, base: string): Promise<
   for (const [i, id] of ids.entries()) {
     const rows = (await prisma.$queryRaw`SELECT description, mime, size FROM media WHERE id = ${id} AND user_id = ${userId}`.catch(() => [])) as any[];
     if (!rows.length) continue;
-    let description: string | null = rows[0].description || null;
+    let description: string | null = decField('media', 'description', id, rows[0].description) || null;
     if (!description && i < MAX_DESCRIBE && rows[0].size < 4_000_000 && allowDescribe(userId, id)) {
       try {
         const data: any[] = await prisma.$queryRaw`SELECT data FROM media WHERE id = ${id} AND user_id = ${userId}`;
         description = await describeImage(userId, Buffer.from(data[0].data).toString('base64'), rows[0].mime);
-        if (description) await prisma.$executeRaw`UPDATE media SET description = ${description}, described_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+        if (description) await prisma.$executeRaw`UPDATE media SET description = ${encField('media', 'description', id, description)}, described_at = now() WHERE id = ${id} AND user_id = ${userId}`;
       } catch { /* no AI set up, or it failed: the picture is still listed with its address */ }
     }
     out.push({ id, url: `${base}/api/media/${id}`, description });

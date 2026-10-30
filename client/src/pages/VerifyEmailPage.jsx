@@ -29,8 +29,8 @@ export default function VerifyEmailPage() {
         {state.s === 'ok' && (
           <>
             <CheckCircle2 size={42} className="ve-ok" aria-hidden="true" />
-            <h1>{state.kind === 'change' ? 'Your email was changed' : 'Email confirmed'}</h1>
-            <p>{state.kind === 'change' ? <>Your Peblo account now uses <b>{state.email}</b>. Use it the next time you sign in.</> : <><b>{state.email}</b> is confirmed.</>}</p>
+            <h1>{state.kind === 'change' ? 'Your email was changed' : state.kind === 'signup' ? 'Your account is ready' : 'Email confirmed'}</h1>
+            <p>{state.kind === 'change' ? <>Your Peblo account now uses <b>{state.email}</b>. Use it the next time you sign in.</> : state.kind === 'signup' ? <><b>{state.email}</b> is confirmed and your account was created. Sign in with the password you chose.</> : <><b>{state.email}</b> is confirmed.</>}</p>
             <Link className="ve-btn" to={signedIn ? '/settings/profile' : '/'}>{signedIn ? 'Back to Settings' : 'Go to sign in'}</Link>
           </>
         )}

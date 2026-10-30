@@ -10,6 +10,7 @@ import HelpDialog from './components/HelpDialog';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SharedPage = lazy(() => import('./pages/SharedPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const OAuthConsent = lazy(() => import('./pages/OAuthConsent'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="/quick-capture" element={<CaptureGate />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth/consent" element={<OAuthConsent />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />
         <Route path="/todolist" element={<Navigate to="/tasks" replace />} />

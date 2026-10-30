@@ -6,6 +6,7 @@ import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
+import { aadOf, decryptText } from '../dataCrypto.js';
 
 // prisma imported from db.js
 
@@ -107,12 +108,14 @@ export async function getMentions(req: any, res: any, next: any) {
     const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
     const title = (me?.title || '').trim();
     if (!me || title.length < 3 || /^untitled/i.test(title)) return res.json({ mentions: [] });
-    const rows = await prisma.note.findMany({
-      where: { userId: req.user.id, isDeleted: false, id: { not: id }, content: { contains: title, mode: 'insensitive' } },
+    // Note text is encrypted at rest, so the database cannot search it: read the person's notes (newest first) and look in JS.
+    const needle = title.toLowerCase();
+    const rows = (await prisma.note.findMany({
+      where: { userId: req.user.id, isDeleted: false, id: { not: id } },
       select: { id: true, title: true, content: true },
       orderBy: { updatedAt: 'desc' },
-      take: 40,
-    });
+      take: 5000,
+    })).filter((r) => (r.content || '').toLowerCase().includes(needle)).slice(0, 40);
     const re = new RegExp(`(?<![\\[\\w])${escRe(title)}(?![\\]\\w])`, 'i');
     const out: any[] = [];
     for (const r of rows) {
@@ -243,17 +246,10 @@ export async function getNotes(req: any, res: any, next: any) {
       };
     }
 
-    // Search filter
-    if (typeof search === 'string' && search) {
-      // Title, text and tags, ignoring case.
-      const q = String(search).trim();
-      const words = searchWords(q);
-      where.OR = (words.length ? words : [q]).flatMap((w) => [
-        { title: { contains: w, mode: 'insensitive' } },
-        { content: { contains: w, mode: 'insensitive' } },
-        { tags: { some: { tag: { name: { contains: w, mode: 'insensitive' } } } } }
-      ]);
-    }
+    // Search: title, text and tags, ignoring case. Note text is encrypted at rest, so the database cannot look inside it:
+    // the text is matched in JS below (the tag match stays in SQL).
+    const searchQ = typeof search === 'string' ? String(search).trim() : '';
+    const needles = searchQ ? (searchWords(searchQ).length ? searchWords(searchQ) : [searchQ]).map((w) => w.toLowerCase()) : [];
 
     // Sort
     let orderBy = {};
@@ -268,12 +264,39 @@ export async function getNotes(req: any, res: any, next: any) {
         orderBy = { updatedAt: 'desc' };
     }
 
-    const notes = await prisma.note.findMany({
-      where,
+    let pageIds: string[] | null = null;
+    const contentById = new Map<string, string>();
+    if (needles.length) {
+      const tagHits = new Set((await prisma.note.findMany({
+        where: { AND: [where, { tags: { some: { tag: { OR: needles.map((w) => ({ name: { contains: w, mode: 'insensitive' } })) } } } }] },
+        select: { id: true },
+      })).map((n) => n.id));
+      // A page is read in chunks of the sorted list and the scan stops once the page is full (a common word ends early);
+      // without a limit every note is looked at.
+      const hit: string[] = [];
+      const want = limit ? offset + limit : Infinity;
+      const CHUNK = 300;
+      for (let skip = 0; hit.length < want; skip += CHUNK) {
+        const cands = await prisma.note.findMany({
+          where, select: { id: true, title: true, content: true },
+          ...(limit ? { orderBy: [orderBy, { id: 'asc' }], take: CHUNK, skip } : { orderBy }),
+        });
+        for (const c of cands) {
+          const title = (c.title || '').toLowerCase();
+          const text = (c.content || '').toLowerCase();
+          if (tagHits.has(c.id) || needles.some((w) => title.includes(w) || text.includes(w))) { hit.push(c.id); contentById.set(c.id, c.content); }
+        }
+        if (!limit || cands.length < CHUNK) break;
+      }
+      pageIds = limit ? hit.slice(offset, offset + limit) : hit;
+    }
+
+    const rows = await prisma.note.findMany({
+      where: pageIds ? { ...where, id: { in: pageIds } } : where,
       select: {
         id: true,
         title: true,
-        content: true, // Restored to render the sidebar snippet preview correctly
+        ...(pageIds ? {} : { content: true }), // Restored to render the sidebar snippet preview correctly
         category: true,
         isArchived: true,
         isDeleted: true,
@@ -292,8 +315,9 @@ export async function getNotes(req: any, res: any, next: any) {
       orderBy,
       // Optional paging. Without `limit` every note comes back: the sidebar and the editor
       // open notes from that full list, so it must stay complete.
-      ...(limit ? { take: limit, skip: offset } : {})
+      ...(limit && !pageIds ? { take: limit, skip: offset } : {})
     });
+    const notes: any[] = pageIds ? rows.map((r: any) => ({ ...r, content: contentById.get(r.id) ?? '' })) : rows;
 
     let found: any[] = notes;
     const fuzzy = new Set<string>();
@@ -570,12 +594,22 @@ export async function archiveNote(req: any, res: any, next: any) {
 export async function getBackups(req: any, res: any, next: any) {
   try {
     // Metadata only (the text of one version is fetched on demand). If the note is not the user's, the JOIN returns 0 rows.
+    // Encrypted versions come back whole (size and preview are worked out after decrypting); plain ones keep the cheap SQL preview.
     const rows: any[] = await prisma.$queryRaw`
-      SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview, b.label AS label, b.saved_by AS "savedBy"
+      SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview, CASE WHEN LEFT(b.content, 7) = 'enc:v1:' THEN b.content END AS cipher, b.label AS label, b.saved_by AS "savedBy"
       FROM note_backups b JOIN notes n ON n.id = b.note_id
       WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
       ORDER BY b.created_at DESC LIMIT 100`;
-    res.json({ backups: rows.map((r) => ({ id: r.id, createdAt: r.createdAt, size: Number(r.size), preview: r.preview, label: r.label || null, savedBy: r.savedBy || null })) });
+    res.json({ backups: rows.map((r) => {
+      let size = Number(r.size); let preview = r.preview;
+      if (r.cipher) {
+        const text = decryptText(r.cipher, aadOf('note_backups', 'content', r.id));
+        const chars = Array.from(text.length > 600 ? text.slice(0, 600) : text);
+        size = text.length > 600 ? Array.from(text).length : chars.length; // CHAR_LENGTH counts characters, not UTF-16 units
+        preview = chars.slice(0, 140).join('');
+      }
+      return { id: r.id, createdAt: r.createdAt, size, preview, label: r.label || null, savedBy: r.savedBy || null };
+    }) });
   } catch (error) {
     next(error);
   }

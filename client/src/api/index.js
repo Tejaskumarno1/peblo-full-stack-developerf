@@ -8,6 +8,8 @@ export const authAPI = {
   deleteAccount: (data) => api.post('/auth/delete-account', data),
   sendVerification: () => api.post('/auth/send-verification'),
   verifyEmail: (token) => api.post('/auth/verify-email', { token }),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
   cancelEmailChange: () => api.post('/auth/cancel-email-change')
 };
 

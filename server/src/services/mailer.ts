@@ -133,3 +133,16 @@ export function changeEmailMail(to: string, link: string): Mail {
 export function emailChangedNotice(to: string, newEmail: string): Mail {
   return { to, subject: 'Your Peblo email was changed', text: `The sign-in email for your Peblo account was changed to ${newEmail}.\n\nIf this was not you, sign in and change your password right away.` };
 }
+
+export function passwordResetMail(to: string, link: string): Mail {
+  const m = shell('Reset your password', 'Someone asked to reset the password for your Peblo account. Press the button to choose a new one. The link works once and expires in 30 minutes. Everyone signed in to the account will be signed out.', link, 'Choose a new password', 'If you did not ask for this, ignore this email: your password stays as it is.');
+  return { to, subject: 'Reset your Peblo password', ...m };
+}
+export function finishSignupMail(to: string, link: string): Mail {
+  const m = shell('Finish signing up', 'Press the button to confirm this address and create your Peblo account. The link works once and expires in 24 hours.', link, 'Finish signing up', 'If you did not ask for this, ignore this email: no account is created until the link is opened.');
+  return { to, subject: 'Finish signing up for Peblo', ...m };
+}
+export function signupAttemptNotice(to: string, link: string): Mail {
+  const m = shell('Someone tried to sign up with your email', 'A sign-up was started with this address, but it already has a Peblo account, so nothing was created or changed. If it was you, sign in instead, or reset your password if you forgot it.', link, 'Go to Peblo', 'If it was not you, you can ignore this email.');
+  return { to, subject: 'Someone tried to sign up with your Peblo email', ...m };
+}

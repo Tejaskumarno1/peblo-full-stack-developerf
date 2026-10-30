@@ -11,6 +11,8 @@ export async function boot(opts = {}) {
   const envText = fs.readFileSync(path.join(REPO, 'server', '.env'), 'utf8');
   const parsed = dotenv.parse(envText);
   Object.assign(process.env, parsed);
+  // Tests never send real email, and sign-up must stay instant for them: drop any mail settings from server/.env (a test that wants mail sets MAIL_OUTBOX itself).
+  for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'RESEND_API_KEY', 'MAIL_OUTBOX']) delete process.env[k];
   // Tests never touch the real database: a throwaway local Postgres (or PEBLO_TEST_DATABASE_URL), always named peblo_test.
   process.env.DATABASE_URL = process.env.PEBLO_TEST_DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:55432/peblo_test';
   if (!/peblo_test/.test(process.env.DATABASE_URL)) throw new Error('refusing to run: not peblo_test');

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import express from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
+import { encField } from '../dataCrypto.js';
 import { authenticate, TOKEN_PREFIX, hashToken, verifyToken } from '../middleware/auth.js';
 import { createPebloMcp } from '../mcp/tools.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -190,7 +191,11 @@ mcpRoutes.all('/', async (req, res) => {
   const row = await prisma.apiToken.findFirst({ where: { tokenHash: hashToken(token) }, select: { name: true } }).catch(() => null);
   const app = (row?.name || 'An app').replace(/^Connected:\s*/i, '');
   const log = (tool: string, summary: string, ok: boolean) => {
-    prisma.$executeRaw`INSERT INTO mcp_activity (user_id, app, tool, summary, ok) VALUES (${user.id}, ${app}, ${tool}, ${summary.slice(0, 160)}, ${ok})`
+    // the summary can hold a note title, a search or a line of text the app wrote: stored encrypted
+    const aid = crypto.randomUUID();
+    let stored: string | null = '';
+    try { stored = encField('mcp_activity', 'summary', aid, summary.slice(0, 160)); } catch { return; } // locked or no usable key: log nothing rather than log plain text
+    prisma.$executeRaw`INSERT INTO mcp_activity (id, user_id, app, tool, summary, ok) VALUES (${aid}, ${user.id}, ${app}, ${tool}, ${stored}, ${ok})`
       .then(() => prisma.$executeRaw`DELETE FROM mcp_activity WHERE user_id = ${user.id} AND at < now() - interval '60 days'`).catch(() => {});
   };
   const server = createPebloMcp(`http://127.0.0.1:${req.socket.localPort}`, token, log);

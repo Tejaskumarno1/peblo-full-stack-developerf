@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { withDataEncryption } from './prismaCrypto.js';
 
 // The database is Postgres (Supabase), shared by every user. DATABASE_URL must be set: in the Electron app's own .env
 // next to the packaged server, or in the hosting platform's environment once this is deployed.
@@ -39,7 +40,14 @@ function withPool(url: string): string {
   const n = Math.max(1, Math.min(20, Number(process.env.PEBLO_DB_CONNECTIONS) || 5));
   return url + (url.includes('?') ? '&' : '?') + 'connection_limit=' + n + '&pool_timeout=30';
 }
-const prisma = new PrismaClient({ datasources: { db: { url: withPool(process.env.DATABASE_URL || '') } } });
+const basePrisma = new PrismaClient({ datasources: { db: { url: withPool(process.env.DATABASE_URL || '') } } });
+/**
+ * The client the whole app uses: user text columns (note bodies, versions, AI results...) are encrypted on the way into the
+ * database and decrypted on the way out when PEBLO_DATA_KEY is set (see dataCrypto.ts / prismaCrypto.ts). Typed as the plain client.
+ */
+const prisma = withDataEncryption(basePrisma) as unknown as PrismaClientType;
+/** The client without encryption: only for the conversion job, which handles raw stored values itself. */
+export const rawPrisma: PrismaClientType = basePrisma;
 
 function findSqlDir(): string {
   const candidates = [

@@ -168,6 +168,8 @@ export function AuthProvider({ children }) {
   const signIn = useCallback(async (mode, form) => {
     const call = mode === 'signup' ? authAPI.signup : authAPI.login;
     const res = await call(form);
+    // Where the server can send mail, sign-up answers 202 and finishes when the emailed link is opened: nobody is signed in yet.
+    if (res.data?.pending) return { pending: true, message: res.data.message };
     queryClient.clear();
     setToken(res.data.token);
     setConnectError(null);

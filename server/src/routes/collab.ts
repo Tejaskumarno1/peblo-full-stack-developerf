@@ -2,8 +2,10 @@ import { accessFor } from '../services/shareAccess.js';
 import { Router } from 'express';
 import { rateLimit } from '../middleware/rateLimit.js';
 import prisma from '../db.js';
+import { decField } from '../dataCrypto.js';
 import { authenticate } from '../middleware/auth.js';
 import { liveRoomIds, presenceOf } from '../services/collab.js';
+import { issueTicket } from '../services/accountSafety.js';
 import { addComment, listComments, notifyOwner, removeComment, setStatus } from '../services/comments.js';
 
 /*
@@ -17,6 +19,19 @@ export const collabPublic = Router();
 router.use(authenticate);
 
 const ownNote = (userId: string, id: string) => prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, title: true } });
+
+// POST /api/collab/ticket { noteId } -> { ticket }: a 30-second, single-use pass for opening the live-editing WebSocket for ONE of my notes.
+// (The WebSocket address used to carry the sign-in token itself, which ends up in logs and browser history.)
+const ticketLimit = rateLimit({ windowMs: 60_000, max: 120, key: (req) => (req.user?.id ? `ticket:${req.user.id}` : ''), message: 'Too many live-editing connections. Wait a moment.' });
+router.post('/ticket', ticketLimit, async (req, res, next) => {
+  try {
+    if ((req.user as any).viaToken && (req.user as any).readOnly) return res.status(403).json({ error: 'This access token is read-only.' });
+    const noteId = String(req.body?.noteId || '');
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId) || !(await ownNote(req.user!.id, noteId))) return res.status(404).json({ error: 'Note not found' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ticket: issueTicket(req.user!.id, noteId) });
+  } catch (err) { next(err); }
+});
 
 // GET /api/collab/presence -> { [noteId]: [{ name, color }] }
 router.get('/presence', async (req, res, next) => {
@@ -67,7 +82,7 @@ router.get('/notifications', async (req, res, next) => {
   try {
     const rows = await prisma.$queryRawUnsafe<any[]>('SELECT id, kind, note_id, title, body, from_name, is_read, created_at FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', req.user!.id);
     res.json({
-      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, title: r.title, body: r.body, from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
+      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, title: r.title, body: decField('user_notifications', 'body', r.id, r.body), from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
       unread: rows.filter((r) => !r.is_read).length,
     });
   } catch (err) { next(err); }

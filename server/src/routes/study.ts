@@ -134,9 +134,11 @@ router.get('/activity', async (req, res, next) => {
 // GET /api/study/notes/:id/questions: how many quiz questions came from one note
 router.get('/notes/:id/questions', async (req, res, next) => {
   try {
-    const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id, questions: { contains: String(req.params.id) } }, select: { questions: true } }); // only runs that mention this note id at all
+    // quiz questions are encrypted at rest: the database cannot filter them, so look in JS (newest runs first, bounded)
+    const runs = await prisma.quizRun.findMany({ where: { userId: req.user!.id }, select: { questions: true }, orderBy: { createdAt: 'desc' }, take: 2000 });
     let count = 0;
-    for (const r of runs) for (const q of parse(r.questions, [])) if (q.noteId === req.params.id) count++;
+    const idText = String(req.params.id);
+    for (const r of runs) { if (!r.questions.includes(idText)) continue; for (const q of parse(r.questions, [])) if (q.noteId === req.params.id) count++; } // only runs that mention this note id at all
     res.json({ count });
   } catch (error) {
     next(error);

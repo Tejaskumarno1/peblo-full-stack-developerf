@@ -169,10 +169,11 @@ for (const [name, e] of Object.entries(explainOut)) if (e.exec > 100) console.lo
 let synced = 0, converged = false, afterIdle = true, apiAlive = true, ok = 0, limited = 0, other = 0, put200 = 0, put429 = 0, putOther = 0, crashed = false, limiterNormal = false;
 if (!process.env.PERF_SKIP_WS) {
   const collabMod = await import(pathToFileURL(path.join(REPO, 'dist', 'server', 'services', 'collab.js')).href);
-  const wsUrl = (noteId) => `ws://127.0.0.1:${port}/collab?token=${encodeURIComponent(token)}&note=${noteId}`;
-  const makeClient = (noteId, label) => new Promise((resolve) => {
+  // the live-editing socket takes a single-use ticket (POST /api/collab/ticket), not the sign-in token
+  const wsUrl = async (noteId) => { const r = await fetch(`http://127.0.0.1:${port}/api/collab/ticket`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ noteId }) }); const { ticket } = await r.json(); return `ws://127.0.0.1:${port}/collab?ticket=${encodeURIComponent(ticket || 'none')}&note=${noteId}`; };
+  const makeClient = (noteId, label) => new Promise(async (resolve) => {
     const doc = new Y.Doc(); const text = doc.getText('perf');
-    const ws = new WebSocket(wsUrl(noteId)); ws.binaryType = 'arraybuffer';
+    const ws = new WebSocket(await wsUrl(noteId)); ws.binaryType = 'arraybuffer';
     const c = { doc, text, ws, label, synced: false, closed: null, errors: 0 };
     const send = (enc) => { if (ws.readyState === 1) ws.send(encoding.toUint8Array(enc)); };
     doc.on('update', (u, origin) => { if (origin === ws) return; const e = encoding.createEncoder(); encoding.writeVarUint(e, 0); syncProtocol.writeUpdate(e, u); send(e); });
@@ -212,8 +213,8 @@ if (!process.env.PERF_SKIP_WS) {
   console.log(`room gone after idle: ${!afterIdle}; note_ydocs rows ${persisted}; server alive: ${apiAlive}; rooms ${roomsBefore} -> ${collabMod.liveRoomIds().length}`);
   await sleep(30000); // let the 10 upgrades above leave the one-minute window
   for (let i = 0; i < 70; i++) {
-    const c = await new Promise((resolve) => {
-      const ws = new WebSocket(wsUrl(collabNote)); let done = false; const fin = (v) => { if (!done) { done = true; resolve(v); } };
+    const c = await new Promise(async (resolve) => {
+      const ws = new WebSocket(await wsUrl(collabNote)); let done = false; const fin = (v) => { if (!done) { done = true; resolve(v); } };
       ws.on('open', () => fin({ ws, code: 'open' })); ws.on('unexpected-response', (_q, res) => fin({ ws, code: res.statusCode })); ws.on('error', () => fin({ ws, code: 'err' }));
     });
     if (c.code === 'open') { ok++; c.ws.close(); } else if (c.code === 429) limited++; else other++;

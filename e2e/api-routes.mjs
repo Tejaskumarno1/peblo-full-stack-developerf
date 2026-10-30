@@ -23,6 +23,7 @@ const check = (name, ok, extra) => {
 
 // ---------------------------------------------------------------- boot
 Object.assign(process.env, dotenv.parse(fs.readFileSync(path.join(REPO, 'server', '.env'), 'utf8')));
+for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'RESEND_API_KEY', 'MAIL_OUTBOX']) delete process.env[k]; // tests never send mail
 process.env.DATABASE_URL = DB_URL;
 process.env.NODE_ENV = 'test'; // never "development": that mode adds stack traces to error replies on purpose
 process.env.PEBLO_SQL_DIR = path.join(REPO, 'server', 'prisma', 'sql');
