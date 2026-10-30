@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
-import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
+import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive, markExternalEdit } from '../utils/noteSync';
 import { useUndoToast } from '../utils/useUndoToast';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
@@ -142,7 +142,7 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const patch = (p) => setDoc((d) => (d ? { ...d, ...p } : d));
   // Replace the text from outside the editor (templates, find & replace): remounts the editor with the new content
-  const applyContent = (p) => { if (!docRef.current) return; setDoc((d) => (d ? { ...d, ...p } : d)); setEditorKey(`apply-${Date.now()}`); };
+  const applyContent = (p) => { if (!docRef.current) return; if (typeof p.content === 'string') markExternalEdit(docRef.current.id); setDoc((d) => (d ? { ...d, ...p } : d)); setEditorKey(`apply-${Date.now()}`); };
 
   const refreshLists = () => {
     queryClient.invalidateQueries({ queryKey: ['notes'] });

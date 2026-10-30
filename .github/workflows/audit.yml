@@ -18,9 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Shipped dependencies must have no high or critical advisories.
-      - name: Audit server and desktop shell
-        run: npm audit --omit=dev --audit-level=high
-      - name: Audit client
-        working-directory: client
-        run: npm audit --omit=dev --audit-level=high
+      # Shipped dependencies must have no NEW high or critical advisories. Reviewed ones live in
+      # .github/audit-allowlist.json (reason, link, expiry); see docs/SECURITY-AUDIT.md.
+      # npm audit needs the lockfiles only, so nothing is installed.
+      - name: Audit gate (root and client)
+        run: node scripts/audit-gate.mjs

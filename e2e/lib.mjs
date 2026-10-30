@@ -17,7 +17,7 @@ export async function boot(opts = {}) {
   process.env.PEBLO_SQL_DIR = path.join(REPO, 'server', 'prisma', 'sql');
   process.env.SIGNUP_RATE_MAX = '1000';
   delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_API_KEYS;
-  const { startServer } = await import(pathToFileURL(path.join(REPO, 'dist', 'server', 'index.js')).href);
+  const { startServer } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'index.js')).href);
   const { server, port } = await startServer({ port: 0, staticDir: path.join(REPO, 'client', 'dist') });
   const base = `http://127.0.0.1:${port}`;
   process.env.PUBLIC_URL = base; // links use the "public" address; in a test that is this server
@@ -48,7 +48,7 @@ export async function boot(opts = {}) {
   const check = (name, ok, extra) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) { failures++; if (extra !== undefined) console.log('      ', String(extra).slice(0, 300)); } };
   const finish = async () => {
     await browser.close(); server.close();
-    const { default: prisma } = await import(pathToFileURL(path.join(REPO, 'dist', 'server', 'db.js')).href);
+    const { default: prisma } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'db.js')).href);
     try { await prisma.user.deleteMany({ where: { email } }); } catch {}
     await prisma.$disconnect();
     console.log(failures ? `\n${failures} check(s) failed` : '\nAll e2e checks passed');

@@ -55,8 +55,9 @@ try {
       { type: 'numberedListItem', content: 'first' },
     ], last, 'after');
   }, { VID, AUD, FIL });
-  await page.waitForTimeout(2500);
-  const saved = (await api('GET', `/api/notes/${note.id}`)).note;
+  // autosave is debounced (and the editor's Markdown conversion waits for typing to pause): poll for the saved copy instead of a fixed sleep
+  let saved = (await api('GET', `/api/notes/${note.id}`)).note;
+  for (let i = 0; i < 40 && !(/```python/.test(saved.content) && /data:application\/pdf/.test(saved.content)); i++) { await page.waitForTimeout(300); saved = (await api('GET', `/api/notes/${note.id}`)).note; }
   check('toggle saved', /▸ Toggle heading/.test(saved.content), saved.content);
   check('video saved', /<img src="data:video\/mp4/.test(saved.content));
   check('audio saved', /<img src="data:audio\/mpeg/.test(saved.content));

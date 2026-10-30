@@ -801,3 +801,10 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 }
 
 .o-pop > button > svg, .o-pop > a > svg { flex: none; opacity: 0.75; }
+
+
+/* Narrow windows (tablet width): the top bar, the sheets over the map and their headers must fit the window instead of running off its right edge. */
+.o-ask { flex: 0 1 420px; min-width: 0; }
+.o-ask input { width: 0; }
+.o-sheet { max-width: calc(100% - 48px); }
+@media (max-width: 1100px) { .o-sheet-head { height: auto; min-height: 68px; flex-wrap: wrap; padding-block: 8px; row-gap: 6px; } }

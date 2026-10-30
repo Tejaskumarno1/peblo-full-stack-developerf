@@ -634,21 +634,25 @@ function RiverNoteList({ onNew }) {
     try { await exportManyMarkdown(list); } catch { flash('Could not download'); }
   };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notes'] });
+  // A failed request says so (the row stays as the server has it) instead of failing silently
+  const attempt = async (fn, failed) => {
+    try { await fn(); } catch { flash(failed); }
+    refresh();
+  };
   const actions = filter === 'archive'
     ? [
-        { label: 'Unarchive', run: async (n) => { await notesAPI.archive(n.id); refresh(); } },
-        { label: 'Move to Trash', danger: true, run: async (n) => { await notesAPI.delete(n.id); refresh(); } },
+        { label: 'Unarchive', run: (n) => attempt(() => notesAPI.archive(n.id), 'Could not unarchive that note. Try again.') },
+        { label: 'Move to Trash', danger: true, run: (n) => attempt(() => notesAPI.delete(n.id), 'Could not move that note to the Trash. Try again.') },
       ]
     : filter === 'trash'
       ? [
-          { label: 'Restore', run: async (n) => { await notesAPI.restore(n.id); refresh(); } },
-          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await notesAPI.delete(n.id, { permanent: true }); refresh(); } },
+          { label: 'Restore', run: (n) => attempt(() => notesAPI.restore(n.id), 'Could not restore that note. Try again.') },
+          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await attempt(() => notesAPI.delete(n.id, { permanent: true }), 'Could not delete that note. Try again.'); } },
         ]
       : null;
   const emptyTrash = async () => {
     if (!window.confirm(`Delete ${listed.length} note${listed.length === 1 ? '' : 's'} in the Trash forever? This cannot be undone.`)) return;
-    for (const n of listed) await notesAPI.delete(n.id, { permanent: true });
-    refresh();
+    await attempt(async () => { for (const n of listed) await notesAPI.delete(n.id, { permanent: true }); }, 'Could not empty the Trash. Try again.');
   };
   const shownTags = moreTags || tags.findIndex(([t]) => t === filter) >= 10 ? tags : tags.slice(0, 10);
   const title = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : filter === 'all' ? 'Every note' : `#${filter}`;
@@ -731,6 +735,7 @@ function RiverNoteList({ onNew }) {
             </div>
           )}
 
+          {searching && msg && <p className="r-err" role="alert">{msg}</p>}
           {searching ? (
             <>
               <p className="r-quiet small">

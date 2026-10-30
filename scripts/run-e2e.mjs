@@ -16,7 +16,7 @@
 // Checkless scripts that exit 0 whatever happens (screenshot/probe tools), so a "PASS" would mean nothing:
 //   notesprobe, notesprobe2, np-shots, np-shots2, orbitshots, ref-shots, refshots, rivshots, yjs-debug*
 // Other non-suites: hosted-cursors, spawn-lab, shots-share, present2-dbg, comments-dbg, rivprobe
-// (see SKIP below; edit it there). Note: seeddemo, capture2, filtershot, media-probe are NOT skipped here; check if they are suites.
+// (see SKIP below; edit it there). perf-scale, responsive-smoke and electron-app are long, need their own database or the desktop app, and are run by hand.
 import fs from 'fs';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
@@ -27,6 +27,7 @@ const E2E = path.join(REPO, 'e2e');
 const SKIP = [
   'hosted-cursors', 'spawn-lab', 'shots-share', 'present2-dbg', 'yjs-debug*', 'notesprobe*', 'np-shots*',
   'orbitshots', 'ref-shots', 'refshots', 'rivshots', 'comments-dbg', 'rivprobe',
+  'seeddemo', 'media-probe', 'perf-scale', 'responsive-smoke', 'electron-app',
 ];
 const skipRes = SKIP.map((p) => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'));
 const isSkipped = (n) => n.startsWith('lib') || n.startsWith('_') || skipRes.some((r) => r.test(n));

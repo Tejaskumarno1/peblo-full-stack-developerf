@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Minus, Plus, Lock, RotateCw, Download, FileWarning } from 'lucide-react';
+import { readSheets, SHOW_ROWS } from '../utils/sheetRead';
 import { bytesOf, pdfOpen, FileProblem, isEncryptedOffice, tidyPackage, extOf, downloadUrl, escapeRe } from '../utils/docFiles';
 
 // The four ways a file is drawn inside a frame or the full-screen viewer: slides, pages of a document, a sheet, PDF pages.
@@ -202,7 +203,7 @@ export const ZoomBar = ({ zoom, fit, setZoom }) => (
 
 /* =========================== Excel =========================== */
 const colName = (i) => { let s = ''; let n = i; do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; };
-export const ROW_CAP = 200;
+export const ROW_CAP = SHOW_ROWS;
 
 export function useSheets(buf) {
   const [wb, setWb] = useState(null); const [err, setErr] = useState(null);
@@ -211,14 +212,8 @@ export function useSheets(buf) {
     if (!buf) return () => { off = true; };
     (async () => {
       try {
-        const X = await import('xlsx');
-        const book = X.read(buf.slice(0), { type: 'array', cellDates: true });
-        const sheets = book.SheetNames.map((name) => {
-          const ws = book.Sheets[name];
-          const rows = X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true });
-          const cols = Math.min(40, Math.max(6, ...rows.slice(0, ROW_CAP).map((r) => r.length)));
-          return { name, rows, cols };
-        });
+        // size cap, row/sheet limits, prototype check and a stoppable worker all live in sheetRead.js (xlsx advisories, docs/SECURITY-AUDIT.md)
+        const { sheets } = await readSheets(buf);
         if (!off) setWb(sheets);
       } catch (e) { if (!off) setErr(isEncryptedOffice(buf) ? new FileProblem('password', 'Password protected') : e); }
     })();
@@ -230,6 +225,7 @@ export function useSheets(buf) {
 export function SheetView({ sheets, err, at, mode = 'frame', onSearchRoot }) {
   const root = useRef(null);
   useEffect(() => { onSearchRoot?.(root.current); }, [sheets, at, onSearchRoot]);
+  if (err && (err.code === 'big' || err.code === 'slow')) return <Problem title="Too big to preview" body="This workbook is too large to show here. Download it to open it." />;
   if (err) return err.code === 'password' ? <Problem tone="lilac" icon={<Lock size={22} />} title="Password protected" body="A workbook with a password cannot be previewed here. Download it to open it." /> : <Problem title="We could not make a preview" body="The file itself is safe. Try again, or download it." />;
   if (!sheets) return <Busy what="Making the preview…" />;
   const s = sheets[clamp(at, 0, sheets.length - 1)];
@@ -249,7 +245,7 @@ export function SheetView({ sheets, err, at, mode = 'frame', onSearchRoot }) {
           ))}
         </div>
       </div>
-      {s.rows.length > ROW_CAP && <div className="df-sheet-note">Showing the first {ROW_CAP} rows of {s.rows.length.toLocaleString()}. Download for the rest.</div>}
+      {s.rows.length > ROW_CAP && <div className="df-sheet-note">Showing the first {ROW_CAP} rows of {s.rows.length.toLocaleString()}{s.more ? '+' : ''}. Download for the rest.</div>}
     </div>
   );
 }

@@ -432,7 +432,7 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .rp small { opacity: .75; }
 .pb-shared .rp > button { border: 0; border-radius: 999px; padding: 7px 14px; background: #fff; color: #2b1458; font-weight: 700; }
 .pb-shared .rp > button[aria-label] { padding: 6px; background: transparent; color: #fff; }
-@media (max-width: 640px) { .pb-shared [data-pb-bm="1"]::after { right: -4px; } .pb-shared .reader-pills { top: 66px; width: calc(100vw - 24px); } }
+@media (max-width: 640px) { .pb-shared [data-pb-bm="1"]::after { right: -4px; } .pb-shared .reader-pills { top: 66px; width: calc(100vw - 24px); } .pb-shared .rp > button { min-height: 32px; } .pb-shared .rp > button[aria-label] { min-width: 32px; display: grid; place-items: center; } .pb-shared .brand { min-height: 32px; } }
 
 /* Stage 4: waiting room */
 .pb-shared .wait-name { display: inline-flex; flex-direction: column; gap: 6px; margin-top: 18px; font-size: 13px; text-align: left; }

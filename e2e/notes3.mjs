@@ -61,32 +61,32 @@ try {
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
   await page.getByRole('button', { name: 'More' }).click();
   await page.getByRole('menuitem', { name: /Move to folder/ }).click();
-  await page.getByRole('dialog', { name: /folder/i }).locator('input').fill('Work');
+  await page.getByRole('dialog', { name: 'Move to folder' }).getByRole('button', { name: /New folder/ }).click(); // the sheet lists folders; a new one is made in the New folder sheet and the note moves into it
+  await page.getByRole('dialog', { name: 'New folder' }).getByLabel('Folder name').fill('Work');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1000);
   const meta = (await api('GET', `/api/notes/${target.id}`)).note.meta || {};
   check('moving a note to a folder saves it', meta.folder === 'Work', JSON.stringify(meta));
   await page.reload();
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
-  await page.locator('.s-filters-toggle').click();
-  await page.locator('.s-filters select[aria-label="Folder"]').selectOption('Work');
+  await page.getByRole('tab', { name: /^Work/ }).click(); // folder chips replaced the old filter selects
   await page.waitForTimeout(400);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('the folder filter shows only that folder', rows.length === 1 && /Zebra/.test(rows[0]), rows.join('|'));
-  await page.getByRole('button', { name: 'Clear' }).click();
-  await page.getByRole('button', { name: 'With pictures' }).click();
-  check('the pictures filter narrows the list', (await page.locator('.s-note-row').count()) === 0);
-  await page.getByRole('button', { name: 'Clear' }).click();
+  await page.getByRole('tab', { name: /^All/ }).click();
+  await page.locator('.s-notes-foot').getByRole('button', { name: 'Pictures' }).click(); // the pictures gallery replaced the With pictures filter
+  check('the pictures view shows only notes with pictures (none here)', await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByText(/No pictures yet/).waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByRole('button', { name: 'Close' }).click();
 
-  await page.getByRole('button', { name: 'Select' }).click();
+  await page.getByRole('button', { name: 'Select notes' }).click();
   await page.locator('.s-note-row', { hasText: 'Linker' }).click();
-  check('select mode counts picked notes', /1 selected/.test(await page.locator('.s-bulk').innerText()));
-  await page.locator('.s-bulk').getByRole('button', { name: 'Archive' }).click();
+  check('select mode counts picked notes', /1 selected/.test(await page.locator('.np-selhead').innerText()));
+  await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click();
   await page.waitForTimeout(1000);
   const arch = (await api('GET', `/api/notes/${linker.id}`)).note;
   check('bulk archive archives the picked notes', arch.isArchived === true);
 
-  await page.locator('.s-notes-foot').getByRole('button', { name: 'Manage tags' }).click();
+  await page.locator('.s-notes-foot').getByRole('button', { name: 'Tags', exact: true }).click();
   await page.waitForTimeout(600);
   check('the tag manager opens and lists tags', (await page.locator('.s-share', { hasText: 'b3' }).count()) > 0);
   await shot('notes3-tags');

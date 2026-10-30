@@ -1,0 +1,19 @@
+{
+  "_comment": "Reviewed high/critical advisories that the audit gate accepts. Each needs a reachability verdict, a link and an expiry. See docs/SECURITY-AUDIT.md.",
+  "accepted": [
+    {
+      "id": "GHSA-4r6h-8v6p-xvw6",
+      "package": "xlsx",
+      "link": "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6",
+      "reason": "Prototype pollution in SheetJS 0.18.5. No fixed version on npm. Reachable only through spreadsheet previews in a note; mitigated by client/src/utils/sheetRead.js (10 MB cap, row/sheet limits, prototype check, parse inside a Web Worker). Server never parses spreadsheets.",
+      "expires": "2027-01-31"
+    },
+    {
+      "id": "GHSA-5pgg-2g8v-p4x9",
+      "package": "xlsx",
+      "link": "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9",
+      "reason": "ReDoS in SheetJS 0.18.5. No fixed version on npm. Mitigated by the same file: parse runs in a Web Worker that is terminated after 20 s, so the page never freezes.",
+      "expires": "2027-01-31"
+    }
+  ]
+}

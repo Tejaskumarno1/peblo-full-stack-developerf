@@ -313,6 +313,8 @@ const remember = (title) => { try { localStorage.setItem(RECENT_KEY, JSON.string
 
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
+const CHANGE_DEBOUNCE_MS = 200; // quiet time before the typed text is turned into Markdown (see handleChange)
+
 function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -582,20 +584,66 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     } catch { /* if the editor cannot do this, @ still works */ }
   };
 
-  const handleChange = async () => {
+  // Turning the whole document into Markdown costs time in proportion to the note's size (about 0.17 s on a 2 MB note), so doing
+  // it on every keystroke made typing in big notes lag. The conversion now waits until typing pauses for CHANGE_DEBOUNCE_MS,
+  // and is run at once (flushChange) when the editor loses focus, the tab is hidden, Ctrl+S is pressed, or something fires
+  // the 'peblo-flush-editor' event. What is saved is the same Markdown as before; only the moment it is produced moves.
+  const dirtyRef = useRef(false);
+  const changeTimerRef = useRef(null);
+  const pendingFnRef = useRef(null);
+  const flushChange = () => {
+    if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    const deliver = pendingFnRef.current;
+    if (!deliver || loadingRef.current || aiBusyRef.current) return;
+    if (rt && !connRef.current) return;
+    const sequence = ++changeSequenceRef.current;
+    // take the document now (not after the await) so an edit made while converting is a new change of its own
+    const blocks = toStorage(editor.document);
+    void (async () => {
+      const markdown = await editor.blocksToMarkdownLossy(blocks); // may be synchronous or a promise depending on the BlockNote version
+      // Markdown conversion is asynchronous. Ignore an older conversion that
+      // finishes after a newer edit, otherwise autosave can roll content back.
+      if (sequence !== changeSequenceRef.current) return;
+      if (rt && liveRef.current) rt.announce(markdown); // the server learns this text is ours before it is saved
+      deliver(markdown);
+    })().catch(() => { /* the next edit converts again */ });
+  };
+  const flushRef = useRef(flushChange);
+  flushRef.current = flushChange;
+  const handleChange = () => {
     checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
     // While a live connection is down, edits stay in the shared document and sync when it returns. Saving the page's own
     // copy now could overwrite what other people typed meanwhile.
     if (rt && !connRef.current) return;
-    const sequence = ++changeSequenceRef.current;
-    const markdown = await editor.blocksToMarkdownLossy(toStorage(editor.document));
-    // Markdown conversion is asynchronous. Ignore an older conversion that
-    // finishes after a newer edit, otherwise autosave can roll content back.
-    if (sequence !== changeSequenceRef.current) return;
-    if (rt && liveRef.current) rt.announce(markdown); // the server learns this text is ours before it is saved
-    onChange(markdown);
+    dirtyRef.current = true;
+    pendingFnRef.current = onChange;
+    if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
+    changeTimerRef.current = setTimeout(() => flushRef.current(), CHANGE_DEBOUNCE_MS);
   };
+  useEffect(() => {
+    const flush = () => flushRef.current();
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) flush(); };
+    const root = rootRef.current;
+    root?.addEventListener('focusout', flush, true);
+    root?.addEventListener('keydown', onKey, true);
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('peblo-flush-editor', flush);
+    return () => {
+      root?.removeEventListener('focusout', flush, true);
+      root?.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('peblo-flush-editor', flush);
+      // Leaving the editor: the parents' onChange writes into whichever note is current by now, so an edit still waiting is
+      // delivered only by blur (which always comes first when a person clicks elsewhere), never from here.
+      if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
+    };
+  }, []);
 
   // ---------- AI: the result lands in a card; nothing in the note changes until you pick what to do ----------
   const sourceFor = (kind) => {

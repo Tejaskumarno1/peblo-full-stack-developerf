@@ -27,10 +27,14 @@ export default function RiverTaskList() {
   const [closed, setClosed] = useState(() => new Set());
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
+  const [err, setErr] = useState('');
   const { toast, say, dismiss } = useUndoToast();
   const setOpts = (patch) => setOptsState((o) => { const n = { ...o, ...patch }; try { localStorage.setItem(OPTS_KEY, JSON.stringify(n)); } catch { /* storage blocked */ } return n; });
   const refresh = () => qc.invalidateQueries();
-  const { gone, schedule } = useDeferredDelete(async (id) => { await todosAPI.delete(id, 'this'); refresh(); });
+  const { gone, schedule } = useDeferredDelete(async (id) => {
+    try { await todosAPI.delete(id, 'this'); } catch { setErr('Could not delete that task. Try again.'); }
+    refresh();
+  });
 
   const { data: all = [], isLoading } = useQuery({
     queryKey: ['river', 'task-list'],
@@ -44,17 +48,18 @@ export default function RiverTaskList() {
   );
   const groups = useMemo(() => groupTasks(shown, opts.group, H), [shown, opts.group]);
 
-  const setDone = async (t, completed) => { await todosAPI.update(t.id, { completed }); refresh(); };
+  const setDone = async (t, completed) => {
+    try { await todosAPI.update(t.id, { completed }); setErr(''); return true; } catch { setErr('Could not update that task. Try again.'); return false; } finally { refresh(); }
+  };
   const toggle = async (t) => {
     const next = !t.completed;
-    await setDone(t, next);
-    say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
+    if (await setDone(t, next)) say(next ? 'Marked done' : 'Marked not done', () => setDone(t, !next));
   };
   const remove = async (t) => {
     if (t.seriesId) {
       const scope = await askScope(t, 'delete');
       if (!scope) return;
-      await todosAPI.delete(t.id, scope);
+      try { await todosAPI.delete(t.id, scope); setErr(''); } catch { setErr('Could not delete that task. Try again.'); }
       refresh();
       return;
     }
@@ -71,8 +76,9 @@ export default function RiverTaskList() {
     try {
       await todosAPI.create({ text: parsed.text || draft.trim(), priority: parsed.priority, tags: parsed.tags, deadline: parsed.deadline ? parsed.deadline.toISOString() : null });
       setDraft('');
+      setErr('');
       refresh();
-    } finally { setAdding(false); }
+    } catch { setErr('Could not add that task. Try again.'); } finally { setAdding(false); }
   };
 
   // several at once
@@ -80,10 +86,19 @@ export default function RiverTaskList() {
   const bulk = async (label, patchFor) => {
     const chosen = shown.filter((t) => picked.has(t.id));
     const before = chosen.map((t) => ({ id: t.id, completed: t.completed, deadline: t.deadline, priority: t.priority }));
-    await Promise.all(chosen.map((t) => todosAPI.update(t.id, patchFor(t))));
+    try {
+      await Promise.all(chosen.map((t) => todosAPI.update(t.id, patchFor(t))));
+      setErr('');
+    } catch {
+      setErr('Could not change those tasks. Try again.');
+      refresh();
+      return;
+    }
     refresh();
     say(`${label}: ${chosen.length} task${chosen.length === 1 ? '' : 's'}`, async () => {
-      await Promise.all(before.map((b) => todosAPI.update(b.id, { completed: b.completed, deadline: b.deadline, priority: b.priority })));
+      try {
+        await Promise.all(before.map((b) => todosAPI.update(b.id, { completed: b.completed, deadline: b.deadline, priority: b.priority })));
+      } catch { setErr('Could not undo that. Try again.'); }
       refresh();
     });
     setPicked(new Set());
@@ -145,6 +160,7 @@ export default function RiverTaskList() {
             <button type="button" className="r-btn ghost small danger" disabled={!ids.length} onClick={bulkDelete}>Delete</button>
           </div>
         )}
+        {err && <p className="r-err" role="alert">{err}</p>}
         {isLoading && <div className="r-tl-empty"><Loader2 className="r-spin" /></div>}
         {!isLoading && groups.length === 0 && <div className="r-tl-empty">{q.trim() ? 'No tasks match your search.' : 'Nothing here. Try another filter.'}</div>}
         {groups.map((g) => (

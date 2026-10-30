@@ -57,7 +57,9 @@ try {
   await panel.getByRole('tab', { name: 'Viewers' }).click();
 
   // the guest's own panel
-  if (!(await g.getByTestId('live-panel').isVisible())) await g.getByRole('button', { name: /Open live collaboration/ }).click(); // docked and open by default on wide screens
+  // the guest's People panel is docked and opens by itself on wide screens; otherwise the rail's People button opens it
+  await g.getByTestId('live-panel').waitFor({ timeout: 1500 }).catch(() => {});
+  if (!(await g.getByTestId('live-panel').isVisible())) await g.getByTestId('rail-people').click();
   const gp = g.getByTestId('live-panel');
   await gp.waitFor({ timeout: 5000 });
   await g.waitForFunction(() => /Owner/.test(document.querySelector('[data-testid="live-viewers"]')?.textContent || ''), null, { timeout: 9000 });
@@ -85,6 +87,8 @@ try {
   check('and a synced message when back', true);
 
   // turning sharing off from the panel
+  // the "updated this note" toast from the guest's earlier typing sits over the bottom of the panel; dismiss it like a person would
+  if (await page.getByTestId('eb-dismiss').count()) await page.getByTestId('eb-dismiss').click();
   await panel.getByRole('button', { name: 'Turn sharing off' }).click();
   await panel.getByRole('button', { name: 'Turn off' }).click();
   await page.waitForFunction(() => !document.querySelector('[data-testid="share-chips"]'), null, { timeout: 8000 });

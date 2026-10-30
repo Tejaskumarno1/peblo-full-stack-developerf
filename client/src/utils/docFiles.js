@@ -1,4 +1,5 @@
 import api from '../api/client';
+import { readSheets } from './sheetRead';
 
 // Files that sit in a note as a frame: PowerPoint, Word, Excel, PDF and anything else (mockups F1 to F7).
 // The original bytes live on the server (/api/files/<id>); previews are drawn in the browser, so nothing here needs a paid service.
@@ -122,9 +123,7 @@ export async function describe(buf, name) {
       return n ? `${n} page${n === 1 ? '' : 's'}` : '';
     }
     if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-      const X = await import('xlsx');
-      const wb = X.read(buf, { type: 'array', bookSheets: true });
-      const n = wb.SheetNames.length;
+      const { count: n } = await readSheets(buf, { namesOnly: true }); // capped, guarded, off the main thread
       return `${n} sheet${n === 1 ? '' : 's'}`;
     }
     if (ext === 'pdf') {

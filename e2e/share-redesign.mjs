@@ -6,7 +6,7 @@ const SHOTS = 'C:/Users/tejas/Documents/peblo-full-stack-developerf/.shots';
 try {
   const note = (await api('POST', '/api/notes', { title: 'Range note', content: '## Goal\n\nShip the redesign by Friday with no open blockers\n\n## Next\n\nSecond paragraph stays plain', tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
-  await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-collab-tip', '1'); } catch { /* ignore */ } });
+  await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-collab-tip', '1'); localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } }); // the range flags are the non-live marks; a live (Yjs) room draws real cursors and hides them
   await page.setViewportSize({ width: 1440, height: 860 });
   await page.goto(`${base}/notes/${note.id}`);
   await page.locator('.bn-editor').waitFor({ timeout: 15000 });
@@ -58,7 +58,7 @@ try {
   check('and the flag comes back', await page.evaluate(() => !!document.querySelector('.pb-peer-end.hot')));
 
   // two people on the same words: their flags stack instead of overlapping
-  const g2ctx = await ctx.browser().newContext({ viewport: { width: 1280, height: 800 } });
+  const g2ctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 860 } }); // wide enough that the docked People panel pushes the page instead of covering the text (at 1280 it overlays it)
   await g2ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch { /* ignore */ } });
   const g2 = await g2ctx.newPage();
   await g2.goto(`${base}/s/note/${tok}`);
@@ -114,7 +114,8 @@ try {
   await m.waitForTimeout(1500);
   const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   check('phone: no sideways scroll', overflow <= 1, String(overflow));
-  check('phone: the bottom bar shows who is here', await m.getByTestId('live-editors').isVisible());
+  const peopleBtn = m.getByTestId('mbar').getByRole('button', { name: 'People' }); // the phone page action bar replaced the old live-editors pill
+  check('phone: the bottom bar shows who is here', await peopleBtn.isVisible() && /People\s*[1-9]/.test(await peopleBtn.innerText()), await peopleBtn.innerText().catch(() => 'missing'));
   const gutter = await m.evaluate(() => { const a = document.querySelector('.pb-shared article').getBoundingClientRect(); const p = document.querySelector('.bn-editor p, .bn-editor [data-content-type]').getBoundingClientRect(); return { left: Math.round(p.left - a.left), width: Math.round(p.width), card: Math.round(a.width) }; });
   check('phone: the text has at least 85% of the screen width', gutter.width >= 390 * 0.85 - 16, JSON.stringify(gutter));
   await m.screenshot({ path: `${SHOTS}/range-phone.png` });
@@ -129,6 +130,9 @@ try {
   const t = await tctx.newPage();
   await t.goto(`${base}/s/todo/${ttok}`);
   await t.getByLabel('Task').waitFor({ timeout: 15000 });
+  // the People panel opens by itself only when someone else is on the page; open it from the rail like a person would
+  if (!(await t.getByTestId('live-panel').isVisible())) await t.getByTestId('rail-people').click();
+  await t.getByTestId('live-panel').waitFor({ timeout: 5000 }).catch(() => {});
   check('task page: docked panel and white card', await t.getByTestId('live-panel').isVisible() && /255, 255, 255/.test(await t.evaluate(() => getComputedStyle(document.querySelector('.pb-shared article')).backgroundColor)));
   await t.screenshot({ path: `${SHOTS}/range-task.png` });
   await tctx.close();

@@ -9,6 +9,8 @@ export interface ImportedNote {
   tags: string[];
   createdAt?: Date;
   source: string;
+  fromExport?: boolean; // written by Peblo's own export: keep it even when it is empty
+  archived?: boolean; // it sat in the export's Archive/ folder
 }
 
 export interface ImportResult {
@@ -39,22 +41,34 @@ function parseDate(value: string): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
+/** A front-matter value: Peblo writes the title as a JSON string (quotes, backslashes and line breaks escaped), so read that back exactly. */
+function fmString(raw: string): string {
+  const v = raw.trim();
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+    try { const s = JSON.parse(v); if (typeof s === 'string') return s; } catch { /* not JSON: fall through */ }
+  }
+  return v.replace(/^["']|["']$/g, '');
+}
+
 /** Parses one Markdown page from Notion/Obsidian into a note. */
 export function parseMarkdownPage(fileName: string, raw: string, result: ImportResult): ImportedNote {
   let text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n');
   const tags: string[] = [];
   let createdAt: Date | undefined;
   let title = cleanName(fileName);
+  let fmTitle = false;
+  let fromPeblo = false; // a file Peblo itself exported: its first lines are the note's text, not Notion-style properties
 
   // Obsidian / generic YAML front matter
   const fm = text.match(/^---\n([\s\S]*?)\n---\n?/);
   if (fm) {
+    fromPeblo = /^source:\s*peblo-export\s*$/m.test(fm[1]);
     for (const line of fm[1].split('\n')) {
       const m = line.match(/^(tags|tag|keywords|created|date|title)\s*:\s*(.*)$/i);
       if (!m) continue;
       const key = m[1].toLowerCase();
       if (key.startsWith('tag') || key === 'keywords') tags.push(...splitTags(m[2]));
-      else if (key === 'title' && m[2].trim()) title = m[2].trim().replace(/^["']|["']$/g, '');
+      else if (key === 'title' && m[2].trim()) { title = fmString(m[2]); fmTitle = true; }
       else createdAt = createdAt || parseDate(m[2]);
     }
     // YAML list form:  tags:\n  - a\n  - b
@@ -66,7 +80,8 @@ export function parseMarkdownPage(fileName: string, raw: string, result: ImportR
   // Leading "# Title" (Notion always writes one)
   const h1 = text.match(/^\s*#\s+(.+)\n?/);
   if (h1) {
-    title = h1[1].trim();
+    if (!(fromPeblo && fmTitle)) title = h1[1].trim(); // the front-matter title is exact; the heading may have had line breaks flattened
+
     text = text.slice(h1[0].length);
   }
 
@@ -75,7 +90,7 @@ export function parseMarkdownPage(fileName: string, raw: string, result: ImportR
   let i = 0;
   while (i < lines.length && lines[i].trim() === '') i++;
   const kept: string[] = [];
-  while (i < lines.length) {
+  while (!fromPeblo && i < lines.length) {
     const m = lines[i].match(/^([A-Z][\w .&/-]{0,40}):\s+(.+)$/);
     if (!m) break;
     const key = m[1].trim().toLowerCase();
@@ -101,6 +116,7 @@ export function parseMarkdownPage(fileName: string, raw: string, result: ImportR
     tags: [...new Set(tags)].slice(0, 20),
     createdAt,
     source: fileName,
+    ...(fromPeblo ? { fromExport: true } : {}),
   };
 }
 
@@ -182,14 +198,21 @@ function ingestFiles(files: { name: string; data: Buffer }[], result: ImportResu
         if (declared > MAX_ENTRY_BYTES) throw new ImportLimitError(`"${path.basename(e.entryName)}" is too large to import (limit ${MAX_ENTRY_BYTES / 1048576} MB per file).`);
         budget.bytes += declared;
         if (budget.bytes > MAX_UNZIPPED_BYTES) throw new ImportLimitError(`This archive unpacks to more than ${MAX_UNZIPPED_BYTES / 1048576} MB.`);
-        const data = e.getData();
+        let data: Buffer;
+        try { data = e.getData(); }
+        catch (err: any) {
+          // the declared size lied and the data is bigger than it said (or the entry is damaged): refuse, never a 500
+          if (err?.code === 'ERR_BUFFER_TOO_LARGE' || err instanceof RangeError) throw new ImportLimitError(`"${path.basename(e.entryName)}" unpacks to more than it declares, so it was not imported.`);
+          throw Object.assign(new Error(`"${path.basename(e.entryName)}" inside the .zip could not be read.`), { statusCode: 400 });
+        }
         if (data.length > MAX_ENTRY_BYTES) throw new ImportLimitError(`"${path.basename(e.entryName)}" is too large to import (limit ${MAX_ENTRY_BYTES / 1048576} MB per file).`); // the declared size can lie
         return { name: e.entryName, data };
       });
       ingestFiles(inner, result, depth + 1);
     } else if (TEXT_EXT.has(ext)) {
       const note = parseMarkdownPage(file.name, file.data.toString('utf8'), result);
-      if (note.content || note.title !== 'Untitled') result.notes.push(note);
+      if (note.fromExport && /(^|[\\/])Archive[\\/]/.test(file.name)) note.archived = true;
+      if (note.content || note.title !== 'Untitled' || note.fromExport) result.notes.push(note);
     } else if (ext === '.csv') {
       // Notion writes both "DB.csv" (current view) and "DB_all.csv" (every row); keep only the full one.
       if (!lower.endsWith('_all.csv') && names.has(lower.replace(/\.csv$/, '_all.csv'))) continue;
@@ -213,14 +236,16 @@ export function parseUploads(files: { originalname: string; buffer: Buffer }[]):
 /** Builds a .zip of every note as a Markdown file (for backups / leaving Peblo). */
 export function buildMarkdownExport(notes: { title: string; content: string; tags: string[]; createdAt: Date; updatedAt: Date; isArchived: boolean }[]): Buffer {
   const zip = new AdmZip();
-  const used = new Map<string, number>();
+  const used = new Set<string>(); // every file name taken so far, lower-cased: "A", "A" and a note really called "A (2)" must not overwrite each other
   for (const n of notes) {
-    const safe = (n.title || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim().slice(0, 120) || 'Untitled';
-    const count = used.get(safe.toLowerCase()) || 0;
-    used.set(safe.toLowerCase(), count + 1);
-    const fileName = `${n.isArchived ? 'Archive/' : ''}${count ? `${safe} (${count + 1})` : safe}.md`;
+    const safe = Array.from((n.title || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim()).slice(0, 120).join('').trim() || 'Untitled';
+    let fileName = `${n.isArchived ? 'Archive/' : ''}${safe}.md`;
+    for (let k = 2; used.has(fileName.toLowerCase()); k++) fileName = `${n.isArchived ? 'Archive/' : ''}${safe} (${k}).md`;
+    used.add(fileName.toLowerCase());
+    const heading = (n.title || 'Untitled').replace(/\s*[\r\n]+\s*/g, ' ');
     const front = [
       '---',
+      'source: peblo-export',
       `title: ${JSON.stringify(n.title || 'Untitled')}`,
       `tags: [${n.tags.map((t) => JSON.stringify(t)).join(', ')}]`,
       `created: ${n.createdAt.toISOString()}`,
@@ -228,7 +253,7 @@ export function buildMarkdownExport(notes: { title: string; content: string; tag
       '---',
       '',
     ].join('\n');
-    zip.addFile(fileName, Buffer.from(`${front}# ${n.title || 'Untitled'}\n\n${n.content || ''}\n`, 'utf8'));
+    zip.addFile(fileName, Buffer.from(`${front}# ${heading}\n\n${n.content || ''}\n`, 'utf8'));
   }
   return zip.toBuffer();
 }

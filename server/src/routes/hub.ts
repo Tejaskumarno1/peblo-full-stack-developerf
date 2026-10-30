@@ -36,7 +36,7 @@ router.post('/search', async (req, res, next) => {
 router.post('/chat', ...aiLimit, async (req, res) => {
   const userId = req.user!.id;
   const messages: HubMessage[] = (Array.isArray(req.body?.messages) ? req.body.messages : [])
-    .filter((m: any) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .filter((m: any) => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') // a body may hold null or numbers: an error thrown here would not be caught and would stop the server
     .slice(-12);
   const last = messages[messages.length - 1];
 

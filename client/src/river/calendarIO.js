@@ -1,11 +1,13 @@
 // Calendar files (.ics): export the river's meetings and tasks, import meetings from Google Calendar, Outlook, Apple Calendar.
 import { todosAPI } from '../api';
 import { startOfDay, addDays, isMeeting, momentOf, endOf } from './riverUtils';
+import { foldLine, icsEscape } from '../utils/taskExport';
 
 const pad = (n) => String(n).padStart(2, '0');
 const local = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
 const utc = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
-const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+const esc = icsEscape;
+const noBreaks = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, '');
 const RULES = { daily: 'FREQ=DAILY', weekdays: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', weekly: 'FREQ=WEEKLY', monthly: 'FREQ=MONTHLY', yearly: 'FREQ=YEARLY' };
 
 export function buildIcs(todos) {
@@ -20,7 +22,7 @@ export function buildIcs(todos) {
       const s = momentOf(t);
       const e = endOf(t) || new Date(s.getTime() + 3600000);
       out.push('BEGIN:VEVENT', `UID:${key}@peblo`, `DTSTAMP:${utc(new Date())}`, `DTSTART:${local(s)}`, `DTEND:${local(e)}`, `SUMMARY:${esc(t.text)}`);
-      if (t.meta?.link) out.push(`URL:${t.meta.link}`, `LOCATION:${esc(t.meta.link)}`);
+      if (t.meta?.link) out.push(`URL:${noBreaks(t.meta.link)}`, `LOCATION:${esc(t.meta.link)}`);
       const who = t.meta?.attendees || [];
       if (who.length) out.push(`DESCRIPTION:${esc('With ' + who.join(', '))}`);
       if (t.recurrence && RULES[t.recurrence]) out.push(`RRULE:${RULES[t.recurrence]}`);
@@ -32,7 +34,7 @@ export function buildIcs(todos) {
     }
   }
   out.push('END:VCALENDAR');
-  return out.join('\r\n') + '\r\n';
+  return out.map(foldLine).join('\r\n') + '\r\n';
 }
 
 /** Downloads every meeting and dated task from a month ago to a year ahead. */
@@ -51,7 +53,7 @@ export async function exportCalendar() {
   return todos.filter((t) => t.deadline && !t.completed).length;
 }
 
-const unesc = (s) => s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1');
+const unesc = (s) => s.replace(/\\([nN,;\\])/g, (_, c) => (c === 'n' || c === 'N' ? '\n' : c)); // one pass, so an escaped backslash followed by n stays a backslash and an n
 const LINK = /https?:\/\/[^\s<>"\\]*(?:meet\.google|teams\.microsoft|teams\.live|zoom\.us|zoom\.com|webex\.com)[^\s<>"\\]*/i;
 
 function when(value, params) {

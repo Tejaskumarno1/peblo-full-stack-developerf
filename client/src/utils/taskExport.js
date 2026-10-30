@@ -4,18 +4,33 @@ const ymd = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())
 const ymdHm = (d) => `${ymd(d)}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
 const utcStamp = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const icsEscape = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+// RFC 5545 TEXT: escape backslash, semicolon, comma and every kind of line break (a bare CR would otherwise start a new property); other control characters are dropped.
+export const icsEscape = (s) => String(s ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 const PRIO = { high: 1, medium: 5, low: 9 };
 
-/** Lines longer than 75 characters are folded onto the next line, as the calendar format requires. */
+/** Lines longer than 75 octets (UTF-8 bytes, not characters) are folded onto the next line, never inside a multi-byte character. */
 export function foldLine(line) {
-  if (line.length <= 74) return line;
-  const parts = [line.slice(0, 74)];
-  for (let i = 74; i < line.length; i += 73) parts.push(line.slice(i, i + 73));
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const parts = [];
+  let cur = '';
+  let bytes = 0;
+  let limit = 75; // continuation lines start with one space, which counts too
+  for (const ch of line) {
+    const n = enc.encode(ch).length;
+    if (bytes + n > limit) { parts.push(cur); cur = ''; bytes = 0; limit = 74; }
+    cur += ch;
+    bytes += n;
+  }
+  parts.push(cur);
   return parts.join('\r\n ');
 }
 
-const toDate = (todo) => (todo.deadline ? new Date(todo.deadline) : null);
+const toDate = (todo) => {
+  if (!todo.deadline) return null;
+  const d = new Date(todo.deadline);
+  return Number.isNaN(d.getTime()) ? null : d; // an unreadable date becomes an undated to-do, never "NaN" in the file
+};
 const atTime = (day, hhmm) => {
   const [h, m] = String(hhmm).split(':').map(Number);
   const d = new Date(day);
@@ -99,8 +114,11 @@ export function parseCsv(text) {
  * Reads tasks from CSV text (the columns tasksToCsv writes; extra or missing columns are fine).
  * Returns { tasks, errors } where each error names its row, so nothing is dropped silently.
  */
+// tasksToCsv puts a ' in front of a cell that starts with = + - @ (tab, CR); take it off again so a round trip gives back the same text.
+const unneutralise = (v) => (/^'[=+\-@\t\r]/.test(v) ? v.slice(1) : v);
+
 export function parseTasksCsv(text) {
-  const rows = parseCsv(text);
+  const rows = parseCsv(text).map((r) => r.map(unneutralise));
   if (!rows.length) return { tasks: [], errors: ['The file is empty.'] };
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (...names) => head.findIndex((h) => names.includes(h));

@@ -40,6 +40,9 @@ const shot = async (n) => { await page.getByTestId('local-models').scrollIntoVie
 fs.mkdirSync('C:/Users/tejas/peblo-e2e/shots', { recursive: true });
 const waitFor = async (fn, ms = 12000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await page.waitForTimeout(200); } return false; };
 try {
+  // Local AI belongs to the desktop app only: without window.pebloDesktop the client treats the browser as the hosted web app
+  // and hides the model store. This test is about the desktop app, so the page announces itself as one.
+  await page.addInitScript(() => { window.pebloDesktop = window.pebloDesktop || {}; });
   await api('PUT', '/api/profile', { settings: { ollamaUrl: fakeUrl } });
 
   const st = await api('GET', '/api/ai/local/status');

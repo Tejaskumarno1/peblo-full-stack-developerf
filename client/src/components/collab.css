@@ -139,3 +139,5 @@ html.theme-dark .cp-bar-eye { background: #3a261e; }
 .cp-wrap { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; align-items: flex-end; bottom: max(18px, env(safe-area-inset-bottom, 0px)); }
 .pb-shared .cp-wrap { bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
 @media (max-width: 640px) { .cp-wrap { right: 12px; left: 12px; align-items: stretch; bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 64px); } }
+/* Phones: the toast's close button is a full-size tap target. */
+@media (max-width: 640px) { .cp-toast button { width: 32px; height: 32px; } }

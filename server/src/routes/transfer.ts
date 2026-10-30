@@ -31,6 +31,7 @@ router.post('/import', authenticate, capTotal, upload.array('files'), async (req
           userId,
           title: n.title || 'Untitled',
           content: n.content,
+          ...(n.archived ? { isArchived: true } : {}),
           ...(n.createdAt ? { createdAt: n.createdAt } : {}),
         },
         select: { id: true, title: true },

@@ -103,7 +103,7 @@ export async function retrieve(
     return s;
   };
 
-  const attached = new Set(opts.noteIds || []);
+  const attached = new Set(Array.isArray(opts.noteIds) ? opts.noteIds.filter((x): x is string => typeof x === 'string').slice(0, 100) : []); // a body may send anything here
   const scored = visible
     .map((n) => ({
       n,

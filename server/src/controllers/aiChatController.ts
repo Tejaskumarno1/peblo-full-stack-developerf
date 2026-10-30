@@ -107,7 +107,7 @@ export async function chatAndCreateNotes(req: Request, res: Response, next: Next
   try {
     const { message, mode = 'create', noteId } = req.body;
 
-    if (!message?.trim()) {
+    if (typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
@@ -188,7 +188,7 @@ export async function chatStream(req: Request, res: Response, next: NextFunction
   try {
     const { message, mode = 'create', noteId } = req.body;
 
-    if (!message?.trim()) {
+    if (typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Message is required' });
     }
 

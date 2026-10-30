@@ -1,4 +1,4 @@
-﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -29,6 +29,29 @@ import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+// Per-note numbers shown in the list rows, worked out once per note object. Without this every keystroke in the open note
+// re-scanned the text of every note in the list (about 11 MB for 3000 notes) and typing lagged by half a second or more.
+const rowWords = new WeakMap();
+const wordsOfNote = (n) => { let v = rowWords.get(n); if (v === undefined) { v = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; rowWords.set(n, v); } return v; };
+const rowSnippets = new WeakMap();
+const snippetOfNote = (n) => { let v = rowSnippets.get(n); if (v === undefined) { v = snippetOf(n.content); rowSnippets.set(n, v); } return v; };
+
+// One row of the notes list. Memoised so that typing in the open note (which re-renders the whole page on every pause) does not
+// rebuild thousands of rows that did not change.
+const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels, dq, fdef, onPick, onLeave }) {
+  const w = wordsOfNote(n);
+  return (
+      <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id); } else onLeave(); }}>
+        {selectMode && <span className={`np-ck${sel ? ' on' : ''}`} role="checkbox" aria-checked={sel} aria-label={`Select ${n.title || 'Untitled'}`}>{sel && <Check size={14} strokeWidth={2.6} />}</span>}
+        <span className="txt">
+          <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
+          {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOfNote(n) || 'Empty note'}</span>}
+          <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
+        </span>
+      </Link>
+
+  );
+});
 
 /** Soft Studio · Notes (mockup: SoftNotes). List, editor and helpers, with its own layout. */
 export default function SoftNotes() {
@@ -134,8 +157,8 @@ export default function SoftNotes() {
     for (const n of allNotes) for (const t of n.tags || []) if (t !== 'inbox' && t !== 'private') m.set(t, (m.get(t) || 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [allNotes]);
-  const inboxCount = allNotes.filter((n) => (n.tags || []).includes('inbox')).length;
-  const pinnedCount = allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length;
+  const inboxCount = useMemo(() => allNotes.filter((n) => (n.tags || []).includes('inbox')).length, [allNotes]);
+  const pinnedCount = useMemo(() => allNotes.filter((n) => n.meta?.pinned && !n.isDeleted && !n.isArchived).length, [allNotes]);
   const allDefs = useMemo(() => withLegacy(defs, allNotes), [defs, allNotes]);
   const normalDefs = useMemo(() => allDefs.filter((d) => !d.smart), [allDefs]);
   const smartDefs = useMemo(() => allDefs.filter((d) => d.smart), [allDefs]);
@@ -255,6 +278,10 @@ export default function SoftNotes() {
   }, [navigate, queryClient]);
 
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
+  const forceSaveRef = useRef(forceSave);
+  forceSaveRef.current = forceSave;
+  const leaveNote = useCallback(() => forceSaveRef.current(), []); // stable, so the memoised rows are not rebuilt when the save function changes
+  const pickNote = useCallback((id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id])), []);
   const docRef = useRef(null);
   docRef.current = doc;
 
@@ -596,22 +623,9 @@ export default function SoftNotes() {
         )}
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
-          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => {
-            const on = doc?.id === n.id;
-            const fdef = n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null;
-            const w = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length;
-            const sel = selectMode && picked.includes(n.id);
-            return (
-              <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); setPicked((p) => (p.includes(n.id) ? p.filter((x) => x !== n.id) : [...p, n.id])); } else forceSave(); }}>
-                {selectMode && <span className={`np-ck${sel ? ' on' : ''}`} role="checkbox" aria-checked={sel} aria-label={`Select ${n.title || 'Untitled'}`}>{sel && <Check size={14} strokeWidth={2.6} />}</span>}
-                <span className="txt">
-                  <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
-                  {!selectMode && view.preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOf(n.content) || 'Empty note'}</span>}
-                  <span className="m">{view.labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
-                </span>
-              </Link>
-            );
-          })}</div>))}
+          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
+            <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
+          ))}</div>))}
         </div>
         {selectMode ? (
           <div className="np-actions" role="toolbar" aria-label="Bulk actions">

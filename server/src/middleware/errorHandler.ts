@@ -15,7 +15,7 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
 
   // Upload limits (multer): too big -> 413, anything else about the upload -> 400
   if (err.name === 'MulterError') {
-    const tooBig = err.code === 'LIMIT_FILE_SIZE';
+    const tooBig = err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_FILE_COUNT';
     return res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'That file is too large.' : `Upload problem: ${err.message}` });
   }
 

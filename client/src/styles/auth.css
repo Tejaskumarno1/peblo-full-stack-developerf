@@ -168,7 +168,9 @@
 
 /* A narrow window: drop the side panel, keep the brand above the form. */
 @media (max-width: 900px) {
-  .pb-auth { grid-template-columns: 1fr; }
+  /* The app canvas is at least 1440px wide, so on a narrow browser window the screen is pinned to the real window instead (otherwise the form is cut off). */
+  .pb-auth { position: fixed; overflow-y: auto; grid-template-columns: 1fr; }
+  .pb-auth-switch button { min-height: 32px; padding: 0 6px; }
   .pb-auth-side { display: none; }
   .pb-auth-brand.small { display: block; }
 }

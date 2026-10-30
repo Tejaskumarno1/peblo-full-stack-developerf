@@ -71,7 +71,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const user = await verifyToken(token);
     if (!user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
     // A token is for notes and tasks. Account settings, passwords, keys and the tokens themselves need a real sign-in.
-    if (user.viaToken && /^\/api\/(auth|tokens|profile)(\/|\?|$)/i.test(req.originalUrl)) {
+    if (user.viaToken && /^\/api\/(auth|tokens|profile|ai\/connections)(\/|\?|$)/i.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot change account settings. Sign in to do that.' });
     }
     if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {

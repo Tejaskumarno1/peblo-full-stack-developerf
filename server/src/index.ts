@@ -33,6 +33,7 @@ import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
 import { securityHeaders, corsDelegate } from './middleware/security.js';
+import { rejectNulInUrl, cleanBody, inputErrors } from './middleware/cleanInput.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { agentNote, origin as reqOrigin } from './services/agentView.js';
 import { protectExistingKeys, migrateLegacyKeys } from './services/profile.js';
@@ -55,6 +56,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
 
   app.disable('x-powered-by');
   app.use(securityHeaders(staticDir));
+  app.use(rejectNulInUrl); // %00 can never be stored: answer 400 here instead of a database error
 
   // People paste the address with a full stop, space or slash on the end ("https://host/mcp."). Treat those as the same address.
   app.use((req, _res, next) => {
@@ -64,7 +66,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   });
 
   // MCP sign-in (OAuth) and the hosted MCP endpoint: public by design, so any MCP client may call them from anywhere.
-  const open = [cors({ origin: '*', exposedHeaders: ['WWW-Authenticate'], allowedHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'] }), apiLimiter(), express.json({ limit: '1mb' })];
+  const open = [cors({ origin: '*', exposedHeaders: ['WWW-Authenticate'], allowedHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'] }), apiLimiter(), express.json({ limit: '1mb' }), cleanBody];
   app.use('/.well-known', cors({ origin: '*' })); // so Settings can test the address from the page
   app.use(wellKnown);
   app.use('/oauth', ...open, oauthRoutes);
@@ -74,6 +76,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.use(cors(corsDelegate));
 app.use('/api', apiLimiter());
   app.use(express.json({ limit: '10mb' }));
+  app.use(cleanBody); // NUL characters and broken surrogates would make PostgreSQL fail (500)
 
   // Before the routers: hosting platforms probe this without signing in.
   app.get('/api/health', (_req, res) => {
@@ -129,7 +132,7 @@ app.use('/api/public', publicRoutes);
 
   // Unknown API paths answer JSON, never an HTML page.
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
-  app.use('/api', errorHandler);
+  app.use('/api', inputErrors, errorHandler);
 
   if (staticDir && existsSync(staticDir)) {
     // Built files have a hash in their name, so they can be cached for good. A file that does not exist is a real 404:
@@ -155,7 +158,7 @@ app.use('/api/public', publicRoutes);
     });
   }
 
-  app.use(errorHandler);
+  app.use(inputErrors, errorHandler);
   return app;
 }
 

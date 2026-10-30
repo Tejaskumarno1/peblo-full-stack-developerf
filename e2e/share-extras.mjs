@@ -15,7 +15,8 @@ try {
   const note = (await api('POST', '/api/notes', { title: 'Extras note', content: 'First paragraph\n\nSecond paragraph\n\nThird paragraph', tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true, expiresInDays: 1 })).token;
 
-  await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'studio'); localStorage.setItem('peblo-debug', '1'); } catch { /* ignore */ } });
+  await page.addInitScript(() => { try { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-collab', 'off'); localStorage.setItem('peblo-debug', '1'); } catch { /* ignore */ } });
+  // this test is about the block markers (the older presence marks). In a live (Yjs) room the editor draws real cursors instead and hides them, so both sides run without the live room.
   await page.goto(`${base}/notes/${note.id}`);
   await page.locator('.bn-editor').waitFor({ timeout: 15000 });
 

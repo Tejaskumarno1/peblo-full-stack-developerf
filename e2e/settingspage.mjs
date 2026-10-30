@@ -93,6 +93,9 @@ try {
   check('Stop sharing turns the link off', (await api('GET', `/api/share/note/${note.id}`)).token === null);
 
   // per-feature AI routing is stored and honoured by the server
+  // "Where each feature runs" only exists in the desktop app (the preload script adds window.pebloDesktop); on the web it is hidden by design.
+  // Announce a desktop shell on the AI page only, so the other sections keep running as the web app.
+  await page.addInitScript(() => { if (location.pathname === '/settings/ai') window.pebloDesktop = window.pebloDesktop || {}; });
   await page.goto(base + '/settings/ai');
   const row = page.locator('.s-set-feats li', { hasText: 'Improve writing' });
   await row.getByRole('radio', { name: 'This computer' }).click();

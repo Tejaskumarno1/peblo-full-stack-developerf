@@ -3,7 +3,7 @@ import { marked } from 'marked';
 import { inlineMedia } from './imageData';
 import { sanitizeHtml } from './safeHtml';
 
-const baseName = (n) => (n.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
+const baseName = (n) => (n.title || 'Untitled').replace(/[^\p{L}\p{N}_\s-]/gu, '').trim().replace(/\s+/g, '_') || 'note';
 
 function save(blob, name) {
   const a = document.createElement('a');

@@ -450,7 +450,7 @@ export default function RiverCapture({ onClose, preset = {}, windowMode = false 
       {mode === 'meeting' && (
         <div className="r-mset" role="group" aria-label="Meeting settings">
           <div className="r-mrow grid one">
-            <label>Meeting link<input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a Google Meet, Teams or Zoom link" autoComplete="off" /></label>
+            <label>Meeting link<input type="text" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste a Google Meet, Teams or Zoom link" autoComplete="off" /></label>
           </div>
           {provider && <p className="r-capture-status">{provider === 'Link' ? 'Link added.' : provider + ' link added.'} A Join button shows on the meeting.</p>}
           <div className="r-qk" role="group" aria-label="Connect notes and tasks">
