@@ -37,7 +37,7 @@
     "encrypt:existing": "node scripts/encrypt-existing.mjs"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
+    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@prisma/client": "^6.2.0",
     "adm-zip": "^0.6.1",
