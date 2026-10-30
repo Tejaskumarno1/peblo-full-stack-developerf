@@ -6,7 +6,8 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`${base}/notes`);
   await page.locator('.s-note-row').first().waitFor({ timeout: 15000 });
-  const rowsBox = async () => (await page.locator('.s-notes-rows').boundingBox()).height;
+  // A browser window smaller than the 1440 x 900 design shows the screen scaled down: measure in the design's own pixels.
+  const rowsBox = async () => (await page.locator('.s-notes-rows').boundingBox()).height / (parseFloat(await page.evaluate(() => document.documentElement.style.zoom)) || 1);
   const closed = await rowsBox();
   console.log('notes area height, filters folded:', Math.round(closed));
   check('extra view options are folded by default', (await page.getByRole('dialog', { name: 'View options' }).count()) === 0);

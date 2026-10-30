@@ -18,6 +18,9 @@
      The page then always sees a viewport of at least 1440 × 900.
    - This file: makes the canvas fill that viewport (up to a very
      wide 2160px, beyond which the page background shows).
+   - utils/fitCanvas.js: in a browser (not the desktop app) a window smaller
+     than 1440 x 900 shows the signed-in screens scaled down to fit, by the
+     tighter of width and height. Bigger windows are left alone.
 
    Use var(--pb-canvas-w) and var(--pb-canvas-h) instead of vw/vh.
    The quick capture window has its own fixed canvas.

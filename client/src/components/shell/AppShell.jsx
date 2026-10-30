@@ -5,6 +5,7 @@ import RiverShell from '../../river/RiverShell';
 import OrbitShell from '../../orbit/OrbitShell';
 import { useAuth } from '../../context/AuthContext';
 import { CAPTURE_KEY_EVENT, getWebCaptureKey, toAccelerator } from '../../utils/captureKey';
+import { startFitCanvas } from '../../utils/fitCanvas';
 import '../../styles/shell.css';
 import '../../styles/shell-styles.css';
 
@@ -16,6 +17,9 @@ export default function AppShell({ children }) {
   const { pathname } = useLocation();
   const { uiStyle } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // In a browser window smaller than the 1440 x 900 design, show the whole screen scaled down instead of cutting it off.
+  useEffect(() => startFitCanvas(), []);
 
   // Ctrl/Cmd+J opens the AI Hub from anywhere, except inside an open note,
   // where it toggles that note's Ask AI panel instead.
