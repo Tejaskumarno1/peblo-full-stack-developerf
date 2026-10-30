@@ -50,7 +50,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "y-websocket": "^2.1.0",
     "yjs": "^13.6.33",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/react": "^19.2.16",
