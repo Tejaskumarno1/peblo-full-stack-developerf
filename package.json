@@ -66,7 +66,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.9.1",
-    "concurrently": "^9.1.2",
+    "concurrently": "^10.0.6",
     "cross-env": "^10.0.0",
     "docx": "^9.0.2",
     "electron": "^44.4.5",
