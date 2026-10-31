@@ -43,7 +43,7 @@ try {
   await page.getByRole('button', { name: /Full screen/ }).click();
   await page.waitForTimeout(400);
   check('full screen hides the notes list and side rail', !(await page.locator('.s-notes-list').isVisible()) && !(await page.locator('.s-note-side').isVisible()));
-  const outline = await page.locator('.s-focus-outline button').allTextContents();
+  const outline = await page.locator('[data-testid="fs-outline"] button').allTextContents();
   check('full screen shows the outline', outline.includes('Intro') && outline.includes('Part two'), outline.join('|'));
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/focus.png' });
   await page.keyboard.press('Escape');

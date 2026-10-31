@@ -676,10 +676,6 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-wc { margin: 8px 0 0; font-size: 12px; color: var(--o-fg2); font-family: var(--o-mono); }
 .o-linked-task { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .o-linked-task .done { text-decoration: line-through; color: var(--o-fg2); }
-.o-sheet.zen { width: min(980px, 96vw) !important; }
-.o-sheet.zen .o-rail { display: none; }
-.o-sheet.zen .o-sheet-body { grid-template-columns: 1fr; }
-.o-sheet.zen .o-tags { display: none; }
 
 
 /* Round 7: look preferences (font, width, contrast, motion) */

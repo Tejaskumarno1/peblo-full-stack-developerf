@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Undo2, Archive, Copy, FileDown, FileText, History, Layers, ListChecks, Pin, Share2, Sparkles, Trash2, ChevronLeft, Check, Loader2, X } from 'lucide-react';
+import { Undo2, Archive, Copy, FileDown, FileText, History, Layers, ListChecks, Pin, Share2, Sparkles, Trash2, ChevronLeft, Check, Loader2, X, Maximize2 } from 'lucide-react';
 import { notesAPI, todosAPI, riverAPI } from '../api';
 import BlockEditor from '../components/BlockEditor';
+import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
+import { outlineOf } from '../orbit/noteTemplates';
 import useNoteDoc from '../hooks/useNoteDoc';
 import UndoToast from '../components/UndoToast';
 import { RiverHeader, useDismiss } from './RiverShell';
@@ -43,6 +45,18 @@ function RiverNote({ note }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
   const [diffV, setDiffV] = useState(null);
+  // owner full screen (new in River): same bar, outline and word counter as Soft and Orbit
+  const [full, setFull] = useState(false);
+  const [fsOpts, setFsOpts] = useState(false);
+  const [fsp, setFsp] = useFocusPrefs();
+  const getFsScroller = useCallback(() => document.querySelector('.r-sheet.fs'), []);
+  useFocusKeys({ enabled: !!doc && !doc.isDeleted && !doc.isDraft, active: full, toggle: () => setFull((v) => !v), exit: () => { setFull(false); setFsOpts(false); } });
+  const fsWords = useMemo(() => (String(doc?.content || '').replace(/<figure>[\s\S]*?<\/figure>/g, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').match(/[\p{L}\p{N}]+/gu) || []).length, [doc?.content]);
+  const fsOutline = useMemo(() => outlineOf(doc?.content), [doc?.content]);
+  const fsJump = (text) => {
+    const el = [...document.querySelectorAll('.r-body [data-content-type="heading"]')].find((h) => h.textContent.trim() === text);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const { data: versions = [] } = useQuery({
     queryKey: ['notes', 'backups', doc?.id],
     queryFn: () => notesAPI.getBackups(doc.id).then((r) => r.data.backups || r.data || []),
@@ -249,11 +263,12 @@ function RiverNote({ note }) {
       </section>
 
       <div className="r-note-grid">
-        <article className="r-sheet">
+        <article className={`r-sheet${full ? ' fs' : ''}${full && fsOpts ? ' fs-opts' : ''}`}>
           <div className="r-eyebrow">
             <span>NOTE{doc.tags[0] ? ` · ${doc.tags[0]}` : ''}{doc.isDeleted ? ' · IN TRASH' : doc.isArchived ? ' · ARCHIVED' : ''}</span>
             <span className="grow" />
             <span className={`r-saved${saveStatus === 'error' ? ' bad' : ''}`}>{saveStatus === 'saving' ? <Loader2 size={13} className="r-spin" /> : saveStatus === 'saved' && !(doc.isDraft && /^Not saved/.test(saved)) ? <Check size={13} strokeWidth={2.6} /> : null}{saved}</span>
+            {!doc.isDraft && !doc.isDeleted && <button type="button" className="r-btn ghost small" data-testid="fs-open" aria-label={full ? 'Leave full screen' : 'Full screen'} title={full ? 'Leave full screen (Esc)' : 'Full screen (Ctrl+Shift+F)'} aria-pressed={full} onClick={() => { setFull(!full); setFsOpts(false); }}><Maximize2 size={16} /></button>}
             {!doc.isDraft && (
               <div className="r-menu-wrap" ref={menuRef}>
                 <button type="button" className="r-btn ghost small" aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
@@ -329,7 +344,9 @@ function RiverNote({ note }) {
       )}
       {diffV && doc?.id && <div className="pb-dlg-host"><VersionDiff doc={doc} version={diffV} onClose={() => { setDiffV(null); setHistOpen(false); }} onRestore={async (v) => { setDiffV(null); setHistOpen(false); await restoreVersion(v); }} /></div>}
       {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
-            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!doc.isDeleted} focusMode={full && fsp.para} typewriter={full && fsp.type} />
+            <FocusChrome active={full} prefs={fsp} set={setFsp} title={doc.title} saveStatus={saveStatus} words={fsWords} docKey={doc.id} getScroller={getFsScroller}
+              outline={fsOutline} onJump={fsJump} onExit={() => { setFull(false); setFsOpts(false); }} hasOptions optsOpen={fsOpts} onOptions={() => setFsOpts((v) => !v)} />
           </div>
         </article>
 

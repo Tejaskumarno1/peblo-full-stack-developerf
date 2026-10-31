@@ -21,6 +21,7 @@ import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from '../hooks';
 import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
+import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
 import ShareChips from '../components/ShareChips';
 import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/presencePref';
 import { useLive } from '../utils/liveStore';
@@ -80,6 +81,8 @@ export default function SoftNotes() {
     setPresence(true);
     return () => restoreAppPresence(prev);
   }, [focus]);
+  const [fsp, setFsp] = useFocusPrefs(); // full-screen choices (width, text size, theme, tools), kept per person in this browser
+  const [fsOpts, setFsOpts] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
@@ -534,12 +537,8 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
-  useEffect(() => {
-    if (!focus) return undefined;
-    const esc = (e) => { if (e.key === 'Escape' && !document.querySelector('.bn-suggestion-menu')) setFocus(false); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [focus]);
+  useFocusKeys({ enabled: !!doc && !doc.isDeleted, active: focus, toggle: () => setFocus((v) => !v), exit: () => { setFocus(false); setFsOpts(false); } });
+  const getFsScroller = useCallback(() => document.querySelector('.s-notes.focus .s-note-main'), []);
   const outline = useMemo(() => (doc?.content || '').split('\n').map((l) => /^(#{1,3})\s+(.+)$/.exec(l)).filter(Boolean).map((m) => ({ level: m[1].length, text: m[2].replace(/[*_`]/g, '').trim() })), [doc?.content]);
   // who else is in which section (shown as dots on the Outline card)
   const live = useLive();
@@ -576,7 +575,7 @@ export default function SoftNotes() {
   const listTitle = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : 'Notes';
 
   return (
-    <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
+    <div className={`soft-page s-notes${focus ? ' focus' : ''}${focus && fsOpts ? ' fs-opts' : ''}`} data-width={wide}>
       {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
@@ -713,12 +712,7 @@ export default function SoftNotes() {
               {focus && (
                 <button type="button" className="s-outline s-cursors" data-testid="focus-cursors" aria-pressed={cursorsOn} title="Show other people's cursors and selections" onClick={() => setCursors(!cursorsOn)}><MousePointer2 size={14} />Live cursors<span className="s-sw" aria-hidden="true" /></button>
               )}
-              {focus && (
-                <select className="s-outline s-focus-width" aria-label="Writing width" value={wide} onChange={(e) => { setWide(e.target.value); try { localStorage.setItem('peblo-focus-width', e.target.value); } catch { /* ignore */ } }}>
-                  <option value="narrow">Width: Narrow</option><option value="wide">Width: Wide</option><option value="full">Width: Full</option>
-                </select>
-              )}
-              <button type="button" className="s-outline round s-ico" onClick={() => setFocus((v) => !v)} aria-pressed={focus} aria-label={focus ? 'Exit full screen' : 'Full screen'} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
+              <button type="button" className="s-outline round s-ico" onClick={() => setFocus((v) => !v)} aria-pressed={focus} aria-label={focus ? 'Exit full screen' : 'Full screen'} title={focus ? 'Exit full screen (Esc)' : 'Full screen (Ctrl+Shift+F)'}>
                 {focus ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
               <div className="s-menu-wrap" ref={outsideMenu}>
@@ -745,16 +739,9 @@ export default function SoftNotes() {
               </div>
             </div>
 
-            {focus && (
-              <nav className="s-focus-outline" aria-label="Outline">
-                <span className="lab">Outline</span>
-                {outline.length === 0 && <span className="none">Add a heading to see it here.</span>}
-                {outline.map((h, i) => <button key={i} type="button" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
-                <span className="lab" style={{ marginTop: 14 }}>This note</span>
-                <span className="none">{words} words · {Math.max(1, Math.round(words / 200))} min read</span>
-                <span className="none">{linked.length} linked task{linked.length === 1 ? '' : 's'}</span>
-              </nav>
-            )}
+            <FocusChrome active={focus} prefs={fsp} set={setFsp} title={doc.title} saveStatus={saveStatus} words={words} docKey={doc.id} getScroller={getFsScroller}
+              outline={outline.map((h) => ({ ...h, pips: (sec[h.text] || []).map((p) => ({ id: p.id, name: p.name, color: peerColor(p.id) })) }))} onJump={jump}
+              onExit={() => { setFocus(false); setFsOpts(false); }} hasOptions optsOpen={fsOpts} onOptions={() => setFsOpts((v) => !v)} />
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
           mentions={false}
@@ -763,7 +750,8 @@ export default function SoftNotes() {
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}
                 editable={!preview && !doc.isDeleted}
-                focusMode={typewriter === 'on'}
+                focusMode={typewriter === 'on' || (focus && fsp.para)}
+                typewriter={typewriter === 'on' || (focus && fsp.type)}
                 formattingToolbar
               />
             </div>

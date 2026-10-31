@@ -187,3 +187,12 @@
 .bn-editor [data-style-type="textColor"][data-value="pink"], .bn-editor [data-text-color="pink"], .bn-editor .bn-block:has(> .bn-block-content[data-text-color="pink"]) { color: #D6336C; }
 .bn-editor [data-style-type="backgroundColor"][data-value="pink"], .bn-editor [data-background-color="pink"], .bn-editor .bn-block:has(> .bn-block-content[data-background-color="pink"]) { background-color: #F9D0E1; }
 .bn-editor td[data-background-color], .bn-editor th[data-background-color] { color: #241f1a; }
+
+/* ---- The picture bar (BlockEditor.jsx PictureBar): short, wraps inside the note panel, second row for shape and caption ---- */
+.bn-toolbar { flex-wrap: wrap; max-width: 100%; box-sizing: border-box; }
+.bn-toolbar .pb-picbar-row { flex: 0 0 100%; display: flex; align-items: center; gap: 2px; padding-top: 4px; margin-top: 2px; border-top: 1px solid rgba(127, 127, 127, .25); }
+.bn-toolbar .pb-picbar-row.cap input { flex: 1; min-width: 160px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(127, 127, 127, .35); background: transparent; color: inherit; font: 600 13px inherit; outline: none; }
+.bn-toolbar .pb-picbar-row.cap input:focus { border-color: #C4441C; }
+.bn-toolbar .pb-picbar-row.cap button { height: 30px; padding: 0 14px; border: 0; border-radius: 8px; background: #C4441C; color: #fff; font: 800 13px inherit; cursor: pointer; }
+.pb-gbar-alt.pb-capfix { position: fixed; z-index: 9400; width: 360px; }
+.pb-gbar-alt.pb-capfix input { flex: 1; min-width: 0; width: auto; }

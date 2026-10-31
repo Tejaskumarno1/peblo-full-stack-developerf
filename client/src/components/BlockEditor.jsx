@@ -4,12 +4,12 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
-  FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
+  FormattingToolbarController, FormattingToolbar, TextAlignButton, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Presentation, FileText, FileSpreadsheet, File as FileGlyph, Lightbulb, TriangleAlert, CircleCheck, Info, ListTree, Clock, CalendarDays, Link2, LayoutTemplate } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Download, Trash2, ImageUp, Captions, Presentation, FileText, FileSpreadsheet, File as FileGlyph, Lightbulb, TriangleAlert, CircleCheck, Info, ListTree, Clock, CalendarDays, Link2, LayoutTemplate } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -61,7 +61,7 @@ async function uploadFile(file) {
 const textOf = (content) => (Array.isArray(content) ? content.map((c) => (c.type === 'link' ? textOf(c.content) : c.text || '')).join('') : typeof content === 'string' ? content : '');
 
 // A picture's size and side are kept in the address ("...#pw=320&ta=right") because Markdown has nowhere else for them.
-// A picture made smaller than the column floats to its side, so the text beside it uses the space.
+// A picture made smaller than the column sits on its own row (left, centre or right); it never floats.
 const withLayout = (p) => {
   const q = [];
   const pwOk = Number.isFinite(p.previewWidth) && p.previewWidth > 0;
@@ -205,35 +205,59 @@ function keepUndo(editor) {
   return um;
 }
 
-// Buttons that appear above a picture when it is clicked: where it sits and how wide it is.
-function ImageTools() {
+// The bar that appears over a clicked picture: a short bar of its own (size, side, shape, caption, replace, download, delete),
+// not the 21-button text toolbar. It sits centred on the picture and is kept inside the note panel (see boundedToolbar below).
+const PIC_SIZES = [['small', 'Small picture', 'S', 0.25], ['medium', 'Medium picture', 'M', 0.45], ['large', 'Large picture', 'L', 0.7]];
+const PIC_SHAPES = [['orig', 'Original shape', '◻', ''], ['sq', 'Crop to a square', '1:1', 'crop=1'], ['43', 'Crop to 4:3', '4:3', 'crop=1.333'], ['169', 'Crop to 16:9', '16:9', 'crop=1.778']];
+function PictureBar({ b }) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext();
-  const sel = editor.getSelection();
-  const blocks = sel ? sel.blocks : [editor.getTextCursorPosition().block];
-  const b = blocks.length === 1 ? blocks[0] : null;
-  if (!b || b.type !== 'image' || !Components) return null;
+  const [panel, setPanel] = useState(null); // 'shape' | null: a second row under the buttons
+  const fileRef = useRef(null);
+  useEffect(() => { setPanel(null); }, [b.id]);
+  if (!Components) return null;
+  const Btn = Components.FormattingToolbar.Button;
   const width = () => editor.domElement?.clientWidth || 700;
   const set = (props) => editor.updateBlock(b, { props });
-  const Btn = Components.FormattingToolbar.Button;
   const pw = b.props.previewWidth;
   const pct = (p) => Math.round(width() * p);
   const near = (p) => pw && Math.abs(pw - pct(p)) < 12;
   const tag = (t) => <span style={{ fontWeight: 800, fontSize: 12 }}>{t}</span>;
+  const replace = async (file) => {
+    if (!file) return;
+    try { const url = await uploadFile(file); set({ url, name: '' }); } catch { /* the notice says why */ }
+  };
+  const download = () => {
+    const a = document.createElement('a');
+    a.href = String(b.props.url || '').split('#')[0];
+    a.download = (b.props.caption || 'picture').replace(/[^\w.-]+/g, '-').slice(0, 60) || 'picture';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const shapeOn = PIC_SHAPES.find(([, , , v]) => (b.props.name || '') === v)?.[0] || 'orig';
   return (
-    <>
-      <Btn key="s" mainTooltip="Small picture. Smaller than the page, it sits to one side (use the align buttons) and text wraps beside it" icon={tag('S')} isSelected={near(0.25)} onClick={() => set({ previewWidth: pct(0.25) })} />
-      <Btn key="m" mainTooltip="Medium picture" icon={tag('M')} isSelected={near(0.45)} onClick={() => set({ previewWidth: pct(0.45) })} />
-      <Btn key="l" mainTooltip="Large picture" icon={tag('L')} isSelected={near(0.7)} onClick={() => set({ previewWidth: pct(0.7) })} />
-      {[['orig', 'Original shape', ''], ['sq', 'Crop to a square', 'crop=1'], ['43', 'Crop to 4:3', 'crop=1.333'], ['169', 'Crop to 16:9', 'crop=1.778']].map(([k, tip, v]) => (
-        <Btn key={'c' + k} mainTooltip={tip} icon={tag({ orig: '◻', sq: '1:1', 43: '4:3', 169: '16:9' }[k])} isSelected={(b.props.name || '') === v || (!v && !/^crop=/.test(b.props.name || ''))} onClick={() => set({ name: v })} />
-      ))}
-      <Btn key="crop" mainTooltip="Crop, rotate or flip this picture" icon={<Crop size={15} />} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'crop', id: b.id } }))} />
-      <Btn key="f" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />
-    </>
+    <FormattingToolbar>
+      {[
+        ...PIC_SIZES.map(([k, tip, t, p]) => <Btn key={k} mainTooltip={tip} icon={tag(t)} isSelected={near(p)} onClick={() => set({ previewWidth: pct(p) })} />),
+        <Btn key="full" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />,
+        <TextAlignButton key="al" textAlignment="left" />,
+        <TextAlignButton key="ac" textAlignment="center" />,
+        <TextAlignButton key="ar" textAlignment="right" />,
+        <Btn key="shape" mainTooltip="Crop and shape" icon={<Crop size={15} />} isSelected={panel === 'shape'} onClick={() => setPanel(panel === 'shape' ? null : 'shape')} />,
+        <Btn key="cap" mainTooltip="Caption and alt text" icon={<Captions size={15} />} isSelected={!!b.props.caption} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'caption', id: b.id } }))} />,
+        <Btn key="rep" mainTooltip="Replace picture" icon={<ImageUp size={15} />} onClick={() => fileRef.current?.click()} />,
+        <Btn key="dl" mainTooltip="Download picture" icon={<Download size={15} />} onClick={download} />,
+        <Btn key="del" mainTooltip="Delete picture" icon={<Trash2 size={15} />} onClick={() => { try { editor.removeBlocks([b.id]); } catch { /* already gone */ } }} />,
+        <input key="file" ref={fileRef} type="file" accept="image/*" hidden data-testid="pic-replace-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; replace(f); }} />,
+        ...(panel === 'shape' ? [<div key="shapes" className="pb-picbar-row" role="group" aria-label="Crop and shape">
+          {PIC_SHAPES.map(([k, tip, t, v]) => <Btn key={k} mainTooltip={tip} icon={tag(t)} isSelected={shapeOn === k} onClick={() => set({ name: v })} />)}
+          <Btn key="crop" mainTooltip="Crop, rotate or flip this picture" icon={<Crop size={15} />} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'crop', id: b.id } }))} />
+        </div>] : []),
+      ]}
+    </FormattingToolbar>
   );
 }
 // Comment on the selected words, or suggest new words for them (the comments drawer opens with the words attached).
+
 const CommentsOn = createContext(false);
 function CommentTools() {
   const on = useContext(CommentsOn);
@@ -296,7 +320,64 @@ function AskTool() {
     </div>
   );
 }
-const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it)), <ImageTools key="imagetools" />, <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+// Which block is selected (one block only), and its picture on screen.
+const oneBlock = (editor) => {
+  try {
+    const sel = editor.getSelection();
+    const blocks = sel ? sel.blocks : [editor.getTextCursorPosition().block];
+    return blocks.length === 1 ? blocks[0] : null;
+  } catch { return null; }
+};
+// The nearest ancestor that scrolls the note (the panel the toolbar must stay inside); null means the page itself.
+const scrollerOf = (el) => {
+  for (let p = el; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === 'auto' || o === 'scroll') && p.clientHeight > 0) return p;
+  }
+  return null;
+};
+// Floating-ui middleware for the selection toolbar: placed above the selection (above, and centred on, a picture), flipped below the
+// selection when there is no room above, shifted into the note panel, and hidden when the selection has scrolled out of the panel.
+// A picture at the top of the note puts the bar on the picture itself, so it never covers the lines below.
+const boundedToolbar = (editor) => ({
+  name: 'pbBounded',
+  fn({ rects, elements }) {
+    const fl = elements.floating; const dom = editor.domElement;
+    if (!fl || !dom) return {};
+    const b = oneBlock(editor);
+    const img = b && b.type === 'image' ? dom.querySelector(`.bn-block-outer[data-id="${b.id}"] .bn-visual-media-wrapper, .bn-block-outer[data-id="${b.id}"] img.bn-visual-media`) : null;
+    const sc = scrollerOf(dom.closest('.block-editor-container')?.parentElement); const box = sc ? sc.getBoundingClientRect() : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+    const vb = { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, window.innerHeight), left: Math.max(box.left, 0), right: Math.min(box.right, window.innerWidth) };
+    const r = img ? img.getBoundingClientRect() : { top: rects.reference.y, left: rects.reference.x, bottom: rects.reference.y + rects.reference.height, width: rects.reference.width };
+    fl.style.maxWidth = `${Math.max(160, vb.right - vb.left - 16)}px`;
+    const fw = rects.floating.width; const fh = rects.floating.height;
+    const gap = img ? 8 : 10;
+    let y = r.top - fh - gap;
+    if (y < vb.top + 6) y = img ? Math.max(r.top, vb.top) + 8 : r.bottom + gap;
+    y = Math.min(Math.max(y, vb.top + 6), vb.bottom - fh - 6);
+    let x = img ? r.left + r.width / 2 - fw / 2 : r.left;
+    x = Math.min(Math.max(x, vb.left + 8), vb.right - fw - 8);
+    fl.style.visibility = r.bottom < vb.top + 4 || r.top > vb.bottom - 4 ? 'hidden' : '';
+    return { x, y };
+  },
+});
+// Keeps the toolbar following the picture or words while the note scrolls, the window resizes or the picture changes size.
+const followSelection = (editor) => (reference, floating, update) => {
+  const on = () => update();
+  document.addEventListener('scroll', on, true);
+  window.addEventListener('resize', on);
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(on) : null;
+  if (ro && editor.domElement) ro.observe(editor.domElement);
+  const mo = new MutationObserver(on);
+  if (editor.domElement) mo.observe(editor.domElement, { subtree: true, attributes: true, attributeFilter: ['data-preview-width', 'style'] });
+  return () => { document.removeEventListener('scroll', on, true); window.removeEventListener('resize', on); ro?.disconnect(); mo.disconnect(); };
+};
+const Toolbar = () => {
+  const editor = useBlockNoteEditor();
+  const b = oneBlock(editor);
+  if (b && b.type === 'image') return <PictureBar b={b} />;
+  return <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it)), <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+};
 
 // Ready-made starting points, offered in the slash menu.
 const TEMPLATES = {
@@ -315,7 +396,7 @@ const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/
 
 const CHANGE_DEBOUNCE_MS = 200; // quiet time before the typed text is turned into Markdown (see handleChange)
 
-function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
+function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, typewriter = null, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
@@ -351,10 +432,12 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
   const rootRef = useRef(null);
+  // the selection toolbar is kept inside the note panel and follows its picture or words (see boundedToolbar)
+  const toolbarFloat = useMemo(() => ({ useFloatingOptions: { strategy: 'fixed', middleware: [boundedToolbar(editor)], whileElementsMounted: followSelection(editor) } }), [editor]);
   const [fitRoot, setFitRoot] = useState(null);
   useEffect(() => { if (rootRef.current !== fitRoot) setFitRoot(rootRef.current); });
-  // A picture saved at a width that is nearly the whole column (or leaves too little room beside it in a narrower column,
-  // such as a shared page) is shown full width instead of floating, so the text next to it never shrinks to a sliver.
+  // A picture keeps the proportions it was given in the owner's column when the column here is narrower or wider (a shared page,
+  // a phone). Pictures never float (blockEditor.css), so nothing can sit beside one.
   // BlockNote rewrites the classes of a block, so the blocks are named in a style sheet of their own.
   useEffect(() => {
     const root = fitRoot; if (!root) return undefined;
@@ -375,20 +458,9 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         const rc = Number.isFinite(rcN) && rcN > 0 && rcN < 20000 ? rcN : (guest ? 1090 : 0);
         const w = rc > 0 && Math.abs(rc - col) > 8 ? Math.floor(Math.min(col, w0 * col / rc) * 0.92) : w0;
         const sel = `.block-editor-container .bn-block-outer[data-id="${id}"]`;
-        if (w >= col * 0.66 || col - w < 295) parts.push(`${sel} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }`);
-        else if (w !== w0) parts.push(`${sel} .bn-visual-media-wrapper, ${sel} .bn-file-block-content-wrapper, ${sel} img.bn-visual-media { width: ${w}px !important; max-width: 100% !important; }`);
-      });
-      // text that comes right after a row of pictures starts below them when the pictures leave it too little room beside them
-      root.querySelectorAll('.bn-editor > .bn-block-group > .bn-block-outer').forEach((o) => {
-        const prev = o.previousElementSibling;
-        const isPic = (e) => !!e?.querySelector(':scope > .bn-block > .bn-block-content[data-content-type="image"]');
-        if (isPic(o) || !isPic(prev)) return;
-        const tops = []; let e = prev;
-        while (isPic(e)) { const r = e.getBoundingClientRect(); tops.push(r); e = e.previousElementSibling; }
-        const rowTop = tops[0].top; const row = tops.filter((r) => Math.abs(r.top - rowTop) < 4);
-        const used = row.reduce((a, r) => a + r.width, 0);
-        const fl = getComputedStyle(prev).float;
-        if (fl !== 'none' && col - used < 260) parts.push(`.block-editor-container .bn-block-outer[data-id="${o.getAttribute('data-id')}"] { clear: both; }`);
+        // a picture nearly as wide as the column keeps its saved width (the column caps it); only a clearly narrower one is rescaled
+        if (w >= col * 0.66 || col - w < 295) return;
+        if (w !== w0) parts.push(`${sel} .bn-visual-media-wrapper, ${sel} .bn-file-block-content-wrapper, ${sel} img.bn-visual-media { width: ${w}px !important; max-width: 100% !important; }`);
       });
       const text = parts.join('\n');
       if (text !== last) { last = text; sheet.textContent = text; if (again < 4) { again += 1; timer = setTimeout(fit, 60); } } else again = 0; // the new sizes move other pictures, so look once more
@@ -399,6 +471,27 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     queue();
     return () => { mo.disconnect(); ro.disconnect(); if (timer) clearTimeout(timer); sheet.remove(); };
   }, [fitRoot, guest]);
+  // A picture smaller than the column leaves empty room on its row. Clicking that room puts the caret on the line below the picture
+  // (a new empty line is added when the next block is not text), so typing there is never lost.
+  useEffect(() => {
+    const root = fitRoot; if (!root || editable === false) return undefined;
+    const down = (e) => {
+      if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const content = e.target?.closest?.('.bn-block-content[data-content-type="image"]');
+      if (!content || !root.contains(content) || content.hasAttribute('data-gl')) return;
+      if (e.target.closest('.bn-visual-media-wrapper, .bn-file-block-content-wrapper, .bn-add-file-button, button, input, a')) return;
+      const id = content.closest('.bn-block-outer')?.getAttribute('data-id'); if (!id) return;
+      try {
+        const blk = editor.getBlock(id); if (!blk) return;
+        e.preventDefault(); e.stopPropagation();
+        let next = editor.getNextBlock(blk);
+        if (!next || !Array.isArray(next.content)) { editor.insertBlocks([{ type: 'paragraph' }], blk, 'after'); next = editor.getNextBlock(blk); }
+        if (next) { editor.setTextCursorPosition(next, 'start'); editor.focus(); }
+      } catch { /* leave the click alone */ }
+    };
+    root.addEventListener('mousedown', down, true);
+    return () => root.removeEventListener('mousedown', down, true);
+  }, [fitRoot, editable, editor]);
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
   const [findOpen, setFindOpen] = useState(false);
@@ -440,20 +533,23 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   }, [lightbox, editable, editor]);
 
   // Typewriter focus: the block you are writing in stays bright and centred, the rest fades.
+  // focusMode fades every block but the one being written in; typewriter keeps that block centred (when typewriter is not given, focusMode does both)
+  const centre = typewriter === null ? focusMode : !!typewriter;
   const [curId, setCurId] = useState(null);
   useEffect(() => {
-    if (!focusMode) { setCurId(null); return undefined; }
+    if (!focusMode && !centre) { setCurId(null); return undefined; }
     const mark = () => {
       try {
         const id = editor.getTextCursorPosition().block.id;
-        setCurId(id);
-        rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (focusMode) setCurId(id);
+        if (centre) rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       } catch { /* no cursor yet */ }
     };
+    if (!focusMode) setCurId(null);
     mark();
     const off = editor.onSelectionChange(mark);
     return () => { if (typeof off === 'function') off(); };
-  }, [focusMode, editor]);
+  }, [focusMode, centre, editor]);
 
   useEffect(() => {
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloEditor = editor; } catch { /* ignore */ }
@@ -920,7 +1016,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BlockMenu} />} />
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
-        {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
+        {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} floatingUIOptions={toolbarFloat} />}
         {editable && <TableHandlesController tableHandle={(p) => <TableHandle {...p} tableHandleMenu={TableMenu} />} />}
       </BlockNoteView>
       </CommentsOn.Provider>

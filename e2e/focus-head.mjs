@@ -13,6 +13,7 @@ try {
   check('normal view: live cursors are off', await off());
   await page.locator('button[aria-label="Full screen"]').click();
   await wait(1500);
+  await page.locator('[data-testid="fs-opts"]').click(); await wait(500); // the share chips and live cursors live under Note options in the new full screen
   check('full screen: live cursors switch on by themselves', !(await off()));
   check('full screen: the Live cursors option is there and on', (await page.locator('[data-testid="focus-cursors"]').getAttribute('aria-pressed')) === 'true');
   const lay = await page.evaluate(() => {
@@ -24,7 +25,7 @@ try {
   console.log(JSON.stringify(lay));
   check('full screen: the four share chips sit on one row', lay.chips >= 4 && lay.rows === 1);
   check('full screen: the title has room (no "modul…")', lay.tw > 400);
-  check('full screen: the chips are under the title, same row as the tag', lay.ctop >= lay.tb - 4 && Math.abs(lay.tagTop - lay.ctop) < 24);
+  check('full screen: the chips are under the title', lay.ctop >= lay.tb - 4);
   const box = await page.evaluate(() => { const i = document.querySelector('.bn-block-content[data-content-type="checkListItem"] input'); return i ? getComputedStyle(i).accentColor : 'none'; });
   check('full screen: checkboxes are orange like the share page', /rgb\(196, 68, 28\)/.test(box), box);
   await page.screenshot({ path: 'e2e/focus-after.png' });
@@ -32,11 +33,11 @@ try {
   check('the Live cursors option turns them off', await off() && (await page.locator('[data-testid="focus-cursors"]').getAttribute('aria-pressed')) === 'false');
   await page.locator('[data-testid="focus-cursors"]').click(); await wait(300);
   check('and on again', !(await off()));
-  await page.locator('button[aria-label="Exit full screen"]').click(); await wait(600);
+  await page.locator('[data-testid="fs-exit"]').click(); await wait(600);
   check('leaving full screen: live cursors are off again', await off());
   await page.locator('button[aria-label="Full screen"]').click(); await wait(600);
   check('entering again: on again', !(await off()));
-  await page.locator('button[aria-label="Exit full screen"]').click(); await wait(300);
+  await page.locator('[data-testid="fs-exit"]').click(); await wait(300);
 
   // a share page starts with live cursors on
   const g = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
