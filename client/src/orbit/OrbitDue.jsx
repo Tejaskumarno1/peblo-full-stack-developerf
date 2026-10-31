@@ -14,7 +14,8 @@ import OrbitToday, { TimeReport } from './OrbitToday';
 import { TaskDetail, Board, Assignments, DoneLog, NextCard } from './OrbitTaskExtras';
 import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
-import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf } from '../river/riverUtils';
+import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf, spanOf } from '../river/riverUtils';
+import TimeGrid from '../components/TimeGrid';
 
 const UNDO_MS = 6000;
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -29,6 +30,47 @@ const withDay = (t, day) => {
   if (old) d.setHours(old.getHours(), old.getMinutes(), 0, 0); else d.setHours(23, 59, 0, 0);
   return d;
 };
+
+const WEEK_BAR = { meet: 'var(--o-path)', task: 'var(--o-ink)' };
+/** The Calendar week: all 24 hours in one internal scroll (shared TimeGrid). Drag a task to another day, or Shift+Left/Right. */
+function WeekGrid({ days, todos, gone, hideDone, today, toggle, reschedule }) {
+  const live = todos.filter((t) => t.deadline && !gone.includes(t.id) && !(hideDone && t.completed));
+  const events = [];
+  const allDay = [];
+  const keys = (t, d) => ({
+    draggable: true,
+    onDragStart: (e) => e.dataTransfer.setData('text/plain', t.id),
+    onClick: () => toggle(t),
+    onKeyDown: (e) => { if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = addDays(d, e.key === 'ArrowLeft' ? -1 : 1); reschedule(t, to, dayWord(to).toLowerCase()); } },
+    title: t.completed ? 'Mark not done' : 'Mark done',
+  });
+  for (const d of days) {
+    const prev = addDays(d, -1);
+    for (const t of live) {
+      const meet = !!t.startTime;
+      const look = meet ? { bg: 'var(--o-path-soft)', fg: 'var(--o-path-ink)', bar: WEEK_BAR.meet } : { bg: 'var(--o-soft)', fg: 'var(--o-fg)', bar: WEEK_BAR.task };
+      if (isAllDay(t)) {
+        if (sameDay(t.deadline, d)) allDay.push({ id: t.id, day: d, title: t.text, done: t.completed, ...look, props: keys(t, d) });
+        continue;
+      }
+      const s = spanOf(t);
+      if (!s) continue;
+      const when = t.startTime ? clock(momentOf(t)) : clock(t.deadline);
+      const common = { title: t.text, meta: `${when}${t.endTime ? ` - ${t.endTime}` : ''}`, done: t.completed, day: d, ...look, props: keys(t, d) };
+      if (sameDay(t.deadline, d)) events.push({ ...common, id: t.id, start: s.start, end: Math.min(24, s.end) });
+      else if (s.end > 24 && sameDay(t.deadline, prev)) events.push({ ...common, id: t.id, start: 0, end: s.end - 24, cont: true });
+    }
+  }
+  const onDrop = (d, e) => {
+    const t = todos.find((x) => x.id === e.dataTransfer.getData('text/plain'));
+    if (t && !sameDay(t.deadline, d)) reschedule(t, d, dayWord(d).toLowerCase());
+  };
+  return (
+    <div className="o-week-grid">
+      <TimeGrid days={days} events={events} allDay={allDay} onDayDrop={onDrop} label="Week" />
+    </div>
+  );
+}
 
 /** Orbit · Due: tasks as a list (Tasks) or as a week (Calendar), on a sheet over the map. */
 export default function OrbitDue({ view: initialView = 'list' }) {
@@ -394,7 +436,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   return (
     <>
       <div className="o-scrim" onMouseDown={back} />
-      <article className="o-sheet" style={{ top: 92, width: 876 }} aria-label="Due" ref={sheet}>
+      <article className="o-sheet" style={{ top: 92, width: view === 'week' ? 'min(1180px, calc(100% - 48px))' : 876 }} aria-label="Due" ref={sheet}>
         <header className="o-sheet-head">
           <span className="crumb">Due</span>
           <div className="o-seg" role="tablist" aria-label="View" style={{ marginLeft: 8 }}>
@@ -416,7 +458,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
             {err && <p className="o-err" role="alert">{err}</p>}
             {pv ? (
               <p className="o-preview" aria-live="polite">Adds “{pv.text || text.trim()}”{pvBits.length ? ` · ${pvBits.join(' · ')}` : ''}</p>
-            ) : (
+            ) : view === 'week' ? null : (
               <p className="o-preview o-quiet">Try: {HINTS[new Date().getDate() % HINTS.length]} <button type="button" className="o-chip" aria-expanded={showWords} onClick={() => setShowWords(!showWords)}>?</button>
                 {showWords && <span> Words I understand: today, tonight, tomorrow, weekdays, next friday, 6pm, 2026-11-02, oct 21, !high, !low, #topic</span>}
               </p>
@@ -551,32 +593,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
                 <span className="o-eyebrow" style={{ marginLeft: 8 }}>{week.getDate()} {week.toLocaleDateString('en-GB', { month: 'short' })} – {addDays(week, 6).getDate()} {addDays(week, 6).toLocaleDateString('en-GB', { month: 'short' })}</span>
                 <span className="o-quiet" style={{ marginLeft: 'auto', fontSize: 12.5 }}>Drag a task to another day to move it, or focus it and press Shift+Left or Right</span>
               </div>
-              <div className="o-week">
-                {days.map((d) => {
-                  const items = todos.filter((t) => t.deadline && sameDay(t.deadline, d) && !gone.includes(t.id) && !(hideDone && t.completed)).sort((a, b) => (momentOf(a) || 0) - (momentOf(b) || 0));
-                  return (
-                    <div
-                      key={d.toISOString()}
-                      className={`o-week-day${sameDay(d, today) ? ' today' : ''}`}
-                      data-day={dateValue(d)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const t = todos.find((x) => x.id === e.dataTransfer.getData('text/plain'));
-                        if (t && !sameDay(t.deadline, d)) reschedule(t, d, dayWord(d).toLowerCase());
-                      }}
-                    >
-                      <div className="h"><b>{d.getDate()}</b><span>{DOW[d.getDay()].toUpperCase()}</span></div>
-                      {items.map((t) => (
-                        <button key={t.id} type="button" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)} className={`o-week-item${t.startTime ? ' meet' : ''}${t.completed ? ' done' : ''}`} onClick={() => toggle(t)} onKeyDown={(e) => { if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = addDays(d, e.key === 'ArrowLeft' ? -1 : 1); reschedule(t, to, dayWord(to).toLowerCase()); } }} title={t.completed ? 'Mark not done' : 'Mark done'}>
-                          <span>{t.text}</span>
-                          {timeOf(t) && <span className="m">{timeOf(t)}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+              <WeekGrid days={days} todos={todos} gone={gone} hideDone={hideDone} today={today} toggle={toggle} reschedule={reschedule} />
             </>
           )}
         </div>

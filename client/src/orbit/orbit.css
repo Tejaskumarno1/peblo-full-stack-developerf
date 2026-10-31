@@ -808,3 +808,5 @@ button.o-group-head:focus-visible { outline: 2px solid var(--o-path); outline-of
 .o-ask input { width: 0; }
 .o-sheet { max-width: calc(100% - 48px); }
 @media (max-width: 1100px) { .o-sheet-head { height: auto; min-height: 68px; flex-wrap: wrap; padding-block: 8px; row-gap: 6px; } }
+.o-week-grid { flex: 1 1 0; min-height: 0; display: flex; padding: 4px 0 18px; }
+.o-sheet .tg { --tg-card: var(--o-surface); --tg-border: var(--o-line); --tg-line: var(--o-line); --tg-fg: var(--o-fg); --tg-fg2: var(--o-fg2); --tg-fg3: var(--o-fg2); --tg-accent: var(--o-path); --tg-on-accent: #fff; --tg-today: var(--o-path-soft); --tg-allday: var(--o-bg); --tg-ink: var(--o-ink); --tg-on-ink: var(--o-on-ink); --tg-track: var(--o-soft); --tg-blue: var(--o-path); --tg-radius: 16px; font-family: inherit; }
