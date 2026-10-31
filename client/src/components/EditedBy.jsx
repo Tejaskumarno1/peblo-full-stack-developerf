@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
+import { splitMarkers } from '../utils/tableMeta';
 import DOMPurify from 'dompurify';
 import { X, Check, Copy, GitCompare, History, Clock, ArrowRight } from 'lucide-react';
 import { compareModel, wordsOf } from '../utils/compare';
@@ -131,7 +132,7 @@ export default function EditedBy({ rt, editor, ready }) {
         </div>
       </div>}
       {edit && cmp && <CompareBox title={firstLine(edit.base)} now={{ content: edit.now, at: edit.at }} versions={pseudo} loadVersion={loadBefore} initialId="__before__" whoNow={edit.who}
-        onClose={() => setCmp(false)} onRestore={async (v, text) => { try { editor.replaceBlocks(editor.document, await editor.tryParseMarkdownToBlocks(text)); } catch { /* keep the page as it is */ } ack(); }}
+        onClose={() => setCmp(false)} onRestore={async (v, text) => { try { editor.replaceBlocks(editor.document, await editor.tryParseMarkdownToBlocks(splitMarkers(text).text)); } catch { /* keep the page as it is */ } ack(); }}
         onKeep={async () => { if (await keepMine()) { setCmp(false); } }} />}
     </>
   );
