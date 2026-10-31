@@ -111,21 +111,6 @@
 .soft .s-note-side { overflow-y: auto; }
 
 /* ===== notes full screen ===== */
-.soft .s-notes.focus { position: fixed; inset: 0; z-index: 70; display: block; background: #fffdf8; padding: 0; margin: 0; border-radius: 0; }
-.soft .s-notes.focus .s-notes-list, .soft .s-notes.focus .s-note-side { display: none; }
-.soft .s-notes.focus .s-note-main { width: 100%; height: 100%; max-width: none; border-radius: 0; box-shadow: none; box-sizing: border-box; padding: 12px 40px 30px 300px; overflow-y: auto; background: transparent; }
-.soft .s-notes.focus { --fw: 1040px; }
-.soft .s-notes.focus[data-width="narrow"] { --fw: 720px; }
-.soft .s-notes.focus[data-width="full"] { --fw: 100%; }
-.soft .s-notes.focus .s-note-title, .soft .s-notes.focus .s-note-tags, .soft .s-notes.focus .s-note-body, .soft .s-notes.focus .s-toast { max-width: var(--fw); width: 100%; }
-.soft .s-notes.focus .s-note-title { font-size: 54px; }
-.soft .s-notes.focus .s-note-body { overflow: visible; font-size: 19px; }
-.soft .s-focus-outline { position: fixed; left: 32px; top: 86px; width: 232px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 120px); overflow-y: auto; }
-.soft .s-focus-outline .lab { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg2); padding: 0 12px 6px; }
-.soft .s-focus-outline button { border: none; background: transparent; text-align: left; font: inherit; font-size: 14px; font-weight: 600; padding: 7px 12px; border-radius: 12px; cursor: pointer; color: var(--s-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.soft .s-focus-outline button:hover { background: var(--s-item); }
-.soft .s-focus-outline .none { font-size: 13px; color: var(--s-fg2); padding: 3px 12px; }
-.soft .s-focus-width { padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; }
 
 /* ===== quick capture ===== */
 .soft .s-capture { gap: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
@@ -580,19 +565,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-note-head .s-outline.s-ico:hover, .soft .s-note-head .s-outline.round:hover { background: var(--s-bg); }
 .soft .s-note-head .s-outline.s-ico[aria-pressed="true"] { background: var(--s-bg); }
 .soft .s-note-head .s-outline.round { width: 34px; height: 34px; border-color: transparent; }
-.soft .s-notes.focus .s-note-head { max-width: var(--fw); width: 100%; }
-.soft .s-notes.focus .s-note-head .s-note-title { width: auto; max-width: 46%; font-size: 40px; line-height: 46px; height: 46px; min-height: 46px; }
 @media (max-width: 800px) { .soft .s-note-head { flex-wrap: wrap; } .soft .s-note-head .s-note-title { max-width: 100%; flex: 1 1 100%; } }
 
 /* ---- full screen: the title gets the first row with the controls at its right end; everything about the note sits on one row under it ---- */
-.soft .s-notes.focus .s-note-head { flex-wrap: wrap; row-gap: 8px; align-items: center; }
-.soft .s-notes.focus .s-note-head .s-note-title { order: 1; flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
-.soft .s-notes.focus .s-note-head > .grow { display: none; }
-.soft .s-notes.focus .s-note-head > .s-outline, .soft .s-notes.focus .s-note-head > .s-menu-wrap { order: 2; flex: none; }
-.soft .s-notes.focus .s-note-head::before { content: ''; order: 3; flex: 0 0 100%; height: 0; }
-.soft .s-notes.focus .s-note-head > :not(.s-note-title):not(.s-outline):not(.s-menu-wrap):not(.grow) { order: 4; }
-.soft .s-notes.focus .s-note-head .cp-chips { flex-wrap: nowrap; }
-.soft .s-notes.focus .s-note-head .s-note-tags { flex: none; width: auto; max-width: none; }
 .soft .s-cursors { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .soft .s-cursors .s-sw { width: 8px; height: 8px; border-radius: 50%; background: #b7ab9c; }
 .soft .s-cursors[aria-pressed="true"] { border-color: var(--s-accent); color: var(--s-accent); }

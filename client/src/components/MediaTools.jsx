@@ -122,6 +122,30 @@ function GroupBar({ editor, rootRef, onCrop }) {
   );
 }
 
+/* ------------------------------------------------------------------ caption and alt text for one picture (opened from the picture bar) */
+function CaptionPop({ editor, rootRef, id, onClose }) {
+  const block = (() => { try { return editor.getBlock(id); } catch { return null; } })();
+  const [text, setText] = useState(block?.props?.caption || '');
+  const [pos, setPos] = useState({ top: 80, left: 80 });
+  useEffect(() => {
+    const bar = document.querySelector('.bn-toolbar')?.getBoundingClientRect();
+    const img = rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"] img`)?.getBoundingClientRect();
+    const w = 360;
+    if (bar) setPos({ top: Math.min(window.innerHeight - 64, bar.bottom + 6), left: Math.max(8, Math.min(bar.left, window.innerWidth - w - 8)) });
+    else if (img) setPos({ top: Math.max(8, img.top + 8), left: Math.max(8, Math.min(img.left + 8, window.innerWidth - w - 8)) });
+  }, [id, rootRef]);
+  useEffect(() => { if (!block) onClose(); }, [block, onClose]);
+  if (!block) return null;
+  const save = () => { try { editor.updateBlock(id, { props: { caption: text.trim() } }); } catch { /* the picture is gone */ } onClose(); };
+  return createPortal(
+    <form className="pb-gbar-alt pb-capfix" style={{ top: pos.top, left: pos.left }} data-testid="pic-caption-form" onSubmit={(e) => { e.preventDefault(); save(); }} onMouseDown={(e) => { if (!e.target.closest('input')) e.preventDefault(); }}>
+      <input autoFocus value={text} placeholder="Caption, also read aloud as alt text" aria-label="Caption and alt text" data-testid="pic-caption" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }} />
+      <button type="submit">Save</button>
+    </form>,
+    document.body,
+  );
+}
+
 /* ------------------------------------------------------------------ inline crop (C A) */
 const RATIOS = [['free', 'Free', 0], ['1', '1:1', 1], ['43', '4:3', 4 / 3], ['169', '16:9', 16 / 9]];
 function CropOverlay({ editor, rootRef, id, uploadFile, onClose }) {
@@ -437,6 +461,7 @@ export default function MediaTools({ editor, rootRef, uploadFile, editable }) {
   const [ask, setAsk] = useState(null); // { kind, refId }
   const [mode, setMode] = useState(null); // { kind: 'dictate' | 'record', refId }
   const [cropId, setCropId] = useState(null);
+  const [capId, setCapId] = useState(null);
 
   const addFiles = useCallback(async (files, refId) => {
     const list = [...files];
@@ -479,6 +504,7 @@ export default function MediaTools({ editor, rootRef, uploadFile, editable }) {
       else if (act === 'voice') setMode({ kind: 'record', refId });
       else if (act === 'dictate') setMode({ kind: 'dictate', refId });
       else if (act === 'crop') setCropId(e.detail.id);
+      else if (act === 'caption') setCapId(e.detail.id);
     };
     window.addEventListener('pb-media', on);
     return () => window.removeEventListener('pb-media', on);
@@ -489,6 +515,7 @@ export default function MediaTools({ editor, rootRef, uploadFile, editable }) {
     <>
       <GroupBar editor={editor} rootRef={rootRef} onCrop={setCropId} />
       <DropVeil rootRef={rootRef} />
+      {capId && <CaptionPop editor={editor} rootRef={rootRef} id={capId} onClose={() => setCapId(null)} />}
       {cropId && <CropOverlay editor={editor} rootRef={rootRef} id={cropId} uploadFile={uploadFile} onClose={() => setCropId(null)} />}
       {ask && <LinkAsk kind={ask.kind} onClose={() => setAsk(null)} onFiles={(f) => { const r = ask.refId; setAsk(null); addFiles(f, r); }} onLink={(u) => addLink(ask.kind, u, ask.refId)} />}
       {mode?.kind === 'dictate' && <Dictation editor={editor} onClose={() => setMode(null)} />}

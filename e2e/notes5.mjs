@@ -20,6 +20,7 @@ try {
   const b = await l.boundingBox();
   await page.mouse.click(b.x + 6, b.y + 6);
   await page.waitForTimeout(500);
+  await page.locator('.bn-toolbar button[data-test="cropandshape"]').first().click(); // the picture bar keeps the shapes one click away, under Crop and shape
   await page.locator('.bn-toolbar button[data-test="cropto16:9"]').first().click();
   await page.waitForTimeout(2500);
   const saved = (await api('GET', `/api/notes/${n.id}`)).note.content;
