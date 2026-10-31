@@ -135,3 +135,97 @@ html[data-fs-theme="dark"] .pb-cbtn { background: var(--fs-seg); color: var(--fs
 .soft .s-notes.focus.fs-opts .s-note-head { max-width: min(1000px, calc(100vw - 80px)); }
 .soft .s-notes.focus.fs-opts .s-note-head .cp-chips { flex-wrap: nowrap; }
 .soft .s-notes.focus.fs-opts .s-note-body { margin-top: 8px; }
+
+
+/* ---- v4: one slim bar, a docked drawer that the page reflows beside, no overlap ---- */
+.fsx-bar { left: 16px; right: 16px; top: 10px; height: 52px; border-radius: 18px; gap: 4px; padding: 0 10px 0 16px; }
+.fsx-title { margin-right: 6px; flex: 0 1 auto; }
+.fsx-title .t { font-size: 14px; max-width: 180px; }
+.fsx-title .s { font-size: 11.5px; }
+.fsx-ic { width: 34px; height: 34px; border-radius: 11px; }
+.fsx-ic.acc { background: var(--fs-acc); color: #fff; }
+.fsx-seg button { padding: 4px 9px; font-size: 12px; }
+.fsx-sizes { margin-left: 2px; }
+.fsx-sizes .fsx-ic { width: 28px; }
+.fsx-exit { padding: 8px 14px; font-size: 13px; margin-left: 2px; }
+.fsx-items { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.fsx-item { display: inline-flex; align-items: center; flex: none; }
+.fsx .cp-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 999px; background: var(--fs-seg); color: var(--fs-fg); font: 700 12.5px var(--fs-sans); white-space: nowrap; border: 1px solid transparent; }
+.fsx .cp-chip.ok { background: rgba(45, 157, 106, .18); color: var(--fs-ok); }
+.fsx .cp-chip.live { background: transparent; border-color: var(--fs-line); padding: 0 8px; gap: 4px; }
+.fsx .cp-live { display: inline-flex; align-items: center; gap: 5px; color: var(--fs-ok); font-size: 11px; font-weight: 800; }
+.fsx .cp-live i { width: 7px; height: 7px; border-radius: 4px; background: var(--fs-ok); display: inline-block; }
+.fsx .cp-avs { display: inline-flex; margin-left: 4px; }
+.fsx .cp-avs .cp-av { margin-left: -8px; border: 2px solid var(--fs-bar); box-sizing: border-box; }
+.fsx .cp-avs .cp-av:first-child { margin-left: 0; }
+.fsx .s-note-tags { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.fsx .s-tag { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 999px; font: 700 12px var(--fs-sans); background: var(--fs-seg) !important; color: var(--fs-fg); white-space: nowrap; }
+.fsx .s-tag button { border: 0; background: transparent; color: inherit; padding: 0; display: inline-flex; }
+.fsx .s-dashed { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--fs-faint); background: transparent; color: var(--fs-dim); font: 700 12.5px var(--fs-sans); }
+.fsx .s-tag-input { height: 30px; width: 110px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--fs-acc); background: var(--fs-bg); color: var(--fs-fg); font: 600 12.5px var(--fs-sans); outline: none; }
+.fsx-sprint { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 999px; background: var(--fs-ink); color: var(--fs-inkfg); font: 700 12.5px var(--fs-sans); border: 0; white-space: nowrap; }
+.fsx-sprint b { color: #9be0bd; font-weight: 800; }
+.fsx-sprint.done { background: rgba(45, 157, 106, .2); color: var(--fs-ok); }
+
+.fsx-drawer { position: absolute; right: 16px; top: 74px; bottom: 16px; width: 290px; box-sizing: border-box; border-radius: 18px; background: var(--fs-bar); border: 1px solid var(--fs-line); box-shadow: 0 8px 28px var(--fs-sh); backdrop-filter: blur(8px); display: flex; flex-direction: column; overflow: hidden; transition: opacity .35s ease; }
+.fsx[data-shown="0"] .fsx-drawer { opacity: .25; }
+.fsx-tabs { display: flex; gap: 4px; padding: 6px; margin: 10px; border-radius: 12px; background: var(--fs-seg); flex: none; }
+.fsx-tabs button { flex: 1; padding: 6px; border-radius: 9px; border: 0; background: transparent; color: var(--fs-dim); font-weight: 700; font-size: 13px; }
+.fsx-tabs button.on { background: var(--fs-segon); color: var(--fs-fg); box-shadow: 0 1px 3px var(--fs-segsh); }
+.fsx-dbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.fsx-dh { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--fs-dim); padding: 6px 2px 2px; }
+.fsx-rows { display: flex; flex-direction: column; gap: 6px; }
+.fsx-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; background: var(--fs-bg); border: 1px solid var(--fs-track); font-size: 13px; font-weight: 600; cursor: grab; }
+.fsx-row .grip { color: var(--fs-faint); flex: none; }
+.fsx-row .lb { flex: 1; min-width: 0; }
+.fsx-row.lift { opacity: .55; border-color: var(--fs-acc); }
+.fsx-row.over { box-shadow: 0 -3px 0 var(--fs-acc); }
+.fsx-sw { width: 28px; height: 16px; border-radius: 8px; border: 0; background: var(--fs-faint); position: relative; padding: 0; flex: none; }
+.fsx-sw i { position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 6px; background: #fff; transition: left .15s; }
+.fsx-sw[aria-checked="true"] { background: var(--fs-ok); }
+.fsx-sw[aria-checked="true"] i { left: 14px; }
+.fsx-tools { display: flex; flex-direction: column; gap: 6px; }
+.fsx-tool { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; min-height: 30px; }
+.fsx-tool .lb { flex: 1; }
+.fsx-tool kbd { font: 700 11px var(--fs-sans); padding: 2px 6px; border-radius: 6px; background: var(--fs-seg); }
+.fsx-pill { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--fs-line); background: transparent; color: var(--fs-fg); font: 700 12px var(--fs-sans); }
+.fsx-pill.on { background: var(--fs-ink); color: var(--fs-inkfg); border-color: var(--fs-ink); }
+.fsx-pill:disabled { opacity: .45; cursor: default; }
+.fsx-nm { display: flex; flex-direction: column; gap: 2px; }
+.fsx-nm button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--fs-fg); font: 600 13px var(--fs-sans); text-align: left; }
+.fsx-nm button:hover { background: var(--fs-seg); }
+.fsx-nm button.danger { color: var(--fs-bad); }
+.fsx-nm button svg { opacity: .7; flex: none; }
+.fsx-share { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.fsx-share .cp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fsx-muted { margin: 0; font-size: 13px; color: var(--fs-dim); }
+.fsx-wide { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--fs-line); background: transparent; color: var(--fs-fg); font: 700 13px var(--fs-sans); }
+.fsx-dfoot { flex: none; padding: 10px 14px; border-top: 1px solid var(--fs-track); font-size: 12px; color: var(--fs-dim); display: flex; justify-content: space-between; align-items: center; }
+.fsx-dfoot button { border: 0; background: transparent; color: var(--fs-acc); font-weight: 800; font-size: 12px; }
+
+/* the counter is a small pill in the corner, outline and counter fade while typing */
+.fsx-count { left: 28px; right: auto; top: auto; bottom: 20px; width: auto; flex-direction: row; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--fs-seg); font-size: 12px; font-weight: 700; }
+.fsx-count .lab { display: none; }
+.fsx-count .n { font-size: 13px; font-weight: 800; }
+.fsx-count .track { width: 46px; height: 5px; }
+.fsx-count .track i { height: 5px; }
+.fsx-outline { left: 28px; top: 100px; width: 170px; }
+.fsx-outline .rt { margin-left: auto; font-size: 11px; color: var(--fs-faint); white-space: nowrap; }
+.fsx-outline, .fsx-count { transition: opacity .35s ease; }
+.fsx[data-shown="0"] .fsx-outline, .fsx[data-shown="0"] .fsx-count { opacity: .35; }
+.fsx-quick { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(520px, calc(100vw - 48px)); display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; background: var(--fs-ink); color: var(--fs-inkfg); box-shadow: 0 10px 30px rgba(42, 31, 23, .25); }
+.fsx-quick input { flex: 1; border: 0; outline: none; background: transparent; color: inherit; font: 600 14px var(--fs-sans); }
+.fsx-quick input::placeholder { color: rgba(255, 255, 255, .6); }
+.fsx-quick kbd { font: 700 11px var(--fs-sans); padding: 2px 6px; border-radius: 6px; background: rgba(255, 255, 255, .2); }
+.fsx-flash { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; background: var(--fs-ink); color: var(--fs-inkfg); font: 700 13px var(--fs-sans); }
+
+/* the writing column reflows beside the drawer, and starts higher now the bar is slimmer */
+.soft .s-notes.focus .s-note-main { padding-top: 92px; }
+html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 330px; }
+.fsx-title .s { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1300px) { .fsx .cp-chip.ok { display: none; } }
+@media (max-width: 1200px) { .fsx-title .rt { display: none; } }
+@media (max-width: 1160px) { .fsx-items { display: none; } }
+
+/* the find box sits beside the drawer, not under it */
+html[data-fs-drawer="1"] .pb-find { right: 322px !important; }

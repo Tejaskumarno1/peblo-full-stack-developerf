@@ -13,19 +13,16 @@ try {
   check('normal view: live cursors are off', await off());
   await page.locator('button[aria-label="Full screen"]').click();
   await wait(1500);
-  await page.locator('[data-testid="fs-opts"]').click(); await wait(500); // the share chips and live cursors live under Note options in the new full screen
   check('full screen: live cursors switch on by themselves', !(await off()));
   check('full screen: the Live cursors option is there and on', (await page.locator('[data-testid="focus-cursors"]').getAttribute('aria-pressed')) === 'true');
   const lay = await page.evaluate(() => {
-    const chips = [...document.querySelectorAll('.s-note-head .cp-chips .cp-chip')].map((e) => e.getBoundingClientRect());
+    const chips = [...document.querySelectorAll('.fsx-bar .cp-chip, .fsx-bar [data-testid="fs-copylink"]')].map((e) => e.getBoundingClientRect());
     const t = document.querySelector('.s-note-head .s-note-title').getBoundingClientRect();
-    const tags = document.querySelector('.s-note-head .s-add-tag')?.getBoundingClientRect();
-    return { rows: new Set(chips.map((c) => Math.round(c.top / 6))).size, chips: chips.length, tw: Math.round(t.width), tb: Math.round(t.bottom), ctop: Math.round(Math.min(...chips.map((c) => c.top))), tagTop: tags && Math.round(tags.top) };
+    return { rows: new Set(chips.map((c) => Math.round((c.top + c.height / 2) / 10))).size, chips: chips.length, tw: Math.round(t.width) };
   });
   console.log(JSON.stringify(lay));
-  check('full screen: the four share chips sit on one row', lay.chips >= 4 && lay.rows === 1);
-  check('full screen: the title has room (no "modul…")', lay.tw > 400);
-  check('full screen: the chips are under the title', lay.ctop >= lay.tb - 4);
+  check('full screen: the share chips (shared, copy, live) sit on the bar on one row', lay.chips >= 3 && lay.rows === 1);
+  check('full screen: the title has room', lay.tw > 400);
   const box = await page.evaluate(() => { const i = document.querySelector('.bn-block-content[data-content-type="checkListItem"] input'); return i ? getComputedStyle(i).accentColor : 'none'; });
   check('full screen: checkboxes are orange like the share page', /rgb\(196, 68, 28\)/.test(box), box);
   await page.screenshot({ path: 'e2e/focus-after.png' });

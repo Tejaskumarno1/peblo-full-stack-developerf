@@ -3,6 +3,7 @@
 import fs from 'fs';
 import { boot } from './lib.mjs';
 const { base, api, page, check, finish } = await boot();
+await page.addInitScript(() => { try { localStorage.removeItem('peblo-fs-hint'); } catch { /* none */ } }); // the keyboard hint shows only the first three times
 const SHOT = process.env.SHOT_DIR || '';
 if (SHOT) fs.mkdirSync(SHOT, { recursive: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,13 +38,13 @@ try {
     const want = ['Outline', 'Typewriter mode', 'Focus on one paragraph', 'Find in note', 'Narrow', 'Wide', 'Full', 'Smaller text', 'Larger text', 'Dark theme', 'Exit full screen'];
     check(`${T} the bar has every button from the mockup`, want.every((w) => labels.includes(w)), labels.join(' | '));
     const bar = await page.locator('[data-testid="fs-bar"]').boundingBox();
-    check(`${T} bar sits at the top, 56px tall, inside the screen`, !!bar && Math.abs(bar.y - 16) < 3 && Math.abs(bar.height - 56) < 3 && bar.x >= 20 && bar.x + bar.width <= 1262, JSON.stringify(bar));
+    check(`${T} bar sits at the top, 52px tall, inside the screen`, !!bar && Math.abs(bar.y - 10) < 3 && Math.abs(bar.height - 52) < 3 && bar.x >= 12 && bar.x + bar.width <= 1268, JSON.stringify(bar));
     const status = await page.locator('[data-testid="fs-status"]').innerText();
     check(`${T} save state, word count and reading time are shown`, /Saved|Saving|Editing/.test(status) && /\d+ words?/.test(status) && /min read/.test(status), status);
     // the column
     const col = async () => page.evaluate(() => { const e = document.querySelector('.bn-editor'); const r = e.getBoundingClientRect(); const p = e.querySelector('[data-content-type="paragraph"] .bn-inline-content, [data-content-type="paragraph"]'); const cs = getComputedStyle(p); return { x: r.x, w: r.width, font: cs.fontFamily, size: parseFloat(cs.fontSize), lh: parseFloat(cs.lineHeight) }; });
     let c = await col();
-    check(`${T} wide column is about 680px and centred`, Math.abs(c.w - 680) < 30 && Math.abs(c.x + c.w / 2 - 640) < 30, JSON.stringify(c));
+    check(`${T} wide column is about 680px and centred (beside the drawer when it is open)`, Math.abs(c.w - 680) < 30 && Math.abs(c.x + c.w / 2 - ((await page.locator('[data-testid="fs-drawer"]').count()) ? 487 : 640)) < 30, JSON.stringify(c));
     check(`${T} writing column is the Newsreader serif at 21px`, /Newsreader|Georgia|serif/i.test(c.font) && Math.abs(c.size - 21) < 0.6, JSON.stringify(c));
     const title = await page.evaluate(() => { const t = document.querySelector('#s-note-title, #r-note-title, #o-note-title'); const cs = t && getComputedStyle(t); const r = t && t.getBoundingClientRect(); return t ? { size: parseFloat(cs.fontSize), weight: cs.fontWeight, w: r.width, x: r.x } : null; });
     check(`${T} the title is the big sans heading in the column`, !!title && title.size >= 40 && Number(title.weight) >= 700 && title.w > 400, JSON.stringify(title));
@@ -108,9 +109,10 @@ try {
     await page.keyboard.press('Escape'); await wait(300);
     check(`${T} Esc in the find box closes only the find box`, (await vis('fs-bar')) && !(await finder.isVisible().catch(() => false)));
     // options
+    const hadDrawer = await page.evaluate(() => !!document.querySelector('[data-testid="fs-drawer"]'));
     await page.locator('[data-testid="fs-opts"]').click(); await wait(400);
-    const optsSeen = await page.evaluate(() => !!document.querySelector('.s-notes.fs-opts .s-note-head .s-menu-wrap, .o-sheet.fs-opts .o-sheet-head, .r-sheet.fs-opts > .r-eyebrow'));
-    check(`${T} Note options bring the usual controls back (share, more menu)`, optsSeen);
+    const optsSeen = await page.evaluate((had) => { const d = !!document.querySelector('[data-testid="fs-drawer"]'); return had ? !d : (d || !!document.querySelector('.o-sheet.fs-opts .o-sheet-head, .r-sheet.fs-opts > .r-eyebrow')); }, hadDrawer);
+    check(`${T} the three dots toggle the note options (drawer in Soft, the usual controls elsewhere)`, optsSeen);
     await page.locator('[data-testid="fs-opts"]').click();
     // keep the choices
     await page.reload();

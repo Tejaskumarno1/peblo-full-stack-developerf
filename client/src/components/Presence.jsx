@@ -1,3 +1,4 @@
+import DragWrap from './DragWrap';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Ic } from '../utils/icons';
@@ -416,7 +417,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
   return (
     <>
       {others.length > 0 && (
-        <div className="pb-presence-wrap" data-testid="presence">
+        <DragWrap className="pb-presence-wrap" data-testid="presence">
           <div className="pb-presence" role="group" aria-label="People in this note">
             {shown.map((p) => {
               const typing = !p.me && now - p.typingAt < TYPING_MS;
@@ -461,7 +462,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
               <button type="button" onClick={() => { setFollowing(null); setKeep(false); }}>Stop</button>
             </div>
           )}
-        </div>
+        </DragWrap>
       )}
       {others.length > 0 && livePresenters.length > 0 && !presenting && <div className="pb-presence-wrap pb-aud-wrap" style={{ position: 'fixed', right: 82, bottom: 24, zIndex: 1100 }}><AudienceActions presenter={talker || livePresenters[0]} qOn={!!talker} hand={myHand} onHand={raise} onAsk={ask} sent={myAsks.length} reacts={myReacts} onReact={react} /></div>}
       {presenting && <PresenterKit startedAt={resumeRef.current?.t0} startPanel={resumeRef.current?.drawer ? 'queue' : null} aw={rt.provider.awareness} me={myKey} peers={peers} mode={mode} qOn={qOn} notesOn={notesOn} laser={laser} setLaser={setLaser} spot={spot} setSpot={setSpot} getAnchor={() => anchorOf(rootRef.current)} goToBlock={goToBlock} onEnd={endSession} />}
@@ -485,6 +486,8 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
       <style>{`
         .pb-presence-count { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0 4px; }
         .pb-presence-wrap { position: relative; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
+        .pb-presence-wrap[data-draggable] .pb-presence { cursor: grab; touch-action: none; }
+        .pb-presence-wrap.is-dragging .pb-presence { cursor: grabbing; box-shadow: 0 14px 30px rgba(0,0,0,.22); }
         .pb-presence { pointer-events: auto; display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; border-radius: 999px; background: color-mix(in srgb, var(--pb-bg, #fff) 92%, transparent); border: 1px solid color-mix(in srgb, currentColor 14%, transparent); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(0,0,0,.08); font-size: 12px; }
         .pb-avatar { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--c); background: var(--c); color: #fff; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; position: relative; padding: 0; cursor: pointer; line-height: 1; }
         .pb-avatar:disabled { cursor: default; }
