@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Table editing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>body{margin:0;font-family:Figtree,system-ui,sans-serif}button{font-family:inherit;cursor:pointer}.tb{width:34px;height:34px;border-radius:10px;border:0;background:transparent;color:#2a1f17;display:flex;align-items:center;justify-content:center}.tb.on{background:#2a1f17;color:#fff}.pl{position:absolute;width:24px;height:24px;border-radius:12px;background:#c4441c;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(196,68,28,0.4)}.sep{width:1px;height:22px;background:#e3d7c4;margin:0 4px}</style>
+</helmet>
+<div style="width:1100px;height:780px;box-sizing:border-box;background:#faf6ee;color:#2a1f17;padding:28px 40px;position:relative;overflow:hidden">
+  <div style="font-size:30px;font-weight:800;letter-spacing:-0.02em;margin-bottom:6px">Pi planning</div>
+  <div style="font-size:14px;color:#6b5d50;margin-bottom:22px">Hover a column or row edge to add one. Drag a border to resize. Click a cell to see the toolbar.</div>
+
+  <div style="position:absolute;left:40px;top:128px;height:48px;padding:0 8px;border-radius:16px;background:#fff;border:1px solid #eadfce;box-shadow:0 8px 24px rgba(42,31,23,0.12);display:flex;align-items:center;gap:2px">
+    <button class="tb" aria-label="Header row"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg></button>
+    <button class="tb on" aria-label="Header column"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+    <span class="sep"></span>
+    <button class="tb" aria-label="Align left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg></button>
+    <button class="tb" aria-label="Align center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg></button>
+    <button class="tb" aria-label="Align right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg></button>
+    <button class="tb" aria-label="Vertical align"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 3h16M4 21h16M12 7v10M9 10l3-3 3 3M9 14l3 3 3-3"/></svg></button>
+    <span class="sep"></span>
+    <button class="tb" aria-label="Merge cells"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8M10 10l-2 2 2 2M14 10l2 2-2 2"/></svg></button>
+    <button class="tb" aria-label="Split cell"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/></svg></button>
+    <button class="tb" aria-label="Cell color"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l7-8 7 8-7 6z"/><path d="M20 17c0 1.5-1 2.5-1 3.5"/></svg></button>
+    <button class="tb" aria-label="Sort A to Z"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h6M5 12h9M5 18h12M18 5v14M15 16l3 3 3-3"/></svg></button>
+    <span class="sep"></span>
+    <button class="tb" aria-label="Distribute columns evenly"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4v16M12 4v16M20 4v16"/></svg></button>
+    <button class="tb" aria-label="Zebra stripes"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 15h18"/></svg></button>
+    <button class="tb" aria-label="Copy as CSV"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg></button>
+    <span class="sep"></span>
+    <button class="tb" aria-label="Delete table" style="color:#a3301a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+  </div>
+
+  <div style="position:absolute;left:84px;top:196px;width:960px">
+    <div style="position:absolute;left:0;top:-30px;width:210px;height:22px;border-radius:8px 8px 0 0;background:#2a1f17;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">Column A &nbsp;·&nbsp; 210 px</div>
+    <div style="display:grid;grid-template-columns:90px 300px 310px 260px;background:#fff;border:1.5px solid #eadfce;border-radius:14px;overflow:hidden;font-size:14px">
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">Board</div>
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">Feature</div>
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">Status in the mobile code</div>
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-bottom:1px solid #eadfce">Owner</div>
+
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">24-27</div>
+      <div style="padding:14px;background:#d9ecf5;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce;outline:2px solid #3b8bb8;outline-offset:-2px">Session setup: PI and sprints, teams and roles</div>
+      <div style="padding:14px;background:#d9ecf5;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce;outline:2px solid #3b8bb8;outline-offset:-2px">None. The mobile app can run a session but not create one.</div>
+      <div style="padding:14px;border-bottom:1px solid #eadfce">Eshwar</div>
+
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">28</div>
+      <div style="padding:14px;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">Team boards</div>
+      <div style="padding:14px;border-right:1px solid #eadfce;border-bottom:1px solid #eadfce">None. Today the app only says Team boards</div>
+      <div style="padding:14px;border-bottom:1px solid #eadfce">Tejas</div>
+
+      <div style="padding:14px;background:#f4ede2;font-weight:800;border-right:1px solid #eadfce">29</div>
+      <div style="padding:14px;border-right:1px solid #eadfce">Draft plan review</div>
+      <div style="padding:14px;border-right:1px solid #eadfce">None. Same web-only note.</div>
+      <div style="padding:14px">Unassigned</div>
+    </div>
+
+    <div class="pl" style="left:288px;top:-12px" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div style="position:absolute;left:299px;top:-2px;width:3px;height:224px;border-radius:2px;background:#c4441c"></div>
+    <div style="position:absolute;left:291px;top:104px;width:20px;height:40px;border-radius:10px;background:#c4441c;border:2px solid #fff;display:flex;align-items:center;justify-content:center;gap:2px" aria-label="Drag to resize column"><span style="width:2px;height:16px;background:#fff;border-radius:1px"></span><span style="width:2px;height:16px;background:#fff;border-radius:1px"></span></div>
+    <div style="position:absolute;left:402px;top:-2px;width:46px;height:20px;border-radius:6px;background:#fff;border:1px solid #eadfce;font-size:11px;font-weight:700;color:#6b5d50;display:flex;align-items:center;justify-content:center;transform:translateX(-120px)">300 px</div>
+
+    <div class="pl" style="left:-40px;top:122px" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div style="position:absolute;left:-28px;top:134px;width:60px;height:2px;border-radius:1px;background:#c4441c;opacity:0.55"></div>
+    <div style="position:absolute;left:-40px;top:62px;width:24px;height:24px;border-radius:8px;background:#fff;border:1px solid #eadfce;display:flex;align-items:center;justify-content:center;color:#6b5d50" aria-label="Drag row"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></div>
+
+    <div class="pl" style="right:-12px;top:-12px" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div class="pl" style="left:468px;bottom:-34px;width:24px;height:24px;display:none" aria-hidden="true"></div>
+    <div style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;border-radius:5px;background:#fff;border:2px solid #c4441c;display:flex;align-items:center;justify-content:center;transform:rotate(0deg)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#c4441c" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M11 17l6-6"/></svg></div>
+  </div>
+
+  <div style="position:absolute;left:380px;top:372px;width:236px;padding:8px;border-radius:16px;background:#fff;border:1px solid #eadfce;box-shadow:0 14px 36px rgba(42,31,23,0.18);display:flex;flex-direction:column;gap:2px;font-size:14px;font-weight:600">
+    <div style="padding:9px 12px;border-radius:10px;background:#f4ede2;display:flex;justify-content:space-between">Insert row above<span style="color:#6b5d50;font-weight:500">Alt+Up</span></div>
+    <div style="padding:9px 12px;border-radius:10px">Insert row below</div>
+    <div style="padding:9px 12px;border-radius:10px">Insert column left</div>
+    <div style="padding:9px 12px;border-radius:10px">Insert column right</div>
+    <div style="height:1px;background:#eadfce;margin:4px 0"></div>
+    <div style="padding:9px 12px;border-radius:10px">Duplicate row</div>
+    <div style="padding:9px 12px;border-radius:10px">Move row up</div>
+    <div style="padding:9px 12px;border-radius:10px">Fit columns to width</div>
+    <div style="padding:9px 12px;border-radius:10px">Freeze header row</div>
+    <div style="height:1px;background:#eadfce;margin:4px 0"></div>
+    <div style="padding:9px 12px;border-radius:10px;color:#a3301a">Delete row</div>
+  </div>
+
+  <div style="position:absolute;left:40px;bottom:28px;right:40px;display:flex;gap:10px;font-size:12px;color:#6b5d50;align-items:center">
+    <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #eadfce">3 rows, 4 columns</span>
+    <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #eadfce">2 cells selected</span>
+    <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #eadfce">Tab moves right, Enter moves down, Ctrl+Z undoes</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":780}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Profile page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>body{margin:0;font-family:Figtree,system-ui,sans-serif}button{font-family:inherit;cursor:pointer}input,textarea,select{font-family:inherit}</style>
+</helmet>
+<div style="width:1100px;height:900px;box-sizing:border-box;background:#faf6ee;color:#2a1f17;padding:32px 40px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+  <div style="display:flex;align-items:flex-end;gap:16px">
+    <div style="flex-grow:1">
+      <h1 style="margin:0;font-size:36px;font-weight:800;letter-spacing:-0.02em">Profile</h1>
+      <div style="margin-top:4px;font-size:14px;color:#6b5d50">How you appear in Peblo and in notes you share.</div>
+    </div>
+    <span style="padding:8px 14px;border-radius:999px;background:#cdebdd;color:#14573a;font-size:13px;font-weight:700">Saved automatically</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start">
+    <div style="background:#fff;border:1px solid #eadfce;border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:20px">
+      <div style="font-size:20px;font-weight:800">Your picture</div>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div style="position:relative;width:112px;height:112px;flex-shrink:0">
+          <div style="width:112px;height:112px;border-radius:56px;background:linear-gradient(135deg,#f6b79e,#e9856a);display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:#fff;box-shadow:0 0 0 4px #fff,0 0 0 6px #eadfce">A</div>
+          <button aria-label="Change picture" style="position:absolute;right:-2px;bottom:-2px;width:36px;height:36px;border-radius:18px;border:3px solid #fff;background:#c4441c;color:#fff;display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button style="padding:10px 16px;border-radius:999px;border:0;background:#c4441c;color:#fff;font-weight:700;font-size:14px">Upload a photo</button>
+            <button style="padding:10px 16px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;color:#2a1f17;font-weight:700;font-size:14px">Remove</button>
+          </div>
+          <div style="font-size:13px;color:#6b5d50;line-height:1.5">JPG, PNG or WebP, up to 5 MB. You can crop it to a square after choosing it. Or drop a picture here.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#6b5d50">
+        <span style="font-weight:700;color:#2a1f17">Shown as</span>
+        <span style="width:40px;height:40px;border-radius:20px;background:linear-gradient(135deg,#f6b79e,#e9856a);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800">A</span>
+        <span style="width:28px;height:28px;border-radius:14px;background:linear-gradient(135deg,#f6b79e,#e9856a);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px">A</span>
+        <span>in the header, comments and shared notes</span>
+      </div>
+      <div style="height:1px;background:#eadfce"></div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Display name<input value="agiledigest" style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px;color:#2a1f17"></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Username<input value="@agiledigest" style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px;color:#2a1f17"></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Role<input placeholder="Student, Designer, Founder" style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Pronouns<input placeholder="Optional" style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Time zone<select style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px;color:#2a1f17"><option>Asia/Kolkata (UTC+05:30)</option></select></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">Language<select style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px;color:#2a1f17"><option>English</option></select></label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700">About you
+        <textarea rows="3" placeholder="A line or two. AI answers can use it to fit you better." style="padding:12px 14px;border:1.5px solid #eadfce;border-radius:14px;background:#faf6ee;font-size:15px;resize:none"></textarea>
+        <span style="align-self:flex-end;font-size:12px;font-weight:500;color:#6b5d50">0/400</span>
+      </label>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="background:#fff;border:1px solid #eadfce;border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:20px;font-weight:800">Email</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:15px">tboddu@agiledigest.com <span style="padding:4px 10px;border-radius:999px;background:#fde9a8;color:#6b4a00;font-size:12px;font-weight:700">Not confirmed</span></div>
+        <div style="display:flex;gap:8px"><button style="padding:10px 16px;border-radius:999px;border:0;background:#c4441c;color:#fff;font-weight:700;font-size:14px">Send confirmation link</button><button style="padding:10px 16px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:14px;color:#2a1f17">Change email</button></div>
+      </div>
+      <div style="background:#fff;border:1px solid #eadfce;border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:20px;font-weight:800">Sign-in and security</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eadfce"><span style="flex-grow:1;font-size:14px"><b>Password</b><br><span style="color:#6b5d50">Last changed 3 months ago</span></span><button style="padding:8px 14px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:13px;color:#2a1f17">Change</button></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eadfce"><span style="flex-grow:1;font-size:14px"><b>Where you are signed in</b><br><span style="color:#6b5d50">Chrome on Windows (this device) and 1 more</span></span><button style="padding:8px 14px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:13px;color:#2a1f17">Sign out others</button></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eadfce"><span style="flex-grow:1;font-size:14px"><b>Connected accounts</b><br><span style="color:#6b5d50">Google, GitHub</span></span><button style="padding:8px 14px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:13px;color:#2a1f17">Manage</button></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eadfce"><span style="flex-grow:1;font-size:14px"><b>Download your data</b><br><span style="color:#6b5d50">Notes, tasks and pictures as one file</span></span><button style="padding:8px 14px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:13px;color:#2a1f17">Export</button></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eadfce"><span style="flex-grow:1;font-size:14px"><b style="color:#a3301a">Delete account</b><br><span style="color:#6b5d50">Removes everything after 30 days</span></span><button style="padding:8px 14px;border-radius:999px;border:1.5px solid #e9b4a6;background:#fff;font-weight:700;font-size:13px;color:#a3301a">Delete</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":900}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>
