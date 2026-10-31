@@ -521,15 +521,16 @@
 .soft .s-note-body .bn-editor [data-content-type="heading"] { padding-bottom: 4px !important; }
 .soft .s-note-body .bn-editor [data-content-type="heading"] .bn-inline-content { line-height: var(--pb-lh-normal) !important; }
 .soft .s-note-body .bn-editor .tableWrapper { padding: 0 !important; margin: 0 !important; width: 100%; overflow: visible; }
-.soft .s-note-body .bn-editor table { width: 100% !important; table-layout: fixed; }
-.soft .s-note-body .bn-editor col:first-child { width: 92px !important; }
-.soft .s-note-body .bn-editor col:not(:first-child) { width: auto !important; }
+/* The table fills the note until its columns are given widths; then the widths the table writes on itself (inline) win. They were forced with !important before, which undid every column drag. */
+.soft .s-note-body .bn-editor table:not([style*=" width:"]):not([style^="width:"]) { width: 100% !important; }
+.soft .s-note-body .bn-editor table { table-layout: fixed; }
 .soft .s-note-body .bn-editor th, .soft .s-note-body .bn-editor td,
 .soft .s-note-body .bn-editor th *, .soft .s-note-body .bn-editor td * { line-height: var(--pb-lh-normal) !important; }
 .soft .s-note-body .bn-editor th p, .soft .s-note-body .bn-editor td p { margin: 0; }
 .soft .s-note-body .bn-editor blockquote .bn-inline-content,
 .soft .s-note-body .bn-editor [data-content-type="quote"] .bn-inline-content { line-height: 1.5 !important; }
-.soft .s-note-body .bn-editor th, .soft .s-note-body .bn-editor td { font-weight: 400; text-align: left; }
+.soft .s-note-body .bn-editor th, .soft .s-note-body .bn-editor td { font-weight: 400; }
+.soft .s-note-body .bn-editor th:not([data-text-alignment]), .soft .s-note-body .bn-editor td:not([data-text-alignment]) { text-align: left; }
 .soft .s-note-body .bn-editor th:not([data-background-color]), .soft .s-note-body .bn-editor td:not([data-background-color]) { background: transparent !important; }
 .soft .s-note-body .bn-editor tr > :first-child { font-weight: 800; }
 .soft .s-note-body .bn-editor h1,

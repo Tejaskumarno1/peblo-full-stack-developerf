@@ -15,6 +15,8 @@ import { presenceOn } from '../utils/presencePref';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import useShareReader from './useShareReader';
 import useFileFrames from '../components/useFileFrames';
+import { splitMarkers, applyMarksToHtml } from '../utils/tableMeta';
+import '../components/tableMeta.css';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
@@ -22,7 +24,8 @@ const BlockEditor = lazy(() => import('../components/BlockEditor'));
 // The note's HTML is written once per change (a fresh object each render would write it again and undo the file frames drawn into it).
 const DocHtml = memo(function DocHtml({ innerRef, html }) { return <div className="doc" ref={innerRef} dangerouslySetInnerHTML={{ __html: html }} />; });
 
-const toHtml = (md) => {
+const toHtml = (md0) => {
+  const { text: md, marks } = splitMarkers(md0); // the table settings Markdown cannot hold (widths, colours, merged cells) ride in hidden comment lines
   let html = marked.parse(md || '');
   html = html.replace(/<figure>\s*<img src="(data:(video|audio)\/[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, kind, cap) => `<figure><${kind} controls src="${src}"></${kind}>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`);
   html = html.replace(/<figure>\s*<img src="(data:(?!image\/)[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, cap) => `<p><a href="${src}" download="${(cap || 'file').replace(/"/g, '')}">${cap || 'Download file'}</a></p>`);
@@ -36,6 +39,7 @@ const toHtml = (md) => {
     heading.id = count ? `${base}-${count + 1}` : base;
   });
   groupPictures(parsed);
+  applyMarksToHtml(parsed.body, marks);
   return parsed.body.innerHTML;
 };
 

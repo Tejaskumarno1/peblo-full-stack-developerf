@@ -21,6 +21,10 @@ import CommentsDock from './CommentsDock';
 import EditedBy from './EditedBy';
 import ColorTool from './ColorPanel';
 import TableMenu from './TableMenu';
+import TableTools from './TableTools';
+import { newMarks, noteTable, insertMarkers, splitMarkers, applyMarks, createMetaStore, exportRows } from '../utils/tableMeta';
+import { makeTablePlugin } from '../utils/tablePlugin';
+import './tableMeta.css';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
@@ -86,9 +90,14 @@ const withLayout = (p) => {
 // Pictures, files and documents live in notes as blocks; the document block (PowerPoint, Word, Excel, PDF and other files) is added to the standard set.
 const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, docfile: docFileSpec() } });
 
-function toStorage(blocks) {
+// `ctx` (from newMarks) collects each table's saved settings, to be written after the table by insertMarkers.
+function toStorage(blocks, ctx, store) {
   return blocks.map((b) => {
-    const children = b.children?.length ? toStorage(b.children) : [];
+    if (b.type === 'table' && ctx && b.content?.type === 'tableContent') {
+      noteTable(ctx, b, store);
+      return { ...b, content: { ...b.content, rows: exportRows(b) }, children: b.children?.length ? toStorage(b.children, ctx, store) : [] };
+    }
+    const children = b.children?.length ? toStorage(b.children, ctx, store) : [];
     if (b.type === 'docfile') {
       if (!b.props?.url) return { ...b, type: 'paragraph', props: {}, content: [], children };
       return { id: b.id, type: 'image', props: { url: packProps(b.props), caption: b.props.name || 'file' }, children };
@@ -142,6 +151,12 @@ function fromStorage(blocks) {
     }
     return { ...b, children };
   });
+}
+
+// Markdown to blocks, with each table's saved settings put back (see utils/tableMeta).
+async function parseMd(editor, text, store) {
+  const { text: plain, marks } = splitMarkers(text);
+  return applyMarks(fromStorage(await editor.tryParseMarkdownToBlocks(plain)), marks, store);
 }
 
 // Callouts, cropped pictures and picture groups are drawn with decorations (the editor rewrites attributes it did not set itself, so a decoration is what it keeps).
@@ -417,7 +432,8 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return () => window.removeEventListener('pb-identity', on);
   }, [rt]);
   const [live, setLive] = useState({ connected: false, ready: false });
-  const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin()] }));
+  const [metaStore] = useState(() => createMetaStore(rt?.doc)); // table settings Markdown cannot hold; shared with everyone in a live note
+  const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin(), makeTablePlugin(metaStore)] }));
   const editor = useCreateBlockNote({
     schema,
     uploadFile,
@@ -573,7 +589,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     // Tell the page the text the shared document holds now (after a reset, or after a dropped connection came back).
     const flush = async () => {
       if (dead || !onChangeRef.current) return;
-      try { const md = await editor.blocksToMarkdownLossy(toStorage(editor.document)); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
+      try { const mc = newMarks(); const md = insertMarkers(await editor.blocksToMarkdownLossy(toStorage(editor.document, mc, metaStore)), mc); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
     };
     let everReady = false;
     let pushedExternal = false;
@@ -595,7 +611,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (text === null) return;
       clearExternalEdit(noteId);
       loadingRef.current = true;
-      const blocks = text.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(text)) : [];
+      const blocks = text.trim() ? await parseMd(editor, text, metaStore) : [];
       if (dead || !blocks.length) return;
       editor.replaceBlocks(editor.document, blocks);
       pushedExternal = true;
@@ -615,7 +631,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       busy = true;
       try {
         loadingRef.current = true;
-        const blocks = seedText.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(seedText)) : null;
+        const blocks = seedText.trim() ? await parseMd(editor, seedText, metaStore) : null;
         if (dead) return;
         if (meta.get('seeded') !== true) {
           if (blocks && blocks.length) editor.replaceBlocks(editor.document, blocks);
@@ -678,11 +694,12 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (noteId) clearExternalEdit(noteId); // no room to put outside text into: initialContent already has it
       if (!initialContent) return;
       try {
-        const parsed = await editor.tryParseMarkdownToBlocks(initialContent);
-        loadingRef.current = true;
-        editor.replaceBlocks(editor.document, fromStorage(parsed));
+        loadingRef.current = true; // reading a note in is not an edit to save
+        const parsed = await parseMd(editor, initialContent, metaStore);
+        editor.replaceBlocks(editor.document, parsed);
         setTimeout(() => { loadingRef.current = false; }, 0);
       } catch (err) {
+        loadingRef.current = false;
         console.error('Failed to parse markdown:', err);
       }
     }
@@ -719,9 +736,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     if (rt && !connRef.current) return;
     const sequence = ++changeSequenceRef.current;
     // take the document now (not after the await) so an edit made while converting is a new change of its own
-    const blocks = toStorage(editor.document);
+    const marksCtx = newMarks();
+    const blocks = toStorage(editor.document, marksCtx, metaStore);
     void (async () => {
-      const markdown = await editor.blocksToMarkdownLossy(blocks); // may be synchronous or a promise depending on the BlockNote version
+      const markdown = insertMarkers(await editor.blocksToMarkdownLossy(blocks), marksCtx); // may be synchronous or a promise depending on the BlockNote version
       // Markdown conversion is asynchronous. Ignore an older conversion that
       // finishes after a newer edit, otherwise autosave can roll content back.
       if (sequence !== changeSequenceRef.current) return;
@@ -729,8 +747,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       deliver(markdown);
     })().catch(() => { /* the next edit converts again */ });
   };
+  useEffect(() => metaStore.subscribe((mine) => { if (mine && !loadingRef.current) handleChangeRef.current?.(); }), [metaStore]); // a table setting changed: save it like a typed edit
   const flushRef = useRef(flushChange);
   flushRef.current = flushChange;
+  const handleChangeRef = useRef(null);
   const handleChange = () => {
     checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
@@ -742,6 +762,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
     changeTimerRef.current = setTimeout(() => flushRef.current(), CHANGE_DEBOUNCE_MS);
   };
+  handleChangeRef.current = handleChange;
   useEffect(() => {
     const flush = () => flushRef.current();
     const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -859,7 +880,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const fileItems = editable === false || guest ? [] : [
       { title: 'Presentation', onItemClick: () => doc('ppt'), aliases: ['ppt', 'pptx', 'powerpoint', 'slides', 'deck', 'keynote'], badge: '/ppt', group: 'Files', icon: <Presentation size={16} style={{ color: '#c4441c' }} />, subtext: 'Show its slides right in the note' },
       { title: 'Document', onItemClick: () => doc('doc'), aliases: ['doc', 'docx', 'word', 'letter', 'contract'], badge: '/doc', group: 'Files', icon: <FileText size={16} style={{ color: '#1f5a8c' }} />, subtext: 'Read a Word file in place' },
-      { title: 'Spreadsheet', onItemClick: () => doc('xls'), aliases: ['xls', 'xlsx', 'excel', 'sheet', 'csv', 'table'], badge: '/xls', group: 'Files', icon: <FileSpreadsheet size={16} style={{ color: '#1e8e4e' }} />, subtext: 'Look through an Excel sheet' },
+      { title: 'Spreadsheet', onItemClick: () => doc('xls'), aliases: ['xls', 'xlsx', 'excel', 'sheet', 'csv', 'spreadsheet'], badge: '/xls', group: 'Files', icon: <FileSpreadsheet size={16} style={{ color: '#1e8e4e' }} />, subtext: 'Look through an Excel sheet' },
       { title: 'PDF', onItemClick: () => doc('pdf'), aliases: ['pdf', 'paper', 'report'], badge: '/pdf', group: 'Files', icon: <FileGlyph size={16} style={{ color: '#a5281b' }} />, subtext: 'Read pages, or show just a few' },
       { title: 'Any other file', onItemClick: () => doc('any'), aliases: ['file', 'attach', 'attachment', 'upload', 'zip'], badge: '/file', group: 'Files', icon: <FileGlyph size={16} />, subtext: 'Keep it with the note to download' },
     ];
@@ -878,7 +899,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (made) editor.setTextCursorPosition(made, 'end');
     };
     const insertTemplate = async (md) => {
-      const blocks = fromStorage(await editor.tryParseMarkdownToBlocks(md));
+      const blocks = await parseMd(editor, md, metaStore);
       const cur = editor.getTextCursorPosition().block;
       const empty = cur.type === 'paragraph' && !textOf(cur.content).trim();
       editor.insertBlocks(blocks, cur, 'after');
@@ -906,7 +927,11 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     ];
     const all = [...mediaItems, ...fileItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
-    return filterSuggestionItems([...recent, ...all], query);
+    const found = filterSuggestionItems([...recent, ...all], query);
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return found;
+    const rank = (i) => { const t = String(i.title).toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : 2; }; // "/table" finds Table before anything that merely mentions it
+    return found.map((i, n) => [i, n]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
   };
 
   const getNoteLinkItems = async (query) => {
@@ -1019,6 +1044,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} floatingUIOptions={toolbarFloat} />}
         {editable && <TableHandlesController tableHandle={(p) => <TableHandle {...p} tableHandleMenu={TableMenu} />} />}
       </BlockNoteView>
+      <TableTools editor={editor} rootRef={rootRef} store={metaStore} editable={editable !== false && (!rt || live.ready)} dark={dark} onEdited={() => handleChangeRef.current?.()} />
       </CommentsOn.Provider>
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
