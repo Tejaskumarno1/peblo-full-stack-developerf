@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar, 24 hour grid</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>body{margin:0;font-family:Figtree,system-ui,sans-serif}button{font-family:inherit;cursor:pointer}.hr{position:absolute;left:0;right:0;height:1px;background:#f0e6d6}.lbl{position:absolute;left:0;width:56px;text-align:right;font-size:11px;font-weight:600;color:#a69a8c;transform:translateY(-7px);padding-right:10px;box-sizing:border-box}.ev{position:absolute;border-radius:10px;padding:6px 8px;font-size:12px;font-weight:700;box-sizing:border-box;overflow:hidden;line-height:1.25}.ev small{display:block;font-weight:500;opacity:.8}.pill{padding:8px 14px;border-radius:999px;border:1.5px solid #eadfce;background:#fff;font-weight:700;font-size:13px;color:#2a1f17}</style>
+</helmet>
+<div style="width:1280px;height:800px;box-sizing:border-box;background:#faf6ee;color:#2a1f17;padding:20px 28px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+
+  <div style="display:flex;align-items:center;gap:10px">
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-0.02em">October 2026</h1>
+    <button class="pill" style="margin-left:10px">Today</button>
+    <button class="pill" aria-label="Previous week" style="padding:8px 12px">&lsaquo;</button>
+    <button class="pill" aria-label="Next week" style="padding:8px 12px">&rsaquo;</button>
+    <span style="flex-grow:1"></span>
+    <div style="display:flex;gap:4px;padding:3px;border-radius:12px;background:#f4ede2;font-size:13px;font-weight:700"><span style="padding:6px 12px;color:#6b5d50">Day</span><span style="padding:6px 12px;border-radius:9px;background:#fff;box-shadow:0 1px 3px rgba(42,31,23,.15)">Week</span><span style="padding:6px 12px;color:#6b5d50">Month</span></div>
+    <button style="padding:10px 18px;border-radius:999px;border:0;background:#c4441c;color:#fff;font-weight:700;font-size:14px">New event</button>
+  </div>
+
+  <div style="flex-grow:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 22px;gap:12px">
+    <div style="position:relative;background:#fff;border:1px solid #eadfce;border-radius:24px;overflow:hidden;display:flex;flex-direction:column">
+
+      <div style="display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid #eadfce;background:#fff;position:relative;z-index:2">
+        <div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">MON<div style="font-size:20px;color:#2a1f17;font-weight:800">26</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">TUE<div style="font-size:20px;color:#2a1f17;font-weight:800">27</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">WED<div style="font-size:20px;color:#2a1f17;font-weight:800">28</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">THU<div style="font-size:20px;color:#2a1f17;font-weight:800">29</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">FRI<div style="font-size:20px;color:#2a1f17;font-weight:800">30</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#c4441c;font-weight:800">SAT<div style="display:inline-flex;width:34px;height:34px;border-radius:17px;background:#c4441c;color:#fff;font-size:20px;font-weight:800;align-items:center;justify-content:center">31</div></div>
+        <div style="padding:10px 0;text-align:center;font-size:12px;color:#6b5d50;font-weight:700">SUN<div style="font-size:20px;color:#2a1f17;font-weight:800">1</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid #eadfce;background:#fffdf8;position:relative;z-index:2;box-shadow:0 6px 10px -8px rgba(42,31,23,.25)">
+        <div style="font-size:10px;font-weight:700;color:#a69a8c;padding:8px 8px 0 0;text-align:right;box-sizing:border-box">ALL DAY</div>
+        <div style="padding:5px 4px"></div><div style="padding:5px 4px"></div>
+        <div style="padding:5px 4px"><div style="background:#cdebdd;color:#14573a;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700">Diwali</div></div>
+        <div style="padding:5px 4px"></div><div style="padding:5px 4px"></div><div style="padding:5px 4px"></div><div style="padding:5px 4px"></div>
+      </div>
+
+      <div style="position:relative;flex-grow:1;min-height:0;overflow:hidden">
+        <div style="position:absolute;left:0;right:0;top:-1180px;height:1920px;display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr))">
+          <div style="position:relative">
+            <div class="lbl" style="top:1180px">6 AM</div><div class="lbl" style="top:1260px">7 AM</div><div class="lbl" style="top:1340px">8 AM</div><div class="lbl" style="top:1420px">9 AM</div><div class="lbl" style="top:1500px">10 AM</div><div class="lbl" style="top:1580px">11 AM</div><div class="lbl" style="top:1660px">12 PM</div><div class="lbl" style="top:1740px">1 PM</div><div class="lbl" style="top:1820px">2 PM</div>
+          </div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6;background:#fff8f2"></div>
+          <div style="position:relative;border-left:1px solid #f0e6d6"></div>
+        </div>
+        <div style="position:absolute;left:56px;right:0;top:0;bottom:0;pointer-events:none">
+          <div class="hr" style="top:20px"></div><div class="hr" style="top:100px"></div><div class="hr" style="top:180px"></div><div class="hr" style="top:260px"></div><div class="hr" style="top:340px"></div><div class="hr" style="top:420px"></div><div class="hr" style="top:500px"></div>
+        </div>
+        <div style="position:absolute;left:0;top:0;width:56px;bottom:0;pointer-events:none">
+          <div class="lbl" style="top:20px">6 AM</div><div class="lbl" style="top:100px">7 AM</div><div class="lbl" style="top:180px">8 AM</div><div class="lbl" style="top:260px">9 AM</div><div class="lbl" style="top:340px">10 AM</div><div class="lbl" style="top:420px">11 AM</div><div class="lbl" style="top:500px">12 PM</div>
+        </div>
+        <div style="position:absolute;left:56px;right:0;top:0;bottom:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:100px;height:70px;background:#dbe7f3;color:#1d4a73;border-left:4px solid #3b7bbf">Standup<small>7:00 - 8:00</small></div></div>
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:260px;height:150px;background:#fde9d8;color:#8a3a14;border-left:4px solid #c4441c">PI planning<small>9:00 - 11:00</small></div></div>
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:180px;height:70px;background:#e8dff5;color:#4a2d7a;border-left:4px solid #7b52b8">Gym<small>8:00 - 9:00</small></div></div>
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:340px;height:70px;background:#cdebdd;color:#14573a;border-left:4px solid #2d9d6a">Review pass<small>10:00 - 11:00</small></div></div>
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:60px;height:70px;background:#fde9a8;color:#6b4a00;border-left:4px solid #d19a12">Early flight<small>6:30 - 7:30</small></div></div>
+          <div style="position:relative"><div class="ev" style="left:4px;right:4px;top:420px;height:70px;background:#dbe7f3;color:#1d4a73;border-left:4px solid #3b7bbf">Write notes<small>11:00 - 12:00</small></div>
+            <div style="position:absolute;left:0;right:0;top:300px;height:2px;background:#c4441c"></div><div style="position:absolute;left:-5px;top:295px;width:12px;height:12px;border-radius:6px;background:#c4441c"></div></div>
+          <div style="position:relative"></div>
+        </div>
+        <div style="position:absolute;left:0;right:0;top:0;height:28px;background:linear-gradient(#fff,rgba(255,255,255,0));pointer-events:none"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(rgba(255,255,255,0),#fff);pointer-events:none"></div>
+        <button style="position:absolute;right:16px;bottom:16px;padding:9px 16px;border-radius:999px;border:0;background:#2a1f17;color:#fff;font-weight:700;font-size:13px;box-shadow:0 8px 20px rgba(42,31,23,.3)">Jump to now</button>
+        <div style="position:absolute;left:62px;top:8px;padding:4px 10px;border-radius:999px;background:#2a1f17;color:#fff;font-size:11px;font-weight:700;opacity:.92">2 events before 6 AM</div>
+      </div>
+    </div>
+
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;font-size:9px;font-weight:700;color:#a69a8c">
+      <div style="margin-bottom:4px">12A</div>
+      <div style="position:relative;flex-grow:1;width:10px;border-radius:5px;background:#eadfce">
+        <div style="position:absolute;left:-2px;right:-2px;top:25%;height:36%;border-radius:6px;background:#c4441c"></div>
+        <div style="position:absolute;left:0;right:0;top:12%;height:5px;border-radius:3px;background:#3b7bbf"></div>
+        <div style="position:absolute;left:0;right:0;top:41%;height:5px;border-radius:3px;background:#fff;opacity:.8"></div>
+      </div>
+      <div style="margin-top:4px">11P</div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:20px;font-size:12px;color:#6b5d50">
+    <span><b style="color:#2a1f17">Scroll inside the grid</b> with the wheel, trackpad, touch or keys. The page does not move.</span>
+    <span>Header and all-day row stay put.</span>
+    <span>Drag the red window on the right rail to jump anywhere in 24 hours.</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>
