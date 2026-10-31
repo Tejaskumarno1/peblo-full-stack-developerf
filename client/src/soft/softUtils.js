@@ -66,8 +66,16 @@ export function spanOf(t) {
   if (t.startTime) start = toHours(t.startTime);
   else if (t.deadline) { const d = new Date(t.deadline); start = d.getHours() + d.getMinutes() / 60; }
   else return null;
-  let end = t.endTime ? toHours(t.endTime) : start + (t.priority === 'high' ? 1.5 : 1);
-  if (end <= start) end = start + 1;
+  let end;
+  if (t.endTime) {
+    end = toHours(t.endTime);
+    // An end at or before the start means the event runs past midnight (22:00 - 01:00): end = 25.
+    if (end <= start) end += 24;
+  } else {
+    // No end time: a default length, kept inside the same day so a late task does not spill over.
+    end = Math.min(24, start + (t.priority === 'high' ? 1.5 : 1));
+    if (end <= start) end = start + 0.5;
+  }
   return { start, end };
 }
 

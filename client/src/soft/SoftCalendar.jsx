@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { todosAPI } from '../api';
 import NewMeeting from '../components/NewMeeting';
+import TimeGrid from '../components/TimeGrid';
 import { startOfWeek, weekdayNames } from '../utils/weekStart';
 import { startOfDay, addDays, sameDay, daysFromToday, spanOf, timeOf, toneOf, tagsOf, weekdayLong } from './softUtils';
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// Left accent bar colour per pastel tone (mockup: Calendar.dc.html)
+const BAR = { peach: '#c4441c', sky: '#3b7bbf', lilac: '#7b52b8', mint: '#2d9d6a', butter: '#d19a12' };
 const fmt = (d, o) => new Date(d).toLocaleDateString('en-GB', o);
 
 /** Soft Studio · Calendar (mockup: SoftCalendar). Week view with a mini month and a countdown. */
@@ -18,7 +21,7 @@ export default function SoftCalendar() {
   const weekStart = startOfWeek(cursor);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = startOfWeek(monthStart);
-  const from = gridStart < weekStart ? gridStart : weekStart;
+  const from = addDays(gridStart < weekStart ? gridStart : weekStart, -1); // one day back so an event past midnight shows its tail
   const to = addDays(from, 62);
 
   const { data: todos = [], isError } = useQuery({
@@ -37,34 +40,31 @@ export default function SoftCalendar() {
 
   const days = view === 'day' ? [cursor] : Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  // Hours shown: at least 09:00–22:00, stretched to fit early or late tasks
-  const onDays = todos.filter((t) => t.deadline && days.some((d) => sameDay(t.deadline, d)));
-  const spans = onDays.map((t) => ({ t, s: timeOf(t) ? spanOf(t) : null }));
-  const first = Math.min(9, ...spans.filter((x) => x.s).map((x) => Math.floor(x.s.start)));
-  const last = Math.max(22, ...spans.filter((x) => x.s).map((x) => Math.ceil(x.s.end)));
-  const total = last - first;
-  const hours = Array.from({ length: total }, (_, i) => first + i);
-  const allDay = spans.filter((x) => !x.s);
+  // All 24 hours are always in the grid (TimeGrid scrolls inside itself). Events that run past midnight continue on the next day.
+  const openTask = (t) => (t.note?.id ? navigate(`/notes/${t.note.id}`) : navigate('/tasks'));
+  const spans = todos.filter((t) => t.deadline).map((t) => ({ t, s: timeOf(t) ? spanOf(t) : null }));
+  const allDay = spans.filter((x) => !x.s && days.some((d) => sameDay(x.t.deadline, d)));
 
   const toneFor = (t) => {
-    if (nextBig && t.id === nextBig.id) return { bg: 'var(--s-accent)', fg: 'var(--s-on-accent)' };
-    if (t.priority === 'high') return { bg: 'var(--s-peach)', fg: 'var(--s-fg)' };
+    if (nextBig && t.id === nextBig.id) return { bg: 'var(--s-accent)', fg: 'var(--s-on-accent)', bar: 'var(--s-on-accent)' };
+    if (t.priority === 'high') return { bg: 'var(--s-peach)', fg: 'var(--s-fg)', bar: BAR.peach };
     const tone = toneOf(tagsOf(t)[0]);
-    return { bg: `var(--s-${tone === 'peach' ? 'sky' : tone})`, fg: 'var(--s-fg)' };
+    const k = tone === 'peach' ? 'sky' : tone;
+    return { bg: `var(--s-${k})`, fg: 'var(--s-fg)', bar: BAR[k] };
   };
 
-  // Lay out a day's timed tasks side by side when they overlap
-  const layout = (day) => {
-    const items = spans.filter((x) => x.s && sameDay(x.t.deadline, day)).sort((a, b) => a.s.start - b.s.start);
-    const lanes = [];
-    for (const it of items) {
-      let lane = lanes.findIndex((end) => end <= it.s.start);
-      if (lane === -1) { lane = lanes.length; lanes.push(0); }
-      lanes[lane] = it.s.end;
-      it.lane = lane;
+  const gridEvents = [];
+  for (const d of days) {
+    const prev = addDays(d, -1);
+    for (const { t, s } of spans) {
+      if (!s) continue;
+      const c = toneFor(t);
+      const common = { title: t.text, meta: `${timeOf(t)}${t.endTime ? ` – ${t.endTime}` : ''}`, bg: c.bg, fg: c.fg, bar: c.bar, done: t.completed, day: d, props: { onClick: () => openTask(t) } };
+      if (sameDay(t.deadline, d)) gridEvents.push({ ...common, id: t.id, start: s.start, end: Math.min(24, s.end) });
+      else if (s.end > 24 && sameDay(t.deadline, prev)) gridEvents.push({ ...common, id: t.id, start: 0, end: s.end - 24, cont: true });
     }
-    return items.map((it) => ({ ...it, lanes: Math.max(1, lanes.length) }));
-  };
+  }
+  const gridAllDay = allDay.flatMap(({ t }) => days.filter((d) => sameDay(t.deadline, d)).map((d) => { const c = toneFor(t); return { id: t.id, day: d, title: t.text, bg: c.bg, fg: c.fg, bar: c.bar, done: t.completed, props: { onClick: () => openTask(t) } }; }));
 
   const move = (dir) => setCursor((c) => (view === 'month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'day' ? 1 : 7))));
   const title = view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
@@ -79,7 +79,6 @@ export default function SoftCalendar() {
   const mini = Array.from({ length: 42 }, (_, i) => addDays(miniStart, i)).filter((d, i) => d.getMonth() === cursor.getMonth() || i < 7 || addDays(miniStart, i - (i % 7)).getMonth() === cursor.getMonth());
 
   const bigDays = nextBig ? daysFromToday(nextBig.deadline) : null;
-  const openTask = (t) => (t.note?.id ? navigate(`/notes/${t.note.id}`) : navigate('/tasks'));
 
   return (
     <div className="soft-page s-cal">
@@ -140,7 +139,7 @@ export default function SoftCalendar() {
       </div>
 
       {isError && <p className="s-empty small" role="alert">Could not load your schedule. Check your connection and try again.</p>}
-      <section className="s-week" aria-label="Schedule">
+      <section className={`s-week${view === 'month' ? '' : ' is-grid'}`} aria-label="Schedule">
         {view === 'month' ? (
           <div className="s-month">
             {weekdayNames(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => <span key={i} className="s-month-dow">{d}</span>)}
@@ -157,58 +156,7 @@ export default function SoftCalendar() {
           </div>
         ) : (
           <>
-            <div className="s-week-cols" style={{ gridTemplateColumns: `50px repeat(${days.length}, minmax(0, 1fr))` }}>
-              <span />
-              {days.map((d) => (
-                <span key={d.toISOString()} className={`s-week-day${sameDay(d, new Date()) ? ' today' : ''}`}>
-                  <span className="n">{fmt(d, { weekday: 'short' })}</span>
-                  <span className="d">{d.getDate()}</span>
-                </span>
-              ))}
-            </div>
-            {allDay.length > 0 && (
-              <div className="s-week-cols s-allday" style={{ gridTemplateColumns: `50px repeat(${days.length}, minmax(0, 1fr))` }}>
-                <span className="lbl">All day</span>
-                {days.map((d) => (
-                  <span key={d.toISOString()} className="cell">
-                    {allDay.filter((x) => sameDay(x.t.deadline, d)).map(({ t }) => { const c = toneFor(t); return <button key={t.id} type="button" className="ev" style={{ background: c.bg, color: c.fg }} onClick={() => openTask(t)}>{t.text}</button>; })}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="s-week-grid" style={{ gridTemplateColumns: `50px repeat(${days.length}, minmax(0, 1fr))`, height: total * 36 }}>
-              <div className="s-hours">
-                {hours.map((h, i) => <span key={h} style={{ top: `${(i / total) * 100}%` }}>{String(h).padStart(2, '0')}:00</span>)}
-              </div>
-              {days.map((d) => (
-                <div key={d.toISOString()} className="s-daycol">
-                  {sameDay(d, new Date()) && (() => { const now = new Date(); const pos = (now.getHours() + now.getMinutes() / 60 - first) / total; return pos > 0 && pos < 1 ? <span className="s-now" style={{ top: `${pos * 100}%` }} /> : null; })()}
-                  {layout(d).map(({ t, s, lane, lanes }) => {
-                    const c = toneFor(t);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className={`s-ev${t.completed ? ' done' : ''}${s.end - s.start < 1.25 ? ' short' : ''}`}
-                        style={{
-                          top: `calc(${((s.start - first) / total) * 100}% + 2px)`,
-                          height: `calc(${((s.end - s.start) / total) * 100}% - 4px)`,
-                          left: `calc(${(lane / lanes) * 100}% + 4px)`,
-                          width: `calc(${100 / lanes}% - 8px)`,
-                          background: c.bg,
-                          color: c.fg,
-                        }}
-                        onClick={() => openTask(t)}
-                        title={t.text}
-                      >
-                        <span className="t">{t.text}</span>
-                        <span className="m">{timeOf(t)}{t.endTime ? ` – ${t.endTime}` : ''}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+            <TimeGrid days={days} events={gridEvents} allDay={gridAllDay} headClass="s-week-day" onToday={() => setCursor(startOfDay())} label="Schedule" />
           </>
         )}
       </section>

@@ -571,7 +571,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
             {/* time labels */}
             <div className="r-lane ticks">
               {lay && lay.ticks.map((k) => (
-                <span key={k.key} className={`r-tick${k.day ? ' day' : ''}${k.today ? ' today' : ''}`} style={{ left: k.x }}>{k.label}</span>
+                <span key={k.key} className={`r-tick${k.day ? ' day' : ''}${k.today ? ' today' : ''}`} style={{ left: k.x, ...(zoom !== 'week' && k.x > nowX - 96 && k.x < nowX + 52 ? { visibility: 'hidden' } : null) }}>{k.label}</span>
               ))}
               {bins && bins.map((b) => (
                 <button
