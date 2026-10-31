@@ -6,8 +6,7 @@ import { validZone } from '../utils/userTime.js';
 import { ollamaUrlProblem } from '../utils/ollamaPolicy.js';
 import { mailConfigured } from '../services/mailer.js';
 import { sendChange } from '../services/emailAccount.js';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { LANGUAGES, cleanName, cleanUsername, validEmail } from '../utils/account.js';
 
 export async function getProfile(req: Request, res: Response, next: NextFunction) {
   try {
@@ -19,14 +18,31 @@ export async function getProfile(req: Request, res: Response, next: NextFunction
 
 export async function updateProfile(req: Request, res: Response, next: NextFunction) {
   try {
-    const { name, email, jobTitle, bio, avatar, timezone, settings, currentPassword } = req.body;
+    const { name, email, jobTitle, bio, avatar, timezone, settings, currentPassword, username, pronouns, language } = req.body;
     const userId = req.user!.id;
 
     // Sizes and types (PEB-66): nothing unbounded is stored.
     const bad = (m: string) => res.status(400).json({ error: m });
-    if (name !== undefined && typeof name !== 'string') return bad('Name must be text.');
+    let cleanedName: string | undefined;
+    if (name !== undefined) {
+      const n = cleanName(name); // a name of only spaces is refused, not silently stored as empty
+      if ('error' in n) return bad(n.error);
+      cleanedName = n.name;
+    }
     if (jobTitle !== undefined && (typeof jobTitle !== 'string' || jobTitle.length > 100)) return bad('Job title must be text of at most 100 characters.');
-    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) return bad('Bio must be text of at most 500 characters.');
+    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 400)) return bad('About you must be text of at most 400 characters.');
+    if (pronouns !== undefined && pronouns !== null && (typeof pronouns !== 'string' || pronouns.trim().length > 40)) return bad('Pronouns must be text of at most 40 characters.');
+    if (language !== undefined && !LANGUAGES.includes(language)) return bad('That language is not available yet.');
+    let cleanedUsername: string | null | undefined;
+    if (username !== undefined) {
+      const u = cleanUsername(username);
+      if ('error' in u) return bad(u.error);
+      cleanedUsername = u.username;
+      if (cleanedUsername) {
+        const used = await prisma.user.findFirst({ where: { username: cleanedUsername, NOT: { id: userId } }, select: { id: true } });
+        if (used) return res.status(409).json({ error: 'That username is taken.' });
+      }
+    }
     // Profile picture: a small WebP data address, or empty to remove it.
     if (avatar !== undefined && avatar !== null && avatar !== '' && (typeof avatar !== 'string' || !/^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(avatar) || avatar.length > 200_000)) return bad('The profile picture must be a WebP image under 150 KB.');
     if (timezone !== undefined && timezone !== '' && !validZone(timezone)) return bad('Unknown time zone.');
@@ -36,7 +52,7 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     let emailChangePending: string | null = null;
     if (email !== undefined) {
       newEmail = String(email).trim().toLowerCase();
-      if (!EMAIL_RE.test(newEmail)) return res.status(400).json({ error: 'Enter a valid email address.' });
+      if (!validEmail(newEmail)) return res.status(400).json({ error: 'Enter a valid email address.' });
       // Changing the sign-in email needs the current password (a stolen session alone must not be enough).
       const me = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, passwordHash: true } });
       if (me && me.email !== newEmail) {
@@ -73,7 +89,10 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     await prisma.user.update({
       where: { id: userId },
       data: {
-        ...(name && { name: String(name).trim().slice(0, 80) }),
+        ...(cleanedName !== undefined && { name: cleanedName }),
+        ...(cleanedUsername !== undefined && { username: cleanedUsername }),
+        ...(pronouns !== undefined && { pronouns: typeof pronouns === 'string' && pronouns.trim() ? pronouns.trim() : null }),
+        ...(language !== undefined && { language }),
         ...(newEmail !== undefined && { email: newEmail, emailVerifiedAt: null }),
         ...(jobTitle !== undefined && { jobTitle }),
         ...(bio !== undefined && { bio }),

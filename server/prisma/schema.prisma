@@ -29,6 +29,13 @@ model User {
   timezone     String   @default("UTC")
   settings     Json
 
+  // Profile page (migration 030)
+  username     String?  @unique @db.Citext
+  pronouns     String?
+  language     String   @default("en")
+  passwordChangedAt    DateTime? @map("password_changed_at")
+  deletionRequestedAt  DateTime? @map("deletion_requested_at")
+
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

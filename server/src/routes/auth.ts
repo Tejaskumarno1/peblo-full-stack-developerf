@@ -14,7 +14,8 @@ import { completeSignup, consumeReset, dropPendingSignup, issueReset, storePendi
  */
 const router = Router();
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { DELETION_GRACE_DAYS, cleanName, passwordProblem, validEmail } from '../utils/account.js';
+const EMAIL_RE = { test: validEmail };
 
 // Brute-force protection. Sign-in is limited twice: per address (generous, many people can share one) and
 // per account (tight, and it still holds when someone fakes their address). Only failed attempts count.
@@ -38,12 +39,6 @@ const forgotEmailLimit = rateLimit({ windowMs: 15 * 60_000, max: envNum('PEBLO_F
 const resetLimit = rateLimit({ windowMs: 15 * 60_000, max: envNum('PEBLO_RESET_RATE_MAX', 20), message: 'Too many attempts. Wait a few minutes and try again.' });
 const signupEmailLimit = rateLimit({ windowMs: 60 * 60_000, max: envNum('PEBLO_SIGNUP_EMAIL_MAX', 5), key: (req) => { const e = emailOf(req); return e ? `signup:${e}` : ''; }, message: 'Too many sign-ups from this address. Try again later.' });
 
-/** The rules for a new password, shared by sign-up, change and reset. null = fine. */
-function passwordProblem(password: string): string | null {
-  if (password.length < 8) return 'Password must be at least 8 characters.';
-  if (Buffer.byteLength(password, 'utf8') > 72) return 'Password is too long (72 bytes at most; some characters count as more than one).';
-  return null;
-}
 const FORGOT_REPLY = { message: 'If an account exists for that email, a reset link is on its way. It works once and expires in 30 minutes.' };
 const SIGNUP_PENDING_REPLY = { pending: true, message: 'Check your email. If this address can be used to sign up, a link to finish is on its way.' };
 
@@ -54,7 +49,9 @@ router.post('/signup', signupLimit, signupEmailLimit, async (req, res, next) => 
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
-    const name = String(req.body?.name || '').trim().slice(0, 80) || email.split('@')[0];
+    const given = req.body?.name === undefined || req.body?.name === null || String(req.body.name).trim() === '' ? null : cleanName(String(req.body.name));
+    if (given && 'error' in given) return res.status(400).json({ error: given.error });
+    const name = (given && 'name' in given ? given.name : '') || email.split('@')[0];
 
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
     const problem = passwordProblem(password);
@@ -105,7 +102,10 @@ router.post('/login', ...loginLimit, async (req, res, next) => {
     const ok = !!user && matches;
     if (!ok) return res.status(401).json({ error: 'Incorrect email or password.' });
 
-    res.json({ token: signToken(user!), user: await loadProfile(user!.id) });
+    // Signing in during the 30 days after asking to delete the account cancels the deletion.
+    const deletionCancelled = !!user!.deletionRequestedAt;
+    if (deletionCancelled) await prisma.user.update({ where: { id: user!.id }, data: { deletionRequestedAt: null } });
+    res.json({ token: signToken(user!), user: await loadProfile(user!.id), ...(deletionCancelled && { deletionCancelled: true }) });
   } catch (error) {
     next(error);
   }
@@ -164,9 +164,10 @@ router.post('/change-password', authenticate, passwordLimit, async (req, res, ne
     if (!user || !(await bcrypt.compare(current, user.passwordHash))) {
       return res.status(403).json({ error: 'Your current password is not correct.' });
     }
+    if (next_ === current) return res.status(400).json({ error: 'The new password must be different from the current one.' });
     const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: await bcrypt.hash(next_, 12), tokenVersion: { increment: 1 } },
+      data: { passwordHash: await bcrypt.hash(next_, 12), tokenVersion: { increment: 1 }, passwordChangedAt: new Date() },
     });
     await prisma.$executeRawUnsafe('DELETE FROM password_resets WHERE user_id = $1', user.id).catch(() => {}); // a reset link sent earlier is now pointless
     (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
@@ -210,7 +211,7 @@ router.post('/reset-password', resetLimit, async (req, res, next) => {
     const userId = await consumeReset(raw);
     if (!userId) return res.status(400).json({ error: 'This link is not valid or has expired. Ask for a new one.' });
     await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 } } }),
+      prisma.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 }, passwordChangedAt: new Date() } }),
       prisma.apiToken.deleteMany({ where: { userId } }),
       prisma.$executeRawUnsafe('DELETE FROM password_resets WHERE user_id = $1', userId),
       prisma.user.updateMany({ where: { id: userId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } }), // opening a link sent to the address proves it is theirs
@@ -228,6 +229,36 @@ router.post('/logout-all', authenticate, async (req, res, next) => {
     await prisma.user.update({ where: { id: req.user!.id }, data: { tokenVersion: { increment: 1 } } });
     (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(req.user!.id);
     res.json({ message: 'Signed out on all devices.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// "Sign out other devices": every other sign-in ends; this device gets a fresh token and stays signed in.
+router.post('/logout-others', authenticate, async (req, res, next) => {
+  try {
+    const updated = await prisma.user.update({ where: { id: req.user!.id }, data: { tokenVersion: { increment: 1 } } });
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(req.user!.id);
+    res.json({ token: signToken(updated), message: 'Other devices were signed out.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Ask to delete the account with a 30-day grace period: needs the password, signs every device out, and the server removes the
+// account 30 days later. Signing in again before then cancels it. (POST /delete-account below removes it at once.)
+router.post('/schedule-deletion', authenticate, passwordLimit, async (req, res, next) => {
+  try {
+    const password = String(req.body?.password || '').slice(0, 200);
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(403).json({ error: 'That password is not correct.' });
+    }
+    const now = new Date();
+    await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: now, tokenVersion: { increment: 1 } } });
+    (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
+    const deleteOn = new Date(now.getTime() + DELETION_GRACE_DAYS * 86_400_000);
+    res.json({ scheduled: true, deleteOn: deleteOn.toISOString(), message: `Your account will be deleted on ${deleteOn.toISOString().slice(0, 10)}. Sign in again before then to keep it.` });
   } catch (error) {
     next(error);
   }
