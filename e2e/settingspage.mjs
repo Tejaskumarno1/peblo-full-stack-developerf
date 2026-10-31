@@ -32,7 +32,7 @@ try {
 
   // profile name saves on blur
   await page.goto(base + '/settings/profile');
-  const name = page.getByLabel('Name', { exact: true });
+  const name = page.getByLabel('Display name', { exact: true });
   await name.fill('Renamed Person');
   await name.blur();
   await page.getByText('Saved', { exact: false }).first().waitFor({ timeout: 5000 }).catch(() => {});

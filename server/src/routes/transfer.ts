@@ -85,12 +85,14 @@ router.get('/backup', authenticate, async (req, res, next) => {
       orderBy: { createdAt: 'asc' },
     });
     const todos = await prisma.todo.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
-    const stamp = new Date().toISOString().slice(0, 10);
+    const me = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true, username: true, jobTitle: true, pronouns: true, bio: true, timezone: true, language: true, avatar: true } });
+    const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Disposition', `attachment; filename="peblo-backup-${stamp}.json"`);
     res.json({
       format: 'peblo-backup',
       version: 1,
       exportedAt: new Date().toISOString(),
+      profile: me,
       notes: notes.map((n) => ({
         id: n.id, title: n.title, content: n.content, tags: n.tags.map((t) => t.tag.name),
         isArchived: n.isArchived, meta: n.meta ?? {}, createdAt: n.createdAt, updatedAt: n.updatedAt,

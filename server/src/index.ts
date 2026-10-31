@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
 import { purgeExpiredTrash } from './controllers/notesController.js';
+import { purgeScheduledDeletions } from './services/accountDeletion.js';
 import tagsRoutes from './routes/tags.js';
 import tokensRoutes from './routes/tokens.js';
 import aiRoutes, { noteAiRoutes } from './routes/ai.js';
@@ -243,6 +244,11 @@ if (isDirectRun) {
     const trashSweep = process.env.PEBLO_TRASH_PURGE === '1' ? setInterval(sweepTrash, 60 * 60 * 1000) : null;
     trashSweep?.unref?.();
     if (trashSweep) setTimeout(sweepTrash, 30_000).unref();
+    // Accounts asked to be deleted more than 30 days ago are removed (on by default: it is what the person was told).
+    const sweepAccounts = () => { purgeScheduledDeletions().then((n) => { if (n) console.log(`[accounts] removed ${n} account(s) past their 30-day deletion grace`); }).catch((e) => console.error('[accounts] purge:', e)); };
+    const accountSweep = process.env.PEBLO_ACCOUNT_PURGE === '0' ? null : setInterval(sweepAccounts, 60 * 60 * 1000);
+    accountSweep?.unref?.();
+    if (accountSweep) setTimeout(sweepAccounts, 45_000).unref();
     // Hosting platforms stop the app with SIGTERM: save the open live documents and let the database connections go first.
     let stopping = false;
     const stop = (signal: string) => {
@@ -250,6 +256,7 @@ if (isDirectRun) {
       stopping = true;
       console.log(`${signal} received, shutting down`);
       if (trashSweep) clearInterval(trashSweep);
+      if (accountSweep) clearInterval(accountSweep);
       setTimeout(() => process.exit(0), 10_000).unref();
       closeCollab()
         .catch((e) => console.error('[collab] shutdown:', e))
