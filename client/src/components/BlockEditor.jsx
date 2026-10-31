@@ -930,7 +930,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const found = filterSuggestionItems([...recent, ...all], query);
     const q = String(query || '').trim().toLowerCase();
     if (!q) return found;
-    const rank = (i) => { const t = String(i.title).toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : 2; }; // "/table" finds Table before anything that merely mentions it
+    const rank = (i) => (i.group !== 'Media' && i.group !== 'Files' && String(i.title).toLowerCase() === q ? 0 : 1); // "/table" finds Table before anything that merely mentions it
     return found.map((i, n) => [i, n]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
   };
 
