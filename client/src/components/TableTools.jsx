@@ -338,6 +338,8 @@ export default function TableTools({ editor, rootRef, store, editable, dark, onE
       const x = Math.min(menu.x, window.innerWidth - 250); const y = Math.max(6, Math.min(menu.y, window.innerHeight - 580));
       ctxUi = (
         <div className={`pbtt-menu ${th}`} role="menu" aria-label="Table cell" style={{ left: x, top: y }} data-testid="table-context-menu">
+          <MenuItem done={done} id="open-tab" onClick={() => window.open(window.location.href, '_blank', 'noopener')}>Open in new tab</MenuItem>
+          <div className="div" />
           <MenuItem done={done} id="row-above" hint="Alt+Up" onClick={() => insertRow(editor, store, menu.id, menu.r)}>Insert row above</MenuItem>
           <MenuItem done={done} id="row-below" hint="Alt+Down" onClick={() => insertRow(editor, store, menu.id, menu.r + 1)}>Insert row below</MenuItem>
           <MenuItem done={done} id="col-left" onClick={() => insertColumn(editor, menu.id, menu.c)}>Insert column left</MenuItem>

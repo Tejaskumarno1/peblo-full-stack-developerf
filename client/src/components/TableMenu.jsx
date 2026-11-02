@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Type, Trash2 } from 'lucide-react';
 import { useBlockNoteEditor, useComponentsContext, useExtension, useExtensionState } from '@blocknote/react';
 import { TableHandlesExtension } from '@blocknote/core/extensions';
@@ -15,6 +15,8 @@ export default function TableMenu({ orientation }) {
   const ext = useExtension(TableHandlesExtension);
   const live = useExtensionState(TableHandlesExtension, { selector: (s) => ({ block: s?.block, rowIndex: s?.rowIndex, colIndex: s?.colIndex }) }) || {};
   const last = useRef(null);
+  // A fill rewrites the table, so this menu can unmount without BlockNote hearing "closed": the grips then stay frozen and no other row opens. Always unfreeze on the way out.
+  useEffect(() => () => { try { ext.unfreezeHandles(); } catch { /* editor gone */ } }, [ext]);
   if (live.block && live.rowIndex !== undefined && live.colIndex !== undefined) last.current = live; // keep the menu open after a fill, when the grips hide
   const [scope, setScope] = useState(orientation === 'row' ? 'row' : 'column');
   const { rowIndex, colIndex } = last.current || {};
@@ -38,6 +40,7 @@ export default function TableMenu({ orientation }) {
     targets().forEach(([r, c]) => { next[r].cells[c].props.backgroundColor = value; });
     editor.updateBlock(block, { type: 'table', content: { ...block.content, rows: next } });
     if (value !== 'default') pushRecent('bg', value);
+    setTimeout(() => { try { ext.unfreezeHandles(); } catch { /* editor gone */ } }, 0);
   };
   const header = isRow ? (block.content.headerRows || 0) > 0 && rowIndex === 0 : (block.content.headerCols || 0) > 0 && colIndex === 0;
   const toggleHeader = () => {

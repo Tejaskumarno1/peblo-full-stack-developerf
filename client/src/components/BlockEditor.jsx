@@ -431,6 +431,17 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     window.addEventListener('pb-identity', on);
     return () => window.removeEventListener('pb-identity', on);
   }, [rt]);
+  // The caret other people see. Your own second window (same name and colour) is not drawn, so you never meet yourself in the note.
+  const renderCursor = (u) => {
+    const dark = (() => { const m = /^#([0-9a-f]{6})$/i.exec(u.color || ''); if (!m) return false; const v = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] <= 0.179; })();
+    const css = `background-color: ${u.color}; color: ${dark ? 'white' : 'black'}`;
+    const base = document.createElement('span'); base.classList.add('bn-collaboration-cursor__base');
+    if (rt && u.name === rt.user.name && u.color === rt.user.color) { base.style.display = 'none'; base.setAttribute('data-self', ''); return base; }
+    const caret = document.createElement('span'); caret.setAttribute('contentedEditable', 'false'); caret.classList.add('bn-collaboration-cursor__caret'); caret.setAttribute('style', css);
+    const label = document.createElement('span'); label.classList.add('bn-collaboration-cursor__label'); label.setAttribute('style', css); label.appendChild(document.createTextNode(u.name));
+    caret.appendChild(label); base.appendChild(document.createTextNode('⁠')); base.appendChild(caret); base.appendChild(document.createTextNode('⁠'));
+    return base;
+  };
   const [live, setLive] = useState({ connected: false, ready: false });
   const [metaStore] = useState(() => createMetaStore(rt?.doc)); // table settings Markdown cannot hold; shared with everyone in a live note
   const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin(), makeTablePlugin(metaStore)] }));
@@ -438,7 +449,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     schema,
     uploadFile,
     extensions: [decoExt],
-    ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity' } } : {}),
+    ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity', renderCursor } } : {}),
   });
   useMemo(() => keepUndo(editor), [editor]);
   useEffect(() => { keepUndo(editor); }, [editor, rt]);
