@@ -48,6 +48,15 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     status: (v) => (v === 'doing' ? 'doing' : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
+    repeatFromDone: (v) => (v === true ? true : undefined),
+    source: (v) => {
+      if (!isObj(v)) return undefined;
+      const quote = str(v.quote, 400);
+      if (!quote) return undefined;
+      const noteId = str(v.noteId, 64);
+      const line = int(v.line, 1, 100000);
+      return { quote, ...(noteId ? { noteId } : {}), ...(line ? { line } : {}) };
+    },
       link: (v) => { const s = str(v, 300); return s && /^https?:\/\/\S+$/i.test(s) ? s : undefined; },
       linkedTasks: (v) => {
         if (!Array.isArray(v)) return undefined;

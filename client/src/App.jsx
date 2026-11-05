@@ -5,6 +5,7 @@ import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
 import HelpDialog from './components/HelpDialog';
+import TaskReminders from './components/TaskReminders';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -92,6 +93,7 @@ function ShellLayout() {
         <HelpDialog />
         <LiveEditors />
         <NotificationPill />
+        <TaskReminders />
         <AppMenu />
       </Suspense>
     </AppShell>

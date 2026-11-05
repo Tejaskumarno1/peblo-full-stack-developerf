@@ -466,6 +466,24 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   });
   useMemo(() => keepUndo(editor), [editor]);
   useEffect(() => { keepUndo(editor); }, [editor, rt]);
+  // "Jump to the line": /notes/<id>?line=14 scrolls to the 14th block and marks it for a moment (a task opened from "where it came from").
+  useEffect(() => {
+    const line = Number(new URLSearchParams(window.location.search).get('line'));
+    if (!line || line < 1) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      const block = editor.document[line - 1];
+      const el = block ? document.querySelector(`.bn-block-outer[data-id="${block.id}"]`) : null;
+      if (el) {
+        clearInterval(timer);
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.add('pb-jump');
+        setTimeout(() => el.classList.remove('pb-jump'), 2600);
+      } else if (tries > 25) clearInterval(timer);
+    }, 200);
+    return () => clearInterval(timer);
+  }, [editor, noteId]);
   const { theme } = useAuth();
   const loadingRef = useRef(!!rt); // a live document is not edited until it is in step with the server
   const changeSequenceRef = useRef(0);
@@ -972,7 +990,8 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         const prev = editor.getTextCursorPosition().prevBlock;
         const text = (textOf(cur.content).trim() || textOf(prev?.content).trim()).slice(0, 200);
         if (!text) return;
-        try { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
+        const line = editor.document.findIndex((b) => b.id === (textOf(cur.content).trim() ? cur.id : prev?.id)) + 1;
+        try { await todosAPI.create({ text, priority: 'medium', noteId, meta: { source: { noteId, quote: text, ...(line ? { line } : {}) } } }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
       }, aliases: ['task', 'todo', 'to-do'], group: 'Insert', icon: <CheckSquare size={16} />, subtext: 'Turn this line (or the one above) into a task linked to this note.' }]),
       { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <Clock size={16} />, subtext: 'Type the time as text.' },
       { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <CalendarDays size={16} />, subtext: 'Type today as text.' },

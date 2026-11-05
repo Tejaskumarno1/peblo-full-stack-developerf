@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, FileText, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, FileText, Check, ChevronLeft, ChevronRight, Copy, Repeat } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import TaskSteps from '../components/TaskSteps';
 import ShareDialog from './ShareDialog';
+import { askScope } from '../utils/askScope';
+import './tasks2.css';
 import { tagsOf, addDays, startOfDay, snippetOf } from './softUtils';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -13,6 +15,10 @@ const timeVal = (d) => (d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PRESETS = [['09:00', 'Morning · 9:00 AM'], ['14:00', 'Afternoon · 2:00 PM'], ['18:30', 'Evening · 6:30 PM']];
 const label12 = (t) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`; };
+const REPEATS = [['none', 'None'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']];
+const REMINDS = [[0, 'At the time'], [10, '10 min before'], [60, '1 hour before'], [1440, '1 day before']];
+const ESTIMATES = [[15, '15 min'], [30, '30 min'], [60, '1 hour']];
+const ordinal = (n) => { const v = n % 100; return n + (['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'); };
 const TAG_TONES = ['butter', 'mint', 'lilac', 'peach', 'sky'];
 
 function MiniCalendar({ value, onPick }) {
@@ -63,6 +69,16 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [link, setLink] = useState(task.meta?.link || '');
   const [steps, setSteps] = useState(task.meta?.subtasks || []);
   const [error, setError] = useState('');
+  const [recurrence, setRecurrence] = useState(task.recurrence || 'none');
+  const [fromDone, setFromDone] = useState(!!task.meta?.repeatFromDone);
+  const [remind, setRemind] = useState(task.meta?.remindMin ?? null);
+  const [estimate, setEstimate] = useState(task.meta?.estimateMin ?? null);
+  const [confirmEsc, setConfirmEsc] = useState(false);
+  const snap0 = useRef(null);
+  const snapNow = JSON.stringify({ text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, remind, estimate });
+  if (snap0.current === null) snap0.current = snapNow;
+  const dirty = snapNow !== snap0.current || !!tagDraft.trim();
+  const requestClose = () => { if (dirty && !saving) setConfirmEsc(true); else onClose(); };
 
   const { data: notes = [] } = useQuery({
     queryKey: ['notes', 'sidebar'],
@@ -106,7 +122,17 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
     try {
       const deadline = date ? new Date(`${date}T${time || '09:00'}`).toISOString() : null;
       const t = tagDraft.trim().replace(/^#/, '').toLowerCase();
-      await todosAPI.update(task.id, { text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, meta: { link: link.trim() || null, subtasks: steps } });
+      const ruleChanged = recurrence !== (task.recurrence || 'none');
+      let scope = 'this';
+      if (task.seriesId && !isNew && !ruleChanged) {
+        scope = await askScope(task, 'edit');
+        if (!scope) { setSaving(false); return; }
+      }
+      await todosAPI.update(task.id, {
+        text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, scope,
+        ...(ruleChanged ? { recurrence } : {}),
+        meta: { link: link.trim() || null, subtasks: steps, remindMin: remind, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
+      });
       refresh();
       onChanged?.();
       onClose();
@@ -122,16 +148,41 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
     onClose();
   };
 
+  const skipThis = async () => {
+    await todosAPI.delete(task.id, 'this');
+    refresh();
+    onChanged?.();
+    onClose();
+  };
+  const duplicate = async () => {
+    try {
+      await todosAPI.create({
+        text: text.trim() || task.text, priority, tags, noteId: note?.id || null,
+        deadline: date ? new Date(`${date}T${time || '09:00'}`).toISOString() : null,
+        meta: { link: link.trim() || null, subtasks: steps.map((x) => ({ ...x, done: false })), remindMin: remind, estimateMin: estimate },
+      });
+      refresh();
+      onChanged?.();
+      onClose();
+    } catch (e) { setError(e.response?.data?.error || 'Could not duplicate this task.'); }
+  };
+  const repeatNote = (() => {
+    if (recurrence === 'none' || !date) return '';
+    const d = new Date(`${date}T00:00`);
+    return ({ daily: 'Every day', weekdays: 'Every weekday', weekly: `Every week on ${d.toLocaleDateString(undefined, { weekday: 'long' })}`, monthly: `Every month on the ${ordinal(d.getDate())}`, yearly: `Every year on ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}` })[recurrence] || '';
+  })();
+  const source = task.meta?.source || null;
   const dueLabel = date ? new Date(`${date}T00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : null;
 
   const body = (
-    <div className={`s-sheet${inline ? ' inline' : ''}`} role={inline ? undefined : 'dialog'} aria-label={isNew ? 'Set up your new task' : 'Edit task'} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
+    <div className={`s-sheet${inline ? ' inline' : ''}`} role={inline ? undefined : 'dialog'} aria-label={isNew ? 'Set up your new task' : 'Edit task'} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); if (confirmEsc) setConfirmEsc(false); else requestClose(); } }}>
       <div className="s-sheet-top">
         <span className={`s-sheet-kicker${isNew ? ' new' : ''}`}>{isNew ? <><Check size={13} strokeWidth={3} /> Task added</> : 'Task'}</span>
         <span className="grow" />
-        <button type="button" className="s-capture-close" aria-label="Close" onClick={onClose}><X size={16} strokeWidth={2.4} /></button>
+        <button type="button" className="s-capture-close" aria-label="Close" onClick={requestClose}><X size={16} strokeWidth={2.4} /></button>
       </div>
 
+      {recurrence !== 'none' && date && <p className="s-sheet-sub">Part of a repeating series</p>}
       <label className="s-sr" htmlFor="s-sheet-title">Task</label>
       <input id="s-sheet-title" className="s-sheet-title" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }} autoFocus={!inline} />
 
@@ -152,6 +203,32 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         )}
       </section>
 
+      {date && (
+        <section className="s-sheet-sec" aria-label="Repeat">
+          <span className="s-sheet-lab">Repeat</span>
+          <div className="s-sheet-pills" role="radiogroup" aria-label="Repeat">
+            {REPEATS.map(([k, name]) => <button key={k} type="button" role="radio" aria-checked={recurrence === k} className={recurrence === k ? 'on' : ''} onClick={() => setRecurrence(k)}>{name}</button>)}
+          </div>
+          {recurrence !== 'none' && (
+            <>
+              <p className="s-sheet-note"><Repeat size={13} /> {repeatNote}</p>
+              <label className="s-sheet-check"><input type="checkbox" checked={fromDone} onChange={(e) => setFromDone(e.target.checked)} /> Repeat from the date I finish it</label>
+              {task.seriesId && !isNew && <button type="button" className="s-sheet-skipone" onClick={skipThis}>Skip this one</button>}
+              <p className="s-sheet-hint">Saving a change asks: just this one, this and following, or all in the series.</p>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="s-sheet-sec" aria-label="Remind me">
+        <span className="s-sheet-lab">Remind me</span>
+        <div className="s-sheet-pills" role="radiogroup" aria-label="Remind me">
+          {REMINDS.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={remind === m} className={remind === m ? 'on' : ''} onClick={() => setRemind(remind === m ? null : m)}>{name}</button>)}
+          <button type="button" className={`ghost${remind === null ? ' on' : ''}`} onClick={() => setRemind(null)}>No reminder</button>
+        </div>
+        <p className="s-sheet-hint">When it rings you can snooze it: 10 min, 1 hour, tonight or tomorrow morning.</p>
+      </section>
+
       <section className="s-sheet-sec" aria-label="Priority">
         <span className="s-sheet-lab">Priority</span>
         <div className="s-sheet-pills" role="radiogroup" aria-label="Priority">
@@ -161,7 +238,28 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         </div>
       </section>
 
+      <section className="s-sheet-sec" aria-label="Estimate">
+        <span className="s-sheet-lab">Estimate</span>
+        <div className="s-sheet-pills" role="radiogroup" aria-label="Estimate">
+          {ESTIMATES.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={estimate === m} className={estimate === m ? 'on' : ''} onClick={() => setEstimate(estimate === m ? null : m)}>{name}</button>)}
+          <input type="number" min="1" max="1440" aria-label="Estimate in minutes" className="s-sheet-time" style={{ width: 96 }} placeholder="minutes" value={estimate && !ESTIMATES.some(([m]) => m === estimate) ? estimate : ''} onChange={(e) => setEstimate(e.target.value ? Number(e.target.value) : null)} />
+        </div>
+      </section>
+
       <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} /></section>
+
+      {source && (
+        <section className="s-sheet-sec" aria-label="Where it came from">
+          <span className="s-sheet-lab">Where it came from</span>
+          <div className="s-sheet-source">
+            <blockquote>&ldquo;{source.quote}&rdquo;</blockquote>
+            <div className="row">
+              <span>{noteFull?.title || task.note?.title || 'Note'}{source.line ? ` \u00b7 line ${source.line}` : ''}</span>
+              {(source.noteId || task.noteId) && <Link className="chip" to={`/notes/${source.noteId || task.noteId}${source.line ? `?line=${source.line}` : ''}`} onClick={onClose}>Jump to the line</Link>}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="s-sheet-sec" aria-label="Link">
         <span className="s-sheet-lab">Link</span>
@@ -216,7 +314,16 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
 
       {shareOpen && <ShareDialog kind="todo" id={task.id} title={text} onClose={() => setShareOpen(false)} />}
       {error && <p className="s-sheet-error" role="alert">{error}</p>}
+      {confirmEsc && (
+        <div className="s-sheet-confirm" role="alertdialog" aria-label="Unsaved changes">
+          <b>You have unsaved changes.</b>
+          <span className="grow" />
+          <button type="button" autoFocus onClick={() => { setConfirmEsc(false); setTimeout(() => document.getElementById('s-sheet-title')?.focus(), 0); }}>Keep editing</button>
+          <button type="button" className="warn" onClick={onClose}>Discard</button>
+        </div>
+      )}
       <div className="s-sheet-foot">
+        {!isNew && <button type="button" className="s-sheet-del" style={{ marginRight: 8 }} onClick={duplicate}><Copy size={13} /> Duplicate</button>}
         {!isNew && <button type="button" className="s-sheet-del" style={{ marginRight: 8 }} onClick={() => setShareOpen(true)}>Share</button>}
           {!isNew && <button type="button" className="s-sheet-del" onClick={remove}>Delete</button>}
         <span className="grow" />
@@ -228,7 +335,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
 
   if (inline) return body;
   return (
-    <div className="s-sheet-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="s-sheet-back" onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       {body}
     </div>
   );

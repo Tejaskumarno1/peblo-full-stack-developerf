@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
-import { tzOf, dayBounds, dayBoundsOf } from '../utils/userTime.js';
+import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
 import { RECURRENCES, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
 
@@ -278,6 +278,17 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
           prisma.todoSeries.update({ where: { id: todo.seriesId }, data: shared }),
         ]);
       }
+    }
+
+    // "Repeat from the date I finish it": finishing moves the next date to one period after today, not after the old due date.
+    if (data.completed === true && !todo.completed && todo.seriesId && (todo.meta as any)?.repeatFromDone && todo.deadline) {
+      const tz = tzOf(req);
+      const old = zoneParts(todo.deadline, tz);
+      const now = zoneParts(new Date(), tz);
+      const anchor = zonedTime(now.y, now.m, now.d, old.h, old.mi, old.s, 0, tz);
+      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, id: { not: todo.id }, completed: false, deadline: { gt: todo.deadline } } });
+      await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { anchor, lastGenerated: anchor } });
+      await topUpSeries(userId, todo.seriesId);
     }
 
     const io = req.app.get('io');

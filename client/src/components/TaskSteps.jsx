@@ -18,6 +18,7 @@ export default function TaskSteps({ steps = [], onChange, label = 'Steps' }) {
   return (
     <div className="pb-steps" role="group" aria-label={label}>
       <div className="pb-steps-head"><b>{label}</b>{steps.length > 0 && <span>{done} of {steps.length}</span>}</div>
+      {steps.length > 0 && <div className="pb-steps-bar" aria-hidden="true"><i style={{ width: `${Math.round((done / steps.length) * 100)}%` }} /></div>}
       {steps.map((s) => (
         <div key={s.id} className="pb-step">
           <input type="checkbox" checked={!!s.done} onChange={() => onChange(steps.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))} aria-label={`Step: ${s.text}`} />
