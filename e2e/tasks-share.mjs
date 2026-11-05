@@ -38,7 +38,9 @@ try {
   for (const n of ['Can view', 'Can tick and comment', 'Can add tasks (you approve)', 'Can edit']) check(`permission pill: ${n}`, (await dlg.getByRole('radio', { name: n }).count()) === 1);
   check('Can view is chosen first', (await dlg.getByRole('radio', { name: 'Can view' }).getAttribute('aria-checked')) === 'true');
   check('Share with AI shows the text link', (await dlg.getByLabel('Text version link').inputValue()) === url + '.md');
-  check('Share with AI shows the MCP address', /\/mcp$/.test(await dlg.getByLabel('MCP address').inputValue()));
+  check('MCP address stays hidden until the owner opts in', (await dlg.getByLabel('MCP address').count()) === 0);
+  await dlg.getByRole('checkbox', { name: /Let AI agents connect/ }).click();
+  check('after opting in the MCP address is for this list', new RegExp('/mcp/list/' + token + '$').test(await dlg.getByLabel('MCP address').inputValue()));
   await dlg.getByRole('radio', { name: 'In 30 days' }).click();
   await page.waitForTimeout(600);
   check('link end date is saved', (await api('GET', '/api/task-lists/shares')).shares[0].expiresAt != null);
