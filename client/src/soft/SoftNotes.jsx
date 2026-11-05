@@ -212,8 +212,8 @@ export default function SoftNotes() {
     }
     return out;
   }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownGroups = gSel ? groups.filter((g) => g.key === gSel) : groups;
-  const folderMode = group === 'folder' && !dq && filter !== 'archive' && filter !== 'trash'; // Group by Folder shows the folder cards
+  const shownGroups = gSel && !dq ? groups.filter((g) => g.key === gSel) : groups;
+  const folderMode = group === 'folder' && !dq && filter === 'all' && !selectMode; // Group by Folder shows the folder cards
   useEffect(() => { setGSel(null); }, [group, filter]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
@@ -664,8 +664,8 @@ export default function SoftNotes() {
           const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
           const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
           const list = fSel ? (parent ? normalDefs.filter((k) => k.parent === parent.id) : []) : [...normalDefs.filter((d) => !d.parent), ...smartDefs];
-          const Card = ({ d }) => (
-            <button type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} title="Click to open, double-click to edit">
+          const card = (d) => (
+            <button key={d.id} type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} title="Click to open, double-click to edit">
               <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
               <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
             </button>
@@ -681,7 +681,7 @@ export default function SoftNotes() {
                   <button type="button" className="np-crumb-all" aria-label="Show all notes" title="Show all notes" onClick={() => { setFSel(null); setCards(false); if (folderMode) setView({ ...view, group: 'date' }); }}><X size={14} strokeWidth={2} /></button>
                 </nav>
               )}
-              {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => <Card key={d.id} d={d} />)}</div>}
+              {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => card(d))}</div>}
               {!fSel && list.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No folders yet. Use + to make one.</p>}
             </div>
           );
