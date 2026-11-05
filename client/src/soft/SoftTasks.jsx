@@ -528,7 +528,7 @@ export default function SoftTasks() {
   const toggleLists = () => { const n = !showLists; setShowLists(n); try { localStorage.setItem('peblo-task-lists-open', n ? '1' : '0'); } catch { /* ignore */ } };
 
   return (
-    <div className="soft-page s-tasks">
+    <div className={`soft-page s-tasks${acct?.calmMode === true ? ' calm' : ''}`}>
       <div className="s-page-head">
         <div className="s-page-title">
           <h1 className="s-h1">{selMode ? `${sel.size} selected` : 'Tasks'}</h1>
@@ -536,6 +536,7 @@ export default function SoftTasks() {
         </div>
         <span className="grow" />
         {selMode && <button type="button" className="s-selbtn" onClick={exitSelect}>Cancel</button>}
+        {!selMode && <Link to="/tasks/plan" className="s-selbtn plan-link">Plan my day</Link>}
         <div className="s-seg" role="tablist" aria-label="View">
           {VIEWS.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
         </div>

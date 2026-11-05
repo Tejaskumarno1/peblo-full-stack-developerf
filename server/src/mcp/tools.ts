@@ -150,8 +150,11 @@ server.registerTool('create_task', {
   },
   annotations: writes,
 }, (args) => run(async () => {
-  const { todo } = await api('POST', '/todos', args);
-  return { id: todo.id, text: todo.text, deadline: todo.deadline };
+  // When the person asked to approve what Claude adds (Plan my day), the task waits in their approval inbox.
+  let propose = false;
+  try { const me = await api('GET', '/profile'); propose = me?.user?.settings?.aiApproval === true; } catch { /* no setting: add it straight away */ }
+  const { todo } = await api('POST', '/todos', propose ? { ...args, meta: { proposal: { by: 'Claude' } } } : args);
+  return { id: todo.id, text: todo.text, deadline: todo.deadline, ...(propose ? { status: 'waiting for the person to approve it' } : {}) };
 }));
 
 server.registerTool('complete_task', {

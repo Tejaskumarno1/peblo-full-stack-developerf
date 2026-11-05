@@ -73,6 +73,9 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     astatus: (v) => (ASTATUS.includes(v) ? v : undefined),
     order: (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined),
     list: (v) => str(v, 60),
+    planned: (v) => (v === true ? true : undefined),
+    moves: (v) => int(v, 0, 99),
+    proposal: (v) => { if (!isObj(v)) return undefined; const by = str(v.by, 60); if (!by) return undefined; const from = str(v.from, 120); return { by, ...(from ? { from } : {}) }; },
   });
 }
 

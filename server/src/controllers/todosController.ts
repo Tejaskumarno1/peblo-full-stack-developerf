@@ -55,7 +55,10 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
       ],
       take: Math.min(Math.max(parseInt(String(limit), 10) || 1000, 1), 2000), // paging cap: open tasks come first, old finished ones are what gets cut
     });
-    res.json({ todos });
+    // Tasks that Claude or a guest only proposed wait in the approval inbox: ?proposals=only shows just those, ?proposals=all both.
+    const prop = (t: any) => !!(t.meta as any)?.proposal;
+    const mode = String(req.query.proposals || '');
+    res.json({ todos: mode === 'only' ? todos.filter(prop) : mode === 'all' ? todos : todos.filter((t) => !prop(t)) });
   } catch (error) {
     next(error);
   }
@@ -79,6 +82,8 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
       orderBy: { deadline: 'asc' },
       take: 1000,
     }) as any[];
+    const allTasksAll = allTasks;
+    allTasks.splice(0, allTasks.length, ...allTasksAll.filter((t) => !(t.meta as any)?.proposal));
 
     const todayStartDate = new Date(todayStart);
     const todayEndDate = new Date(todayEnd);
@@ -126,7 +131,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
       take: 2000,
     });
 
-    res.json({ todos });
+    res.json({ todos: todos.filter((t) => !(t.meta as any)?.proposal) });
   } catch (error) {
     next(error);
   }
@@ -220,6 +225,11 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     if (deadline !== undefined) {
       if (deadline && Number.isNaN(new Date(deadline).getTime())) return res.status(400).json({ error: 'Invalid date' });
       data.deadline = deadline ? new Date(deadline) : null;
+      // Pushing a task to a later day counts, so Plan my day can ask "still want it?" after three moves.
+      if (data.deadline && todo.deadline && data.deadline.getTime() - todo.deadline.getTime() > 12 * 3600e3 && !(meta && typeof meta === 'object' && 'moves' in meta)) {
+        const cur = ((data.meta ?? todo.meta) || {}) as any;
+        data.meta = { ...cur, moves: Math.min(99, (Number(cur.moves) || 0) + 1) };
+      }
     }
     if (startTime !== undefined) data.startTime = startTime || null;
     if (endTime !== undefined) data.endTime = endTime || null;
