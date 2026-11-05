@@ -230,11 +230,13 @@ export default function SoftNotes() {
   const open = useCallback((note) => {
     setDoc({ ...note, title: editable(note.title), content: note.content || '', tags: note.tags || [] });
     setEditorKey(`${note.id}-${Date.now()}`);
-    setPreview(!!note.isDeleted);
+    setPreview(!!note.isDeleted || new URLSearchParams(window.location.search).get('view') === 'reader'); // Open as > Reader view
     setTagDraft(null);
     setMenuOpen(false);
     setHistoryOpen(false);
   }, []);
+
+  useEffect(() => { if (doc?.id && !doc.isDraft && params.get('view') === 'reader') setPreview(true); }, [doc?.id, params.get('view')]); // eslint-disable-line react-hooks/exhaustive-deps -- Open as > Reader view
 
   const startDraft = useCallback(() => {
     setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], createdAt: new Date().toISOString() });

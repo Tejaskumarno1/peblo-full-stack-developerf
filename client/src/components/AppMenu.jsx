@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, AppWindow, EyeOff, Link2, Download, Code2, FileText, FilePlus2, ListChecks, Pin, PinOff, Copy, Trash2, Share2, ChevronRight, X, SquareArrowOutUpRight } from 'lucide-react';
-import { notesAPI } from '../api';
+import { ExternalLink, AppWindow, EyeOff, Link2, Download, Code2, FileText, FilePlus2, ListChecks, Pin, PinOff, Copy, Trash2, Share2, ChevronRight, X, SquareArrowOutUpRight, FolderInput, Tag as TagIcon, Columns2, BookOpen, Globe, Image as PicIcon, Check } from 'lucide-react';
+import { notesAPI, tagsAPI } from '../api';
+import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { exportMarkdown, exportWord, exportPdf } from '../utils/exportNote';
 import './appMenu.css';
 
@@ -13,6 +15,9 @@ const pictures = (md) => [...new Set([...String(md || '').matchAll(/\/api\/media
 
 export default function AppMenu() {
   const navigate = useNavigate();
+  const { settings } = useAuth();
+  const [tags, setTags] = useState([]);
+  const folders = (settings?.noteFolders || []).filter((d) => !d.smart);
   const [menu, setMenu] = useState(null); // { x, y, kind: 'note' | 'link' | 'space', id?, href? }
   const [note, setNote] = useState(null);
   const [sub, setSub] = useState(null);
@@ -53,6 +58,7 @@ export default function AppMenu() {
     if (!menu || menu.kind !== 'note') return undefined;
     let live = true;
     notesAPI.get(menu.id).then(({ data }) => { if (live) setNote(data.note); }).catch(() => {});
+    tagsAPI.list().then((r) => { if (live) setTags((r.data.tags || []).filter((t) => t.name !== 'inbox' && t.name !== 'private').slice(0, 10)); }).catch(() => {});
     return () => { live = false; };
   }, [menu]);
 
@@ -72,6 +78,13 @@ export default function AppMenu() {
   const pin = async (m) => { try { const next = !note?.meta?.pinned; await notesAPI.update(m.id, { meta: { ...(note?.meta || {}), pinned: next } }); say(next ? 'Pinned' : 'Unpinned'); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not change the pin'); } };
   const dup = async () => { if (!note) return; try { const { data } = await notesAPI.create({ title: `Copy of ${note.title || 'Untitled'}`, content: note.content || '', tags: note.tags || [] }); navigate(`/notes/${data.note.id}`); } catch { say('Could not duplicate the note'); } };
   const trash = async (m) => { try { await notesAPI.delete(m.id); say('Moved to the trash'); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not move it to the trash'); } };
+  const moveTo = (name) => async (m) => { try { await notesAPI.update(m.id, { meta: { ...(note?.meta || {}), folder: name } }); say(name ? `Moved to ${name}` : 'Taken out of its folder'); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not move it'); } };
+  const toggleTag = (name) => async (m) => { try { const has = (note?.tags || []).includes(name); const next = has ? note.tags.filter((t) => t !== name) : [...(note?.tags || []), name]; await notesAPI.update(m.id, { tags: next }); say(has ? `Removed #${name}` : `Tagged #${name}`); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not change the tag'); } };
+  // A link that already exists is reused as it is; a new one is made only when there is none (and then it ends on its own).
+  const linkFor = async (m, days) => { const cur = await api.get(`/share/note/${m.id}`); if (cur.data?.token) return cur.data.token; const made = await api.post(`/share/note/${m.id}`, { expiresInDays: days, edit: false }); return made.data.token; };
+  const openPublic = async (m) => { try { const t = await linkFor(m, 7); window.open(abs(`/s/note/${t}`), '_blank', 'noopener'); } catch { say('Could not make the public page'); } };
+  const picturesLink = async (m) => { try { const t = await linkFor(m, 1); await copy(abs(`/s/note/${t}.md`), 'Pictures link copied. It works for AI tools and ends in 1 day'); } catch { say('Could not make the pictures link'); } };
+  const side = (href) => { const w = Math.floor(window.screen.availWidth / 2); window.open(href, '_blank', `popup,width=${w},height=${window.screen.availHeight - 60},left=${window.screen.availWidth - w},top=0,noopener`); };
   const openNew = (href) => window.open(href, '_blank', 'noopener');
   const openWin = (href) => window.open(href, '_blank', 'popup,width=1100,height=800,noopener');
   const privateHint = (href) => copy(href, 'Link copied. Paste it into a private window');
@@ -88,11 +101,11 @@ export default function AppMenu() {
   }, [menu, note]);
   if (!menu && !details && !toast) return null;
 
-  const subPanel = (name, items) => {
+  const subPanel = (name, items, count = 3) => {
     if (sub !== name || !subAt) return null;
     const W = 252; const gap = -3; // overlaps the parent a little, so the pointer never crosses a dead strip
     const left = subAt.right + gap + W > window.innerWidth - 8 ? Math.max(8, subAt.left - W - gap) : subAt.right + gap;
-    const rows = 3; const top = Math.max(8, Math.min(subAt.top - 6, window.innerHeight - (rows * 32 + 16) - 8));
+    const rows = Math.min(count, 10); const top = Math.max(8, Math.min(subAt.top - 6, window.innerHeight - (rows * 32 + 16) - 8));
     return <div className="am-menu am-sub" role="menu" data-testid={`am-sub-${name}`} style={{ left, top }} onMouseEnter={() => clearTimeout(timer.current)}>{items}</div>;
   };
 
@@ -110,9 +123,12 @@ export default function AppMenu() {
               <I id="open" icon={ExternalLink} label="Open" hint="Enter" onClick={go((m) => navigate(`/notes/${m.id}`))} />
               <I id="open-tab" icon={SquareArrowOutUpRight} label="Open in new tab" onClick={go((m) => openNew(m.href))} />
               <I id="open-win" icon={AppWindow} label="Open in new window" onClick={go((m) => openWin(m.href))} />
+              <I id="open-side" icon={Columns2} label="Open to the side" onClick={go((m) => side(m.href))} />
               <I id="open-as" icon={EyeOff} label="Open as" arrow="open-as" onClick={() => setSub('open-as')} />
               {subPanel('open-as', <>
                 <I keep id="as-peblo" icon={AppWindow} label="Peblo window (default)" onClick={go((m) => navigate(`/notes/${m.id}`))} />
+                <I keep id="as-reader" icon={BookOpen} label="Reader view" onClick={go((m) => navigate(`/notes/${m.id}?view=reader`))} />
+                <I keep id="as-public" icon={Globe} label="Public share page" onClick={go(openPublic)} />
                 <I keep id="as-private" icon={EyeOff} label="Private window (copies the link)" onClick={go((m) => privateHint(m.href))} />
               </>)}
               <div className="am-sep" /><div className="am-lab">Create</div>
@@ -120,8 +136,20 @@ export default function AppMenu() {
               <div className="am-sep" /><div className="am-lab">Organise</div>
               <I id="pin" icon={note?.meta?.pinned ? PinOff : Pin} label={note?.meta?.pinned ? 'Unpin' : 'Pin'} disabled={!note} onClick={go(pin)} />
               <I id="dup" icon={Copy} label="Duplicate" disabled={!note} onClick={go(dup)} />
+              <I id="move" icon={FolderInput} label="Move to folder" arrow="move" disabled={!note} onClick={() => setSub('move')} />
+              {subPanel('move', <>
+                {folders.map((d) => <I keep key={d.id} id={`mv-${d.id}`} icon={note?.meta?.folder === d.name ? Check : FolderInput} label={d.name} onClick={go(moveTo(d.name))} />)}
+                {folders.length === 0 && <I keep id="mv-none-yet" icon={FolderInput} label="No folders yet" disabled onClick={() => {}} />}
+                {note?.meta?.folder && <I keep id="mv-out" icon={X} label="Take out of its folder" onClick={go(moveTo(''))} />}
+              </>, Math.max(1, folders.length + (note?.meta?.folder ? 1 : 0)))}
+              <I id="tag" icon={TagIcon} label="Tag" arrow="tag" disabled={!note} onClick={() => setSub('tag')} />
+              {subPanel('tag', <>
+                {tags.map((t) => <I keep key={t.name} id={`tg-${t.name}`} icon={(note?.tags || []).includes(t.name) ? Check : TagIcon} label={`#${t.name}`} onClick={go(toggleTag(t.name))} />)}
+                {tags.length === 0 && <I keep id="tg-none-yet" icon={TagIcon} label="No tags yet" disabled onClick={() => {}} />}
+              </>, Math.max(1, tags.length))}
               <div className="am-sep" /><div className="am-lab">Share</div>
               <I id="copy-link" icon={Link2} label="Copy link" onClick={go((m) => copy(m.href, 'Link copied'))} />
+              <I id="pics-link" icon={PicIcon} label="Temporary pictures link" hint="1 day" onClick={go(picturesLink)} />
               <I id="save-as" icon={Download} label="Save as" arrow="save-as" disabled={!note} onClick={() => setSub('save-as')} />
               {subPanel('save-as', <>
                 <I keep id="save-md" icon={FileText} label="Markdown (.md)" onClick={go(() => exportMarkdown(note))} />
