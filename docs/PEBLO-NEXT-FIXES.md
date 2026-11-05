@@ -40,3 +40,11 @@ Full inventory with UI and gaps: docs/SHARE-PAGE-FEATURES.md.
 
 ## 7. Rules I follow
 Implement approved mockups exactly; never remove approved features; icons only, no emojis; run real tests on every change; mockup before new UI; push both branches after every change; never touch the Android emulator folders.
+
+## Update 5 Nov 2026 (evening)
+
+Done, tested and pushed: blob picture guard, picture link pills, markdown list fix, MCP get_image and read_shared_link, toolbar block menu, right-click menu (scrolling, submenus, Move to folder, Tag, Open to the side, Reader view, Public share page, Temporary pictures link), folder cards, group-by cards (folder, tag, date), 8-tab cap, profile page fixes and photo upload, PDF bundle for share links (.pdf), Share with AI panel in the share dialog, full screen: version history in the Note tab, version box and comments panel above the page, stale e2e checks fixed (focus-fullscreen, notes6, share-extras).
+
+Still open: right-click keyboard navigation, folder drag-reorder and drag a note onto a folder, notice when the oldest tab closes, notes panel resize, phone long-press menu, OCR of picture text on upload, owner opt-in toggle for link-scoped MCP access, whole-app phone layout (decision needed), release v1.0.5 (waiting for your word).
+
+Task page: seven mockups added to the design canvas (board v2, task sheet v2, task and note split, select and shortcuts, lists as cards, plan my day with approval inbox, share a list with the AI panel). Nothing built yet; waiting for your review.
