@@ -96,6 +96,7 @@ try {
   check('Duplicate makes a second task with steps reset', gyms.length === 2 && gyms.every((g) => g.priority === 'low') && gyms.some((g) => g.id !== solo.id && g.meta?.subtasks?.[0]?.done === false), JSON.stringify(gyms.map((g) => g.meta)));
 
   // reminder rings and snoozes
+  await page.goto('about:blank'); // an open Tasks page would ring it first and mark it as rung
   const soon = new Date(Date.now() + 60000);
   const rem = (await api('POST', '/api/todos', { text: 'Ring me', deadline: iso(soon), meta: { remindMin: 10 } })).todo;
   await page.goto(base + '/tasks');
@@ -119,6 +120,8 @@ try {
   check('finishing early moves the next one a week from today', next === 7, String(next));
 } catch (e) {
   console.error(e);
+  await page.screenshot({ path: `${shots}/sheet2-fail.png` }).catch(() => {});
+  console.log('URL', page.url(), 'LS', await page.evaluate(() => localStorage.getItem('peblo-reminders-rung')).catch(() => '?'));
   check('no crash', false, String(e));
 }
 await finish();
