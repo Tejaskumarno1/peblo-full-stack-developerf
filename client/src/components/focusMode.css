@@ -229,3 +229,11 @@ html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 330p
 
 /* the find box sits beside the drawer, not under it */
 html[data-fs-drawer="1"] .pb-find { right: 322px !important; }
+
+/* The writing column never starts under the outline rail: room for the rail on the left, mirrored on the right, and the drawer takes its own width */
+@media (min-width: 1181px) {
+  .soft .s-notes.focus .s-note-main { padding-left: 224px; padding-right: 224px; }
+  html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 330px; }
+  html[data-fs-width="full"] { --fs-col: min(1240px, calc(100vw - 448px)); }
+  html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1240px, calc(100vw - 554px)); }
+}

@@ -141,3 +141,8 @@
 .soft .np .np-page .np-btns { margin-top: auto; }
 
 .soft .np.selecting .np-sheet.move { bottom: 62px; border-radius: 28px 28px 0 0; box-shadow: 0 -10px 30px rgba(70,45,20,.16); }
+
+/* The folder sheets always clear the bulk-action bar, and their Create / Cancel row stays pinned at the bottom of the sheet */
+.soft .np.selecting .np-sheet { bottom: 62px; max-height: calc(100% - 74px); border-radius: 28px 28px 0 0; }
+.soft .np .np-sheet.nf { padding-bottom: 0; }
+.soft .np .np-sheet.nf .np-btns { position: sticky; bottom: 0; z-index: 2; margin: 0 -18px; padding: 10px 18px 16px; background: var(--s-surface); border-top: 1px solid var(--s-line); }

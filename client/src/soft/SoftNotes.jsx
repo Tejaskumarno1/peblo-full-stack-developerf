@@ -3,7 +3,7 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon , MousePointer2 } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon , MousePointer2, MoreHorizontal } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -47,14 +47,14 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
         <span className="txt">
           <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
           {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOfNote(n) || 'Empty note'}</span>}
-          <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} ∑ ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` ∑ ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` ∑ ${w} words` : ''}</span></span>
+          <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} ¬∑ ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` ¬∑ ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` ¬∑ ${w} words` : ''}</span></span>
         </span>
       </Link>
 
   );
 });
 
-/** Soft Studio ∑ Notes (mockup: SoftNotes). List, editor and helpers, with its own layout. */
+/** Soft Studio ‚Äî Notes (mockup: SoftNotes). List, editor and helpers, with its own layout. */
 export default function SoftNotes() {
   const { id: routeId } = useParams();
   const [params, setParams] = useSearchParams();
@@ -567,8 +567,8 @@ export default function SoftNotes() {
   }, [allNotes, doc?.id, doc?.title]);
 
   const crumb = doc?.isDeleted ? 'Trash' : doc?.isArchived ? 'Archive' : doc?.tags?.[0] ? cap(doc.tags[0]) : null;
-  const saved = saveStatus === 'saving' ? { text: 'SavingÖ', icon: <Loader2 size={14} className="s-spin" /> }
-    : saveStatus === 'unsaved' ? { text: 'EditingÖ', icon: null }
+  const saved = saveStatus === 'saving' ? { text: 'Saving‚Ä¶', icon: <Loader2 size={14} className="s-spin" /> }
+    : saveStatus === 'unsaved' ? { text: 'Editing‚Ä¶', icon: null }
       : saveStatus === 'error' ? { text: "Couldn't save", icon: null, bad: true }
         : { text: 'Saved to your account', icon: <Check size={14} strokeWidth={2.4} /> };
 
@@ -607,11 +607,11 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}Ö` : 'Move to folderÖ'}</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}‚Ä¶` : 'Move to folder‚Ä¶'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share linkÖ</button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link‚Ä¶</button>
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
@@ -643,7 +643,7 @@ export default function SoftNotes() {
             <button type="button" className="np-view" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />View</button>
           </div>
         )}
-        {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>◊</button></span>)}</div>}
+        {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
         {filter !== 'archive' && filter !== 'trash' && (
           <div className="np-row" role="tablist" aria-label="Folders">
             <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); }}>All <i>{allNotes.length}</i></button>
@@ -666,7 +666,7 @@ export default function SoftNotes() {
           <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
         )}
         <div className="s-notes-rows">
-          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches ì${dq}î.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches ‚Äú${dq}‚Äù.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
           {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
@@ -724,7 +724,7 @@ export default function SoftNotes() {
               />
               {!focus && renderTags()}
               <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad ? '' : 's-sr'}>{saved.text}</span></span>
-              {!doc.isDraft && <span className="s-note-stats" title={`${words} words ∑ ${chars} characters ∑ ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> ∑ {chars} characters ∑ {Math.max(1, Math.round(words / 200))} min read</span></span>}
+              {!doc.isDraft && <span className="s-note-stats" title={`${words} words ¬∑ ${chars} characters ¬∑ ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> ¬∑ {chars} characters ¬∑ {Math.max(1, Math.round(words / 200))} min read</span></span>}
               {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
               {!doc.isDraft && !focus && <ShareChips noteId={doc.id} />}
               <span className="grow" />
@@ -737,7 +737,7 @@ export default function SoftNotes() {
                 {focus ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
               <div className="s-menu-wrap" ref={outsideMenu}>
-                <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>∑∑∑</button>
+                <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={18} /></button>
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
                     {renderMenuItems()}
@@ -806,7 +806,7 @@ export default function SoftNotes() {
           ))}
           {noteId && (
             <form className="s-linked-add" onSubmit={addLinkedTask}>
-              <input aria-label="Add a task to this note" value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} placeholder="Add a taskÖ" autoComplete="off" />
+              <input aria-label="Add a task to this note" value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} placeholder="Add a task‚Ä¶" autoComplete="off" />
               <button type="submit" aria-label="Add task" disabled={!taskDraft.trim()}><Plus size={14} strokeWidth={2.6} /></button>
             </form>
           )}
@@ -849,7 +849,7 @@ export default function SoftNotes() {
               <div className="s-menu up" role="menu">
                 {versions.slice(0, 8).map((v) => (
                   <button key={v.id} type="button" role="menuitem" onClick={() => { setHistoryOpen(false); setDiffV(v); }}>
-                    Compare ∑ {relTime(v.createdAt)}
+                    Compare ¬∑ {relTime(v.createdAt)}
                   </button>
                 ))}
               </div>
