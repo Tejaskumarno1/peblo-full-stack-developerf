@@ -1,0 +1,37 @@
+.sl-page { min-height: 100vh; background: #faf5ec; color: #2a1f17; font-family: Figtree, system-ui, sans-serif; padding: 28px max(16px, env(safe-area-inset-left, 0px)) 60px; box-sizing: border-box; }
+.sl-wrap { max-width: 640px; margin: 0 auto; }
+.sl-top { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.sl-dot { width: 22px; height: 22px; border-radius: 11px; background: #c4441c; }
+.sl-pill { background: #f4ede2; font-size: 11.5px; font-weight: 700; color: #5a4c40; padding: 4px 10px; border-radius: 999px; }
+.sl-page h1 { font-size: 36px; font-weight: 800; margin: 20px 0 0; line-height: 1.05; }
+.sl-sub { font-size: 14px; color: #5a4c40; font-weight: 600; margin: 4px 0 0; }
+.sl-card { background: #fff; border-radius: 20px; padding: 14px 16px; margin: 14px 0 0; }
+.sl-prog { display: flex; justify-content: space-between; font-size: 14px; }
+.sl-bar { height: 10px; border-radius: 5px; background: #f1e8da; margin-top: 8px; overflow: hidden; }
+.sl-bar i { display: block; height: 10px; border-radius: 5px; background: #2d9d6a; }
+.sl-next { margin: 8px 0 0; font-size: 12px; font-weight: 600; color: #5a4c40; }
+.sl-list { list-style: none; padding: 6px 16px; }
+.sl-list.dim { opacity: .75; }
+.sl-task { border-bottom: 1px solid #f0e6d6; padding: 6px 0; }
+.sl-task:last-child { border-bottom: 0; }
+.sl-trow { display: flex; align-items: center; gap: 10px; min-height: 40px; flex-wrap: wrap; }
+.sl-box { width: 20px; height: 20px; border: 2px solid #2a1f17; border-radius: 6px; background: #fff; flex: none; box-sizing: border-box; padding: 0; cursor: pointer; }
+.sl-box.ro { cursor: default; }
+.sl-box.on { background: #c4441c; border-color: #c4441c; }
+.sl-text { font-weight: 700; font-size: 14.5px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sl-text.done { text-decoration: line-through; color: #6b5d50; }
+.sl-chip { background: #f4ede2; font-size: 11.5px; font-weight: 700; color: #5a4c40; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.sl-chip.hi { background: #fbd9cc; color: #9a2f10; }
+.sl-cbtn { border: 0; background: transparent; color: #6b5d50; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.sl-steps { margin: 0 0 4px 30px; padding: 0; list-style: none; font-size: 12.5px; color: #5a4c40; font-weight: 600; }
+.sl-steps li.done { text-decoration: line-through; }
+.sl-comments { margin: 4px 0 6px 30px; font-size: 13px; }
+.sl-comments p { margin: 3px 0; }
+.sl-comments form, .sl-add { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.sl-comments input, .sl-add input { flex: 1; min-width: 120px; height: 38px; border: 1.5px solid #eadfce; border-radius: 12px; padding: 0 12px; font: inherit; background: #fff; box-sizing: border-box; }
+.sl-comments button, .sl-add button { height: 38px; padding: 0 16px; border-radius: 999px; border: 0; background: #2a1f17; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.sl-add button:disabled { opacity: .5; }
+.sl-empty { padding: 12px 0; color: #5a4c40; font-weight: 600; font-size: 13.5px; }
+.sl-note { font-size: 13px; font-weight: 700; color: #14673f; margin: 10px 0 0; }
+.sl-foot { margin-top: 20px; font-size: 12.5px; color: #5a4c40; font-weight: 600; text-align: center; }
+.grow { flex: 1; }

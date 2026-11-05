@@ -13,6 +13,7 @@ import './tasks2.css';
 import './bulk.css';
 import './lists.css';
 import { ShortcutSheet, BulkBar, UndoRedo, DeleteConfirm } from './TaskBulk';
+import ShareList from './ShareList';
 import { ListCards, ListMenu, NewListDialog, DeleteListDialog, MiniCards, withLegacyLists, newListId, INBOX } from './TaskLists';
 import { useAuth } from '../context/AuthContext';
 import { timeOf, dayChip, daysFromToday, weekdayLong, startOfDay, addDays, tagsOf } from './softUtils';
@@ -507,6 +508,7 @@ export default function SoftTasks() {
   const archiveList = (l) => { upsertList({ ...l, archived: !l.archived, legacy: undefined }); if (!l.archived && listSel === l.name) setListSel(null); say(l.archived ? `${l.name} is back` : `${l.name} archived`, () => upsertList({ ...l, archived: !!l.archived, legacy: undefined })); };
   const tasksOfList = (l) => collapsed.filter((t) => t.meta?.list === l.name);
   const dropOnList = (key) => { const id = dragId; setDragId(null); setOverCol(null); if (id) bMove(key === INBOX ? null : key, new Set([id])); };
+  const [shareList, setShareList] = useState(null);
   const confirmDeleteList = async (l, mode) => {
     setDelList(null);
     const before = reg;
@@ -631,7 +633,8 @@ export default function SoftTasks() {
       <UndoRedo canUndo={hist.current.undo.length > 0 && !hist.current.undo.at(-1).expired} canRedo={hist.current.redo.length > 0 && !!hist.current.redo.at(-1).redo} label={hist.current.undo.at(-1)?.label?.toLowerCase() || ''} onUndo={undoLast} onRedo={redoLast} />
       {keys && <ShortcutSheet onClose={() => setKeys(false)} />}
       {confirmDel && <DeleteConfirm {...delStats()} onCancel={() => setConfirmDel(false)} onConfirm={doDelete} />}
-      {menu && <ListMenu list={menu.list} anchor={menu.anchor} onClose={() => setMenu(null)} onRename={renameList} onColor={colorList} onArchive={archiveList} onDelete={(l) => setDelList(l)} />}
+      {menu && <ListMenu list={menu.list} anchor={menu.anchor} onClose={() => setMenu(null)} onRename={renameList} onColor={colorList} onArchive={archiveList} onShare={(l) => setShareList(l)} onDelete={(l) => setDelList(l)} />}
+      {shareList && <ShareList list={shareList} open={tasksOfList(shareList).filter((t) => !t.completed).length} onClose={() => setShareList(null)} />}
       {newList && <NewListDialog taken={allLists.map((l) => l.name)} onCreate={createList} onClose={() => setNewList(false)} />}
       {delList && <DeleteListDialog list={delList} open={tasksOfList(delList).filter((t) => !t.completed).length} done={tasksOfList(delList).filter((t) => t.completed).length} onCancel={() => setDelList(null)} onConfirm={(m) => confirmDeleteList(delList, m)} />}
       {sheet && <TaskSheet task={sheet.task} isNew={sheet.isNew} onClose={() => { setSheet(null); inputRef.current?.focus(); }} />}

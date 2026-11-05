@@ -29,6 +29,7 @@ import aiConnectionsRoutes from './routes/aiConnections.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { shareRoutes, publicRoutes, shortRedirect } from './routes/share.js';
+import { listShareRoutes, listPublicRoutes, listMarkdownHandler } from './routes/listShare.js';
 import mediaRoutes from './routes/media.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
@@ -138,9 +139,12 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/files', filesRoutes);
 app.get('/l/:code', apiLimiter(), shortRedirect);
 app.use('/api/share', shareRoutes);
+app.get(/^\/s\/list\/([A-Za-z0-9_-]{20,40})\.md$/, apiLimiter(), listMarkdownHandler);
 app.get('/s/note/:tok', apiLimiter(), agentNote); // bots and programs get Markdown or JSON from the same link
 app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);
+app.use('/api/task-lists', listShareRoutes);
+app.use('/api/public/list', listPublicRoutes);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 

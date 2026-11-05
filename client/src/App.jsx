@@ -10,6 +10,7 @@ import TaskReminders from './components/TaskReminders';
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SharedPage = lazy(() => import('./pages/SharedPage'));
+const SharedList = lazy(() => import('./soft/SharedList'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const OAuthConsent = lazy(() => import('./pages/OAuthConsent'));
@@ -137,6 +138,7 @@ export default function App() {
         <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<CaptureGate />} />
+        <Route path="/s/list/:token" element={<SharedList />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
