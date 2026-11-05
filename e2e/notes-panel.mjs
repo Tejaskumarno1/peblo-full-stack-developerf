@@ -48,7 +48,7 @@ try {
   check('13 collect switch counts tagged notes', (await sheet.innerText()).includes('2 notes already have this tag'));
   await sheet.getByRole('radio', { name: 'mint' }).click();
   await sheet.getByRole('button', { name: 'Create folder' }).click();
-  check('14 the new folder chip appears, selected, with its 2 tagged notes', await until(async () => (await list.getByRole('tab', { name: /^Orbit Work 2/, selected: true }).count()) === 1));
+  check('14 the new folder opens with its breadcrumb and 2 tagged notes', await until(async () => (await list.locator('.np-crumbs b').filter({ hasText: 'Orbit Work' }).count()) === 1));
   check('15 the list shows only Alpha and Gamma', (await list.locator('.s-note-row').count()) === 2);
   const prof = await api('GET', '/api/profile');
   check('16 the folder is saved on the account', Array.isArray(prof.user?.settings?.noteFolders) && prof.user.settings.noteFolders[0]?.name === 'Orbit Work' && prof.user.settings.noteFolders[0].color === 'mint', JSON.stringify(prof.user?.settings));
@@ -102,10 +102,10 @@ try {
   check('29 a second rule joins with AND', (await sp.getByText('AND', { exact: true }).count()) === 1);
   await sp.getByLabel('Remove rule').last().click();
   await sp.getByRole('button', { name: 'Save smart folder' }).click();
-  check('30 the smart chip appears with its count and filters the list', await until(async () => (await list.getByRole('tab', { name: /^Urgent things 1/, selected: true }).count()) === 1) && (await list.locator('.s-note-row').count()) === 1);
+  check('30 the smart folder opens with its breadcrumb and filters the list', await until(async () => (await list.locator('.np-crumbs b').filter({ hasText: 'Urgent things' }).count()) === 1) && (await list.locator('.s-note-row').count()) === 1);
 
   // ---- edit and delete a folder, outside-click on the note menu
-  await list.getByRole('tab', { name: /^Orbit Work/ }).dblclick();
+  await list.getByRole('tab', { name: /^All/ }).click(); await list.getByRole('tab', { name: /^Folders/ }).click(); await list.locator('.np-card', { hasText: 'Orbit Work' }).click({ button: 'right' });
   const ed = page.getByRole('dialog', { name: 'Edit folder' });
   await ed.getByLabel('Folder name').fill('Orbit Team');
   await ed.getByRole('button', { name: 'Save folder' }).click();

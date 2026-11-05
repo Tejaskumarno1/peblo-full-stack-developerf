@@ -69,7 +69,7 @@ try {
   check('moving a note to a folder saves it', meta.folder === 'Work', JSON.stringify(meta));
   await page.reload();
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
-  await page.getByRole('tab', { name: /^Work/ }).click(); // folder chips replaced the old filter selects
+  await page.getByRole('tab', { name: /^Folders/ }).click(); await page.locator('.np-card', { hasText: 'Work' }).first().click(); // folder cards replaced the folder chips
   await page.waitForTimeout(400);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('the folder filter shows only that folder', rows.length === 1 && /Zebra/.test(rows[0]), rows.join('|'));

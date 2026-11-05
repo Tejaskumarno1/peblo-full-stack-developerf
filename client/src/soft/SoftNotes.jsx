@@ -112,6 +112,7 @@ export default function SoftNotes() {
   const group = view.group;
   const [viewOpen, setViewOpen] = useState(false);
   const [fSel, setFSel] = useState(null); // { kind: 'folder' | 'smart', id }
+  const [cards, setCards] = useState(false); // the folder cards view
   const [sheet, setSheet] = useState(null); // 'move' | 'tag' | 'folder'
   const [folderEdit, setFolderEdit] = useState(null); // the folder being edited (or {} for a new one)
   const [smartPage, setSmartPage] = useState(null); // { initial, startName }
@@ -646,31 +647,47 @@ export default function SoftNotes() {
         {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
         {filter !== 'archive' && filter !== 'trash' && (
           <div className="np-row" role="tablist" aria-label="Folders">
-            <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); }}>All <i>{allNotes.length}</i></button>
+            <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards(false); }}>All <i>{allNotes.length}</i></button>
             <button type="button" role="tab" aria-selected={filter === 'inbox'} className={`np-chip${filter === 'inbox' ? ' on' : ''}`} onClick={() => { setFilter('inbox'); setFSel(null); }}><span className="np-dot" style={{ background: '#FFB48C' }} />Inbox <i>{inboxCount}</i></button>
-            {normalDefs.filter((d) => !d.parent).map((d) => (
-              <Fragment key={d.id}>
-                <button type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><span className="np-dot" style={{ background: colorOf(d.color)[2] }} />{d.name} <i>{folderCount(d)}</i></button>
-                {(fSel?.id === d.id || normalDefs.some((k) => k.parent === d.id && fSel?.id === k.id)) && normalDefs.filter((k) => k.parent === d.id).map((k) => (
-                  <button key={k.id} type="button" role="tab" aria-selected={fSel?.id === k.id} className={`np-chip kid${fSel?.id === k.id ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: k.id }); }} onDoubleClick={() => openEdit(k)} onContextMenu={(e) => { e.preventDefault(); openEdit(k); }}><span className="np-dot" style={{ background: colorOf(k.color)[2] }} />{k.name} <i>{folderCount(k)}</i></button>
-                ))}
-              </Fragment>
-            ))}
-            {smartDefs.map((d) => (
-              <button key={d.id} type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip sm${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'smart', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><Zap size={14} strokeWidth={1.8} />{d.name} <i>{folderCount(d)}</i></button>
-            ))}
+            <button type="button" role="tab" aria-selected={cards || !!fSel} className={`np-chip fold${cards || fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards((v) => !v); }}><Folder size={14} strokeWidth={1.8} />Folders <i>{normalDefs.filter((d) => !d.parent).length + smartDefs.length}</i></button>
             <button type="button" className="np-chip new" aria-label="New folder" title="New folder" onClick={() => openNew(false)}><Plus size={15} strokeWidth={1.8} /></button>
           </div>
         )}
         {!selectMode && filter !== 'archive' && filter !== 'trash' && (viewOpen || sort !== 'updated' || group !== 'date' || selTags.length > 0) && (
           <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
         )}
-        <div className="s-notes-rows">
+        {(cards || fSel) && filter !== 'archive' && filter !== 'trash' && (() => {
+          const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
+          const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
+          const list = fSel ? (parent ? normalDefs.filter((k) => k.parent === parent.id) : []) : [...normalDefs.filter((d) => !d.parent), ...smartDefs];
+          const Card = ({ d }) => (
+            <button type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} title="Click to open, double-click to edit">
+              <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
+              <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
+            </button>
+          );
+          return (
+            <div className="np-cards-wrap">
+              {fSel && (
+                <nav className="np-crumbs" aria-label="Folder path">
+                  <button type="button" onClick={() => { setFSel(null); setCards(true); }}>Folders</button>
+                  {top && <><span>/</span><button type="button" onClick={() => setFSel({ kind: 'folder', id: top.id })}>{top.name}</button></>}
+                  {selDef && <><span>/</span><b>{selDef.name}</b></>}
+                  {selDef && <button type="button" className="np-crumb-edit" aria-label="Edit this folder" title="Edit this folder" onClick={() => openEdit(selDef)}><Pencil size={13} strokeWidth={1.8} /></button>}
+                  <button type="button" className="np-crumb-all" onClick={() => { setFSel(null); setCards(false); }}>All notes</button>
+                </nav>
+              )}
+              {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => <Card key={d.id} d={d} />)}</div>}
+              {!fSel && list.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No folders yet. Use + to make one.</p>}
+            </div>
+          );
+        })()}
+        {(!cards || fSel) && <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
           {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
-        </div>
+        </div>}
         {selectMode ? (
           <div className="np-actions" role="toolbar" aria-label="Bulk actions">
             <button type="button" className={sheet === 'move' ? 'on' : ''} disabled={!picked.length} onClick={() => setSheet(sheet === 'move' ? null : 'move')}><Folder size={18} strokeWidth={1.8} />Move</button>

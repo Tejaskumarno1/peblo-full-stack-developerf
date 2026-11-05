@@ -146,3 +146,18 @@
 .soft .np.selecting .np-sheet { bottom: 62px; max-height: calc(100% - 74px); border-radius: 28px 28px 0 0; }
 .soft .np .np-sheet.nf { padding-bottom: 0; }
 .soft .np .np-sheet.nf .np-btns { position: sticky; bottom: 0; z-index: 2; margin: 0 -18px; padding: 10px 18px 16px; background: var(--s-surface); border-top: 1px solid var(--s-line); }
+
+/* Folder cards */
+.np-chip.fold { display: inline-flex; align-items: center; gap: 6px; }
+.np-cards-wrap { padding: 4px 12px 8px; }
+.np-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.np-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border: 1px solid var(--s-line, rgba(0,0,0,.1)); border-radius: 14px; background: var(--s-card, rgba(255,255,255,.6)); color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.np-card:hover, .np-card:focus-visible { border-color: currentColor; outline: none; }
+.np-card-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 4px; background: rgba(120,120,140,.15); }
+.np-card b { font-weight: 600; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-card i { font-style: normal; font-size: 12px; opacity: .65; }
+.np-crumbs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; padding: 2px 0 8px; }
+.np-crumbs button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 2px 4px; border-radius: 6px; text-decoration: underline; text-underline-offset: 3px; }
+.np-crumbs .np-crumb-all { margin-left: auto; text-decoration: none; opacity: .7; }
+.np-crumbs span { opacity: .5; }
+@media (max-width: 600px) { .np-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }.np-crumbs .np-crumb-edit { margin-left: auto; text-decoration: none; opacity: .7; display: grid; } .np-crumbs .np-crumb-edit + .np-crumb-all { margin-left: 6px; }
