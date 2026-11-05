@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
+import { BlockMenu as ToolbarBlockMenu } from './ToolbarBlockMenu';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
   FormattingToolbarController, FormattingToolbar, TextAlignButton, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
@@ -394,7 +395,16 @@ const Toolbar = () => {
   const editor = useBlockNoteEditor();
   const b = oneBlock(editor);
   if (b && b.type === 'image') return <PictureBar b={b} />;
-  return <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it)), <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+  // the Picture entry of the block menu: pick a file, store it, and put it under the selected block
+  const pickPicture = (after) => {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files && input.files[0]; if (!f) return;
+      try { const url = await uploadFile(f); editor.insertBlocks([{ type: 'image', props: { url, name: '' } }], after || editor.getTextCursorPosition().block, 'after'); } catch { /* the notice says why */ }
+    };
+    input.click();
+  };
+  return <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it.key === 'blockTypeSelect' ? <ToolbarBlockMenu key="blocks" onPicture={pickPicture} /> : it)), <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
 };
 
 // Ready-made starting points, offered in the slash menu.
