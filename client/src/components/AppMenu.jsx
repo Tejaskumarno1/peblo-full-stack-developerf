@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ExternalLink, AppWindow, EyeOff, Link2, Download, Code2, FileText, FilePlus2, ListChecks, Pin, PinOff, Copy, Trash2, Share2, ChevronRight, X, SquareArrowOutUpRight } from 'lucide-react';
 import { notesAPI } from '../api';
@@ -16,11 +16,14 @@ export default function AppMenu() {
   const [menu, setMenu] = useState(null); // { x, y, kind: 'note' | 'link' | 'space', id?, href? }
   const [note, setNote] = useState(null);
   const [sub, setSub] = useState(null);
+  const [subAt, setSubAt] = useState(null); // where the open submenu hangs: { x, y, left }
+  const [pos, setPos] = useState({ left: 0, top: 0 });
+  const timer = useRef(0);
   const [details, setDetails] = useState(null);
   const [toast, setToast] = useState('');
   const box = useRef(null);
   const say = useCallback((t) => { setToast(t); setTimeout(() => setToast(''), 2200); }, []);
-  const close = useCallback(() => { setMenu(null); setSub(null); }, []);
+  const close = useCallback(() => { clearTimeout(timer.current); setMenu(null); setSub(null); setSubAt(null); }, []);
 
   useEffect(() => {
     const onCtx = (e) => {
@@ -55,11 +58,12 @@ export default function AppMenu() {
 
   useEffect(() => {
     if (!menu) return undefined;
-    const away = (e) => { if (box.current && !box.current.contains(e.target)) close(); };
+    const away = (e) => { if (e.target instanceof Element && e.target.closest('.am-menu')) return; close(); };
     const esc = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('mousedown', away, true); document.addEventListener('keydown', esc, true); window.addEventListener('blur', close); window.addEventListener('resize', close);
-    document.addEventListener('scroll', close, true);
-    return () => { document.removeEventListener('mousedown', away, true); document.removeEventListener('keydown', esc, true); window.removeEventListener('blur', close); window.removeEventListener('resize', close); document.removeEventListener('scroll', close, true); };
+    const onScroll = (e) => { if (e.target instanceof Element && e.target.closest('.am-menu')) return; close(); };
+    document.addEventListener('scroll', onScroll, true);
+    return () => { document.removeEventListener('mousedown', away, true); document.removeEventListener('keydown', esc, true); window.removeEventListener('blur', close); window.removeEventListener('resize', close); document.removeEventListener('scroll', onScroll, true); };
   }, [menu, close]);
 
   const copy = async (text, done) => { try { await navigator.clipboard.writeText(text); say(done); } catch { say('Could not copy'); } };
@@ -72,17 +76,25 @@ export default function AppMenu() {
   const openWin = (href) => window.open(href, '_blank', 'popup,width=1100,height=800,noopener');
   const privateHint = (href) => copy(href, 'Link copied. Paste it into a private window');
 
-  const I = useMemo(() => function Item({ icon: Icon, label, onClick, hint, arrow, danger, disabled, id }) { return (
-    <button type="button" role="menuitem" className={`am-i${danger ? ' danger' : ''}`} disabled={disabled} data-testid={`am-${id}`} onClick={onClick} onMouseEnter={() => setSub(arrow || null)}>
+  const I = useMemo(() => function Item({ icon: Icon, label, onClick, hint, arrow, danger, disabled, id, keep }) { return (
+    <button type="button" role="menuitem" className={`am-i${danger ? ' danger' : ''}`} disabled={disabled} data-testid={`am-${id}`} onClick={onClick} onMouseEnter={(e) => { clearTimeout(timer.current); if (keep) return; if (arrow) { const r = e.currentTarget.getBoundingClientRect(); setSubAt({ top: r.top, right: r.right, left: r.left }); setSub(arrow); } else timer.current = setTimeout(() => { setSub(null); setSubAt(null); }, 220); }} onFocus={(e) => { if (keep || !arrow) return; const r = e.currentTarget.getBoundingClientRect(); setSubAt({ top: r.top, right: r.right, left: r.left }); setSub(arrow); }}>
       <Icon size={15} /><span>{label}</span>{hint && <em>{hint}</em>}{arrow && <ChevronRight size={14} className="am-ar" />}
     </button>
   ); }, []);
+  useLayoutEffect(() => {
+    if (!menu || !box.current) return;
+    const h = box.current.offsetHeight; const w = box.current.offsetWidth;
+    setPos({ left: Math.max(8, Math.min(menu.x, window.innerWidth - w - 8)), top: Math.max(8, Math.min(menu.y, window.innerHeight - h - 8)) });
+  }, [menu, note]);
   if (!menu && !details && !toast) return null;
 
-  const left = menu ? Math.max(8, Math.min(menu.x, window.innerWidth - 250)) : 0;
-  const top = menu ? Math.max(8, Math.min(menu.y, window.innerHeight - (menu.kind === 'note' ? 420 : 200))) : 0;
-  const flip = menu && left > window.innerWidth - 500;
-  const subPanel = (name, items) => sub === name && <div className={`am-menu am-sub${flip ? ' flip' : ''}`} role="menu" data-testid={`am-sub-${name}`}>{items}</div>;
+  const subPanel = (name, items) => {
+    if (sub !== name || !subAt) return null;
+    const W = 252; const gap = -3; // overlaps the parent a little, so the pointer never crosses a dead strip
+    const left = subAt.right + gap + W > window.innerWidth - 8 ? Math.max(8, subAt.left - W - gap) : subAt.right + gap;
+    const rows = 3; const top = Math.max(8, Math.min(subAt.top - 6, window.innerHeight - (rows * 32 + 16) - 8));
+    return <div className="am-menu am-sub" role="menu" data-testid={`am-sub-${name}`} style={{ left, top }} onMouseEnter={() => clearTimeout(timer.current)}>{items}</div>;
+  };
 
   const inspect = (m) => {
     if (m.kind === 'note' && note) setDetails({ title: note.title || 'Untitled', rows: [['Link', m.href], ['Id', note.id], ['Words', String(words(note.content))], ['Updated', note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''], ['Created', note.createdAt ? new Date(note.createdAt).toLocaleString() : ''], ['Pinned', note.meta?.pinned ? 'yes' : 'no'], ['Tags', (note.tags || []).join(', ') || 'none']], pics: pictures(note.content) });
@@ -92,7 +104,7 @@ export default function AppMenu() {
   return (
     <>
       {menu && (
-        <div className="am-menu" ref={box} role="menu" data-testid="app-menu" data-kind={menu.kind} style={{ left, top }}>
+        <div className="am-menu" ref={box} role="menu" data-testid="app-menu" data-kind={menu.kind} style={{ left: pos.left, top: pos.top }} onMouseEnter={() => clearTimeout(timer.current)}>
           {menu.kind === 'note' && (
             <>
               <I id="open" icon={ExternalLink} label="Open" hint="Enter" onClick={go((m) => navigate(`/notes/${m.id}`))} />
@@ -100,8 +112,8 @@ export default function AppMenu() {
               <I id="open-win" icon={AppWindow} label="Open in new window" onClick={go((m) => openWin(m.href))} />
               <I id="open-as" icon={EyeOff} label="Open as" arrow="open-as" onClick={() => setSub('open-as')} />
               {subPanel('open-as', <>
-                <I id="as-peblo" icon={AppWindow} label="Peblo window (default)" onClick={go((m) => navigate(`/notes/${m.id}`))} />
-                <I id="as-private" icon={EyeOff} label="Private window (copies the link)" onClick={go((m) => privateHint(m.href))} />
+                <I keep id="as-peblo" icon={AppWindow} label="Peblo window (default)" onClick={go((m) => navigate(`/notes/${m.id}`))} />
+                <I keep id="as-private" icon={EyeOff} label="Private window (copies the link)" onClick={go((m) => privateHint(m.href))} />
               </>)}
               <div className="am-sep" /><div className="am-lab">Create</div>
               <I id="new-note" icon={FilePlus2} label="New note here" onClick={go(newNote)} />
@@ -112,9 +124,9 @@ export default function AppMenu() {
               <I id="copy-link" icon={Link2} label="Copy link" onClick={go((m) => copy(m.href, 'Link copied'))} />
               <I id="save-as" icon={Download} label="Save as" arrow="save-as" disabled={!note} onClick={() => setSub('save-as')} />
               {subPanel('save-as', <>
-                <I id="save-md" icon={FileText} label="Markdown (.md)" onClick={go(() => exportMarkdown(note))} />
-                <I id="save-doc" icon={FileText} label="Word (.doc)" onClick={go(() => exportWord(note))} />
-                <I id="save-pdf" icon={FileText} label="PDF" onClick={go(() => exportPdf(note))} />
+                <I keep id="save-md" icon={FileText} label="Markdown (.md)" onClick={go(() => exportMarkdown(note))} />
+                <I keep id="save-doc" icon={FileText} label="Word (.doc)" onClick={go(() => exportWord(note))} />
+                <I keep id="save-pdf" icon={FileText} label="PDF" onClick={go(() => exportPdf(note))} />
               </>)}
               <div className="am-sep" />
               <I id="inspect" icon={Code2} label="Inspect (details)" disabled={!note} onClick={go(inspect)} />

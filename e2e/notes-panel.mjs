@@ -27,7 +27,7 @@ try {
   check('6 View menu shows sort, group, density and 4 switches', await pop.isVisible() && (await pop.getByRole('radio').count()) === 9 && (await pop.getByRole('switch').count()) === 4);
   check('7 summary chips show while View is open', await list.locator('.np-sum').isVisible());
   await pop.getByRole('radio', { name: 'Title' }).click();
-  await pop.getByRole('radio', { name: 'Folder' }).click();
+  await pop.getByRole('radio', { name: 'Tag' }).click();
   await pop.getByRole('radio', { name: 'Compact' }).click();
   check('8 sort by title applies (Alpha first)', (await list.locator('.s-note-row .t').first().innerText()).includes('Alpha'));
   check('9 compact density hides previews', (await list.locator('.s-note-row .s').first().isVisible()) === false);

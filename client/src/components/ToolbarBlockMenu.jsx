@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useBlockNoteEditor, useComponentsContext, useSelectedBlocks } from '@blocknote/react';
 import { Type, Heading1, Heading2, Heading3, Heading4, Heading5, Heading6, List, ListOrdered, ListChecks, ChevronRight, ChevronDown, Quote, Code2, Table2, Image as ImageIcon } from 'lucide-react';
 
@@ -53,11 +54,20 @@ export function BlockMenu({ onPicture }) {
   const [more, setMore] = useState(false);
   const [q, setQ] = useState('');
   const box = useRef(null);
+  const pop = useRef(null);
+  const [at, setAt] = useState({ left: 8, top: 8 });
+  // The menu is drawn on the page itself (a portal), because the floating toolbar clips anything that hangs out of it.
+  useLayoutEffect(() => {
+    if (!open || !box.current) return;
+    const r = box.current.getBoundingClientRect(); const h = pop.current ? pop.current.offsetHeight : 380; const w = pop.current ? pop.current.offsetWidth : 340;
+    const below = r.bottom + 8; const top = below + h > window.innerHeight - 8 ? Math.max(8, r.top - 8 - h) : below;
+    setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), top });
+  }, [open, more, q]);
   const cur = currentItem(blocks);
   const Cur = cur ? cur.icon : Type;
   useEffect(() => {
     if (!open) return undefined;
-    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const away = (e) => { if ((box.current && box.current.contains(e.target)) || (pop.current && pop.current.contains(e.target))) return; setOpen(false); };
     const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     document.addEventListener('mousedown', away, true); document.addEventListener('keydown', esc, true);
     return () => { document.removeEventListener('mousedown', away, true); document.removeEventListener('keydown', esc, true); };
@@ -91,8 +101,8 @@ export function BlockMenu({ onPicture }) {
       <button type="button" className="pb-bm-btn" data-testid="bm-open" aria-haspopup="menu" aria-expanded={open} title="Block type" onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)}>
         <Cur size={16} /><span>{cur ? cur.label : 'Text'}</span><ChevronDown size={14} />
       </button>
-      {open && (
-        <div className="pb-bm-pop" role="menu" data-testid="bm-pop">
+      {open && createPortal(
+        <div className="pb-bm-pop" role="menu" data-testid="bm-pop" ref={pop} style={{ left: at.left, top: at.top }} onMouseDown={(e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); }}>
           <input className="pb-bm-q" data-testid="bm-filter" aria-label="Filter block types" placeholder="Type to filter, e.g. check" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && found && found[0]) { e.preventDefault(); apply(found[0]); } }} />
           {found ? (
@@ -111,8 +121,7 @@ export function BlockMenu({ onPicture }) {
               {more && <div className="pb-bm-grid">{MORE.map((i) => <Cell key={i.id} item={i} />)}</div>}
             </>
           )}
-        </div>
-      )}
+        </div>, document.body)}
       </span>
       <ListBtn Btn={Btn} id="bullet" icon={<List size={15} />} label="Bullet list" type="bulletListItem" blocks={blocks} editor={editor} />
       <ListBtn Btn={Btn} id="numbered" icon={<ListOrdered size={15} />} label="Numbered list" type="numberedListItem" blocks={blocks} editor={editor} />

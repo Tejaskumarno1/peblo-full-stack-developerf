@@ -161,3 +161,17 @@
 .np-crumbs .np-crumb-all { margin-left: auto; text-decoration: none; opacity: .7; }
 .np-crumbs span { opacity: .5; }
 @media (max-width: 600px) { .np-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }.np-crumbs .np-crumb-edit { margin-left: auto; text-decoration: none; opacity: .7; display: grid; } .np-crumbs .np-crumb-edit + .np-crumb-all { margin-left: 6px; }
+
+/* group cards: compact, space-saving */
+.np-cards-wrap { padding: 2px 10px 4px; }
+.np-crumbs { flex-wrap: nowrap; padding: 0 0 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.np-crumbs b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.np-crumbs .np-crumb-edit { margin-left: auto; }
+.np-crumbs .np-crumb-all { margin-left: 2px; display: grid; text-decoration: none; }
+.np-cards { gap: 8px; }
+.np-card { padding: 9px 10px; gap: 2px; }
+.np-card-ic { width: 28px; height: 28px; border-radius: 9px; margin-bottom: 2px; }
+.np-cards.mini { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 10px 6px; }
+.np-card.mini { flex-direction: row; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 999px; }
+.np-card.mini.on { background: var(--s-ink, #2a1f17); color: var(--s-bg, #fff); }
+.np-card.mini i { opacity: .7; }

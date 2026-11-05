@@ -1,5 +1,5 @@
 /* Peblo right-click menu */
-.am-menu { position: fixed; z-index: 3000; width: 240px; max-height: calc(100vh - 16px); overflow: visible; box-sizing: border-box; padding: 6px; border-radius: 14px; background: var(--pb-bg, #fff); color: var(--pb-fg, #2a1f17); border: 1px solid color-mix(in srgb, currentColor 14%, transparent); box-shadow: 0 14px 36px rgba(42, 31, 23, .22); font: 600 13px/1.2 var(--pb-font, system-ui, sans-serif); }
+.am-menu { position: fixed; z-index: 3000; width: 240px; max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 6px; border-radius: 14px; background: var(--pb-bg, #fff); color: var(--pb-fg, #2a1f17); border: 1px solid color-mix(in srgb, currentColor 14%, transparent); box-shadow: 0 14px 36px rgba(42, 31, 23, .22); font: 600 13px/1.2 var(--pb-font, system-ui, sans-serif); }
 .am-i { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
 .am-i:hover:not(:disabled), .am-i:focus-visible { background: color-mix(in srgb, currentColor 9%, transparent); outline: none; }
 .am-i:disabled { opacity: .45; cursor: default; }
@@ -10,7 +10,6 @@
 .am-sep { height: 1px; margin: 5px 4px; background: color-mix(in srgb, currentColor 12%, transparent); }
 .am-lab { padding: 6px 10px 3px; font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .6; }
 .am-sub { position: absolute; left: calc(100% + 4px); top: 0; width: 250px; }
-.am-sub.flip { left: auto; right: calc(100% + 4px); }
 .am-back { position: fixed; inset: 0; z-index: 3100; display: grid; place-items: center; background: rgba(20, 14, 8, .35); }
 .am-dlg { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box; padding: 16px; border-radius: 16px; background: var(--pb-bg, #fff); color: var(--pb-fg, #2a1f17); box-shadow: 0 24px 60px rgba(0, 0, 0, .3); font: 500 13px/1.4 var(--pb-font, system-ui, sans-serif); }
 .am-dlg header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 15px; }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pin, Copy, X, Undo2, Plus } from 'lucide-react';
 
 const KEY = 'peblo-note-tabs';
+export const MAX_TABS = 8;
 const load = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
 
 // Open notes as tabs above the page, with back / forward, pin, duplicate, close others and reopen closed.
@@ -26,7 +27,12 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
   // opening a note adds its tab and a step in the back / forward trail
   useEffect(() => {
     if (!docId) return;
-    setTabs((ts) => (ts.some((t) => t.id === docId) ? ts : [...ts, { id: docId, title: doc.title || 'Untitled', pinned: false }]));
+    setTabs((ts) => {
+      if (ts.some((t) => t.id === docId)) return ts;
+      const next = [...ts, { id: docId, title: doc.title || 'Untitled', pinned: false }];
+      while (next.length > MAX_TABS) { const i = next.findIndex((t) => !t.pinned && t.id !== docId); if (i < 0) break; next.splice(i, 1); } // the oldest unpinned tab makes room
+      return next;
+    });
     const h = hist.current;
     if (h.skip) { h.skip = false; bump((n) => n + 1); return; }
     if (h.list[h.i] === docId) return;
