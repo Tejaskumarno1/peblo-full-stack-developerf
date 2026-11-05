@@ -63,7 +63,7 @@ try {
     check(`${T} top picture: the bar is fully inside the note panel`, inside(g), JSON.stringify({ bar: g.bar, sc: g.sc }));
     const firstP = g.paras[0];
     check(`${T} top picture: the bar does not cover the lines under the picture`, !!g.bar && !!firstP && (g.bar.b <= firstP.top + 1 || g.bar.y >= firstP.bottom), JSON.stringify({ bar: g.bar, firstP }));
-    check(`${T} the picture bar is short (at most 12 buttons, at most 560px wide)`, g.buttons > 6 && g.buttons <= 12 && g.bar.w <= 560, `${g.buttons} buttons, ${g.bar && Math.round(g.bar.w)}px`);
+    check(`${T} the picture bar is short (at most 13 buttons, at most 560px wide)`, g.buttons > 6 && g.buttons <= 13 && g.bar.w <= 560, `${g.buttons} buttons, ${g.bar && Math.round(g.bar.w)}px`);
     if (SHOT) await page.screenshot({ path: `${SHOT}/pic-${style}-top.png` });
     // ---- picture in the middle
     await open(style, midNote.id);

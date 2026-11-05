@@ -196,3 +196,5 @@
 .bn-toolbar .pb-picbar-row.cap button { height: 30px; padding: 0 14px; border: 0; border-radius: 8px; background: #C4441C; color: #fff; font: 800 13px inherit; cursor: pointer; }
 .pb-gbar-alt.pb-capfix { position: fixed; z-index: 9400; width: 360px; }
 .pb-gbar-alt.pb-capfix input { flex: 1; min-width: 0; width: auto; }
+
+.pb-lightbox .pb-lb-copy { top: auto; right: auto; bottom: 22px; left: 50%; transform: translateX(-50%); width: auto; height: 40px; padding: 0 18px; border-radius: 999px; display: inline-flex; align-items: center; gap: 8px; font: 700 14px system-ui, sans-serif; }

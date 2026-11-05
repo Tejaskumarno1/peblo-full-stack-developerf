@@ -1,0 +1,8 @@
+.pv-back { position: fixed; inset: 0; z-index: 9500; background: rgba(15, 10, 6, .88); display: grid; place-items: center; cursor: zoom-out; }
+.pv-back img { max-width: 94vw; max-height: 84vh; border-radius: 10px; background: #fff; cursor: default; }
+.pv-x { position: absolute; top: 16px; right: 18px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; color: #2a1f17; display: grid; place-items: center; cursor: pointer; }
+.pv-bar { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.pv-bar button { height: 40px; padding: 0 18px; border-radius: 999px; border: 0; background: #fff; color: #2a1f17; display: inline-flex; align-items: center; gap: 8px; font: 700 14px system-ui, sans-serif; cursor: pointer; }
+.pv-bar button:hover { background: #f4ede2; }
+.pv-bar button:focus-visible, .pv-x:focus-visible { outline: 2px solid #ffb48c; outline-offset: 2px; }
+.pb-shared .doc img { cursor: zoom-in; }

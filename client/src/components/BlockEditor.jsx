@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { aiAPI, notesAPI, todosAPI } from '../api/index';
 import { fileToAttachment } from '../utils/imageData';
+import { copyImage } from '../utils/copyImage';
+import { Copy as CopyIcon, Check as CheckIcon } from 'lucide-react';
 import { createCollab } from '../utils/collab';
 import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
@@ -260,6 +262,7 @@ function PictureBar({ b }) {
         <Btn key="shape" mainTooltip="Crop and shape" icon={<Crop size={15} />} isSelected={panel === 'shape'} onClick={() => setPanel(panel === 'shape' ? null : 'shape')} />,
         <Btn key="cap" mainTooltip="Caption and alt text" icon={<Captions size={15} />} isSelected={!!b.props.caption} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'caption', id: b.id } }))} />,
         <Btn key="rep" mainTooltip="Replace picture" icon={<ImageUp size={15} />} onClick={() => fileRef.current?.click()} />,
+        <Btn key="copy" mainTooltip="Copy picture" icon={<CopyIcon size={15} />} onClick={() => { copyImage(b.props.url); }} />,
         <Btn key="dl" mainTooltip="Download picture" icon={<Download size={15} />} onClick={download} />,
         <Btn key="del" mainTooltip="Delete picture" icon={<Trash2 size={15} />} onClick={() => { try { editor.removeBlocks([b.id]); } catch { /* already gone */ } }} />,
         <input key="file" ref={fileRef} type="file" accept="image/*" hidden data-testid="pic-replace-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; replace(f); }} />,
@@ -521,6 +524,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   }, [fitRoot, editable, editor]);
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
+  const [lbCopied, setLbCopied] = useState(''); // what the Copy picture button just did: image, link, failed
   const [findOpen, setFindOpen] = useState(false);
   const [findReplace, setFindReplace] = useState(false);
 
@@ -1069,6 +1073,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" />
           <button type="button" aria-label="Close picture" onClick={() => setLightbox(null)}><X size={18} /></button>
+          <button type="button" className="pb-lb-copy" data-testid="lightbox-copy" aria-label="Copy picture" title="Copy picture" onClick={(e) => { e.stopPropagation(); copyImage(lightbox).then((r) => { setLbCopied(r); setTimeout(() => setLbCopied(''), 1800); }); }}>{lbCopied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}<span>{lbCopied === 'link' ? 'Link copied' : lbCopied === 'failed' ? 'Could not copy' : lbCopied ? 'Copied' : 'Copy picture'}</span></button>
         </div>
       )}
 

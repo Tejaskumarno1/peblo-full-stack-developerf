@@ -20,6 +20,7 @@ import '../components/tableMeta.css';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
+const PictureView = lazy(() => import('../components/PictureView'));
 
 // The note's HTML is written once per change (a fresh object each render would write it again and undo the file frames drawn into it).
 const DocHtml = memo(function DocHtml({ innerRef, html }) { return <div className="doc" ref={innerRef} dangerouslySetInnerHTML={{ __html: html }} />; });
@@ -451,6 +452,14 @@ export default function SharedPage() {
     return data?.kind === 'note' ? withoutTitleHeading(html, data.title) : html;
   }, [data]);
   useFileFrames(docRef, body);
+  // a picture on a read-only page opens full size, with Copy and Save (the page is plain HTML, so one click listener covers every picture)
+  const [viewPic, setViewPic] = useState(null);
+  useEffect(() => {
+    const root = docRef.current; if (!root) return undefined;
+    const click = (e) => { const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '' }); };
+    root.addEventListener('click', click);
+    return () => root.removeEventListener('click', click);
+  }, [body]);
   // the title is shown big at the top, so a first heading that says the same thing is hidden (still there for the editor)
   useEffect(() => {
     if (data?.kind !== 'note') return undefined;
@@ -1014,6 +1023,7 @@ export default function SharedPage() {
                     onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <DocHtml innerRef={docRef} html={body} />}
               {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
+              {viewPic && <Suspense fallback={null}><PictureView src={viewPic.src} name={viewPic.name} onClose={() => setViewPic(null)} /></Suspense>}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}
 
