@@ -1,0 +1,56 @@
+.tl-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin: 10px 0 6px; }
+.tl-card { position: relative; border: 0; border-radius: 22px; padding: 14px 16px; min-height: 112px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; font: inherit; color: #2a1f17; box-sizing: border-box; }
+.tl-card b { font-size: 17px; font-weight: 800; }
+.tl-card .meta { font-size: 12.5px; font-weight: 600; color: #5a4c40; }
+.tl-card .foot { margin-top: auto; font-size: 11.5px; font-weight: 700; color: #5a4c40; }
+.tl-card .bar { margin-top: auto; align-self: stretch; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .7); }
+.tl-card .bar + .foot { margin-top: 0; }
+.tl-card .bar i { display: block; height: 6px; border-radius: 3px; background: #2a1f17; }
+.tl-card.on { box-shadow: 0 0 0 2px #c4441c; }
+.tl-card.over { box-shadow: 0 0 0 2px #c4441c, 0 6px 18px rgba(196, 68, 28, .2); }
+.tl-card.new { background: #fff; border: 1.5px dashed #bfae94; align-items: center; justify-content: center; flex-direction: row; gap: 6px; font-weight: 800; font-size: 14px; color: #5a4c40; }
+.tl-card.inbox { background: #fff; border: 1px solid #eadfce; }
+.tl-card .more { position: absolute; top: 8px; right: 10px; width: 26px; height: 22px; border-radius: 11px; display: grid; place-items: center; font-weight: 800; letter-spacing: 1px; opacity: 0; line-height: 1; }
+.tl-card:hover .more, .tl-card:focus-within .more, .tl-card .more:focus-visible { opacity: 1; background: rgba(255, 255, 255, .6); }
+
+.tl-crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; margin: 8px 0 0; }
+.tl-crumbs button { border: 0; padding: 5px 12px; border-radius: 999px; background: #fff; font: inherit; cursor: pointer; color: inherit; }
+.tl-crumbs .x { background: transparent; padding: 4px 8px; color: #6b5d50; }
+
+.tl-menu { position: fixed; z-index: 70; min-width: 200px; background: #fff; border-radius: 16px; box-shadow: 0 14px 40px rgba(42, 31, 23, .2); padding: 6px; display: flex; flex-direction: column; }
+.tl-menu > button, .tl-menu form button.go { border: 0; background: transparent; text-align: left; padding: 9px 12px; border-radius: 10px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; color: #2a1f17; }
+.tl-menu > button:hover { background: #f4ede2; }
+.tl-menu .bad { color: #b3261e; }
+.tl-menu form { display: flex; gap: 6px; padding: 4px; }
+.tl-menu input { flex: 1; min-width: 0; height: 36px; border: 1.5px solid #eadfce; border-radius: 10px; padding: 0 10px; font: inherit; }
+.tl-menu form button.go { background: #c4441c; color: #fff; text-align: center; }
+.tl-menu form button.go:disabled { opacity: .5; }
+.tl-tones { display: flex; gap: 8px; padding: 8px; }
+.tl-tones button { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid #eadfce; cursor: pointer; }
+.tl-tones button.on { box-shadow: 0 0 0 2px #2a1f17; }
+
+.tl-back { position: fixed; inset: 0; z-index: 80; background: rgba(42, 31, 23, .35); display: grid; place-items: center; }
+.tl-dlg { width: min(400px, calc(100vw - 32px)); background: #fff; border-radius: 24px; padding: 18px 20px; box-shadow: 0 14px 40px rgba(42, 31, 23, .2); box-sizing: border-box; }
+.tl-dlg h2 { margin: 0; font-size: 17px; font-weight: 800; }
+.tl-dlg p { margin: 6px 0 0; font-size: 13.5px; color: #5a4c40; font-weight: 600; line-height: 1.45; }
+.tl-dlg p.warn { color: #b3261e; }
+.tl-dlg input { width: 100%; height: 42px; margin-top: 12px; border: 1.5px solid #eadfce; border-radius: 12px; padding: 0 12px; font: inherit; box-sizing: border-box; }
+.tl-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tl-opts button { height: 42px; border-radius: 14px; border: 1.5px solid #eadfce; background: #fff; text-align: left; padding: 0 14px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; color: #2a1f17; }
+.tl-opts button.on { border: 2px solid #2a1f17; }
+.tl-dlg .acts { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+.tl-dlg .acts button { height: 38px; padding: 0 18px; border-radius: 999px; border: 0; font: inherit; font-weight: 800; font-size: 13px; cursor: pointer; }
+.tl-dlg .ghost { background: #f1e8da; color: #2a1f17; }
+.tl-dlg .go { background: #2a1f17; color: #fff; }
+.tl-dlg .go.bad { background: #c4441c; }
+.tl-dlg .go:disabled { opacity: .5; }
+
+.tl-seg { display: inline-flex; background: #fff; border-radius: 999px; padding: 4px; }
+.tl-seg button { height: 28px; padding: 0 12px; border-radius: 999px; border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 12.5px; cursor: pointer; color: #2a1f17; }
+.tl-seg button.on { background: #2a1f17; color: #fff; }
+.tl-mini { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+.tl-mini button { min-width: 120px; border: 1px solid #eadfce; background: #fff; border-radius: 16px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; cursor: pointer; color: #2a1f17; }
+.tl-mini b { font-size: 15px; font-weight: 800; }
+.tl-mini span { font-size: 12px; color: #5a4c40; }
+.tl-mini button.on { border-color: #c4441c; box-shadow: 0 0 0 2px #f6c9b8; }
+.tl-card.arch{opacity:.55}
