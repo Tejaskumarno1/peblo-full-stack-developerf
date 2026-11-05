@@ -237,3 +237,7 @@ html[data-fs-drawer="1"] .pb-find { right: 322px !important; }
   html[data-fs-width="full"] { --fs-col: min(1240px, calc(100vw - 448px)); }
   html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1240px, calc(100vw - 554px)); }
 }
+/* margin comments panel and the version box sit above the full-screen page; the comments panel steps aside for the open drawer */
+html[data-fs] .cb-back { z-index: 9400; }
+html[data-fs] .pb-cpanel { z-index: 9300; top: 74px; right: 16px; }
+html[data-fs][data-fs-drawer="1"] .pb-cpanel { right: 322px; }

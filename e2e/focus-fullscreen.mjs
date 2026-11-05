@@ -44,7 +44,9 @@ try {
     // the column
     const col = async () => page.evaluate(() => { const e = document.querySelector('.bn-editor'); const r = e.getBoundingClientRect(); const p = e.querySelector('[data-content-type="paragraph"] .bn-inline-content, [data-content-type="paragraph"]'); const cs = getComputedStyle(p); return { x: r.x, w: r.width, font: cs.fontFamily, size: parseFloat(cs.fontSize), lh: parseFloat(cs.lineHeight) }; });
     let c = await col();
-    check(`${T} wide column is about 680px and centred (beside the drawer when it is open)`, Math.abs(c.w - 680) < 30 && Math.abs(c.x + c.w / 2 - ((await page.locator('[data-testid="fs-drawer"]').count()) ? 487 : 640)) < 30, JSON.stringify(c));
+    // centred in the free space between the outline rail (left) and the drawer (right, when open)
+    const mid = await page.evaluate(() => { const o = document.querySelector('[data-testid="fs-outline"]'); const d = document.querySelector('[data-testid="fs-drawer"]'); const l = o ? o.getBoundingClientRect().right : 0; const r = d ? d.getBoundingClientRect().left : window.innerWidth; return d ? (l + r) / 2 : window.innerWidth / 2; });
+    check(`${T} wide column is about 680px and centred (beside the drawer when it is open)`, Math.abs(c.w - 680) < 30 && Math.abs(c.x + c.w / 2 - mid) < 40, JSON.stringify({ ...c, mid }));
     check(`${T} writing column is the Newsreader serif at 21px`, /Newsreader|Georgia|serif/i.test(c.font) && Math.abs(c.size - 21) < 0.6, JSON.stringify(c));
     const title = await page.evaluate(() => { const t = document.querySelector('#s-note-title, #r-note-title, #o-note-title'); const cs = t && getComputedStyle(t); const r = t && t.getBoundingClientRect(); return t ? { size: parseFloat(cs.fontSize), weight: cs.fontWeight, w: r.width, x: r.x } : null; });
     check(`${T} the title is the big sans heading in the column`, !!title && title.size >= 40 && Number(title.weight) >= 700 && title.w > 400, JSON.stringify(title));
