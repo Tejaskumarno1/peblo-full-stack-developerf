@@ -16,7 +16,7 @@ export default function ShareDialog({ kind, id, title, onClose }) {
   const [token, setToken] = useState(undefined); // undefined = loading, null = not shared
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [botCopied, setBotCopied] = useState(false);
+  const [botCopied, setBotCopied] = useState('');
   const [error, setError] = useState('');
   const dlg = useRef(null);
   const timers = useRef([]);
@@ -56,10 +56,11 @@ export default function ShareDialog({ kind, id, title, onClose }) {
     setError(''); setCopied(true); timers.current.push(setTimeout(() => setCopied(false), 1800));
   };
 
-  const copyBot = async () => {
-    try { await navigator.clipboard.writeText(url + '.md'); } catch { setError('Could not copy. Select the link and copy it by hand.'); return; }
-    setError(''); setBotCopied(true); timers.current.push(setTimeout(() => setBotCopied(false), 1800));
+  const copyText = async (key, text) => {
+    try { await navigator.clipboard.writeText(text); } catch { setError('Could not copy. Select the text and copy it by hand.'); return; }
+    setError(''); setBotCopied(key); timers.current.push(setTimeout(() => setBotCopied(''), 1800));
   };
+  const prompt = `Read this shared Peblo note and help me with it.\nPlain text: ${url}.md\nPDF with pictures: ${url}.pdf\nIf you have the Peblo MCP connected (${base}/mcp), call read_shared_link with ${url}.`;
 
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
@@ -87,8 +88,19 @@ export default function ShareDialog({ kind, id, title, onClose }) {
               <input readOnly aria-label="Share link" value={url} onFocus={(e) => e.target.select()} />
               <button type="button" className="s-share-go" onClick={copy}>{copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy</>}</button>
             </div>
-            {kind === 'note' && <div className="s-share-row bot"><input readOnly aria-label="Plain-text link for bots" value={url + '.md'} onFocus={(e) => e.target.select()} /><button type="button" className="s-share-go ghost" onClick={copyBot}>{botCopied ? <><Check size={15} /> Copied</> : <><Bot size={15} /> For bots</>}</button></div>}
-            {kind === 'note' && <p className="s-share-msg">Bots and AI agents that open the normal link get this plain-text version automatically, with a text description of each picture.</p>}
+            {kind === 'note' && (
+              <div className="s-share-ai" aria-label="Share with AI">
+                <b><Bot size={14} /> Share with AI</b>
+                {[['md', 'Text (markdown)', url + '.md'], ['pdf', 'PDF with pictures', url + '.pdf'], ['mcp', 'MCP address', base + '/mcp']].map(([k, label, v]) => (
+                  <div className="s-share-row bot" key={k}>
+                    <input readOnly aria-label={label} title={label} value={v} onFocus={(e) => e.target.select()} />
+                    <button type="button" className="s-share-go ghost" onClick={() => copyText(k, v)}>{botCopied === k ? <><Check size={15} /> Copied</> : <><Copy size={15} /> {label.split(' ')[0]}</>}</button>
+                  </div>
+                ))}
+                <button type="button" className="s-share-go" onClick={() => copyText('prompt', prompt)}>{botCopied === 'prompt' ? <><Check size={15} /> Copied</> : <><Bot size={15} /> Copy as AI prompt</>}</button>
+                <small>Bots that open the normal link get the plain-text version automatically, with a text description of each picture.</small>
+              </div>
+            )}
             {local && <p className="s-share-msg warn">This link points to your own computer, so other people cannot open it yet. It will work for everyone once Peblo is hosted online.</p>}
             <button type="button" className="s-share-off" onClick={turnOff} disabled={busy}>Stop sharing</button>
           </>

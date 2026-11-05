@@ -106,3 +106,8 @@
 .s-share-go.ghost { background: #f4eee5; color: #241f1a; }
 .s-share-note { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .s-share-note input { width: 18px; height: 18px; accent-color: #c9742a; }
+.s-share-ai { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1.5px dashed #d9c9b3; border-radius: 14px; }
+.s-share-ai > b { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #2a1f17; }
+.s-share-ai > small { font-size: 11.5px; line-height: 1.4; color: #8a7a6a; }
+.s-share-ai .s-share-go { align-self: stretch; justify-content: center; }
+.s-share-ai .s-share-row .s-share-go { align-self: auto; min-width: 84px; padding: 9px 12px; }

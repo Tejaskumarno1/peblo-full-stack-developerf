@@ -575,3 +575,8 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 @media (max-width: 800px) { .soft .s-cursors { display: none; } }
 /* checkboxes in a note are the same orange as on the share page */
 .soft .s-notes .bn-block-content[data-content-type="checkListItem"] input[type="checkbox"] { accent-color: var(--s-accent); }
+.s-share-ai { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1.5px dashed #d9c9b3; border-radius: 14px; }
+.s-share-ai > b { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #2a1f17; }
+.s-share-ai > small { font-size: 11.5px; line-height: 1.4; color: #8a7a6a; }
+.s-share-ai .s-share-go { align-self: stretch; justify-content: center; }
+.s-share-ai .s-share-row .s-share-go { align-self: auto; min-width: 84px; padding: 9px 12px; }
