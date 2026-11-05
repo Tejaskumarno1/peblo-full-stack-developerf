@@ -466,6 +466,35 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const toolbarFloat = useMemo(() => ({ useFloatingOptions: { strategy: 'fixed', middleware: [boundedToolbar(editor)], whileElementsMounted: followSelection(editor) } }), [editor]);
   const [fitRoot, setFitRoot] = useState(null);
   useEffect(() => { if (rootRef.current !== fitRoot) setFitRoot(rootRef.current); });
+  // A picture copied out of another web page (claude.ai, a chat) often arrives as <img src="blob:..."> that only works inside that tab.
+  // When the clipboard also holds the real picture file, that file is stored on the server instead; if it does not, say so.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const paste = (e) => {
+      const dt = e.clipboardData; if (!dt) return;
+      let html = ''; try { html = dt.getData('text/html') || ''; } catch { return; }
+      if (!/<img[^>]+src=["']blob:/i.test(html)) return;
+      e.preventDefault(); e.stopPropagation();
+      const files = [...(dt.files || [])].filter((f) => /^image\//.test(f.type));
+      if (!files.length) {
+        tell('error', 'That picture only lives in the other tab. Save the picture, then drag it in.');
+        const text = dt.getData('text/plain'); if (text) { try { editor.pasteText(text); } catch { /* nothing to paste */ } }
+        return;
+      }
+      (async () => {
+        for (const f of files) {
+          try {
+            const url = await uploadFile(f);
+            const cur = editor.getTextCursorPosition().block;
+            editor.insertBlocks([{ type: 'image', props: { url, name: '' } }], cur, 'after');
+          } catch { /* the notice says why */ }
+        }
+      })();
+    };
+    root.addEventListener('paste', paste, true);
+    return () => root.removeEventListener('paste', paste, true);
+  }, [editor, fitRoot]);
   // A picture keeps the proportions it was given in the owner's column when the column here is narrower or wider (a shared page,
   // a phone). Pictures never float (blockEditor.css), so nothing can sit beside one.
   // BlockNote rewrites the classes of a block, so the blocks are named in a style sheet of their own.
