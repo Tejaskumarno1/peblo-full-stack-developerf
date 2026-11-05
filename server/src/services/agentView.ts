@@ -3,6 +3,7 @@ import prisma from '../db.js';
 import { decField, encField } from '../dataCrypto.js';
 import { accessFor } from './shareAccess.js';
 import { describeImage } from './aiService.js';
+import { notePdf } from './agentPdf.js';
 
 /*
  * A shared note, for bots and other programs: the same link gives plain Markdown or JSON when the caller asks for it
@@ -83,7 +84,7 @@ export function toMarkdown(note: { title: string; content: string; author: strin
 
 export async function agentNote(req: Request, res: Response, next: NextFunction) {
   try {
-    const m = /^([A-Za-z0-9_-]{20,40})(?:\.(md|json|txt))?$/.exec(String(req.params.tok));
+    const m = /^([A-Za-z0-9_-]{20,40})(?:\.(md|json|txt|pdf))?$/.exec(String(req.params.tok));
     if (!m) return next();
     const [, token, ext] = m;
     const q = String(req.query.format || '');
@@ -104,6 +105,12 @@ export async function agentNote(req: Request, res: Response, next: NextFunction)
     const link = `${base}/s/note/${token}`;
     const imgs = await imagesOf(note.content || '', note.userId, base);
     const data = { title: note.title, author: note.user?.name || null, updatedAt: note.updatedAt, canEdit: acc.canEdit, link };
+    if (fmt === 'pdf') {
+      const buf = await notePdf({ title: note.title, content: note.content || '', author: data.author, updatedAt: note.updatedAt, link, userId: note.userId }, imgs);
+      const name = (note.title || 'note').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'note';
+      res.setHeader('Content-Disposition', `inline; filename="${name}.pdf"`);
+      return res.type('application/pdf').send(buf);
+    }
     if (fmt === 'json') {
       return res.json({ ...data, markdown: toMarkdown({ ...note, ...data, author: data.author } as any, imgs, base), images: imgs.map((i) => ({ url: i.url, description: i.description })) });
     }
