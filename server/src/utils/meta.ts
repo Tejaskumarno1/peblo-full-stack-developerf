@@ -72,6 +72,7 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     assignment: (v) => (v === true ? true : undefined),
     astatus: (v) => (ASTATUS.includes(v) ? v : undefined),
     order: (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined),
+    list: (v) => str(v, 60),
   });
 }
 
