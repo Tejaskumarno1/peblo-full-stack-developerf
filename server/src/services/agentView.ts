@@ -72,6 +72,8 @@ export function toMarkdown(note: { title: string; content: string; author: strin
     `- Can be edited through this link: ${note.canEdit ? 'yes' : 'no'}`,
     `- Link: ${note.link}`,
     '',
+    ...(imgs.length ? ['', `- Pictures on this page (${imgs.length}), each one opens as an image at its address:`, ...imgs.map((i, n) => `  - Image ${n + 1}: ${i.url}${i.description ? ` (${i.description.replace(/\s+/g, ' ').slice(0, 240)})` : ''}`)] : []),
+    '',
     '---',
     '',
     body,

@@ -524,3 +524,13 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .doc .pic-group img { width: 100%; height: 100%; margin: 0; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 14px; }
 @media (max-width: 640px) { .pb-shared .doc .pic-group[data-gl="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1281px) { .pb-shared .stage.people-pinned { padding-left: 424px; } }
+
+/* Picture link pill: the picture's full address as real text and a link, with Copy */
+.pb-shared .doc .pic-pill { display: flex; align-items: center; gap: 8px; max-width: 100%; width: max-content; margin: 6px 0 14px; padding: 4px 5px 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; line-height: 1.2; background: color-mix(in srgb, currentColor 7%, transparent); border: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
+.pb-shared .doc .pic-pill svg { flex: none; opacity: .7; }
+.pb-shared .doc .pic-pill .pic-n { flex: none; opacity: .7; }
+.pb-shared .doc .pic-pill a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.pb-shared .doc .pic-pill a:hover { text-decoration: underline; }
+.pb-shared .doc .pic-pill button, .pb-shared .doc .pic-all button { flex: none; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: color-mix(in srgb, currentColor 90%, transparent); color: Canvas; cursor: pointer; font-weight: 700; font-size: 12px; line-height: 1; }
+.pb-shared .doc .pic-all { display: flex; align-items: center; gap: 8px; width: max-content; max-width: 100%; margin: 0 0 18px; padding: 4px 5px 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: color-mix(in srgb, currentColor 7%, transparent); border: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
+@media (max-width: 640px) { .pb-shared .doc .pic-pill { width: auto; } }

@@ -65,6 +65,48 @@ server.registerTool('get_note', {
   return { id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt, text: strip(note.content), markdown: note.content };
 }));
 
+// Pictures. A picture comes back as a real image result, so the AI sees it instead of only reading its address.
+const MAX_PICTURE = 5 * 1024 * 1024;
+const mediaIdOf = (v: string) => (/\/api\/media\/([\w-]{8,64})/.exec(v) || /^([\w-]{8,64})$/.exec(v.trim()) || [])[1];
+async function fetchPicture(id: string) {
+  const res = await fetch(`${BASE}/api/media/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${TOKEN}` }, signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) throw new Error(`That picture could not be read (${res.status}).`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_PICTURE) throw new Error('That picture is larger than 5 MB.');
+  const mimeType = (res.headers.get('content-type') || 'image/webp').split(';')[0];
+  return { type: 'image' as const, data: buf.toString('base64'), mimeType };
+}
+
+server.registerTool('get_image', {
+  description: 'Look at one picture from a note. Give the picture address (https://.../api/media/<id>) or just its id; the picture comes back as an image you can see.',
+  inputSchema: { image: z.string().describe('Picture address or id') },
+  annotations: readOnly,
+}, async ({ image }) => {
+  try {
+    const id = mediaIdOf(image); if (!id) throw new Error('That is not a Peblo picture address.');
+    return { content: [await fetchPicture(id)] };
+  } catch (e) { return fail(e); }
+});
+
+server.registerTool('read_shared_link', {
+  description: 'Read a Peblo share link (https://.../s/note/<token>): its text, and the pictures on it as images you can see. Use this when someone pastes a share link.',
+  inputSchema: { url: z.string().describe('The share link'), pictures: z.boolean().optional().describe('Return the pictures too (default true, at most 6)') },
+  annotations: readOnly,
+}, async ({ url, pictures }) => {
+  try {
+    const m = /\/s\/note\/([A-Za-z0-9_-]{20,40})/.exec(url); if (!m) throw new Error('That is not a Peblo note share link.');
+    const res = await fetch(`${BASE}/s/note/${m[1]}.md`, { headers: { Accept: 'text/markdown' }, signal: AbortSignal.timeout(60_000) });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text.slice(0, 200) || `The link answered ${res.status}.`);
+    const out: any[] = [{ type: 'text' as const, text }];
+    if (pictures !== false) {
+      const ids = [...new Set([...text.matchAll(/\/api\/media\/([\w-]{8,64})/g)].map((x) => x[1]))].slice(0, 6);
+      for (const id of ids) { try { out.push(await fetchPicture(id)); } catch { /* the address stays in the text */ } }
+    }
+    return { content: out };
+  } catch (e) { return fail(e); }
+});
+
 server.registerTool('create_note', {
   description: 'Create a new note. Plain text is fine; blank lines make paragraphs.',
   inputSchema: { title: z.string().min(1), content: z.string().optional(), tags: z.array(z.string()).optional() },

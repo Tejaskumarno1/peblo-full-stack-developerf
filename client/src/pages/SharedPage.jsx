@@ -40,9 +40,44 @@ const toHtml = (md0) => {
     heading.id = count ? `${base}-${count + 1}` : base;
   });
   groupPictures(parsed);
+  addPicturePills(parsed);
   applyMarksToHtml(parsed.body, marks);
   return parsed.body.innerHTML;
 };
+
+// Under every picture a small pill carries the picture's full address as real text and a real link, so a person, a script or any AI
+// that reads this page as text can find and open each picture. The pill is plain markup (no script), the Copy button is wired by one listener.
+const PILL_LINK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 005.6 0l3-3a4 4 0 00-5.6-5.6l-1 1M14 10a4 4 0 00-5.6 0l-3 3a4 4 0 005.6 5.6l1-1"/></svg>';
+const absPicture = (src) => { try { const u = new URL(src, window.location.origin); u.hash = ''; return /^https?:$/.test(u.protocol) ? u.href : ''; } catch { return ''; } };
+function addPicturePills(parsed) {
+  const doc = parsed;
+  const seen = [];
+  [...doc.body.querySelectorAll('img')].forEach((img) => {
+    if (img.closest('a, button')) return;
+    const href = absPicture(img.getAttribute('src') || ''); if (!href) return;
+    seen.push(href);
+    const n = seen.length;
+    const pill = doc.createElement('span'); pill.className = 'pic-pill'; pill.setAttribute('data-testid', 'pic-pill');
+    pill.innerHTML = `${PILL_LINK}<span class="pic-n">Image ${n}</span>`;
+    const a = doc.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = href; a.setAttribute('data-testid', 'pic-pill-link');
+    const b = doc.createElement('button'); b.type = 'button'; b.setAttribute('data-pill-copy', href); b.textContent = 'Copy';
+    pill.append(a, b);
+    const parent = img.parentElement;
+    const group = parent && parent.querySelectorAll('img').length > 1;
+    const after = group ? parent : img;
+    // alt text rides along as data too: a text-only reader gets the name of the picture next to its address
+    const alt = img.getAttribute('alt'); if (alt) pill.setAttribute('title', alt);
+    after.insertAdjacentElement('afterend', pill);
+  });
+  if (seen.length) {
+    const all = doc.createElement('div'); all.className = 'pic-all'; all.setAttribute('data-testid', 'pic-all');
+    all.innerHTML = `${PILL_LINK}<span>${seen.length} picture${seen.length > 1 ? 's' : ''} on this page</span>`;
+    const b = doc.createElement('button'); b.type = 'button'; b.setAttribute('data-pill-copy', seen.join('\n')); b.setAttribute('data-testid', 'pic-all-copy'); b.textContent = 'Copy all picture links';
+    all.append(b);
+    const first = doc.body.firstElementChild;
+    if (first && /^H[1-3]$/.test(first.tagName)) first.insertAdjacentElement('afterend', all); else doc.body.insertAdjacentElement('afterbegin', all);
+  }
+}
 
 // Pictures the owner laid out as a grid or a row are kept in the picture address ("#gl=grid&gc=3"); show them that way here too.
 const layoutOf = (img) => {
@@ -456,7 +491,10 @@ export default function SharedPage() {
   const [viewPic, setViewPic] = useState(null);
   useEffect(() => {
     const root = docRef.current; if (!root) return undefined;
-    const click = (e) => { const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '' }); };
+    const click = (e) => {
+      const pb = e.target?.closest?.('[data-pill-copy]');
+      if (pb) { const text = pb.getAttribute('data-pill-copy'); const done = () => { const old = pb.textContent; pb.textContent = 'Copied'; setTimeout(() => { pb.textContent = old; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
+      const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '' }); };
     root.addEventListener('click', click);
     return () => root.removeEventListener('click', click);
   }, [body]);
