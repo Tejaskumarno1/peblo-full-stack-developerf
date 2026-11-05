@@ -256,6 +256,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
             <div className="row">
               <span>{noteFull?.title || task.note?.title || 'Note'}{source.line ? ` \u00b7 line ${source.line}` : ''}</span>
               {(source.noteId || task.noteId) && <Link className="chip" to={`/notes/${source.noteId || task.noteId}${source.line ? `?line=${source.line}` : ''}`} onClick={onClose}>Jump to the line</Link>}
+              {!isNew && <Link className="chip" to={`/tasks/focus/${task.id}`} onClick={onClose}>Open note beside</Link>}
             </div>
           </div>
         </section>

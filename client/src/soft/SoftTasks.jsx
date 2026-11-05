@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Repeat } from 'lucide-react';
+import { X, Repeat, Target } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
@@ -256,6 +256,7 @@ export default function SoftTasks() {
           {t.note && <Link to={`/notes/${t.note.id}`} className="s-mini note">{t.note.title || 'Note'}</Link>}
         </span>
       </div>
+      {!t.completed && <Link to={`/tasks/focus/${t.id}`} className="s-card-x focus" aria-label={`Focus on "${t.text}"`} title="Focus on this task"><Target size={14} strokeWidth={2.4} /></Link>}
       <button type="button" className="s-card-x" aria-label={`Delete "${t.text}"`} onClick={() => remove(t)}><X size={14} strokeWidth={2.4} /></button>
     </div>
   );

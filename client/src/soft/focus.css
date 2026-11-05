@@ -1,0 +1,42 @@
+/* Task and note split (mockup TaskSplit) */
+.s-focus { position: fixed; inset: 0; z-index: 8800; background: #fffdf8; font-family: Figtree, system-ui, sans-serif; color: #2a1f17; overflow: hidden; }
+.s-focus .chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; background: #f4ede2; font-size: 12px; font-weight: 700; color: #5a4c40; white-space: nowrap; text-decoration: none; }
+.s-focus .lab { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #6b5d50; }
+.s-focus .grow { flex: 1; }
+.s-focus .ib { width: 36px; height: 36px; border-radius: 18px; border: 0; background: #f4ede2; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #2a1f17; }
+.s-focus .ib.on { background: #2a1f17; color: #fff; }
+.s-focus .ib:disabled { opacity: .4; cursor: default; }
+.s-focus-bar { position: absolute; left: 24px; right: 24px; top: 16px; height: 56px; border-radius: 20px; background: #fff; border: 1px solid #eadfce; box-shadow: 0 8px 28px rgba(42,31,23,.08); display: flex; align-items: center; padding: 0 14px; gap: 10px; box-sizing: border-box; }
+.s-focus-bar b { font-size: 15px; font-weight: 800; }
+.s-focus-exit { height: 40px; padding: 0 18px; border-radius: 999px; border: 0; background: #2a1f17; color: #fff; font: 800 14px inherit; cursor: pointer; }
+.s-focus-exit kbd { font: 700 12px inherit; opacity: .7; margin-left: 4px; }
+.s-focus-left { position: absolute; left: 24px; top: 92px; bottom: 24px; width: min(520px, 42vw); border-radius: 28px; background: #ffd9c9; padding: 26px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.s-focus-title { display: flex; gap: 12px; align-items: flex-start; }
+.s-focus-title h1 { margin: 0; font-weight: 800; font-size: 34px; line-height: 1.1; overflow-wrap: anywhere; }
+.s-focus-title .s-check { margin-top: 8px; flex: none; }
+.s-focus-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.s-focus-chips .chip { background: #fff; }
+.s-focus-card { background: #fff; border-radius: 20px; padding: 14px 16px; }
+.s-focus-time { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+.s-focus-time .n { font-weight: 800; font-size: 40px; font-variant-numeric: tabular-nums; }
+.s-focus-time .t, .s-focus-card > .t { flex: 1; font-size: 12.5px; color: #5a4c40; font-weight: 600; }
+.s-focus-card > .t { margin-top: 8px; }
+.s-focus-actions { margin-top: auto; display: flex; gap: 10px; }
+.s-focus-actions button { height: 48px; padding: 0 20px; border-radius: 999px; border: 0; background: #fff; font: 800 14px inherit; cursor: pointer; color: #2a1f17; }
+.s-focus-actions button:disabled { opacity: .4; cursor: default; }
+.s-focus-actions .go { flex: 1; background: #c4441c; color: #fff; font-size: 15px; }
+.s-focus-right { position: absolute; left: calc(24px + min(520px, 42vw) + 24px); right: 24px; top: 92px; bottom: 24px; border-radius: 28px; background: #fff; border: 1px solid #eadfce; padding: 22px 30px; box-sizing: border-box; display: flex; flex-direction: column; min-width: 0; }
+.s-focus-notehead { display: flex; align-items: center; gap: 10px; }
+.s-focus-notetitle { margin: 12px 0 6px; font-weight: 800; font-size: 30px; }
+.s-focus-editor { flex: 1; min-height: 0; overflow-y: auto; font-family: Newsreader, Georgia, serif; }
+.s-focus-back { margin-top: 12px; border-radius: 16px; background: #e4defc; padding: 12px 16px; font-size: 13.5px; font-weight: 600; color: #4b2f8a; }
+.s-focus-back button { border: 0; background: none; color: inherit; text-decoration: underline; font: inherit; cursor: pointer; padding: 0; }
+.s-focus-back .list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.s-focus-back .list a { color: inherit; }
+.soft .s-card-x.focus { display: inline-flex; align-items: center; justify-content: center; color: inherit; text-decoration: none; }
+@media (max-width: 900px) {
+  .s-focus-left { position: static; width: auto; margin: 84px 16px 0; max-height: 50vh; }
+  .s-focus-right { position: static; margin: 12px 16px; min-height: 40vh; }
+  .s-focus { overflow-y: auto; }
+}
+.soft .s-card-x.focus { right: 36px; }

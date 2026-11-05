@@ -56,3 +56,4 @@
 .pb-ring button { height: 32px; padding: 0 12px; border-radius: 999px; border: 0; background: rgba(255,255,255,.14); color: #fff; font: 700 12.5px inherit; cursor: pointer; }
 .pb-ring button.go { background: #c4441c; }
 .pb-ring button.quiet { background: transparent; opacity: .7; }
+.soft .s-card-x.focus { right: 36px; }
