@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette, Hash } from 'lucide-react';
+import { Image as ImageIcon, Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette, Hash } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
-import { notesAPI, todosAPI } from '../api/index';
+import { notesAPI, todosAPI, mediaSearchAPI } from '../api/index';
 import { parseTask } from '../utils/parseTask';
 import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
@@ -52,11 +52,13 @@ export default function CommandPalette() {
 
   // Typing asks the server, which ranks by title, tags and text and forgives a typo; until it answers, titles are matched here.
   const [hits, setHits] = useState(null);
+  const [picHits, setPicHits] = useState({ q: '', list: [] });
   useEffect(() => {
     const t = query.trim();
-    if (t.length < 2) { setHits(null); return undefined; }
+    if (t.length < 2) { setHits(null); setPicHits({ q: '', list: [] }); return undefined; }
     const timer = setTimeout(() => {
       notesAPI.getAll({ search: t, snippet: '1', limit: 6 }).then((r) => setHits({ q: t, notes: r.data.notes || [] })).catch(() => {});
+      mediaSearchAPI.search(t).then((r) => setPicHits({ q: t, list: r.data.pictures || [] })).catch(() => {});
     }, 200);
     return () => clearTimeout(timer);
   }, [query]);
@@ -122,11 +124,13 @@ export default function CommandPalette() {
     ? [...addCmd, { id: 'ask-ai', title: `Ask AI: "${query.trim()}"`, icon: <Sparkles size={16} />, action: () => navigate(`/ai?q=${encodeURIComponent(query.trim())}`) }, ...matchingCommands]
     : [...addCmd, ...matchingCommands];
 
+  const pictureHits = picHits.q === query.trim() && !addMatch ? picHits.list : [];
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),
     ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id })),
     ...taskHits.map((t) => ({ id: `task-${t.id}`, title: t.text, icon: <CheckSquare size={16} />, type: 'task', taskId: t.id })),
     ...tagHits.map((g) => ({ id: `tag-${g}`, title: `#${g}`, icon: <Hash size={16} />, type: 'tag', tag: g })),
+    ...pictureHits.map((p) => ({ id: `pic-${p.id}`, title: p.snippet, icon: <ImageIcon size={16} />, type: 'picture', url: p.url })),
   ];
 
   useEffect(() => {
@@ -147,6 +151,8 @@ export default function CommandPalette() {
       navigate(`/notes/${item.noteId}`);
     } else if (item.type === 'task') {
       navigate(`/tasks?task=${item.taskId}`);
+    } else if (item.type === 'picture') {
+      window.open(item.url, '_blank', 'noopener');
     } else if (item.type === 'tag') {
       navigate(`/tasks?q=${encodeURIComponent(item.tag)}`);
     }
@@ -234,6 +240,16 @@ export default function CommandPalette() {
                 const actualIndex = filteredCommands.length + filteredNotes.length + taskHits.length + index;
                 return (
                   <div key={item.id} className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(actualIndex)} onClick={() => handleSelect(item)}>
+                    <span className="cmd-item-icon">{item.icon}</span>
+                    <span className="cmd-item-title">{item.title}</span>
+                  </div>
+                );
+              })}
+              {pictureHits.length > 0 && <div className="cmd-section-title" style={{ marginTop: '8px' }}>Pictures</div>}
+              {allItems.filter((i) => i.type === 'picture').map((item, index) => {
+                const actualIndex = filteredCommands.length + filteredNotes.length + taskHits.length + tagHits.length + index;
+                return (
+                  <div key={item.id} data-testid="picture-hit" className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(actualIndex)} onClick={() => handleSelect(item)}>
                     <span className="cmd-item-icon">{item.icon}</span>
                     <span className="cmd-item-title">{item.title}</span>
                   </div>

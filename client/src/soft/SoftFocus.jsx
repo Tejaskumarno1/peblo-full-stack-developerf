@@ -49,7 +49,9 @@ export default function SoftFocus() {
     elapsed.current = 0;
     if (!t || secs < 30) return;
     const add = Math.max(1, Math.round(secs / 60));
-    try { await todosAPI.update(t.id, { meta: { spentMin: (t.meta?.spentMin || 0) + add } }); refresh(); } catch { /* the time is lost, not the task */ }
+    const today = new Date(); const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const log = { ...(t.meta?.timeLog || {}) }; log[day] = (log[day] || 0) + add;
+    try { await todosAPI.update(t.id, { meta: { spentMin: (t.meta?.spentMin || 0) + add, timeLog: log } }); refresh(); } catch { /* the time is lost, not the task */ }
   }, [refresh]);
 
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function SoftFocus() {
         </div>
 
         <div className="s-focus-card">
-          <TaskSteps steps={steps} onChange={saveSteps} label="Steps" />
+          <TaskSteps steps={steps} onChange={saveSteps} label="Steps" taskText={task.text} taskDetails={task.meta?.details || ""} />
         </div>
 
         <div className="s-focus-card" data-testid="focus-timer">
@@ -170,7 +172,7 @@ export default function SoftFocus() {
             <span className="t">{left === 0 ? 'Sprint done. Time has been added to this task.' : 'of a 25 minute sprint. Time is added to this task when you stop.'}</span>
             <button type="button" className="ib on" aria-label={running ? 'Pause' : 'Start'} onClick={() => { if (left === 0) setLeft(SPRINT); setRunning((r) => !r); }}>{running ? <Pause size={14} fill="#fff" /> : <Play size={14} fill="#fff" />}</button>
           </div>
-          <div className="t">Logged so far: {spent ? hm(spent) : 'nothing yet'}</div>
+          <div className="t">Logged so far: {spent ? hm(spent) : 'nothing yet'}{spent && Object.keys(task.meta?.timeLog || {}).length > 1 ? ` over ${Object.keys(task.meta.timeLog).length} days` : ''}</div>
         </div>
 
         <div className="s-focus-actions">

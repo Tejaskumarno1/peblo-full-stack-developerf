@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** none, daily, weekdays, weekly, monthly, yearly, or a custom "every:<n>:<day|week|month|year>" such as every:3:day. */
+export const recurrenceSchema = z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]);
+
 export const noteSchemas = {
   create: {
     body: z.object({
@@ -38,7 +41,7 @@ export const todoSchemas = {
       deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: recurrenceSchema.optional(),
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional(),
       meta: z.record(z.string(), z.any()).optional()
@@ -52,7 +55,7 @@ export const todoSchemas = {
       deadline: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'Invalid date').nullable().optional(),
       startTime: z.string().nullable().optional(),
       endTime: z.string().nullable().optional(),
-      recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+      recurrence: recurrenceSchema.optional(),
       scope: z.enum(['this', 'following', 'all']).optional(),
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional(),

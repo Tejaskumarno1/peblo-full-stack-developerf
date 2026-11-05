@@ -76,7 +76,9 @@ export default function ShareList({ list, open, onClose }) {
             <div className="sl-ai">
               <div className="sl-lab">Share with AI</div>
               <div className="sl-row"><input readOnly aria-label="Text version link" value={`${url}.md`} onFocus={(e) => e.target.select()} /><button type="button" className="sl-g" onClick={() => copy('md', `${url}.md`)}>{copied === 'md' ? 'Copied' : 'Text'}</button></div>
-              <div className="sl-row"><input readOnly aria-label="MCP address" value={`${origin()}/mcp`} onFocus={(e) => e.target.select()} /><button type="button" className="sl-g" onClick={() => copy('mcp', `${origin()}/mcp`)}>{copied === 'mcp' ? 'Copied' : 'MCP'}</button></div>
+              <div className="sl-row"><input readOnly aria-label="PDF version link" value={`${url}.pdf`} onFocus={(e) => e.target.select()} /><button type="button" className="sl-g" onClick={() => copy('pdf', `${url}.pdf`)}>{copied === 'pdf' ? 'Copied' : 'PDF'}</button></div>
+              <label className="sl-chip"><input type="checkbox" checked={!!info.mcp} onChange={(e) => save({ mcp: e.target.checked })} /> Let AI agents connect to this list over MCP</label>
+              {info.mcp && <div className="sl-row"><input readOnly aria-label="MCP address" value={`${origin()}/mcp/list/${info.token}`} onFocus={(e) => e.target.select()} /><button type="button" className="sl-g" onClick={() => copy('mcp', `${origin()}/mcp/list/${info.token}`)}>{copied === 'mcp' ? 'Copied' : 'MCP'}</button></div>}
               <button type="button" className="sl-go wide" onClick={() => copy('prompt', prompt)}>{copied === 'prompt' ? 'Copied' : 'Copy as AI prompt'}</button>
               <p className="sl-note">Agents see the tasks, dates and steps. Tasks an agent proposes go to your Approval inbox. Access ends with the link.</p>
             </div>

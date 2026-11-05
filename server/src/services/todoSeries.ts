@@ -6,7 +6,14 @@ import { zoneParts, zonedTime } from '../utils/userTime.js';
 
 export const RECURRENCES = ['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly'] as const;
 export type Recurrence = typeof RECURRENCES[number];
-export const isRepeating = (r: unknown): r is Exclude<Recurrence, 'none'> => typeof r === 'string' && r !== 'none' && (RECURRENCES as readonly string[]).includes(r);
+/** A custom rule is written "every:<n>:<day|week|month|year>", for example every:3:day or every:2:week. */
+export const CUSTOM_RE = /^every:([1-9]\d{0,2}):(day|week|month|year)$/;
+export const parseCustom = (r: unknown): { n: number; unit: 'day' | 'week' | 'month' | 'year' } | null => {
+  const m = typeof r === 'string' ? CUSTOM_RE.exec(r) : null;
+  return m ? { n: Number(m[1]), unit: m[2] as 'day' | 'week' | 'month' | 'year' } : null;
+};
+export const isValidRecurrence = (r: unknown): r is string => typeof r === 'string' && ((RECURRENCES as readonly string[]).includes(r) || !!parseCustom(r));
+export const isRepeating = (r: unknown): r is string => typeof r === 'string' && r !== 'none' && isValidRecurrence(r);
 
 const DAY = 86_400_000;
 const HORIZON_DAYS: Record<string, number> = { daily: 60, weekdays: 60, weekly: 90, monthly: 130, yearly: 400 };
@@ -19,11 +26,18 @@ const daysInMonth = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTC
  * Monthly and yearly always aim for the anchor's day of the month and fall back to the last day of a shorter
  * month (the 31st becomes Feb 28/29, Apr 30...), without drifting later.
  */
-export function nextOccurrence(rule: Exclude<Recurrence, 'none'>, anchor: Date, last: Date, tz: string): Date {
+export function nextOccurrence(rule: string, anchor: Date, last: Date, tz: string): Date {
   const a = zoneParts(anchor, tz);
   const l = zoneParts(last, tz);
   let y = l.y, m = l.m, d = l.d;
-  if (rule === 'daily') d += 1;
+  const custom = parseCustom(rule);
+  if (custom) {
+    const { n, unit } = custom;
+    if (unit === 'day') d += n;
+    else if (unit === 'week') d += 7 * n;
+    else if (unit === 'month') { m += n; y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1; d = Math.min(a.d, daysInMonth(y, m)); }
+    else { y += n; m = a.m; d = Math.min(a.d, daysInMonth(y, m)); }
+  } else if (rule === 'daily') d += 1;
   else if (rule === 'weekly') d += 7;
   else if (rule === 'weekdays') {
     d += 1;
@@ -45,7 +59,8 @@ export async function topUpSeries(userId: string, onlySeriesId?: string): Promis
   const list = await prisma.todoSeries.findMany({ where: { userId, endedAt: null, ...(onlySeriesId ? { id: onlySeriesId } : {}) } });
   const now = Date.now();
   for (const s of list) {
-    const horizon = now + (HORIZON_DAYS[s.recurrence] ?? 60) * DAY;
+    const cu = parseCustom(s.recurrence);
+    const horizon = now + (cu ? HORIZON_DAYS[({ day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' })[cu.unit]] : HORIZON_DAYS[s.recurrence] ?? 60) * DAY;
     if (s.lastGenerated.getTime() >= horizon || !isRepeating(s.recurrence)) continue;
 
     const rows: any[] = [];

@@ -40,6 +40,8 @@ export const notesAPI = {
   linkMention: (id, otherId) => api.post(`/notes/${id}/mentions/${otherId}/link`)
 };
 
+export const mediaSearchAPI = { search: (q) => api.get('/media/search', { params: { q } }) };
+
 export const aiAPI = {
   localStatus: () => api.get('/ai/local/status'),
   localPull: (model) => api.post('/ai/local/pull', { model }),
@@ -53,6 +55,7 @@ export const aiAPI = {
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
   suggestTag: (id, data, config) => api.post(`/notes/${id}/ai/tags`, data, config),
   linkPreview: (url) => api.get('/ai/link-preview', { params: { url } }),
+  taskSteps: (text, details) => api.post('/ai/task-steps', { text, details }),
   ollamaCheck: (url) => api.get('/ai/ollama/check', { params: { url } }),
   chat: (data, config) => api.post('/ai/chat', data, config),
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),

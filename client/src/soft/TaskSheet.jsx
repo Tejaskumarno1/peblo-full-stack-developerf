@@ -15,7 +15,9 @@ const timeVal = (d) => (d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '');
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PRESETS = [['09:00', 'Morning · 9:00 AM'], ['14:00', 'Afternoon · 2:00 PM'], ['18:30', 'Evening · 6:30 PM']];
 const label12 = (t) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`; };
-const REPEATS = [['none', 'None'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']];
+const REPEATS = [['none', 'None'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly'], ['custom', 'Custom']];
+const UNITS = [['day', 'days'], ['week', 'weeks'], ['month', 'months'], ['year', 'years']];
+const customOf = (r) => { const m = /^every:(\d+):(day|week|month|year)$/.exec(r || ''); return m ? { n: Number(m[1]), unit: m[2] } : null; };
 const REMINDS = [[0, 'At the time'], [10, '10 min before'], [60, '1 hour before'], [1440, '1 day before']];
 const ESTIMATES = [[15, '15 min'], [30, '30 min'], [60, '1 hour']];
 const ordinal = (n) => { const v = n % 100; return n + (['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'); };
@@ -169,6 +171,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const repeatNote = (() => {
     if (recurrence === 'none' || !date) return '';
     const d = new Date(`${date}T00:00`);
+    const c = customOf(recurrence);
+    if (c) return `Every ${c.n === 1 ? '' : c.n + ' '}${UNITS.find((u) => u[0] === c.unit)[1].replace(/s$/, c.n === 1 ? '' : 's')}`;
     return ({ daily: 'Every day', weekdays: 'Every weekday', weekly: `Every week on ${d.toLocaleDateString(undefined, { weekday: 'long' })}`, monthly: `Every month on the ${ordinal(d.getDate())}`, yearly: `Every year on ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}` })[recurrence] || '';
   })();
   const source = task.meta?.source || null;
@@ -207,8 +211,15 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         <section className="s-sheet-sec" aria-label="Repeat">
           <span className="s-sheet-lab">Repeat</span>
           <div className="s-sheet-pills" role="radiogroup" aria-label="Repeat">
-            {REPEATS.map(([k, name]) => <button key={k} type="button" role="radio" aria-checked={recurrence === k} className={recurrence === k ? 'on' : ''} onClick={() => setRecurrence(k)}>{name}</button>)}
+            {REPEATS.map(([k, name]) => <button key={k} type="button" role="radio" aria-checked={k === 'custom' ? !!customOf(recurrence) : recurrence === k} className={(k === 'custom' ? !!customOf(recurrence) : recurrence === k) ? 'on' : ''} onClick={() => setRecurrence(k === 'custom' ? (customOf(recurrence) ? recurrence : 'every:2:week') : k)}>{name}</button>)}
           </div>
+          {customOf(recurrence) && (
+            <div className="s-sheet-custom" role="group" aria-label="Custom repeat">
+              <span>Every</span>
+              <input type="number" min="1" max="999" aria-label="Repeat every" value={customOf(recurrence).n} onChange={(e) => setRecurrence(`every:${Math.min(999, Math.max(1, parseInt(e.target.value, 10) || 1))}:${customOf(recurrence).unit}`)} />
+              <select aria-label="Repeat unit" value={customOf(recurrence).unit} onChange={(e) => setRecurrence(`every:${customOf(recurrence).n}:${e.target.value}`)}>{UNITS.map(([u, name]) => <option key={u} value={u}>{name}</option>)}</select>
+            </div>
+          )}
           {recurrence !== 'none' && (
             <>
               <p className="s-sheet-note"><Repeat size={13} /> {repeatNote}</p>
@@ -226,7 +237,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           {REMINDS.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={remind === m} className={remind === m ? 'on' : ''} onClick={() => setRemind(remind === m ? null : m)}>{name}</button>)}
           <button type="button" className={`ghost${remind === null ? ' on' : ''}`} onClick={() => setRemind(null)}>No reminder</button>
         </div>
-        <p className="s-sheet-hint">When it rings you can snooze it: 10 min, 1 hour, tonight or tomorrow morning.</p>
+        <p className="s-sheet-hint">When it rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
       </section>
 
       <section className="s-sheet-sec" aria-label="Priority">
@@ -246,7 +257,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         </div>
       </section>
 
-      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} /></section>
+      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} taskText={text} taskDetails={task.meta?.details || ''} /></section>
 
       {source && (
         <section className="s-sheet-sec" aria-label="Where it came from">

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../db.js';
 import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
-import { RECURRENCES, isRepeating, topUpSeries } from '../services/todoSeries.js';
+import { isValidRecurrence, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
@@ -151,7 +151,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const validPriorities = ['high', 'medium', 'low'];
     const safePriority = validPriorities.includes(priority) ? priority : 'medium';
-    const safeRecurrence = (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : 'none';
+    const safeRecurrence = isValidRecurrence(recurrence) ? recurrence : 'none';
 
     if (noteId) {
       const note = await prisma.note.findFirst({
@@ -247,7 +247,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     }
 
     // Changing "repeat" ends the old series after this task and starts a new one from it (or none).
-    const newRule = recurrence !== undefined && (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : undefined;
+    const newRule = recurrence !== undefined && isValidRecurrence(recurrence) ? recurrence : undefined;
     const ruleChanged = newRule !== undefined && newRule !== (todo.recurrence || 'none');
     let startSeries = false;
     if (ruleChanged) {

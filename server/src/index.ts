@@ -29,7 +29,8 @@ import aiConnectionsRoutes from './routes/aiConnections.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { shareRoutes, publicRoutes, shortRedirect } from './routes/share.js';
-import { listShareRoutes, listPublicRoutes, listMarkdownHandler } from './routes/listShare.js';
+import { listMcpRoutes } from './mcp/listMcp.js';
+import { listShareRoutes, listPublicRoutes, listMarkdownHandler, listPdfHandler } from './routes/listShare.js';
 import mediaRoutes from './routes/media.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
@@ -75,6 +76,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.use('/.well-known', cors({ origin: '*' })); // so Settings can test the address from the page
   app.use(wellKnown);
   app.use('/oauth', ...open, oauthRoutes);
+  app.use('/mcp/list', ...open, listMcpRoutes);
   app.use('/mcp', ...open, mcpRoutes);
 
   // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
@@ -140,6 +142,7 @@ app.use('/api/files', filesRoutes);
 app.get('/l/:code', apiLimiter(), shortRedirect);
 app.use('/api/share', shareRoutes);
 app.get(/^\/s\/list\/([A-Za-z0-9_-]{20,40})\.md$/, apiLimiter(), listMarkdownHandler);
+app.get(/^\/s\/list\/([A-Za-z0-9_-]{20,40})\.pdf$/, apiLimiter(), listPdfHandler);
 app.get('/s/note/:tok', apiLimiter(), agentNote); // bots and programs get Markdown or JSON from the same link
 app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);

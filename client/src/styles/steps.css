@@ -10,3 +10,6 @@
 .pb-step-add input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; font: inherit; }
 .pb-step-add button { height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .pb-step-add button:disabled { opacity: .45; cursor: default; }
+.pb-step-ai { margin-top: 8px; border: 0; background: transparent; padding: 4px 0; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--s-fg, #5a4c40); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pb-step-ai:disabled { opacity: .6; cursor: default; }
+.pb-step-msg { margin: 4px 0 0; font-size: 12.5px; font-weight: 600; color: #5a4c40; }

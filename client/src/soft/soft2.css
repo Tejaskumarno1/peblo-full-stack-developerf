@@ -580,3 +580,6 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .s-share-ai > small { font-size: 11.5px; line-height: 1.4; color: #8a7a6a; }
 .s-share-ai .s-share-go { align-self: stretch; justify-content: center; }
 .s-share-ai .s-share-row .s-share-go { align-self: auto; min-width: 84px; padding: 9px 12px; }
+.soft .s-sheet-custom { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13.5px; font-weight: 600; }
+.soft .s-sheet-custom input, .soft .s-sheet-custom select { height: 34px; border-radius: 999px; border: 1.5px solid var(--s-line, #eadfce); background: #fff; font: inherit; font-weight: 700; padding: 0 12px; color: var(--s-fg); }
+.soft .s-sheet-custom input { width: 70px; }

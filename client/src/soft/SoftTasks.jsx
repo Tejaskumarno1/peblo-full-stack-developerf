@@ -27,6 +27,8 @@ export function repeatLabel(t) {
   const r = t.recurrence;
   if (!r || r === 'none') return '';
   const d = t._ref || t.deadline ? new Date(t._ref || t.deadline) : null; // _ref: a later occurrence, so moving one date does not rename the rule
+  const cu = /^every:(\d+):(day|week|month|year)$/.exec(r);
+  if (cu) return Number(cu[1]) === 1 ? `Every ${cu[2]}` : `Every ${cu[1]} ${cu[2]}s`;
   if (r === 'daily') return 'Every day';
   if (r === 'weekdays') return 'Every weekday';
   if (r === 'weekly') return d ? `Every ${weekdayLong(d)}` : 'Every week';

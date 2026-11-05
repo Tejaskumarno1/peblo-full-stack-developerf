@@ -146,7 +146,7 @@ server.registerTool('create_task', {
   inputSchema: {
     text: z.string().min(1), deadline: z.string().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), tags: z.array(z.string()).optional(),
     startTime: z.string().optional().describe('Start time of day, HH:MM, to make it a calendar event'), endTime: z.string().optional().describe('End time, HH:MM'),
-    recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(), noteId: z.string().optional().describe('Link the task to a note'),
+    recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(), noteId: z.string().optional().describe('Link the task to a note'),
   },
   annotations: writes,
 }, (args) => run(async () => {
@@ -185,7 +185,7 @@ server.registerTool('update_task', {
   description: 'Change a task: its text, deadline (ISO date or date-time), priority, or the note it is linked to (noteId, or null to unlink).',
   inputSchema: {
     id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional(),
-    startTime: z.string().nullable().optional(), endTime: z.string().nullable().optional(), recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']).optional(),
+    startTime: z.string().nullable().optional(), endTime: z.string().nullable().optional(), recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(),
     tags: z.array(z.string()).optional(), scope: z.enum(['this', 'following', 'all']).optional().describe('For repeating tasks: which occurrences to change'),
   },
   annotations: { ...writes, idempotentHint: true },

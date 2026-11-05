@@ -21,6 +21,19 @@ export function ringTime(t) {
   return Math.max(base, snooze);
 }
 
+/** When the next meeting (a task with a start and an end time that is not a planned block) finishes, or null when none is coming up. */
+export function nextMeetingEnd(todos, now = Date.now()) {
+  let best = null;
+  for (const t of todos) {
+    if (t.completed || !t.deadline || !t.startTime || !t.endTime || t.meta?.planned) continue;
+    const [h, m] = String(t.endTime).split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) continue;
+    const end = new Date(t.deadline); end.setHours(h, m, 0, 0);
+    if (end.getTime() > now && (!best || end < best)) best = end;
+  }
+  return best;
+}
+
 export default function TaskReminders() {
   const queryClient = useQueryClient();
   const { data: todos = [] } = useQuery({ queryKey: ['todos', 'all'], queryFn: () => todosAPI.getAll().then((r) => r.data.todos || []), staleTime: 15000, refetchInterval: 60000 });
@@ -62,6 +75,7 @@ export default function TaskReminders() {
   const inMin = (n) => new Date(Date.now() + n * 60000);
   const tonight = () => { const d = new Date(); d.setHours(20, 0, 0, 0); return d.getTime() > Date.now() + 5 * 60000 ? d : inMin(180); };
   const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; };
+  const meetingEnd = nextMeetingEnd(todos);
   const done = async () => { setRinging(null); try { await todosAPI.update(t.id, { completed: true }); } catch { /* ignore */ } refresh(); };
   const when = new Date(t.deadline).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   return (
@@ -74,6 +88,7 @@ export default function TaskReminders() {
         <button type="button" onClick={() => snooze(inMin(60))}>1 hour</button>
         <button type="button" onClick={() => snooze(tonight())}>Tonight</button>
         <button type="button" onClick={() => snooze(tomorrow())}>Tomorrow morning</button>
+        {meetingEnd && <button type="button" data-testid="snooze-meeting" onClick={() => snooze(new Date(meetingEnd.getTime() + 60000))}>After my next meeting</button>}
         <button type="button" className="quiet" onClick={() => setRinging(null)}>Dismiss</button>
       </div>
     </div>

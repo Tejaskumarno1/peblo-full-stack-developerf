@@ -44,6 +44,13 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     },
     estimateMin: (v) => int(v, 1, 1440),
     spentMin: (v) => int(v, 0, 100000),
+    // minutes worked per day, {"2026-11-05": 45}, so the time can be shown as "3 h over 4 days"
+    timeLog: (v) => {
+      if (!isObj(v)) return undefined;
+      const out: Record<string, number> = {};
+      for (const [k, n] of Object.entries(v).slice(0, 400)) { const m = int(n, 1, 1440); if (/^\d{4}-\d{2}-\d{2}$/.test(k) && m !== undefined) out[k] = m; }
+      return Object.keys(out).length ? out : undefined;
+    },
     label: (v) => ((LABELS as readonly string[]).includes(v) ? v : undefined),
     status: (v) => (v === 'doing' ? 'doing' : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { generateSummary, extractActions, suggestTitle, suggestTagForNote, processBlockAI, transcribe, getLinkPreview } from '../controllers/aiController.js';
 import { authenticate } from '../middleware/auth.js';
-import { checkOllama } from '../services/aiService.js';
+import { checkOllama, processTextCommand } from '../services/aiService.js';
 import { aiLimit } from '../middleware/rateLimit.js';
 import prisma from '../db.js';
 import { hosted, effectiveOllamaUrl } from '../utils/ollamaPolicy.js';
@@ -79,6 +79,18 @@ router.post('/local/cancel', (req, res) => {
   res.json({ ok: cancelPull(String(req.body?.model || '')) });
 });
 router.post('/transcribe', ...aiLimit, transcribe);
+// Break a task into a few small steps. The steps are only suggestions: nothing is saved here, the person adds the ones they want.
+router.post('/task-steps', ...aiLimit, async (req, res, next) => {
+  try {
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 500) : '';
+    const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 1500) : '';
+    if (!text) return res.status(400).json({ error: 'Write the task first.' });
+    const raw = await processTextCommand(req.user!.id, `Task: ${text}${details ? `\nDetails: ${details}` : ''}`, "Break this task into 3 to 6 small, concrete steps, each under 10 words, one per line with a '-' prefix, nothing else. Do it for");
+    const steps = String(raw || '').split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').trim()).filter((l) => l && l.length <= 160).slice(0, 8);
+    if (!steps.length) return res.status(502).json({ error: 'The AI did not suggest any steps. Try again.' });
+    res.json({ steps });
+  } catch (e) { next(e); }
+});
 
 // Mounted at /api/notes: AI actions on one note or one block of text
 export const noteAiRoutes = Router();

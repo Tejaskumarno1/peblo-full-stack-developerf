@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import PDFDocument from 'pdfkit';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -17,11 +18,11 @@ const newToken = () => crypto.randomBytes(18).toString('base64url');
 const cleanName = (raw: unknown) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '') || 'Guest';
 const cleanText = (raw: unknown, max: number) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max) : '');
 
-type Row = { token: string; user_id: string; list_name: string; perm: Perm; expires_at: Date | null; show_progress: boolean };
+type Row = { token: string; user_id: string; list_name: string; perm: Perm; expires_at: Date | null; show_progress: boolean; mcp_enabled: boolean };
 
-async function liveShare(token: string): Promise<Row | null> {
+export async function liveShare(token: string): Promise<Row | null> {
   if (!TOKEN_RE.test(token)) return null;
-  const rows = await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress FROM task_list_shares WHERE token = $1 AND (expires_at IS NULL OR expires_at > NOW())', token);
+  const rows = await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled FROM task_list_shares WHERE token = $1 AND (expires_at IS NULL OR expires_at > NOW())', token);
   return rows[0] || null;
 }
 
@@ -57,7 +58,7 @@ async function describe(userId: string, r: Row) {
   ]);
   const tasks = await listTasks(userId, r.list_name);
   return {
-    list: r.list_name, token: r.token, perm: r.perm, expiresAt: r.expires_at, showProgress: r.show_progress,
+    list: r.list_name, token: r.token, perm: r.perm, expiresAt: r.expires_at, showProgress: r.show_progress, mcp: r.mcp_enabled,
     open: tasks.filter((t) => !t.completed).length, done: tasks.filter((t) => t.completed).length,
     guests: guests.map((g) => ({ name: g.name, act: g.last_act })), comments: comments[0]?.n ?? 0,
   };
@@ -66,7 +67,7 @@ async function describe(userId: string, r: Row) {
 // GET /api/task-lists/shares -> every list link this person has
 listShareRoutes.get('/shares', async (req, res, next) => {
   try {
-    const rows = await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress FROM task_list_shares WHERE user_id = $1 ORDER BY created_at DESC', req.user!.id);
+    const rows = await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled FROM task_list_shares WHERE user_id = $1 ORDER BY created_at DESC', req.user!.id);
     res.json({ shares: await Promise.all(rows.map((r) => describe(req.user!.id, r))) });
   } catch (e) { next(e); }
 });
@@ -79,18 +80,19 @@ listShareRoutes.post('/share', async (req, res, next) => {
     if (!list) return res.status(400).json({ error: 'Which list?' });
     const perm = req.body?.perm;
     if (perm !== undefined && !(PERMS as readonly string[]).includes(perm)) return res.status(400).json({ error: 'That permission is not available.' });
-    const old = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress FROM task_list_shares WHERE user_id = $1 AND list_name = $2', uid, list))[0];
+    const old = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled FROM task_list_shares WHERE user_id = $1 AND list_name = $2', uid, list))[0];
     const days = req.body?.expiresInDays;
     let expires: Date | null = old?.expires_at && old.expires_at.getTime() > Date.now() ? old.expires_at : null;
     if (days === null || days === 0) expires = null;
     else if (typeof days === 'number' && days > 0 && days <= 3650) expires = new Date(Date.now() + days * 86400000);
     const show = typeof req.body?.showProgress === 'boolean' ? req.body.showProgress : (old?.show_progress ?? true);
+    const mcp = typeof req.body?.mcp === 'boolean' ? req.body.mcp : (old?.mcp_enabled ?? false);
     const token = old?.token || newToken();
     await prisma.$executeRawUnsafe(
-      'INSERT INTO task_list_shares (token, user_id, list_name, perm, expires_at, show_progress) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (user_id, list_name) DO UPDATE SET perm = EXCLUDED.perm, expires_at = EXCLUDED.expires_at, show_progress = EXCLUDED.show_progress',
-      token, uid, list, perm ?? old?.perm ?? 'view', expires, show,
+      'INSERT INTO task_list_shares (token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (user_id, list_name) DO UPDATE SET perm = EXCLUDED.perm, expires_at = EXCLUDED.expires_at, show_progress = EXCLUDED.show_progress, mcp_enabled = EXCLUDED.mcp_enabled',
+      token, uid, list, perm ?? old?.perm ?? 'view', expires, show, mcp,
     );
-    const row = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress FROM task_list_shares WHERE token = $1', token))[0];
+    const row = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled FROM task_list_shares WHERE token = $1', token))[0];
     res.status(201).json(await describe(uid, row));
   } catch (e) { next(e); }
 });
@@ -109,7 +111,7 @@ listShareRoutes.delete('/share', async (req, res, next) => {
 listShareRoutes.get('/comments', async (req, res, next) => {
   try {
     const list = cleanText(req.query.list, 60);
-    const s = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress FROM task_list_shares WHERE user_id = $1 AND list_name = $2', req.user!.id, list))[0];
+    const s = (await prisma.$queryRawUnsafe<Row[]>('SELECT token, user_id, list_name, perm, expires_at, show_progress, mcp_enabled FROM task_list_shares WHERE user_id = $1 AND list_name = $2', req.user!.id, list))[0];
     if (!s) return res.json({ comments: [] });
     const rows = await prisma.$queryRawUnsafe<{ todo_id: string; author: string; body: string; at: Date }[]>('SELECT todo_id, author, body, at FROM task_list_comments WHERE token = $1 ORDER BY at DESC LIMIT 100', s.token);
     const ids = [...new Set(rows.map((r) => r.todo_id))];
@@ -232,6 +234,40 @@ listPublicRoutes.post('/:token/tasks/:id/comments', guestWrite, async (req, res,
     res.status(201).json({ ok: true });
   } catch (e) { next(e); }
 });
+
+const latin = (s: string) => String(s || '').replace(/[^\u0020-\u007e\u00a0-\u00ff]/g, '?');
+/** The list as one PDF for people and AI tools that take a file: title, progress, then every task with its steps. */
+export async function listPdf(token: string): Promise<Buffer | null> {
+  const s = await liveShare(token);
+  if (!s) return null;
+  const [tasks, owner] = await Promise.all([listTasks(s.user_id, s.list_name), prisma.user.findUnique({ where: { id: s.user_id }, select: { name: true } })]);
+  const done = tasks.filter((t) => t.completed).length;
+  const doc = new PDFDocument({ size: 'A4', margin: 54, info: { Title: latin(s.list_name), Author: latin(owner?.name || 'Peblo') } });
+  const chunks: Buffer[] = [];
+  doc.on('data', (c: Buffer) => chunks.push(c));
+  const finished = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
+  const width = doc.page.width - 108;
+  doc.font('Helvetica-Bold').fontSize(22).fillColor('#2a1f17').text(latin(s.list_name), { width });
+  doc.moveDown(0.3).font('Helvetica').fontSize(10).fillColor('#5a4c40').text(`Shared by ${latin(owner?.name || 'the owner')} on Peblo. ${done} of ${tasks.length} done.`, { width });
+  doc.moveDown(0.8);
+  for (const t of tasks) {
+    const due = t.deadline ? `  (due ${new Date(t.deadline).toISOString().slice(0, 16).replace('T', ' ')} UTC)` : '';
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(t.completed ? '#6b5d50' : '#2a1f17').text(`${t.completed ? '[x]' : '[ ]'} ${latin(t.text)}${due}${t.priority === 'high' ? '  [high]' : ''}`, { width });
+    for (const st of stepsOf(t)) doc.font('Helvetica').fontSize(10).fillColor('#5a4c40').text(`     ${st.done ? '[x]' : '[ ]'} ${latin(st.text)}`, { width });
+    doc.moveDown(0.4);
+  }
+  doc.end();
+  return finished;
+}
+export const listPdfHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const pdf = await listPdf(String(req.params[0] || ''));
+    if (pdf === null) return res.status(404).type('text/plain').send('This list is not shared any more.\n');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.type('application/pdf').send(pdf);
+  } catch (e) { next(e); }
+};
 
 export const listMarkdownHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
