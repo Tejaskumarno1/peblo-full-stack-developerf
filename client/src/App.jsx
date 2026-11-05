@@ -50,6 +50,7 @@ const GoHome = () => <Navigate to="/" replace />;
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const LiveEditors = lazy(() => import('./components/LiveEditors'));
 const NotificationPill = lazy(() => import('./components/NotificationPill'));
+const AppMenu = lazy(() => import('./components/AppMenu'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
 
@@ -91,6 +92,7 @@ function ShellLayout() {
         <HelpDialog />
         <LiveEditors />
         <NotificationPill />
+        <AppMenu />
       </Suspense>
     </AppShell>
   );

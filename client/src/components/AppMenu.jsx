@@ -1,0 +1,161 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ExternalLink, AppWindow, EyeOff, Link2, Download, Code2, FileText, FilePlus2, ListChecks, Pin, PinOff, Copy, Trash2, Share2, ChevronRight, X, SquareArrowOutUpRight } from 'lucide-react';
+import { notesAPI } from '../api';
+import { exportMarkdown, exportWord, exportPdf } from '../utils/exportNote';
+import './appMenu.css';
+
+// Peblo's own right-click menu (mockup "Peblo right-click menu"): different contents for a note in a list, a link, and empty space.
+// Shift plus right-click still gives the normal browser menu. Menus that already exist (tabs, tables, the editor) are left alone.
+const abs = (href) => { try { return new URL(href, window.location.origin).href; } catch { return href; } };
+const words = (md) => String(md || '').replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+const pictures = (md) => [...new Set([...String(md || '').matchAll(/\/api\/media\/([\w-]{8,64})/g)].map((m) => abs(`/api/media/${m[1]}`)))];
+
+export default function AppMenu() {
+  const navigate = useNavigate();
+  const [menu, setMenu] = useState(null); // { x, y, kind: 'note' | 'link' | 'space', id?, href? }
+  const [note, setNote] = useState(null);
+  const [sub, setSub] = useState(null);
+  const [details, setDetails] = useState(null);
+  const [toast, setToast] = useState('');
+  const box = useRef(null);
+  const say = useCallback((t) => { setToast(t); setTimeout(() => setToast(''), 2200); }, []);
+  const close = useCallback(() => { setMenu(null); setSub(null); }, []);
+
+  useEffect(() => {
+    const onCtx = (e) => {
+      if (e.shiftKey || e.defaultPrevented) return;
+      const t = e.target instanceof Element ? e.target : null; if (!t) return;
+      if (t.closest('input, textarea, select, [contenteditable="true"], .bn-editor, [role="dialog"], [role="menu"], button, [data-no-appmenu]')) return;
+      const a = t.closest('a[href]');
+      let next = null;
+      if (a) {
+        const href = a.getAttribute('href') || '';
+        const m = /^\/notes\/([\w-]+)\/?$/.exec(href.split(/[?#]/)[0]);
+        if (m) next = { kind: 'note', id: m[1], href: abs(href) };
+        else if (/^https?:/i.test(href)) next = { kind: 'link', href };
+        else return;
+      } else if (t.closest('main, [data-app-main], .s-main, #root')) next = { kind: 'space' };
+      if (!next) return;
+      e.preventDefault();
+      setSub(null); setNote(null);
+      setMenu({ ...next, x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener('contextmenu', onCtx);
+    return () => document.removeEventListener('contextmenu', onCtx);
+  }, []);
+
+  // the note behind the row is read once the menu opens, so Pin, Save as and Inspect know the real note
+  useEffect(() => {
+    if (!menu || menu.kind !== 'note') return undefined;
+    let live = true;
+    notesAPI.get(menu.id).then(({ data }) => { if (live) setNote(data.note); }).catch(() => {});
+    return () => { live = false; };
+  }, [menu]);
+
+  useEffect(() => {
+    if (!menu) return undefined;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) close(); };
+    const esc = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('mousedown', away, true); document.addEventListener('keydown', esc, true); window.addEventListener('blur', close); window.addEventListener('resize', close);
+    document.addEventListener('scroll', close, true);
+    return () => { document.removeEventListener('mousedown', away, true); document.removeEventListener('keydown', esc, true); window.removeEventListener('blur', close); window.removeEventListener('resize', close); document.removeEventListener('scroll', close, true); };
+  }, [menu, close]);
+
+  const copy = async (text, done) => { try { await navigator.clipboard.writeText(text); say(done); } catch { say('Could not copy'); } };
+  const go = (fn) => () => { const m = menu; close(); fn(m); };
+  const newNote = async () => { try { const { data } = await notesAPI.create({ title: 'Untitled', content: '', tags: [] }); navigate(`/notes/${data.note.id}`); } catch { say('Could not create the note'); } };
+  const pin = async (m) => { try { const next = !note?.meta?.pinned; await notesAPI.update(m.id, { meta: { ...(note?.meta || {}), pinned: next } }); say(next ? 'Pinned' : 'Unpinned'); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not change the pin'); } };
+  const dup = async () => { if (!note) return; try { const { data } = await notesAPI.create({ title: `Copy of ${note.title || 'Untitled'}`, content: note.content || '', tags: note.tags || [] }); navigate(`/notes/${data.note.id}`); } catch { say('Could not duplicate the note'); } };
+  const trash = async (m) => { try { await notesAPI.delete(m.id); say('Moved to the trash'); window.dispatchEvent(new CustomEvent('pb-notes-changed')); } catch { say('Could not move it to the trash'); } };
+  const openNew = (href) => window.open(href, '_blank', 'noopener');
+  const openWin = (href) => window.open(href, '_blank', 'popup,width=1100,height=800,noopener');
+  const privateHint = (href) => copy(href, 'Link copied. Paste it into a private window');
+
+  const I = useMemo(() => function Item({ icon: Icon, label, onClick, hint, arrow, danger, disabled, id }) { return (
+    <button type="button" role="menuitem" className={`am-i${danger ? ' danger' : ''}`} disabled={disabled} data-testid={`am-${id}`} onClick={onClick} onMouseEnter={() => setSub(arrow || null)}>
+      <Icon size={15} /><span>{label}</span>{hint && <em>{hint}</em>}{arrow && <ChevronRight size={14} className="am-ar" />}
+    </button>
+  ); }, []);
+  if (!menu && !details && !toast) return null;
+
+  const left = menu ? Math.max(8, Math.min(menu.x, window.innerWidth - 250)) : 0;
+  const top = menu ? Math.max(8, Math.min(menu.y, window.innerHeight - (menu.kind === 'note' ? 420 : 200))) : 0;
+  const flip = menu && left > window.innerWidth - 500;
+  const subPanel = (name, items) => sub === name && <div className={`am-menu am-sub${flip ? ' flip' : ''}`} role="menu" data-testid={`am-sub-${name}`}>{items}</div>;
+
+  const inspect = (m) => {
+    if (m.kind === 'note' && note) setDetails({ title: note.title || 'Untitled', rows: [['Link', m.href], ['Id', note.id], ['Words', String(words(note.content))], ['Updated', note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''], ['Created', note.createdAt ? new Date(note.createdAt).toLocaleString() : ''], ['Pinned', note.meta?.pinned ? 'yes' : 'no'], ['Tags', (note.tags || []).join(', ') || 'none']], pics: pictures(note.content) });
+    else if (m.kind === 'link') { let u = null; try { u = new URL(m.href); } catch { /* not a URL */ } setDetails({ title: 'Link', rows: [['Address', m.href], ['Site', u ? u.host : ''], ['Path', u ? u.pathname : '']], pics: [] }); }
+  };
+
+  return (
+    <>
+      {menu && (
+        <div className="am-menu" ref={box} role="menu" data-testid="app-menu" data-kind={menu.kind} style={{ left, top }}>
+          {menu.kind === 'note' && (
+            <>
+              <I id="open" icon={ExternalLink} label="Open" hint="Enter" onClick={go((m) => navigate(`/notes/${m.id}`))} />
+              <I id="open-tab" icon={SquareArrowOutUpRight} label="Open in new tab" onClick={go((m) => openNew(m.href))} />
+              <I id="open-win" icon={AppWindow} label="Open in new window" onClick={go((m) => openWin(m.href))} />
+              <I id="open-as" icon={EyeOff} label="Open as" arrow="open-as" onClick={() => setSub('open-as')} />
+              {subPanel('open-as', <>
+                <I id="as-peblo" icon={AppWindow} label="Peblo window (default)" onClick={go((m) => navigate(`/notes/${m.id}`))} />
+                <I id="as-private" icon={EyeOff} label="Private window (copies the link)" onClick={go((m) => privateHint(m.href))} />
+              </>)}
+              <div className="am-sep" /><div className="am-lab">Create</div>
+              <I id="new-note" icon={FilePlus2} label="New note here" onClick={go(newNote)} />
+              <div className="am-sep" /><div className="am-lab">Organise</div>
+              <I id="pin" icon={note?.meta?.pinned ? PinOff : Pin} label={note?.meta?.pinned ? 'Unpin' : 'Pin'} disabled={!note} onClick={go(pin)} />
+              <I id="dup" icon={Copy} label="Duplicate" disabled={!note} onClick={go(dup)} />
+              <div className="am-sep" /><div className="am-lab">Share</div>
+              <I id="copy-link" icon={Link2} label="Copy link" onClick={go((m) => copy(m.href, 'Link copied'))} />
+              <I id="save-as" icon={Download} label="Save as" arrow="save-as" disabled={!note} onClick={() => setSub('save-as')} />
+              {subPanel('save-as', <>
+                <I id="save-md" icon={FileText} label="Markdown (.md)" onClick={go(() => exportMarkdown(note))} />
+                <I id="save-doc" icon={FileText} label="Word (.doc)" onClick={go(() => exportWord(note))} />
+                <I id="save-pdf" icon={FileText} label="PDF" onClick={go(() => exportPdf(note))} />
+              </>)}
+              <div className="am-sep" />
+              <I id="inspect" icon={Code2} label="Inspect (details)" disabled={!note} onClick={go(inspect)} />
+              <I id="trash" icon={Trash2} danger label="Move to Trash" onClick={go(trash)} />
+            </>
+          )}
+          {menu.kind === 'link' && (
+            <>
+              <I id="l-open" icon={SquareArrowOutUpRight} label="Open link in new tab" onClick={go((m) => openNew(m.href))} />
+              <I id="l-private" icon={EyeOff} label="Open link in private window (copies it)" onClick={go((m) => privateHint(m.href))} />
+              <I id="l-win" icon={AppWindow} label="Open link in new window" onClick={go((m) => openWin(m.href))} />
+              <I id="l-save" icon={Download} label="Save link as" onClick={go((m) => { const a = document.createElement('a'); a.href = m.href; a.download = ''; a.rel = 'noopener'; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); })} />
+              <I id="l-copy" icon={Link2} label="Copy link address" onClick={go((m) => copy(m.href, 'Link copied'))} />
+              <div className="am-sep" />
+              <I id="l-inspect" icon={Code2} label="Inspect" onClick={go(inspect)} />
+            </>
+          )}
+          {menu.kind === 'space' && (
+            <>
+              <div className="am-lab">Create</div>
+              <I id="s-note" icon={FilePlus2} label="New note here" onClick={go(newNote)} />
+              <I id="s-todo" icon={ListChecks} label="New to-do" onClick={go(() => navigate('/tasks'))} />
+              <I id="s-share" icon={Share2} label="Copy address of this page" onClick={go(() => copy(window.location.href, 'Link copied'))} />
+            </>
+          )}
+        </div>
+      )}
+      {details && (
+        <div className="am-back" onMouseDown={(e) => { if (e.target === e.currentTarget) setDetails(null); }}>
+          <section className="am-dlg" role="dialog" aria-modal="true" aria-label="Details" data-testid="am-details">
+            <header><b>{details.title}</b><button type="button" aria-label="Close" onClick={() => setDetails(null)}><X size={16} /></button></header>
+            <dl>{details.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+            {details.pics.length > 0 && (
+              <div className="am-pics"><div className="am-lab">Pictures ({details.pics.length})</div>
+                {details.pics.map((p, i) => <div className="am-pic" key={p}><span>Image {i + 1}</span><a href={p} target="_blank" rel="noopener noreferrer">{p}</a><button type="button" onClick={() => copy(p, 'Picture link copied')}>Copy</button></div>)}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      {toast && <div className="am-toast" role="status" data-testid="am-toast">{toast}</div>}
+    </>
+  );
+}
