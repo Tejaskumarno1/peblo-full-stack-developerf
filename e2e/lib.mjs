@@ -38,6 +38,8 @@ export async function boot(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((t) => { try { if (!localStorage.getItem('peblo-token')) localStorage.setItem('peblo-token', t); } catch {} }, token);
   // live cursors are off by default in the app; the older tests exercise them, so they start with them on
+  // The default Notes list layout is folder cards; older tests drive the folded sections, so pin that unless a test asks (opts.noteLayout).
+  await ctx.addInitScript((lay) => { try { const o = JSON.parse(localStorage.getItem('peblo-settings') || '{}') || {}; if (!o.noteLayout) { o.noteLayout = lay; localStorage.setItem('peblo-settings', JSON.stringify(o)); } } catch {} }, opts.noteLayout || 'sections');
   if (process.env.STYLE) await ctx.addInitScript((st) => { try { localStorage.setItem('peblo-style', st); } catch {} }, process.env.STYLE);
   if (process.env.COLLAB_OFF) await ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch {} });
   const page = await ctx.newPage();

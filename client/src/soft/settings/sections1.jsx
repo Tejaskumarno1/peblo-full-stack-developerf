@@ -1,3 +1,4 @@
+import '../notesV2.css';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -235,6 +236,27 @@ export function NotesSection() {
         </Row>
         <Row label="Check spelling" hint="Underline misspelled words while you type in a note.">
           <Switch label="Check spelling" checked={settings?.spellcheck !== false} onChange={(v) => save({ spellcheck: v })} />
+        </Row>
+      </Card>
+      <Card title="Notes list" hint="How the notes panel groups what you wrote.">
+        <Row label="List layout" hint="Folder cards show each date or tag as a folder you open." stack>
+          <span className="set-layouts" role="group" aria-label="Notes list layout">
+            {[['cards', 'Folder cards', 'Date and tag groups open like folders', 'cards', 6], ['sections', 'Folded sections', 'Groups as containers you fold', 'sec', 3], ['classic', 'Classic list', 'Plain headings, no containers', 'cls', 5]].map(([id, name, sub, cls, n]) => (
+              <button key={id} type="button" className="set-layout" aria-pressed={(['cards', 'sections', 'classic'].includes(settings?.noteLayout) ? settings.noteLayout : 'cards') === id} onClick={() => save({ noteLayout: id })}>
+                <span className={`pv ${cls}`} aria-hidden="true">{Array.from({ length: n }).map((_, i) => <span key={i} />)}</span>
+                <b>{name}</b><small>{sub}</small>
+              </button>
+            ))}
+          </span>
+        </Row>
+        <Row label="Default grouping" hint="Used when this device has not picked a grouping yet.">
+          <Seg label="Default grouping" value={['date', 'tag', 'folder', 'none'].includes(settings?.noteGroup) ? settings.noteGroup : 'date'} onChange={(v) => save({ noteGroup: v })} options={[{ id: 'date', label: 'Date' }, { id: 'tag', label: 'Tag' }, { id: 'folder', label: 'Folder' }, { id: 'none', label: 'None' }]} />
+        </Row>
+        <Row label="Density">
+          <Seg label="Density" value={settings?.noteDensity === 'compact' ? 'compact' : 'cozy'} onChange={(v) => save({ noteDensity: v })} options={[{ id: 'cozy', label: 'Cozy' }, { id: 'compact', label: 'Compact' }]} />
+        </Row>
+        <Row label="Remember folded groups" hint="Keep sections folded or open the way you left them.">
+          <Switch label="Remember folded groups" checked={settings?.rememberFolds !== false} onChange={(v) => save({ rememberFolds: v })} />
         </Row>
       </Card>
       <Card title="Calendar and time">

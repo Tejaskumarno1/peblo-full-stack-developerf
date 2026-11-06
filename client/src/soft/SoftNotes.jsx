@@ -9,7 +9,7 @@ import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
-import { colorOf, withLegacy, inFolder, smartMatch } from './folders';
+import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
 import { useAuth } from '../context/AuthContext';
 import './notespanel.css';
 import './notesV2.css';
@@ -66,7 +66,7 @@ export default function SoftNotes() {
   const [filter, setFilter] = useState(() => (new URLSearchParams(window.location.search).get('filter') === 'trash' ? 'trash' : 'all'));
   const [selTags, setSelTags] = useState(() => (params.get('tag') ? [params.get('tag')] : []));
   const [tagMatch, setTagMatch] = useState('any');
-  const [collapsed, setCollapsed] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
+  const [collapsed, setCollapsed] = useState(() => { try { if (JSON.parse(localStorage.getItem('peblo-settings') || '{}').rememberFolds === false) return {}; return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
   const toggleGroup = (k) => setCollapsed((c) => {
     const n = { ...c, [k]: !c[k] };
     if (!n[k]) delete n[k];
@@ -109,12 +109,13 @@ export default function SoftNotes() {
   const { settings: acct, updateSettings } = useAuth();
   const [view, setViewState] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem('peblo-notes-view') || 'null'); if (v && typeof v === 'object') return { ...DEFAULT_VIEW, ...v }; } catch { /* ignore */ }
-    const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', 'date') };
-    return { ...DEFAULT_VIEW, sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : 'date' };
+    const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', '') };
+    return { ...DEFAULT_VIEW, ...(['cozy', 'compact'].includes(acct?.noteDensity) ? { density: acct.noteDensity } : {}), sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : (['date', 'folder', 'tag', 'none'].includes(acct?.noteGroup) ? acct.noteGroup : 'date') };
   });
   const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-notes-view', JSON.stringify(v)); } catch { /* ignore */ } };
   const sort = view.sort;
   const group = view.group;
+  const layout = ['cards', 'sections', 'classic'].includes(acct?.noteLayout) ? acct.noteLayout : 'cards';
   const [viewOpen, setViewOpen] = useState(false);
   const [fSel, setFSel] = useState(null); // { kind: 'folder' | 'smart', id }
   const [cards, setCards] = useState(false); // the folder cards view
@@ -218,6 +219,8 @@ export default function SoftNotes() {
     return out;
   }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownGroups = gSel && !dq ? groups.filter((g) => g.key === gSel) : groups;
+  const dateTagCards = layout === 'cards' && (group === 'date' || group === 'tag') && !dq && filter === 'all' && !selectMode && !fSel && !cards;
+  const gOpen = layout === 'cards' && !!gSel && !dq && !fSel && (group === 'date' || group === 'tag') && filter === 'all' && !selectMode;
   const folderMode = group === 'folder' && !dq && filter === 'all' && !selectMode; // Group by Folder shows the folder cards
   useEffect(() => { setGSel(null); }, [group, filter]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
@@ -638,9 +641,14 @@ export default function SoftNotes() {
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
-      <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
+      <aside className={`s-notes-list np lay-${layout}${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
         {selectMode ? (
           <div className="np-selhead"><button type="button" onClick={() => { setSelectMode(false); setPicked([]); setSheet(null); }}>Cancel</button><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(picked.length === shownList.length ? [] : shownList.map((n) => n.id))}>{picked.length && picked.length === shownList.length ? 'Clear' : 'Select all'}</button></div>
+        ) : gOpen ? (
+          <div className="np-head np-fhead">
+            <button type="button" className="np-ib" aria-label={`Back to ${group === 'tag' ? 'tags' : 'dates'}`} title="Back" onClick={() => setGSel(null)}><ChevronLeft size={18} strokeWidth={1.9} /></button>
+            <div className="np-ftitle"><small>{group === 'tag' ? 'Tag' : 'Date'}</small><h1 className="s-notes-h1">{groups.find((g) => g.key === gSel)?.label || ''}</h1></div>
+          </div>
         ) : fSel && selDef && filter !== 'archive' && filter !== 'trash' ? (
           <div className="np-head np-fhead">
             <button type="button" className="np-ib" aria-label="Back to folders" title="Back to folders" onClick={() => { setFSel(selDef.parent ? { kind: 'folder', id: selDef.parent } : null); if (!selDef.parent) setCards(true); }}><ChevronLeft size={18} strokeWidth={1.9} /></button>
@@ -664,7 +672,7 @@ export default function SoftNotes() {
           </div>
         )}
         {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
-        {filter !== 'archive' && filter !== 'trash' && !(fSel && selDef) && (
+        {filter !== 'archive' && filter !== 'trash' && !(fSel && selDef) && !gOpen && (
           <div className="np-row" role="tablist" aria-label="Folders">
             <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards(false); }}>All <i>{allNotes.length}</i></button>
             <button type="button" role="tab" aria-selected={filter === 'inbox'} className={`np-chip${filter === 'inbox' ? ' on' : ''}`} onClick={() => { setFilter('inbox'); setFSel(null); }}><span className="np-dot" style={{ background: '#FFB48C' }} />Inbox <i>{inboxCount}</i></button>
@@ -701,14 +709,30 @@ export default function SoftNotes() {
             </div>
           );
         })()}
-        {!dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
+        {layout === 'sections' && !dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
           <div className="np-cards mini" role="list" aria-label={group === 'tag' ? 'Jump to a tag' : 'Jump to a date'}>
             {groups.map((g) => (
               <button key={g.key} type="button" role="listitem" className={`np-card mini${gSel === g.key ? ' on' : ''}`} onClick={() => jumpTo(g.key)}><b>{g.label}</b><i>{g.notes.length}</i></button>
             ))}
           </div>
         )}
-        {((!cards && !folderMode) || fSel) && <div className="s-notes-rows">
+        {dateTagCards && !gSel && (
+          <div className="np-cards-wrap">
+            <div className="np-cards gcards" role="list" aria-label={group === 'tag' ? 'Tags' : 'Dates'}>
+              {groups.map((g, i) => {
+                const col = FOLDER_COLORS[i % FOLDER_COLORS.length];
+                return (
+                  <button key={g.key} type="button" role="listitem" className="np-card gcard" onClick={() => setGSel(g.key)}>
+                    <span className="np-card-ic" style={{ background: col[1], color: col[2] }}>{g.key === 'pin' ? <Pin size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
+                    <b>{g.label}</b><i>{g.notes.length} {g.notes.length === 1 ? 'note' : 'notes'}</i>
+                  </button>
+                );
+              })}
+              {groups.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No notes here yet.</p>}
+            </div>
+          </div>
+        )}
+        {((!cards && !folderMode && !(dateTagCards && !gSel)) || fSel) && <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
           {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />

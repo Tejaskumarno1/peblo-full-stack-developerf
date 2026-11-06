@@ -26,3 +26,26 @@
 .soft .np .s-grp-toggle .nm { flex: none; }
 .soft .np .s-grp-toggle .cnt { margin-left: 0; background: var(--s-surface); font-size: 11.5px; padding: 1px 8px; }
 .soft .np .s-grp > a, .soft .np .s-grp > button:not(.s-grp-h) { margin: 0; }
+
+/* Notes v3: date and tag folder cards, and the three list layouts */
+.soft .np .np-cards.gcards { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.soft .np .np-card.gcard { align-items: center; text-align: center; gap: 2px; padding: 14px 8px 12px; border: 0; background: var(--s-bg); box-shadow: 0 0 0 1px var(--s-line); border-radius: 18px; color: var(--s-fg); }
+.soft .np .np-card.gcard:hover, .soft .np .np-card.gcard:focus-visible { box-shadow: 0 0 0 1.5px var(--s-fg); }
+.soft .np .np-card.gcard .np-card-ic { width: 46px; height: 46px; border-radius: 14px; margin-bottom: 6px; }
+.soft .np .np-card.gcard b { font-size: 13.5px; font-weight: 800; }
+.soft .np .np-card.gcard i { font-size: 12px; opacity: .65; }
+.soft .np.lay-classic .s-grp { background: transparent; box-shadow: none; border-radius: 0; padding: 0; }
+.soft .np.lay-classic .s-grp-h { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--s-muted, var(--s-fg)); }
+.soft .np.lay-classic .s-grp-toggle .chev { display: none; }
+.soft .np.lay-classic .s-grp-toggle { pointer-events: none; }
+.soft .np.lay-cards .s-grp { background: transparent; box-shadow: none; padding: 0; }
+.soft .set-layouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.soft .set-layout { display: flex; flex-direction: column; gap: 8px; align-items: stretch; padding: 10px; border: 0; border-radius: 16px; background: var(--s-bg); box-shadow: 0 0 0 1px var(--s-line); color: var(--s-fg); cursor: pointer; font: inherit; text-align: left; }
+.soft .set-layout[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--s-fg); }
+.soft .set-layout .pv { height: 64px; border-radius: 10px; background: var(--s-surface); display: grid; gap: 4px; padding: 6px; align-content: start; }
+.soft .set-layout .pv.cards { grid-template-columns: repeat(3, 1fr); }
+.soft .set-layout .pv.cards span { height: 24px; border-radius: 7px; background: var(--s-accent-soft, #DDD8FF); }
+.soft .set-layout .pv.sec span { height: 16px; border-radius: 8px; box-shadow: 0 0 0 1px var(--s-line); background: var(--s-bg); }
+.soft .set-layout .pv.cls span { height: 5px; border-radius: 3px; background: var(--s-line); }
+.soft .set-layout b { font-size: 13px; font-weight: 800; }
+.soft .set-layout small { font-size: 11.5px; opacity: .7; }
