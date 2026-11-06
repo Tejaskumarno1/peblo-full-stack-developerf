@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, ArrowUp, Plus, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { dashboardAPI, todosAPI, notesAPI, hubAPI } from '../api';
+import { buildTimeline, hhmm } from './homeTimeline';
 import { timeOf, startOfDay, addDays, sameDay, daysFromToday, weekdayShort, weekdayLong, numberWord, snippetOf, firstNameOf, toneOf, toneVar, tagsOf } from './softUtils';
 
 const TILT = [
@@ -132,13 +133,26 @@ export default function SoftHome() {
           </div>
           {err && <p className="s-empty small" role="alert">{err}</p>}
           {todayTasks.length === 0 && <p className="s-empty">Nothing due today. Press Capture to add something.</p>}
-          {todayTasks.slice(0, 3).map((t, i) => (
-            <label key={t.id} className="s-home-task">
-              <input type="checkbox" className="s-check" checked={!!t.completed} onChange={() => toggle(t)} />
-              <span className={`t${t.priority === 'high' || i === 0 ? ' strong' : ''}`}>{t.text}</span>
-              {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
-            </label>
-          ))}
+          {(() => {
+            const d = new Date();
+            const rows = buildTimeline(todayTasks, timeOf, d.getHours() * 60 + d.getMinutes());
+            let shown = 0;
+            return rows.map((r) => {
+              if (r.type === 'now') {
+                return <div key="now" className="s-nowrow" data-testid="home-now"><span className="dot" aria-hidden="true" /><b>Now</b><span>{r.until === null ? (todayTasks.length ? 'Free for the rest of the day' : 'Free all day') : `Free until ${hhmm(r.until)}`}</span></div>;
+              }
+              if (shown >= 3) return null;
+              shown += 1;
+              const t = r.task;
+              return (
+                <label key={t.id} className="s-home-task">
+                  <input type="checkbox" className="s-check" checked={!!t.completed} onChange={() => toggle(t)} />
+                  <span className={`t${t.priority === 'high' || shown === 1 ? ' strong' : ''}`}>{t.text}</span>
+                  {timeOf(t) && <span className={`time${t.priority === 'high' ? ' hot' : ''}`}>{timeOf(t)}</span>}
+                </label>
+              );
+            });
+          })()}
           {todayTasks.length > 3 && <Link to="/tasks" className="s-more">+ {todayTasks.length - 3} more today</Link>}
           <span className="grow" />
           {overdue[0] ? (

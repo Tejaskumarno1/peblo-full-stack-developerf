@@ -608,3 +608,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 @media (max-width: 860px) { .soft .s-sheet.wide .s-sheet-cols { grid-template-columns: 1fr; } }
 .soft .s-sheet-sec input[type="url"] { height: 42px; border: 0; border-radius: 999px; padding: 0 16px; background: var(--s-bg); color: var(--s-fg); caret-color: var(--s-accent); font: 500 14px var(--s-body); }
 .soft .s-sheet-sec input[type="url"]:focus { outline: 2px solid var(--s-accent); }
+
+/* Home: Today as a timeline with a Now marker */
+.soft .s-nowrow { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 0 6px; min-height: 26px; font-size: 12.5px; color: var(--s-fg2); }
+.soft .s-nowrow b { color: var(--s-accent); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 11.5px; }
+.soft .s-nowrow .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--s-accent); flex: none; }
+.soft .s-nowrow::after { content: ''; flex: 1; height: 2px; border-radius: 1px; background: var(--s-accent); opacity: .45; order: 5; }
