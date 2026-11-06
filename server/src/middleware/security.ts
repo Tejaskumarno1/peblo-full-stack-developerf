@@ -45,6 +45,17 @@ export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): s
   ].join('; ');
 }
 
+/**
+ * Behind a hosting platform's proxy (TRUST_PROXY set) in production, plain http is sent to https.
+ * The health probe is exempt so the platform can still check the server.
+ */
+export function forceHttps(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY && !req.secure && req.path !== '/api/health') {
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+  }
+  next();
+}
+
 export function securityHeaders(staticDir?: string) {
   let csp = '';
   if (staticDir) {

@@ -36,7 +36,7 @@ import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { verifyToken } from './middleware/auth.js';
-import { securityHeaders, corsDelegate } from './middleware/security.js';
+import { securityHeaders, forceHttps, corsDelegate } from './middleware/security.js';
 import { rejectNulInUrl, cleanBody, inputErrors } from './middleware/cleanInput.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { agentNote, origin as reqOrigin } from './services/agentView.js';
@@ -61,6 +61,7 @@ export function createApp(staticDir?: string) {
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
   app.disable('x-powered-by');
+  app.use(forceHttps);
   app.use(securityHeaders(staticDir));
   app.use(rejectNulInUrl); // %00 can never be stored: answer 400 here instead of a database error
 

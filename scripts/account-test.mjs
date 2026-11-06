@@ -55,13 +55,15 @@ try {
   check('a made-up link is refused', r.status === 400, r);
 
   // ---- with mail: confirm the address ----
-  process.env.MAIL_OUTBOX = outbox;
+  // An account made without mail starts unconfirmed; once mail is set up it can ask for the confirm link.
   const e1 = `acct-1-${runId}@peblo.test`;
   r = await call('POST', '/api/auth/signup', { email: e1, password: PW, name: 'Mail One' });
   token = r.json.token; const tok1 = token;
+  process.env.MAIL_OUTBOX = outbox;
+  r = await call('POST', '/api/auth/send-verification');
   await new Promise((s) => setTimeout(s, 400));
   let m = mails();
-  check('signup mails a confirm link to the new address', m.length === 1 && m[0].to === e1 && !!linkOf(m[0]) && /Confirm/i.test(m[0].subject), m);
+  check('asking for a confirm link mails it to the address', r.status === 200 && m.length === 1 && m[0].to === e1 && !!linkOf(m[0]) && /Confirm|verify/i.test(m[0].subject), m);
   const raw1 = linkOf(m[0]);
   check('only a hash of the link is stored, not the link', (await prisma.emailToken.findMany({ where: { kind: 'verify' } })).every((t) => t.tokenHash !== raw1 && t.tokenHash.length === 64));
   r = await call('GET', '/api/profile');
@@ -84,10 +86,24 @@ try {
 
   // ---- expired links ----
   const e2 = `acct-2-${runId}@peblo.test`;
+  delete process.env.MAIL_OUTBOX;
   r = await call('POST', '/api/auth/signup', { email: e2, password: PW, name: 'Mail Two' });
   token = r.json.token; const tok2 = token;
+  process.env.MAIL_OUTBOX = outbox;
+  await call('POST', '/api/auth/send-verification');
   await new Promise((s) => setTimeout(s, 400));
   const raw2 = linkOf(mails().at(-1));
+  // With mail set up, signing up only sends a link; the account exists once the link is opened.
+  const e3 = `acct-3-${runId}@peblo.test`;
+  const before = mails().length;
+  r = await call('POST', '/api/auth/signup', { email: e3, password: PW, name: 'Mail Three' });
+  await new Promise((s) => setTimeout(s, 400));
+  const m3 = mails().slice(before);
+  check('signup with mail sends a finish link and makes no account yet', r.status === 202 && r.json.pending === true && m3.length === 1 && m3[0].to === e3 && /Finish signing up/i.test(m3[0].subject) && !(await prisma.user.findFirst({ where: { email: e3 } })), r);
+  r = await call('POST', '/api/auth/verify-email', { token: linkOf(m3[0]) });
+  check('opening the finish link creates the account', r.status === 200 && r.json.kind === 'signup' && !!(await prisma.user.findFirst({ where: { email: e3 } })), r);
+  r = await call('POST', '/api/auth/verify-email', { token: linkOf(m3[0]) });
+  check('the finish link works once', r.status === 400, r);
   await prisma.emailToken.updateMany({ where: { user: { email: e2 } }, data: { expiresAt: new Date(Date.now() - 1000) } });
   r = await call('POST', '/api/auth/verify-email', { token: raw2 });
   check('an expired link is refused', r.status === 400, r);
