@@ -870,13 +870,6 @@ export default function SoftNotes() {
           {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
 
-        {outline.length >= 2 && (
-          <section className="s-side-card s-outline-card" style={{ background: 'var(--s-butter)' }} aria-labelledby="s-outl">
-            <h3 id="s-outl" className="s-h3">Outline <span className="s-cnt">{outline.length}</span></h3>
-            {outline.slice(0, 20).map((h, i) => <button key={i} type="button" className="s-side-link s-outl-item" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
-          </section>
-        )}
-
         <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
           <h3 id="s-mentions" className="s-h3">Mentioned in</h3>
           {mentions.length === 0 && <p className="s-empty small">{(doc?.title || '').trim().length < 4 ? 'Give the note a title to see where it is mentioned.' : 'No other note mentions this one yet.'}</p>}

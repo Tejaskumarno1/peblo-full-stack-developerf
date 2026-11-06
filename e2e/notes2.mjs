@@ -20,9 +20,8 @@ try {
   check('the note shows words, characters and reading time', /\d+ words? · \d+ characters · \d+ min read/.test(stats || ''), stats);
   check('the count ignores the picture address', Number((stats.match(/(\d+) characters/) || [])[1]) < content.length - 25, stats);
 
-  // outline card
-  const items = await page.locator('.s-outline-card .s-outl-item').allTextContents();
-  check('the side panel lists the headings as an outline', items.length === 2 && /First heading/.test(items[0]), items.join('|'));
+  // the side panel has no Outline card (removed on request); Ask, Linked tasks and Mentioned in stay
+  check('the side panel has no Outline card', (await page.locator('.s-outline-card').count()) === 0);
 
   // table does not break the page
   const tbl = await page.evaluate(() => {
