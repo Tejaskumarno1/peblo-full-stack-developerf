@@ -13,7 +13,9 @@ import './tasks2.css';
 import './bulk.css';
 import './lists.css';
 import TaskReview from './TaskReview';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, GripVertical } from 'lucide-react';
+import SavedViews from './SavedViews';
+import { loadViews } from './viewStore';
 import './taskreview.css';
 import { ShortcutSheet, BulkBar, UndoRedo, DeleteConfirm } from './TaskBulk';
 import ShareList from './ShareList';
@@ -129,6 +131,9 @@ export default function SoftTasks() {
   const [delList, setDelList] = useState(null);
   const [gPick, setGPick] = useState(null);
   const [review, setReview] = useState(false);
+  const [views, setViews] = useState(() => loadViews());
+  const [activeView, setActiveView] = useState(null);
+  const [dropAt, setDropAt] = useState(null);
   const [folded, setFolded] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('peblo-task-folded') || '[]')); } catch { return new Set(); } });
   const [dense, setDense] = useState(() => { try { return localStorage.getItem('peblo-task-dense') === '1'; } catch { return false; } });
   const toggleFold = (k) => setFolded((f) => { const n = new Set(f); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('peblo-task-folded', JSON.stringify([...n])); } catch { /* ignore */ } return n; });
@@ -186,7 +191,7 @@ export default function SoftTasks() {
     return { overdue, today: withOrder(today), tomorrow: withOrder(tomorrow), week: withOrder(week), later, done, open };
   }, [base, gone]);
   const otherGroups = useMemo(() => {
-    const sorted = sortTasks(groups.open, ls === 'due' || lg === 'when' ? 'due' : ls, SOFT_H);
+    const sorted = sortTasks(groups.open, ls === 'manual' ? 'manual' : ls === 'due' || lg === 'when' ? 'due' : ls, SOFT_H);
     if (lg === 'list') {
       const m = new Map();
       for (const t of sorted) { const k = t.meta?.list || INBOX; if (!m.has(k)) m.set(k, { key: k, label: k === INBOX ? 'Inbox' : k, items: [] }); m.get(k).items.push(t); }
@@ -362,6 +367,32 @@ export default function SoftTasks() {
     pushHist({ label: 'Order changed', undo: () => applyPatches(before), redo: () => applyPatches(patches) });
   };
 
+  const manual = view === 'list' && ls === 'manual';
+  const moveInGroup = async (id, targetId, groupKey, below = false) => {
+    setDragId(null); setDropAt(null);
+    const g = otherGroups.find((x) => x.key === groupKey);
+    if (!g || !g.items.some((x) => x.id === id) || id === targetId) return;
+    const ids = g.items.map((x) => x.id).filter((x) => x !== id);
+    let at = ids.indexOf(targetId);
+    if (at < 0) at = ids.length; else if (below) at += 1;
+    ids.splice(at, 0, id);
+    const patches = ids.map((x, i) => ({ id: x, order: i * 10 }));
+    const before = g.items.map((x) => ({ id: x.id, order: x.meta?.order ?? null }));
+    await applyPatches(patches);
+    pushHist({ label: 'Order changed', undo: () => applyPatches(before), redo: () => applyPatches(patches) });
+    return before;
+  };
+  const stepInGroup = async (t, groupKey, dir) => {
+    const g = otherGroups.find((x) => x.key === groupKey);
+    if (!g) return;
+    const i = g.items.findIndex((x) => x.id === t.id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= g.items.length) return;
+    const before = await moveInGroup(t.id, g.items[j].id, groupKey, dir > 0);
+    say(`Moved "${t.text}" ${dir < 0 ? 'up' : 'down'} one`, () => applyPatches(before));
+    requestAnimationFrame(() => document.querySelector(`[data-id="${t.id}"] .s-card-open`)?.focus());
+  };
+
   const parsed = draft.trim() ? parseTask(draft) : null;
   const add = async (e) => {
     e.preventDefault();
@@ -463,7 +494,8 @@ export default function SoftTasks() {
   };
 
   const card = (t, column) => (
-    <div key={t.id} data-id={t.id} className={`s-card${t.completed ? ' done' : ''}${dragId === t.id ? ' dragging' : ''}${selMode && sel.has(t.id) ? ' sel' : ''}${cursor === t.id ? ' kb' : ''}`} data-testid="task-card" draggable={!selMode} onClick={(e) => { if (selMode && !e.target.closest('a')) toggleSel(t, e.shiftKey, visibleIds); else setCursor(t.id); }} onDragOver={(e) => { if (dragId && dragId !== t.id) e.preventDefault(); }} onDrop={(e) => { if (dragId && dragId !== t.id) { e.preventDefault(); e.stopPropagation(); reorder(dragId, t, column); } }} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }} onDragEnd={() => { setDragId(null); setOverCol(null); }}>
+    <div key={t.id} data-id={t.id} className={`s-card${t.completed ? ' done' : ''}${dragId === t.id ? ' dragging' : ''}${selMode && sel.has(t.id) ? ' sel' : ''}${cursor === t.id ? ' kb' : ''}${manual && dropAt === t.id ? ' drop-here' : ''}`} data-testid="task-card" draggable={!selMode} onKeyDown={(e) => { if (manual && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); stepInGroup(t, column, e.key === 'ArrowUp' ? -1 : 1); } }} onClick={(e) => { if (selMode && !e.target.closest('a')) toggleSel(t, e.shiftKey, visibleIds); else setCursor(t.id); }} onDragOver={(e) => { if (dragId && dragId !== t.id) { e.preventDefault(); if (manual) setDropAt(t.id); } }} onDrop={(e) => { if (dragId && dragId !== t.id) { e.preventDefault(); e.stopPropagation(); if (manual) moveInGroup(dragId, t.id, column); else reorder(dragId, t, column); } }} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }} onDragEnd={() => { setDragId(null); setOverCol(null); setDropAt(null); }}>
+      {manual && !selMode && <span className="s-grip" aria-hidden="true" title="Drag to reorder, or press Alt with the arrow keys"><GripVertical size={16} /></span>}
       {selMode
         ? <button type="button" className={`s-selbox${sel.has(t.id) ? ' on' : ''}`} aria-pressed={sel.has(t.id)} aria-label={`Select "${t.text}"`} />
         : <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggle(t)} aria-label={`Mark "${t.text}" ${t.completed ? 'not done' : 'done'}`} />}
@@ -580,6 +612,7 @@ export default function SoftTasks() {
       ) : null}
       {err && <p className="s-empty small" role="alert" style={{ margin: '4px 0' }}>{err}</p>}
 
+      <SavedViews views={views} setViews={setViews} current={{ q, pill, lg, ls }} activeId={activeView} setActiveId={setActiveView} onApply={(v) => { setQ(v.q || ''); setPill(v.pill || 'all'); setLg(v.lg || 'when'); setLs(v.ls || 'due'); setGPick(null); }} say={say} />
       <div className="s-tasktools">
         <label htmlFor="s-task-search" className="s-sr">Search tasks</label>
         <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks and tags…" />
@@ -595,7 +628,7 @@ export default function SoftTasks() {
           <>
             <button type="button" className={`s-selbtn${dense ? ' on' : ''}`} aria-pressed={dense} onClick={toggleDense}>{dense ? 'Compact' : 'Comfortable'}</button>
             <div className="tl-seg" role="group" aria-label="Group tasks by">{[['none', 'None'], ['when', 'Date'], ['list', 'List'], ['tag', 'Tag'], ['priority', 'Priority']].map(([k, n]) => <button key={k} type="button" className={lg === k ? 'on' : ''} aria-pressed={lg === k} onClick={() => { setLg(k); setGPick(null); }}>{n}</button>)}</div>
-            {lg !== 'when' && <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>}
+            <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.filter(([k]) => lg !== 'when' || k === 'due' || k === 'manual').map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
           </>
         )}
       </div>

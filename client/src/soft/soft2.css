@@ -589,3 +589,8 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-ask-row, .soft .s-addbar, .soft .s-composer, .soft .s-capture-input, .soft .s-nsearch { cursor: text; }
 .soft .s-ask-row:focus-within, .soft .s-addbar:focus-within, .soft .s-composer:focus-within { outline: 2px solid var(--s-accent); outline-offset: 2px; }
 .soft .s-key-row input:focus, .soft .s-set-input:focus, .soft .s-tasktools input[type=search]:focus { border-color: var(--s-accent); }
+
+.soft .s-grip { color: var(--s-fg3); display: inline-flex; align-items: center; cursor: grab; margin-right: 4px; flex: none; }
+.soft .s-card:hover .s-grip, .soft .s-card:focus-within .s-grip { color: var(--s-fg); }
+.soft .s-card.drop-here { box-shadow: 0 -3px 0 0 var(--s-accent); }
+@media (hover: none) { .soft .s-grip { color: var(--s-fg2); } }

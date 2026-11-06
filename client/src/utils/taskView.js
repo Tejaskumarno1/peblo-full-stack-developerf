@@ -6,7 +6,7 @@ export const RANK = { high: 0, medium: 1, low: 2 };
 export const PRIORITY_LABEL = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
 export const SHOW_OPTIONS = [['open', 'Open'], ['overdue', 'Overdue'], ['nodate', 'No date'], ['meetings', 'Meetings'], ['done', 'Done'], ['all', 'Everything']];
 export const GROUP_OPTIONS = [['due', 'When it is due'], ['priority', 'Priority'], ['tag', 'Tag'], ['none', 'No grouping']];
-export const SORT_OPTIONS = [['due', 'Due soonest'], ['priority', 'Priority'], ['newest', 'Newest'], ['az', 'A to Z']];
+export const SORT_OPTIONS = [['due', 'Due soonest'], ['priority', 'Priority'], ['newest', 'Newest'], ['az', 'A to Z'], ['manual', 'Manual']];
 
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
 
@@ -35,6 +35,7 @@ export function sortTasks(list, sort, h) {
     if (sort === 'priority') return (RANK[a.priority] ?? 1) - (RANK[b.priority] ?? 1) || due(a) - due(b);
     if (sort === 'newest') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     if (sort === 'az') return String(a.text).localeCompare(String(b.text));
+    if (sort === 'manual') { const o = (x) => (typeof x.meta?.order === 'number' ? x.meta.order : Infinity); const d = o(a) - o(b); return Number.isNaN(d) ? due(a) - due(b) : d || due(a) - due(b); }
     return due(a) - due(b);
   });
 }
