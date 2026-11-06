@@ -6,6 +6,7 @@ import Avatar from '../components/Avatar';
 import MeetingReminders from '../river/MeetingReminders';
 import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
+import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import './soft.css';
 import './soft2.css';
@@ -55,6 +56,7 @@ export default function SoftShell({ children, onOpenSettings }) {
         <button type="button" className="soft-avatar" aria-label="Settings" title="Settings" onClick={onOpenSettings}><Avatar src={user?.avatar} fallback={initial} /></button>
       </header>
 
+      <OfflineBar />
       {children}
       <div className="river" style={{ display: 'contents' }}><MeetingReminders /></div>
 

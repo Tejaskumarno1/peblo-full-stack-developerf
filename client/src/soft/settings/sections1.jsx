@@ -8,6 +8,7 @@ import { getToken, setToken, clearToken } from '../../api/token';
 import { Card, Row, Switch, Seg, Confirm, PasswordInput, passwordStrength, useSave } from './ui';
 import Avatar from '../../components/Avatar';
 import ProfilePage from './ProfilePage';
+import { load as loadA11y, store as storeA11y, apply as applyA11y } from '../../utils/a11yPrefs';
 
 const initialOf = (u) => (String(u?.name || u?.email || 'You').trim().charAt(0) || 'Y').toUpperCase();
 const apiBase = () => import.meta.env.VITE_API_URL || '/api';
@@ -194,7 +195,24 @@ export function AppearanceSection() {
           <Switch label="Compact" checked={!!settings?.compact} onChange={(v) => save({ compact: v })} />
         </Row>
       </Card>
+      <A11yCard />
     </>
+  );
+}
+
+/** Text size, motion, contrast and focus ring: kept on this device only. */
+function A11yCard() {
+  const [p, setP] = useState(() => loadA11y());
+  const set = (patch) => { const n = { ...p, ...patch }; setP(n); storeA11y(n); applyA11y(n); };
+  return (
+    <Card title="Accessibility" hint="Saved on this device only, so a phone and a big screen can differ.">
+      <Row label="Text size" hint="Makes the whole app larger or smaller.">
+        <Seg label="Text size" value={p.size} onChange={(v) => set({ size: v })} options={[{ id: 'S', label: 'S' }, { id: 'M', label: 'M' }, { id: 'L', label: 'L' }, { id: 'XL', label: 'XL' }]} />
+      </Row>
+      <Row label="Reduce motion" hint="Turns off animations and slides."><Switch label="Reduce motion" checked={p.motion} onChange={(v) => set({ motion: v })} /></Row>
+      <Row label="High contrast" hint="Darker text and clearer outlines."><Switch label="High contrast" checked={p.contrast} onChange={(v) => set({ contrast: v })} /></Row>
+      <Row label="Visible focus ring" hint="A bold outline on whatever the keyboard is on."><Switch label="Visible focus ring" checked={p.focus} onChange={(v) => set({ focus: v })} /></Row>
+    </Card>
   );
 }
 

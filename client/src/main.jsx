@@ -47,6 +47,9 @@ import '@fontsource/fragment-mono/400.css';
 import './styles/index.css';
 import './styles/tokens.css';
 import './styles/canvas.css';
+import './styles/a11y.css';
+import { load as loadA11y, apply as applyA11y } from './utils/a11yPrefs';
+applyA11y(loadA11y());
 
 // The quick capture window uses its own, smaller design canvas (see styles/canvas.css).
 if (window.location.pathname === '/quick-capture') document.documentElement.classList.add('pb-canvas-capture');

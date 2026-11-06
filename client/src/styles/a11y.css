@@ -1,0 +1,12 @@
+/* Accessibility choices (Settings > Appearance). Set per device by utils/a11yPrefs.js. */
+html[data-a11y-motion] *, html[data-a11y-motion] *::before, html[data-a11y-motion] *::after {
+  animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important;
+}
+html[data-a11y-contrast] .soft { --s-fg2: var(--s-fg); --s-fg3: var(--s-fg); --s-line: var(--s-fg); }
+html[data-a11y-contrast] .soft button, html[data-a11y-contrast] .soft input, html[data-a11y-contrast] .soft select { border-color: var(--s-fg); }
+html[data-a11y-focus] :focus-visible { outline: 3px solid var(--s-accent, #C4441C) !important; outline-offset: 3px !important; border-radius: 8px; }
+
+/* offline bar */
+.soft .s-offline { display: flex; align-items: center; gap: 10px; margin: 0 auto 8px; width: min(1344px, calc(100% - 96px)); padding: 10px 18px; border-radius: 999px; background: var(--s-butter); color: var(--s-fg); font: 600 13.5px var(--s-body); }
+.soft .s-offline .grow { flex: 1; }
+.soft .s-offline .pill { padding: 3px 12px; border-radius: 999px; background: var(--s-surface); font-size: 12.5px; font-weight: 700; }
