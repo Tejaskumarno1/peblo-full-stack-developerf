@@ -1,0 +1,56 @@
+/* Connect page: AI inside Peblo | AI apps using Peblo | Activity (mockup: Connect hub). Soft Studio tokens. */
+.soft .s-hub { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) 300px; gap: 16px; }
+.soft .s-hub.s-hub-all { grid-template-columns: minmax(0, 1.7fr) 330px; }
+.soft .s-hub-col { min-height: 0; overflow-y: auto; padding: 20px; border-radius: 30px; background: var(--s-surface); display: flex; flex-direction: column; gap: 12px; }
+.soft .s-hub-col.narrow { padding: 16px; background: transparent; gap: 14px; padding-top: 0; padding-right: 0; padding-bottom: 0; }
+.soft .s-hub-all .s-hub-col.narrow { padding: 0; }
+.soft .s-hub-col.narrow > .s-conn-card, .soft .s-hub-col.narrow > .s-set-card, .soft .s-hub-col.narrow > section { background: var(--s-surface); border-radius: 28px; }
+.soft .s-hub-col .s-conn-cards { display: flex; flex-direction: column; gap: 12px; flex: 0 0 auto; }
+.soft .s-hub-col .s-conn-card { min-height: 0; overflow: visible; padding: 16px; border-radius: 22px; background: var(--s-bg); }
+.soft .s-hub-col .s-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border: 0; margin: 0; padding: 0; }
+.soft .s-hub-col .s-choice { padding: 10px 12px; border-radius: 18px; min-height: 0; }
+.soft .s-hub-col .s-choice-icon { display: none; }
+.soft .s-hub-col .s-choice-title { font-size: 13px; }
+.soft .s-hub-col .s-choice-desc { font-size: 11.5px; }
+.soft .s-hub-head { display: flex; align-items: flex-start; gap: 10px; }
+.soft .s-hub-head > div { flex: 1; min-width: 0; }
+.soft .s-hub-sub { margin: 2px 0 0; font-size: 13px; color: var(--s-fg3); font-weight: 600; line-height: 1.35; }
+.soft .s-hub-h3 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; color: var(--s-fg2); }
+.soft .s-hub-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.soft .s-hub-clients { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.soft .s-hub-clients button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; border: 0; border-radius: 18px; background: var(--s-bg); color: var(--s-fg); font: inherit; font-size: 13px; cursor: pointer; }
+.soft .s-hub-clients button.on { outline: 2px solid var(--s-fg); outline-offset: -2px; background: var(--s-peach); }
+.soft .s-hub-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-hub-steps li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.4; font-weight: 600; }
+.soft .s-hub-steps li b { width: 24px; height: 24px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: var(--s-fg); color: var(--s-bg); }
+.soft .s-hub-promises { display: flex; flex-wrap: wrap; gap: 6px; }
+.soft .s-hub-promises span { padding: 5px 11px; border-radius: 999px; background: var(--s-mint); font-size: 12.5px; font-weight: 700; }
+.soft .s-hub-promises span:nth-child(2) { background: var(--s-lilac); }
+.soft .s-hub-promises span:nth-child(3) { background: var(--s-butter); }
+.soft .s-hub-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.soft .s-hub-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.soft .s-hub-day { margin: 10px 0 4px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--s-fg3); font-weight: 800; }
+.soft .s-hub-logrow { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-radius: 18px; background: var(--s-bg); }
+.soft .s-hub-log li.bad .s-hub-logrow { background: color-mix(in srgb, #b3261e 12%, var(--s-surface)); }
+.soft .s-hub-logrow .what { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; }
+.soft .s-hub-logrow .what small { font-size: 11.5px; color: var(--s-fg3); font-weight: 600; }
+.soft .s-hub-logrow .when { font-size: 12px; color: var(--s-fg3); font-weight: 600; white-space: nowrap; }
+.soft .s-hub-big { margin: 0; font-family: var(--s-display); font-size: 32px; font-weight: 800; }
+.soft .s-hub-big small { font-size: 13px; font-weight: 600; color: var(--s-fg3); }
+.soft .s-hub-bar { position: relative; display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; padding-bottom: 12px; }
+.soft .s-hub-bar i { position: absolute; left: 0; bottom: 0; height: 7px; border-radius: 4px; background: var(--s-fg); }
+.soft .s-hub-bar::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 7px; border-radius: 4px; background: var(--s-chip-solid); }
+.soft .s-hub-bar i { z-index: 1; }
+.soft .s-hub-col .s-set-adv { background: var(--s-surface); border-radius: 22px; padding: 12px 16px; }
+@media (max-width: 1100px) {
+  .soft .s-hub, .soft .s-hub.s-hub-all { grid-template-columns: minmax(0, 1fr); }
+  .soft .s-hub-col { overflow: visible; }
+}
+
+.soft .s-hub-col:not(.narrow) .s-conn-card { background: transparent; padding: 0; }
+.soft .s-hub-col.narrow .s-set-card-head p { display: none; }
+.soft .s-hub-col .s-conn-h2 { font-size: 19px; margin: 0; }
+
+.soft .s-hub-filters .tl-seg { display: inline-flex; padding: 4px; gap: 2px; border-radius: 999px; background: var(--s-chip-solid); }
+.soft .s-hub-filters .tl-seg button { height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--s-fg2); font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.soft .s-hub-filters .tl-seg button.on { background: var(--s-fg); color: var(--s-bg); }

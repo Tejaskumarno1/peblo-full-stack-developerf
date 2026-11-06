@@ -9,6 +9,7 @@ import api from '../../api/client';
 import { authHeaders, signOutIfRejected } from '../../api/token';
 import { usePublicUrl } from '../../api/publicUrl';
 import AccessTokens from '../../components/AccessTokens';
+import ProviderBadge from '../../components/hub/ProviderBadge';
 import DataTools from '../../components/DataTools';
 import CaptureShortcut from './CaptureShortcut';
 import KeyboardShortcuts from './KeyboardShortcuts';
@@ -152,9 +153,74 @@ function TestConnection({ base, address }) {
   );
 }
 
-function ActivityLog() {
+const CHANGES = new Set(['create_note', 'append_to_note', 'update_note', 'create_task', 'complete_task', 'update_task', 'create_share_link', 'stop_sharing', 'archive_note', 'pin_note', 'trash_note', 'restore_note', 'restore_note_version', 'rename_tag']);
+const dayLabel = (d) => {
+  const a = new Date(d); const t = new Date(); const y = new Date(); y.setDate(t.getDate() - 1);
+  const same = (x, z) => x.toDateString() === z.toDateString();
+  return same(a, t) ? 'Today' : same(a, y) ? 'Yesterday' : a.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+};
+
+/** "See all": the whole activity log with filters, grouped by day (mockup: See all activity). */
+export function ActivityAll({ onBack }) {
   const [rows, setRows] = useState(null);
+  const [app, setApp] = useState('all');
+  const [kind, setKind] = useState('all');
   const [shown, setShown] = useState(40);
+  const load = useCallback(async () => {
+    try { const { data } = await api.get('/tokens/activity'); setRows(data.activity || []); } catch { setRows([]); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const clear = async () => { try { await api.delete('/tokens/activity'); } catch { /* the reload shows what is left */ } load(); };
+  const apps = [...new Set((rows || []).map((r) => r.app))];
+  const list = (rows || []).filter((r) => (app === 'all' || r.app === app) && (kind === 'all' || (kind === 'failed' ? !r.ok : kind === 'changes' ? CHANGES.has(r.tool) : !CHANGES.has(r.tool))));
+  const week = (rows || []).filter((r) => Date.now() - new Date(r.at).getTime() < 7 * 86400000);
+  const byApp = apps.map((a) => [a, week.filter((r) => r.app === a).length]).sort((x, y) => y[1] - x[1]);
+  const failed = week.filter((r) => !r.ok).length;
+  let last = '';
+  return (
+    <div className="s-hub s-hub-all" data-view="activity-all">
+      <div className="s-hub-col wide">
+        <div className="s-hub-head"><div><h2 className="s-conn-h2">Everything connected apps did</h2><p className="s-hub-sub">Newest first. Kept for 60 days.</p></div><button type="button" className="s-outline s-set-btn" onClick={onBack}>Back to Connect</button></div>
+        <div className="s-hub-filters">
+          <div className="tl-seg" role="group" aria-label="App">{[['all', 'All apps'], ...apps.map((a) => [a, a])].map(([k, n]) => <button key={k} type="button" className={app === k ? 'on' : ''} aria-pressed={app === k} onClick={() => { setApp(k); setShown(40); }}>{n}</button>)}</div>
+          <div className="tl-seg" role="group" aria-label="Kind">{[['all', 'Everything'], ['reads', 'Reads'], ['changes', 'Changes'], ['failed', 'Failed']].map(([k, n]) => <button key={k} type="button" className={kind === k ? 'on' : ''} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(40); }}>{n}</button>)}</div>
+          <span className="grow" />
+          {rows?.length > 0 && <Confirm label="Clear log" ask="Erase the whole log? This is your record of what apps did, and it cannot be brought back." onYes={clear} />}
+        </div>
+        {rows === null && <p className="s-empty small">Checking…</p>}
+        {rows && list.length === 0 && <p className="s-empty small">{rows.length === 0 ? 'Nothing yet. When an app searches, reads or adds something, it shows up here.' : 'Nothing matches those filters.'}</p>}
+        <ul className="s-hub-log">
+          {list.slice(0, shown).map((r) => {
+            const d = dayLabel(r.at); const head = d !== last; last = d;
+            return (
+              <li key={r.id} className={r.ok ? '' : 'bad'}>
+                {head && <h3 className="s-hub-day">{d}</h3>}
+                <div className="s-hub-logrow">
+                  <ProviderBadge id={(CLIENTS.find((c) => r.app.toLowerCase().includes(c.name.toLowerCase())) || {}).id || 'custom'} size={28} />
+                  <span className="what"><b>{r.app} {(TOOL_LABELS[r.tool] || r.tool).toLowerCase()}</b>{r.summary ? <small>{r.summary}</small> : null}</span>
+                  {!r.ok && <span className="s-mini">Did not work</span>}
+                  <span className="when">{ago(r.at)}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {list.length > shown && <div className="s-set-actions"><button type="button" className="s-outline s-set-btn" onClick={() => setShown((n) => n + 40)}>Show 40 more ({list.length - shown} left)</button></div>}
+      </div>
+      <div className="s-hub-col narrow">
+        <section className="s-conn-card"><h3 className="s-hub-h3">This week</h3><p className="s-hub-big">{week.length} <small>actions</small></p>
+          {byApp.map(([a, n]) => <div key={a} className="s-hub-bar"><span>{a}</span><small>{n}</small><i style={{ width: `${Math.max(6, (n / Math.max(1, week.length)) * 100)}%` }} /></div>)}
+          {failed > 0 && <p className="s-set-note">{failed} did not work. Pick Failed above to see them.</p>}
+        </section>
+        <section className="s-conn-card"><h3 className="s-hub-h3">What apps can do</h3><p className="s-set-note">They can search, read, add and change notes and tasks. They can never delete for good, and never see #private notes.</p></section>
+      </div>
+    </div>
+  );
+}
+
+function ActivityLog({ compact = false, seeAll }) {
+  const [rows, setRows] = useState(null);
+  const [shown, setShown] = useState(compact ? 5 : 40);
   const load = useCallback(async () => {
     try { const { data } = await api.get('/tokens/activity'); setRows(data.activity || []); } catch { setRows([]); }
   }, []);
@@ -162,7 +228,7 @@ function ActivityLog() {
   const clear = async () => { try { await api.delete('/tokens/activity'); } catch { /* the reload shows what is left */ } load(); };
   return (
     <Card title="Activity" hint="What connected apps have done in your Peblo, newest first. Kept for 60 days."
-      aside={rows?.length ? <Confirm label="Clear" ask="Erase the whole log? This is your record of what apps did, and it cannot be brought back." onYes={clear} /> : null}>
+      aside={compact ? (rows?.length ? <button type="button" className="s-link-btn" onClick={seeAll}>See all</button> : null) : rows?.length ? <Confirm label="Clear" ask="Erase the whole log? This is your record of what apps did, and it cannot be brought back." onYes={clear} /> : null}>
       {rows === null && <p className="s-empty small">Checking…</p>}
       {rows && rows.length === 0 && <p className="s-empty small">Nothing yet. When an app searches, reads or adds something, it shows up here.</p>}
       <ul className="s-set-log">
@@ -173,7 +239,7 @@ function ActivityLog() {
           </li>
         ))}
       </ul>
-      {rows && rows.length > shown && <div className="s-set-actions"><button type="button" className="s-outline s-set-btn" onClick={() => setShown((n) => n + 40)}>Show 40 more ({rows.length - shown} left)</button></div>}
+      {!compact && rows && rows.length > shown && <div className="s-set-actions"><button type="button" className="s-outline s-set-btn" onClick={() => setShown((n) => n + 40)}>Show 40 more ({rows.length - shown} left)</button></div>}
     </Card>
   );
 }
@@ -223,6 +289,82 @@ export function ConnectSection() {
 
       <ActivityLog />
 
+      <details className="s-set-adv">
+        <summary>Advanced: access tokens for scripts and the local MCP server</summary>
+        <AccessTokens />
+      </details>
+    </>
+  );
+}
+
+const CLIENTS = [
+  { id: 'claude', name: 'Claude', steps: ['In Claude, open Settings, then Connectors, then Add custom connector, and paste the address.', 'Press Connect. Peblo opens: sign in and press Allow.', 'Ask Claude about your notes. It can search, read, and add notes and tasks.'] },
+  { id: 'cursor', name: 'Cursor', steps: ['In Cursor, open Settings, then MCP, and add a new remote server.', 'Paste the address above as its URL.', 'Sign in on Peblo the first time and press Allow, then ask Cursor about your notes.'] },
+  { id: 'vscode', name: 'VS Code', steps: ['In VS Code, open the Command Palette and run the command to add an MCP server.', 'Choose an HTTP server and paste the address above.', 'Sign in on Peblo the first time and press Allow, then use it from the chat in agent mode.'] },
+  { id: 'chatgpt', name: 'ChatGPT', steps: ['In ChatGPT, open Settings, then Connectors, and add a custom connector (developer mode may need to be on).', 'Paste the address above.', 'Sign in on Peblo the first time and press Allow, then pick Peblo in a chat.'] },
+];
+
+/** The "AI apps using Peblo" column of the Connect page: address, per-app steps, test, connected apps. */
+export function AgentApps() {
+  const base = usePublicUrl();
+  const address = base ? `${base}/mcp` : '';
+  const [pick, setPick] = useState('claude');
+  const [tokens, setTokens] = useState(null);
+  const load = useCallback(async () => {
+    try { const { data } = await tokensAPI.list(); setTokens(data.tokens || []); } catch { setTokens([]); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const apps = (tokens || []).filter((t) => /^Connected:/i.test(t.name));
+  const remove = async (t) => { try { await tokensAPI.remove(t.id); } catch { /* shown again by the reload */ } load(); };
+  const removeAll = async () => { for (const t of apps) { try { await tokensAPI.remove(t.id); } catch { /* the reload shows what is left */ } } load(); };
+  const cur = CLIENTS.find((c) => c.id === pick) || CLIENTS[0];
+  return (
+    <>
+      <div className="s-hub-head"><div><h2 className="s-conn-h2">AI apps using Peblo</h2><p className="s-hub-sub">Let Claude and others read your notes and add tasks, with your say-so. You sign in on Peblo's own page, so no keys to copy.</p></div></div>
+      <div className="s-set-addr">
+        <span className="s-set-addr-label">Peblo address</span>
+        <code aria-label="Peblo MCP address">{address || 'Loading…'}</code>
+        <CopyButton text={address} />
+      </div>
+      <div className="s-hub-clients" role="tablist" aria-label="Which app">
+        {CLIENTS.map((c) => (
+          <button key={c.id} type="button" role="tab" aria-selected={pick === c.id} className={pick === c.id ? 'on' : ''} onClick={() => setPick(c.id)}>
+            <ProviderBadge id={c.id} size={30} /><b>{c.name}</b>
+          </button>
+        ))}
+      </div>
+      <ol className="s-hub-steps" aria-label={`Steps for ${cur.name}`}>
+        {cur.steps.map((t, i) => <li key={i}><b>{i + 1}</b><span>{t}</span></li>)}
+      </ol>
+      <TestConnection base={base} address={address} />
+      <p className="s-set-note">Copy the address exactly, with no full stop at the end. If the Peblo server has been idle, the first connection can take about a minute while it wakes up.</p>
+
+      <div className="s-hub-row"><h3 className="s-hub-h3">Connected apps</h3>{apps.length > 1 && <Confirm label="Disconnect all" ask="Remove access for every connected app? They stop working straight away." onYes={removeAll} danger />}</div>
+      {tokens === null && <p className="s-empty small">Checking…</p>}
+      {tokens && apps.length === 0 && <p className="s-empty small">Nothing connected yet. Access tokens you made yourself are under "Advanced" at the bottom of the page.</p>}
+      <ul className="s-set-accts">
+        {apps.map((t) => {
+          const name = t.name.replace(/^Connected:\s*/i, '');
+          const id = (CLIENTS.find((c) => name.toLowerCase().includes(c.name.toLowerCase())) || {}).id || 'custom';
+          return (
+            <li key={t.id}>
+              <ProviderBadge id={id} size={30} />
+              <span className="grow"><b>{name}</b><small>{t.lastUsedAt ? `Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'Not used yet'}{t.scope === 'read' ? ' · read only' : ''}</small></span>
+              <Confirm label="Remove access" ask={`Remove ${name}?`} onYes={() => remove(t)} />
+            </li>
+          );
+        })}
+      </ul>
+      <div className="s-hub-promises"><span>Never deletes for good</span><span>#private notes hidden</span><span>Remove access any time</span></div>
+    </>
+  );
+}
+
+/** The Activity column of the Connect page. */
+export function AgentActivity({ onSeeAll }) {
+  return (
+    <>
+      <ActivityLog compact seeAll={onSeeAll} />
       <details className="s-set-adv">
         <summary>Advanced: access tokens for scripts and the local MCP server</summary>
         <AccessTokens />
