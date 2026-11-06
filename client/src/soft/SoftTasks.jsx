@@ -12,6 +12,9 @@ import { filterTasks, sortTasks, groupTasks, isOverdue, PRIORITY_LABEL, GROUP_OP
 import './tasks2.css';
 import './bulk.css';
 import './lists.css';
+import TaskReview from './TaskReview';
+import { ChevronDown } from 'lucide-react';
+import './taskreview.css';
 import { ShortcutSheet, BulkBar, UndoRedo, DeleteConfirm } from './TaskBulk';
 import ShareList from './ShareList';
 import { ListCards, ListMenu, NewListDialog, DeleteListDialog, MiniCards, withLegacyLists, newListId, INBOX } from './TaskLists';
@@ -125,6 +128,11 @@ export default function SoftTasks() {
   const [newList, setNewList] = useState(false);
   const [delList, setDelList] = useState(null);
   const [gPick, setGPick] = useState(null);
+  const [review, setReview] = useState(false);
+  const [folded, setFolded] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('peblo-task-folded') || '[]')); } catch { return new Set(); } });
+  const [dense, setDense] = useState(() => { try { return localStorage.getItem('peblo-task-dense') === '1'; } catch { return false; } });
+  const toggleFold = (k) => setFolded((f) => { const n = new Set(f); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('peblo-task-folded', JSON.stringify([...n])); } catch { /* ignore */ } return n; });
+  const toggleDense = () => setDense((d) => { try { localStorage.setItem('peblo-task-dense', d ? '0' : '1'); } catch { /* ignore */ } return !d; });
 
   const { data: todos = [] } = useQuery({ queryKey: ['todos', 'all'], queryFn: () => todosAPI.getAll().then((r) => r.data.todos || []) });
 
@@ -582,8 +590,10 @@ export default function SoftTasks() {
         </div>
         <button type="button" className={`s-selbtn${showLists ? ' on' : ''}`} aria-pressed={showLists} onClick={toggleLists}>Lists</button>
         <button type="button" className={`s-selbtn${selMode ? ' on' : ''}`} aria-pressed={selMode} onClick={() => (selMode ? exitSelect() : setSelMode(true))}>Select</button>
+        <button type="button" className="s-selbtn" onClick={() => setReview(true)}>Review</button>
         {view === 'list' && (
           <>
+            <button type="button" className={`s-selbtn${dense ? ' on' : ''}`} aria-pressed={dense} onClick={toggleDense}>{dense ? 'Compact' : 'Comfortable'}</button>
             <div className="tl-seg" role="group" aria-label="Group tasks by">{[['none', 'None'], ['when', 'Date'], ['list', 'List'], ['tag', 'Tag'], ['priority', 'Priority']].map(([k, n]) => <button key={k} type="button" className={lg === k ? 'on' : ''} aria-pressed={lg === k} onClick={() => { setLg(k); setGPick(null); }}>{n}</button>)}</div>
             {lg !== 'when' && <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>}
           </>
@@ -622,11 +632,11 @@ export default function SoftTasks() {
           ))}
         </div>
       ) : (
-        <div className="s-list">
+        <div className={`s-list${dense ? ' compact' : ''}`}>
           {shownGroups.map((g) => (
-            <section key={g.key} className="s-list-group">
-              <h2 className="s-col-title">{g.label} <span className="s-col-count">{g.items.length}</span></h2>
-              {g.items.map((t) => card(t, g.key))}
+            <section key={g.key} className="s-list-group" data-group={g.key}>
+              <h2 className="s-col-title"><button type="button" className="s-gfold" aria-expanded={!folded.has(g.key)} onClick={() => toggleFold(g.key)}><ChevronDown size={14} className="chev" />{g.label} <span className="s-col-count">{g.items.length}</span></button></h2>
+              {!folded.has(g.key) && g.items.map((t) => card(t, g.key))}
             </section>
           ))}
         </div>
@@ -640,6 +650,7 @@ export default function SoftTasks() {
       {newList && <NewListDialog taken={allLists.map((l) => l.name)} onCreate={createList} onClose={() => setNewList(false)} />}
       {delList && <DeleteListDialog list={delList} open={tasksOfList(delList).filter((t) => !t.completed).length} done={tasksOfList(delList).filter((t) => t.completed).length} onCancel={() => setDelList(null)} onConfirm={(m) => confirmDeleteList(delList, m)} />}
       {sheet && <TaskSheet task={sheet.task} isNew={sheet.isNew} onClose={() => { setSheet(null); inputRef.current?.focus(); }} />}
+      {review && <TaskReview todos={todos || []} onClose={() => setReview(false)} onSay={(m) => say(m)} />}
       <UndoToast toast={toast} dismiss={dismiss} />
     </div>
   );
