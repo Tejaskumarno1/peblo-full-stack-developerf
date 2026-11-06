@@ -45,3 +45,23 @@ export function agendaDays(todos, from, days = 14) {
   }
   return out;
 }
+
+/** How busy each day of a year is: 12 months of { date, n } with n = items that day (done or not). Pure, so it can be tested. */
+export function yearHeat(todos, year, mondayFirst = true) {
+  const count = new Map();
+  for (const t of todos) {
+    if (!t.deadline) continue;
+    const d = new Date(t.deadline);
+    if (d.getFullYear() !== year) continue;
+    const k = `${d.getMonth()}-${d.getDate()}`;
+    count.set(k, (count.get(k) || 0) + 1);
+  }
+  return Array.from({ length: 12 }, (_, m) => {
+    const len = new Date(year, m + 1, 0).getDate();
+    const first = new Date(year, m, 1).getDay(); // 0 = Sunday
+    const lead = mondayFirst ? (first + 6) % 7 : first;
+    return { month: m, lead, days: Array.from({ length: len }, (_, i) => ({ date: new Date(year, m, i + 1), n: count.get(`${m}-${i + 1}`) || 0 })) };
+  });
+}
+/** 0 none, 1 one item, 2 two or three, 3 four or more. */
+export const heatLevel = (n) => (n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : 3);

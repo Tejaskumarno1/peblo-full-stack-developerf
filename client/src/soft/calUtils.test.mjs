@@ -43,3 +43,24 @@ test('agenda groups by day, in time order, and drops empty days', () => {
   assert.equal(r.length, 1);
   assert.deepEqual(r[0].items.map((t) => t.id), ['early', 'late']);
 });
+
+import { yearHeat, heatLevel } from './calUtils.js';
+test('yearHeat counts items per day and lays months out from the right weekday', () => {
+  const todos = [
+    { deadline: new Date(2026, 10, 6, 9).toISOString() }, { deadline: new Date(2026, 10, 6, 15).toISOString() },
+    { deadline: new Date(2026, 10, 7).toISOString() }, { deadline: new Date(2025, 10, 6).toISOString() }, { deadline: null },
+  ];
+  const y = yearHeat(todos, 2026);
+  assert.equal(y.length, 12);
+  const nov = y[10];
+  assert.equal(nov.days.length, 30);
+  assert.equal(nov.days[5].n, 2);
+  assert.equal(nov.days[6].n, 1);
+  assert.equal(nov.days[0].n, 0);
+  assert.equal(nov.lead, 6); // 1 Nov 2026 is a Sunday: six blanks when weeks start on Monday
+  assert.equal(yearHeat([], 2026, false)[10].lead, 0);
+  assert.equal(y[1].days.length, 28);
+});
+test('heatLevel buckets', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 9].map(heatLevel), [0, 1, 2, 2, 3, 3]);
+});

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
 import QuickCreate from './QuickCreate';
-import { AgendaView, FindSlot, PeekPanel } from './CalExtras';
+import { AgendaView, FindSlot, PeekPanel, YearView } from './CalExtras';
 import UndoToast from '../components/UndoToast';
 import { useUndoToast } from '../utils/useUndoToast';
 import NewMeeting from '../components/NewMeeting';
@@ -40,6 +40,11 @@ export default function SoftCalendar() {
   const { data: todos = [], isError } = useQuery({
     queryKey: ['todos', 'range', 'soft-cal', from.toDateString()],
     queryFn: () => todosAPI.getRange(from.toISOString(), to.toISOString()).then((r) => r.data.todos || []),
+  });
+  const { data: yearTodos = [] } = useQuery({
+    queryKey: ['todos', 'range', 'soft-cal-year', cursor.getFullYear()],
+    queryFn: () => todosAPI.getRange(new Date(cursor.getFullYear(), 0, 1).toISOString(), new Date(cursor.getFullYear() + 1, 0, 1).toISOString()).then((r) => r.data.todos || []),
+    enabled: view === 'year',
   });
   const { data: ahead = [] } = useQuery({
     queryKey: ['todos', 'range', 'soft-cal-ahead', startOfDay().toDateString()],
@@ -122,9 +127,9 @@ export default function SoftCalendar() {
     try { await todosAPI.update(t.id, { completed: !t.completed }); qc.invalidateQueries({ queryKey: ['todos'] }); say(t.completed ? 'Reopened' : 'Marked done', async () => { await todosAPI.update(t.id, { completed: t.completed }); qc.invalidateQueries({ queryKey: ['todos'] }); }); } catch { say('Could not save that.'); }
   };
 
-  const move = (dir) => setCursor((c) => (view === 'month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'day' ? 1 : 7))));
-  const title = view === 'agenda' ? 'Agenda' : view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
-  const range = view === 'day' ? fmt(cursor, { day: 'numeric', month: 'long', year: 'numeric' })
+  const move = (dir) => setCursor((c) => (view === 'year' ? new Date(c.getFullYear() + dir, c.getMonth(), 1) : view === 'month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'day' ? 1 : 7))));
+  const title = view === 'year' ? String(cursor.getFullYear()) : view === 'agenda' ? 'Agenda' : view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
+  const range = view === 'year' ? 'How busy each day is' : view === 'day' ? fmt(cursor, { day: 'numeric', month: 'long', year: 'numeric' })
     : view === 'month' ? fmt(cursor, { year: 'numeric' })
       : `${fmt(weekStart, { day: 'numeric', month: 'long' })} – ${fmt(addDays(weekStart, 6), { day: 'numeric', month: 'long' })}`;
 
@@ -160,7 +165,7 @@ export default function SoftCalendar() {
         </div>
         <NewMeeting className="s-pill46" day={cursor} />
         <div className="s-seg small" role="tablist" aria-label="View">
-          {['day', 'week', 'month', 'agenda'].map((v) => (
+          {['day', 'week', 'month', 'agenda', 'year'].map((v) => (
             <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{v[0].toUpperCase() + v.slice(1)}</button>
           ))}
         </div>
@@ -212,8 +217,10 @@ export default function SoftCalendar() {
       </div>
 
       {isError && <p className="s-empty small" role="alert">Could not load your schedule. Check your connection and try again.</p>}
-      <section className={`s-week${view === 'month' ? '' : ' is-grid'}`} aria-label="Schedule">
-        {view === 'agenda' ? (
+      <section className={`s-week${view === 'month' || view === 'year' ? '' : ' is-grid'}`} aria-label="Schedule">
+        {view === 'year' ? (
+          <YearView todos={yearTodos} year={cursor.getFullYear()} mondayFirst={startOfWeek(new Date(2026, 10, 8)).getDay() === 1} onPick={(d) => { setCursor(d); setView('day'); }} />
+        ) : view === 'agenda' ? (
           <AgendaView todos={shown} from={startOfDay()} toneFor={toneFor} onPick={openTask} />
         ) : view === 'month' ? (
           <div className="s-month">

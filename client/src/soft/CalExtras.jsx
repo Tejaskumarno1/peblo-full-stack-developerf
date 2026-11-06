@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, ExternalLink, Sparkles, Video, X } from 'lucide-react';
-import { agendaDays, freeSlots } from './calUtils';
+import { agendaDays, freeSlots, yearHeat, heatLevel } from './calUtils';
 import { tagsOf, timeOf, weekdayLong } from './softUtils';
 import './calextras.css';
 
@@ -67,5 +67,28 @@ export function PeekPanel({ t, onClose, onOpen, onDone }) {
         <button type="button" onClick={() => onDone(t)}><Check size={15} /> {t.completed ? 'Reopen' : 'Done'}</button>
       </div>
     </aside>
+  );
+}
+
+/** Year view: every day of the year as a small square, darker when busier. Click a day to open it (mockup: Calendar views, heat map). */
+export function YearView({ todos, year, mondayFirst = true, onPick }) {
+  const months = yearHeat(todos, year, mondayFirst);
+  const today = new Date();
+  const dows = mondayFirst ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  return (
+    <div className="s-year" role="grid" aria-label={`${year} at a glance`}>
+      {months.map((m) => (
+        <section key={m.month} className="s-year-m" aria-label={new Date(year, m.month, 1).toLocaleDateString('en-GB', { month: 'long' })}>
+          <h3>{new Date(year, m.month, 1).toLocaleDateString('en-GB', { month: 'short' })}</h3>
+          <div className="s-year-dow" aria-hidden="true">{dows.map((d, i) => <i key={i}>{d}</i>)}</div>
+          <div className="s-year-days">
+            {Array.from({ length: m.lead }, (_, i) => <i key={`b${i}`} className="blank" aria-hidden="true" />)}
+            {m.days.map(({ date, n }) => (
+              <button key={date.getDate()} type="button" className={`lv${heatLevel(n)}${date.toDateString() === today.toDateString() ? ' today' : ''}`} aria-label={`${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${n === 0 ? 'nothing planned' : `${n} item${n === 1 ? '' : 's'}`}`} onClick={() => onPick(date)} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
