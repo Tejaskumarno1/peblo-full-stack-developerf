@@ -597,9 +597,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 
 /* Task sheet: two columns on the pop-up, single column when inline in quick capture */
 .soft .s-sheet-cols, .soft .s-sheet-col { display: contents; }
-.soft .s-sheet.wide { width: min(1080px, 100%); max-height: calc(100vh - 28px); gap: 12px; padding: 18px 26px 16px; }
-.soft .s-sheet.wide .s-sheet-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
-.soft .s-sheet.wide .s-sheet-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.soft .s-sheet.wide { width: min(880px, 100%); max-height: calc(100vh - 28px); gap: 12px; padding: 18px 26px 16px; }
+.soft .s-sheet.wide .s-sheet-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.soft .s-sheet.wide .s-sheet-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .soft .s-sheet.wide .s-sheet-title { background: var(--s-bg); border: 0; border-radius: 999px; padding: 0 22px; height: 50px; font-size: 22px; caret-color: var(--s-accent); }
 .soft .s-sheet.wide .s-sheet-title:focus { box-shadow: 0 0 0 2px var(--s-accent); }
 .soft .s-sheet.wide .s-sheet-foot { position: sticky; bottom: -16px; background: var(--s-surface); padding-top: 10px; border-top: 1px solid var(--s-line); }
@@ -614,3 +614,12 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-nowrow b { color: var(--s-accent); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 11.5px; }
 .soft .s-nowrow .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--s-accent); flex: none; }
 .soft .s-nowrow::after { content: ''; flex: 1; height: 2px; border-radius: 1px; background: var(--s-accent); opacity: .45; order: 5; }
+
+.soft .s-sheet.wide .s-sheet-pills { gap: 6px; }
+.soft .s-sheet.wide .s-sheet-pills > button { background: var(--s-bg); padding: 6px 12px; font-size: 13px; }
+.soft .s-sheet.wide .s-sheet-pills > button.on { background: var(--s-fg); color: #fff; }
+.soft .s-sheet.wide .s-sheet-pills > button.ghost { background: transparent; }
+.soft .s-sheet.wide .s-sheet-pills > button.ghost.on { background: var(--s-fg); }
+.soft .s-sheet.wide .s-sheet-time { background: var(--s-bg); }
+.soft .s-sheet.wide .s-sheet-pills > button.ghost:not(.on), .soft .s-sheet.wide .s-sheet-linkbtn { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-line); }
+.soft .s-sheet.wide .s-sheet-foot .s-sheet-del { box-shadow: inset 0 0 0 1.5px var(--s-line); }

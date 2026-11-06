@@ -103,7 +103,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const today = startOfDay();
   const weekend = (() => { const d = addDays(today, (6 - today.getDay() + 7) % 7 || 7); return d; })();
   const quick = [
-    ['Today', dateVal(today)], ['Tomorrow', dateVal(addDays(today, 1))], ['This weekend', dateVal(weekend)], ['Next week', dateVal(addDays(today, 7))],
+    ['Today', dateVal(today)], ['Tomorrow', dateVal(addDays(today, 1))], ...(dateVal(weekend) === dateVal(addDays(today, 1)) ? [] : [['This weekend', dateVal(weekend)]]), ['Next week', dateVal(addDays(today, 7))],
   ];
   const setDay = (v) => { setDate(v); setCal(false); if (!time) setTime('09:00'); };
   const noDate = () => { setDate(''); setTime(''); setCal(false); };
