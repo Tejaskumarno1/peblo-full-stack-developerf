@@ -92,6 +92,7 @@ export const transferAPI = {
 // Any number of AI providers per person: paste a key and Peblo works out whose it is
 export const aiConnectionsAPI = {
   list: () => api.get('/ai/connections'),
+  usage: () => api.get('/ai/connections/usage'),
   detect: (data) => api.post('/ai/connections/detect', data),
   add: (data) => api.post('/ai/connections', data),
   models: (id) => api.get(`/ai/connections/${id}/models`),

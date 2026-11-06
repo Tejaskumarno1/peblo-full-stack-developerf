@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { aiConnectionsAPI } from '../../api';
+import UsageMeter from './UsageMeter';
 import { connectionModelsQuery } from './ConnectionModelOptions';
 import './aiConnections.css';
 import ProviderBadge from './ProviderBadge';
@@ -191,6 +192,7 @@ export default function AiConnections({ theme }) {
           </ul>
         </>
       )}
+      <UsageMeter connections={connections} />
     </div>
   );
 }

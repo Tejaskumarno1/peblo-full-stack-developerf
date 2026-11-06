@@ -5,6 +5,7 @@ import { rateLimit } from '../middleware/rateLimit.js';
 import { encryptSecret, decryptSecret, isUnreadable } from '../secrets.js';
 import { PROVIDERS, providerById, detectConnection, verifyConnection, checkBaseUrl, suggestModel } from '../services/aiProviders.js';
 import { hosted } from '../utils/ollamaPolicy.js';
+import { usageFor } from '../services/aiUsage.js';
 
 /** Mounted at /api/ai/connections: the person's own AI providers (any number of them). Every query is scoped to the signed-in person. */
 const router = Router();
@@ -22,6 +23,11 @@ const shape = (c: any) => ({
 });
 
 const listFor = (userId: string) => prisma.aiConnection.findMany({ where: { userId }, orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] });
+
+/** How many AI requests were answered (counts only). */
+router.get('/usage', async (req, res, next) => {
+  try { res.json(await usageFor(req.user!.id)); } catch (e) { next(e); }
+});
 
 router.get('/', async (req, res, next) => {
   try {

@@ -1,6 +1,7 @@
 import { decryptSecret, isUnreadable } from '../secrets.js';
 import { effectiveOllamaUrl, ollamaUrlProblem, hosted } from '../utils/ollamaPolicy.js';
 import { usableConnections, providerById } from './aiProviders.js';
+import { recordUse } from './aiUsage.js';
 import { safeFetch } from '../utils/safeFetch.js';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import OpenAI from 'openai';
@@ -273,12 +274,16 @@ async function runWithCascade(
     try {
       if (name === 'gemini' && providers.gemini) {
         console.log(`[${operationName}] Trying Gemini...`);
-        return await withTimeout(executeGemini(providers.gemini), PROVIDER_TIMEOUT_MS);
+        const out = await withTimeout(executeGemini(providers.gemini), PROVIDER_TIMEOUT_MS);
+        recordUse(userId, featureOf(operationName) || operationName, 'gemini');
+        return out;
       }
       if ((name === 'openai' || name === 'ollama' || name.startsWith('conn:')) && providers[name]) {
         const p: OAIProvider = providers[name];
         console.log(`[${operationName}] Trying ${p.name} (${p.model})...`);
-        return await executeOpenAI(p.client, p);
+        const out = await executeOpenAI(p.client, p);
+        recordUse(userId, featureOf(operationName) || operationName, p.name);
+        return out;
       }
     } catch (error: any) {
       if (error?.code === 'TIMEOUT' || error?.name === 'APIConnectionTimeoutError') timedOut = true;
@@ -584,6 +589,7 @@ Respond strictly in JSON with this schema: { reply: string, notes: [{title, cont
   const providers = buildProviders(user);
   const chosen = providerOrder(user, 'ask').find((n) => providers[n]); // same feature pin as the non-streaming chat
   if (!chosen) throw noKeyError(user);
+  recordUse(userId, 'ask', chosen.startsWith('conn:') ? (providers[chosen]?.name || chosen) : chosen);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',

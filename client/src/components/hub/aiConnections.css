@@ -49,3 +49,16 @@
 .ac-test { flex: 1 1 100%; }
 
 .ac input { caret-color: var(--ac-accent); }
+
+/* usage meter (counts only) */
+.ac-usage { margin-top: 16px; padding: 16px; border-radius: 22px; border: 1px solid var(--ac-line); display: flex; flex-direction: column; gap: 12px; }
+.ac-usage-top { display: flex; gap: 28px; }
+.ac-usage-top div { display: flex; flex-direction: column; }
+.ac-usage-top b { font-size: 26px; font-weight: 800; line-height: 1.1; }
+.ac-usage-top span { font-size: 12px; color: var(--ac-fg2); }
+.ac-bars { display: flex; align-items: flex-end; gap: 4px; height: 56px; }
+.ac-bars i { flex: 1; border-radius: 4px; background: var(--ac-line); min-height: 4px; }
+.ac-bars i.on { background: var(--ac-accent); }
+.ac-split { display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-split span { padding: 4px 10px; border-radius: 999px; font-size: 12px; background: var(--ac-line); }
+.ac-split span.alt { background: transparent; border: 1px solid var(--ac-line); }
