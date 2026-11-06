@@ -4,7 +4,20 @@ import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer } from '../hooks/useHubChat';
 import ConnectionModelOptions from '../components/hub/ConnectionModelOptions';
 import { MicButton, SpeakButton } from '../components/VoiceButtons';
+import './aimodes.css';
 
+// Modes and slash commands (mockup: AI chat). A mode adds a short instruction in front of what you type, so it works with any model.
+export const MODES = [
+  { id: 'ask', name: 'Ask notes', cmd: 'ask', prefix: '', hint: 'Answer from my notes', ph: 'Ask about your notes, tasks and calendar…' },
+  { id: 'plan', name: 'Plan', cmd: 'plan', prefix: 'Make a short, step-by-step plan for: ', hint: 'Turn a goal into steps', ph: 'What do you want a plan for?' },
+  { id: 'sum', name: 'Summarise', cmd: 'summarise', prefix: 'Summarise this in a few bullet points: ', hint: 'Short bullet summary', ph: 'What should I summarise?' },
+  { id: 'quiz', name: 'Quiz me', cmd: 'quiz', prefix: 'Quiz me, one question at a time, on: ', hint: 'Test what I know', ph: 'What should I quiz you on?' },
+];
+const EXTRA_CMDS = [
+  { id: 'simple', cmd: 'simple', prefix: 'Explain this in simple words: ', hint: 'Plain-language explanation' },
+  { id: 'cards', cmd: 'flashcards', prefix: 'Make flashcards (question and answer) from: ', hint: 'Flashcards from a topic' },
+];
+const SLASH = [...MODES, ...EXTRA_CMDS];
 const TILTS = [-1.5, 1.2, -0.6, 0.9, -1];
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make flashcards from this'];
 
@@ -21,6 +34,26 @@ export default function SoftAI() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachQuery, setAttachQuery] = useState('');
   const [copied, setCopied] = useState(null);
+  const [mode, setMode] = useState('ask');
+  const [cmdIdx, setCmdIdx] = useState(0);
+  const cur = SLASH.find((m) => m.id === mode) || MODES[0];
+
+  // "/" at the start opens the command list, "@" after a space (or at the start) opens the note list.
+  const slashQ = /^\/(\w*)$/.exec(input);
+  const cmds = slashQ ? SLASH.filter((c) => c.cmd.startsWith(slashQ[1].toLowerCase())) : [];
+  const atQ = !slashQ ? /(^|\s)@([^\s@]*)$/.exec(input) : null;
+  const atNotes = atQ ? allNotes.filter((n) => !attached.find((a) => a.id === n.id)).filter((n) => !atQ[2] || (n.title || '').toLowerCase().includes(atQ[2].toLowerCase())).slice(0, 6) : [];
+  const pickCmd = (c) => { setMode(c.id); setInput(''); setCmdIdx(0); inputRef.current?.focus(); };
+  const pickAt = (n) => { setAttached((l) => [...l, { id: n.id, title: n.title || 'Untitled' }]); setInput((v) => v.replace(/(^|\s)@[^\s@]*$/, '$1')); setCmdIdx(0); inputRef.current?.focus(); };
+  const menu = cmds.length ? cmds : atNotes;
+  const onKey = (e) => {
+    if (!menu.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCmdIdx((i) => (i + 1) % menu.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setCmdIdx((i) => (i - 1 + menu.length) % menu.length); }
+    else if (e.key === 'Enter') { e.preventDefault(); const it = menu[Math.min(cmdIdx, menu.length - 1)]; if (cmds.length) pickCmd(it); else pickAt(it); }
+    else if (e.key === 'Escape') { e.preventDefault(); setInput((v) => v.replace(/(^|\s)[/@][^\s]*$/, '$1')); }
+  };
+  const submit = (e) => { e.preventDefault(); if (menu.length) return; const t = input.trim(); if (!t) return; send(cur.prefix + t); if (mode !== 'ask') setMode('ask'); };
 
   const onThreadClick = (e) => {
     const btn = e.target.closest('[data-cite]');
@@ -132,15 +165,30 @@ export default function SoftAI() {
           )))}
         </div>
 
-        <form className="s-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+        <form className="s-composer" onSubmit={submit}>
+          <div className="s-modes" role="group" aria-label="Mode">
+            {MODES.map((m) => <button key={m.id} type="button" className={mode === m.id ? 'on' : ''} aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>{m.name}</button>)}
+            <span className="grow" />
+            <small className="s-modes-hint">Type <kbd>/</kbd> for commands, <kbd>@</kbd> to add a note</small>
+          </div>
+          {menu.length > 0 && (
+            <div className="s-slash" role="listbox" aria-label={cmds.length ? 'Commands' : 'Notes'}>
+              {cmds.length ? cmds.map((c, i) => (
+                <button key={c.id} type="button" role="option" aria-selected={i === cmdIdx} className={i === cmdIdx ? 'on' : ''} onMouseEnter={() => setCmdIdx(i)} onMouseDown={(e) => { e.preventDefault(); pickCmd(c); }}><b>/{c.cmd}</b><span>{c.hint}</span></button>
+              )) : atNotes.map((n, i) => (
+                <button key={n.id} type="button" role="option" aria-selected={i === cmdIdx} className={i === cmdIdx ? 'on' : ''} onMouseEnter={() => setCmdIdx(i)} onMouseDown={(e) => { e.preventDefault(); pickAt(n); }}><b>@{n.title || 'Untitled'}</b><span>Add this note</span></button>
+              ))}
+            </div>
+          )}
           <div className="s-composer-row">
             <label htmlFor="s-ai-input" className="s-sr">Message</label>
             <input
               id="s-ai-input"
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={active?.messages.length ? 'Ask a follow-up…' : 'Ask about your notes, tasks and calendar…'}
+              onChange={(e) => { setInput(e.target.value); setCmdIdx(0); }}
+              onKeyDown={onKey}
+              placeholder={mode !== 'ask' ? cur.ph : active?.messages.length ? 'Ask a follow-up…' : 'Ask about your notes, tasks and calendar…'}
               autoComplete="off"
             />
             <MicButton className="s-send big" onText={(t) => setInput((v) => (v ? v + ' ' : '') + t)} />

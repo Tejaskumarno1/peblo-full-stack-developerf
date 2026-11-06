@@ -1,0 +1,13 @@
+/* AI chat: modes row, slash commands and @ notes (mockup: AI chat) */
+.soft .s-composer { position: relative; }
+.soft .s-modes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.soft .s-modes button { height: 30px; padding: 0 13px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg2); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.soft .s-modes button.on { background: var(--s-fg); color: var(--s-bg); }
+.soft .s-modes-hint { font-size: 12px; color: var(--s-fg3); font-weight: 600; }
+.soft .s-modes-hint kbd { font: inherit; font-weight: 800; background: var(--s-chip-solid); border-radius: 6px; padding: 0 6px; }
+.soft .s-slash { position: absolute; left: 14px; bottom: calc(100% + 8px); width: min(340px, calc(100% - 28px)); z-index: 5; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 22px; background: var(--s-surface); box-shadow: var(--s-card-shadow); }
+.soft .s-slash button { display: flex; align-items: baseline; gap: 10px; padding: 9px 12px; border: 0; border-radius: 14px; background: transparent; color: var(--s-fg); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.soft .s-slash button b { font-weight: 800; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.soft .s-slash button span { color: var(--s-fg3); font-size: 12px; font-weight: 600; margin-left: auto; white-space: nowrap; }
+.soft .s-slash button.on { background: var(--s-peach); }
+@media (max-width: 700px) { .soft .s-modes-hint { display: none; } }
