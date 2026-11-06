@@ -1,0 +1,53 @@
+/* Calendar agenda, find-a-slot and peek panel (mockups: Calendar views, Calendar create) */
+.s-agenda { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: var(--s-surface); border-radius: 30px; box-shadow: var(--s-card-shadow); }
+.s-agenda-day h3 { margin: 0 0 6px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--s-fg3); }
+.s-agenda-row { display: flex; align-items: center; gap: 14px; width: 100%; margin-bottom: 6px; padding: 10px 14px; border: 0; border-radius: 18px; font: inherit; text-align: left; cursor: pointer; }
+.s-agenda-row.done { opacity: 0.55; }
+.s-agenda-row.done b { text-decoration: line-through; }
+.s-agenda-row .time { width: 64px; flex: none; font-size: 12.5px; font-weight: 800; }
+.s-agenda-row .what { display: flex; flex-direction: column; min-width: 0; }
+.s-agenda-row b { font-size: 14px; }
+.s-agenda-row small { font-size: 12px; opacity: 0.8; }
+.s-agenda-row:focus-visible, .s-slot button:focus-visible, .s-peek button:focus-visible, .s-peek a:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+
+.s-slot { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 26px; background: var(--s-surface); box-shadow: var(--s-soft-shadow); }
+.s-slot-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.s-slot-len { display: flex; gap: 6px; }
+.s-slot-len button { flex: 1; height: 32px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.s-slot-len button.on { background: var(--s-fg); color: var(--s-bg); }
+.s-slot-row { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 12px; border: 0; border-radius: 16px; background: var(--s-mint); color: var(--s-fg); font: inherit; text-align: left; cursor: pointer; }
+.s-slot-row span { display: flex; flex-direction: column; }
+.s-slot-row b { font-size: 13px; }
+.s-slot-row small { font-size: 12px; color: var(--s-fg2); }
+.s-slot-row em { font-style: normal; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: var(--s-surface); }
+.s-slot-none { margin: 0; font-size: 12.5px; color: var(--s-fg3); }
+
+.s-peek { position: fixed; right: 28px; top: 120px; z-index: 80; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 28px; background: var(--s-surface); color: var(--s-fg); box-shadow: var(--s-capture-shadow); font-family: var(--s-body); }
+.s-peek-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-family: var(--s-display); font-size: 17px; line-height: 1.25; }
+.s-peek-head button { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--s-chip-solid); color: var(--s-fg); display: grid; place-items: center; cursor: pointer; }
+.s-peek-when { margin: 0; font-size: 13px; font-weight: 600; color: var(--s-fg2); }
+.s-peek-link { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 7px 14px; border-radius: 999px; background: var(--s-sky); color: var(--s-fg); font-size: 13px; font-weight: 700; text-decoration: none; }
+.s-peek-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.s-peek-tags span { padding: 3px 10px; border-radius: 999px; background: var(--s-lilac); font-size: 12px; font-weight: 700; }
+.s-peek-actions { display: flex; gap: 8px; }
+.s-peek-actions button { height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--s-accent-soft); color: var(--s-accent-ink); font: inherit; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.s-peek-actions .go { flex: 1; justify-content: center; background: var(--s-accent); color: var(--s-on-accent); }
+
+.s-layers { display: flex; flex-wrap: wrap; gap: 6px; }
+.s-layers button { height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.s-layers button[aria-pressed="false"] { opacity: 0.55; }
+.s-layers i { width: 9px; height: 9px; border-radius: 50%; }
+.s-layers button:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+.s-month-cell.drop { outline: 2px dashed var(--s-fg); outline-offset: -3px; }
+
+/* The side column is tight on a 900px screen: compact slot finder, small gaps, scroll as a last resort */
+.soft .s-cal-side { gap: 10px; overflow-y: auto; scrollbar-width: none; }
+.soft .s-cal-side::-webkit-scrollbar { display: none; }
+.soft .s-big { flex: 0 0 auto; min-height: 84px; padding: 14px 18px; }
+.s-slot { padding: 10px 12px; gap: 6px; flex: none; }
+.s-slot-head { font-size: 13px; }
+.s-slot-row { padding: 5px 10px; }
+.s-slot-len button { height: 28px; }
+.soft .s-big-num { font-size: 26px; line-height: 1.05; }
+.soft .s-big-title { font-size: 14px; }
+.soft .s-minical { padding-bottom: 10px; }

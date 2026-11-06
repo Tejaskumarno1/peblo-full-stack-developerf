@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
 import QuickCreate from './QuickCreate';
+import { AgendaView, FindSlot, PeekPanel } from './CalExtras';
 import UndoToast from '../components/UndoToast';
 import { useUndoToast } from '../utils/useUndoToast';
 import NewMeeting from '../components/NewMeeting';
@@ -23,6 +24,9 @@ export default function SoftCalendar() {
   const qc = useQueryClient();
   const { toast, say, dismiss } = useUndoToast();
   const [quick, setQuick] = useState(null);
+  const [peek, setPeek] = useState(null);
+  const [dropDay, setDropDay] = useState(null);
+  const [layers, setLayers] = useState({ tasks: true, meetings: true, done: true });
 
   const weekStart = startOfWeek(cursor);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -47,8 +51,11 @@ export default function SoftCalendar() {
   const days = view === 'day' ? [cursor] : Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   // All 24 hours are always in the grid (TimeGrid scrolls inside itself). Events that run past midnight continue on the next day.
-  const openTask = (t) => (t.note?.id ? navigate(`/notes/${t.note.id}`) : navigate('/tasks'));
-  const spans = todos.filter((t) => t.deadline).map((t) => ({ t, s: timeOf(t) ? spanOf(t) : null }));
+  const openTask = (t) => setPeek(t);
+  const goTask = (t) => (t.note?.id ? navigate(`/notes/${t.note.id}`) : navigate('/tasks'));
+  const isMeeting = (t) => !!(t.startTime && t.endTime);
+  const shown = todos.filter((t) => (isMeeting(t) ? layers.meetings : layers.tasks) && (layers.done || !t.completed));
+  const spans = shown.filter((t) => t.deadline).map((t) => ({ t, s: timeOf(t) ? spanOf(t) : null }));
   const allDay = spans.filter((x) => !x.s && days.some((d) => sameDay(x.t.deadline, d)));
 
   const toneFor = (t) => {
@@ -93,8 +100,27 @@ export default function SoftCalendar() {
     }
   };
 
+  // Month view: drag an item onto another day, it keeps its time
+  const moveToDay = async (id, day) => {
+    const t = todos.find((x) => x.id === id);
+    if (!t || sameDay(t.deadline, day)) return;
+    const old = new Date(t.deadline);
+    const next = t.startTime ? new Date(day.getFullYear(), day.getMonth(), day.getDate()) : new Date(day.getFullYear(), day.getMonth(), day.getDate(), old.getHours(), old.getMinutes());
+    const before = { deadline: t.deadline };
+    patchCache(t.id, { deadline: next.toISOString() });
+    try {
+      await todosAPI.update(t.id, { deadline: next.toISOString() });
+      qc.invalidateQueries({ queryKey: ['todos'] });
+      say(`Moved "${t.text.length > 30 ? `${t.text.slice(0, 30)}...` : t.text}" to ${fmt(day, { weekday: 'short', day: 'numeric', month: 'short' })}`, async () => { patchCache(t.id, before); await todosAPI.update(t.id, before); qc.invalidateQueries({ queryKey: ['todos'] }); });
+    } catch { qc.invalidateQueries({ queryKey: ['todos'] }); say('Could not move it. Nothing changed.'); }
+  };
+  const toggleDone = async (t) => {
+    setPeek(null);
+    try { await todosAPI.update(t.id, { completed: !t.completed }); qc.invalidateQueries({ queryKey: ['todos'] }); say(t.completed ? 'Reopened' : 'Marked done', async () => { await todosAPI.update(t.id, { completed: t.completed }); qc.invalidateQueries({ queryKey: ['todos'] }); }); } catch { say('Could not save that.'); }
+  };
+
   const move = (dir) => setCursor((c) => (view === 'month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'day' ? 1 : 7))));
-  const title = view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
+  const title = view === 'agenda' ? 'Agenda' : view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
   const range = view === 'day' ? fmt(cursor, { day: 'numeric', month: 'long', year: 'numeric' })
     : view === 'month' ? fmt(cursor, { year: 'numeric' })
       : `${fmt(weekStart, { day: 'numeric', month: 'long' })} – ${fmt(addDays(weekStart, 6), { day: 'numeric', month: 'long' })}`;
@@ -120,7 +146,7 @@ export default function SoftCalendar() {
         <button type="button" className="s-round46" aria-label="Next" onClick={() => move(1)}>›</button>
         <NewMeeting className="s-pill46" day={cursor} />
         <div className="s-seg small" role="tablist" aria-label="View">
-          {['day', 'week', 'month'].map((v) => (
+          {['day', 'week', 'month', 'agenda'].map((v) => (
             <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{v[0].toUpperCase() + v.slice(1)}</button>
           ))}
         </div>
@@ -151,6 +177,12 @@ export default function SoftCalendar() {
             })}
           </div>
         </section>
+        <div className="s-layers" role="group" aria-label="Layers">
+          {[['tasks', 'Tasks', '#E8825E'], ['meetings', 'Meetings', '#6FA8DC'], ['done', 'Done', '#7BC59A']].map(([k, label, c]) => (
+            <button key={k} type="button" aria-pressed={layers[k]} onClick={() => setLayers((l) => ({ ...l, [k]: !l[k] }))}><i style={{ background: c }} />{label}</button>
+          ))}
+        </div>
+        <FindSlot todos={todos} from={new Date()} onPick={(s) => setQuick({ day: s.day, start: s.start, end: s.end })} />
         <section className="s-big" aria-label="Next big thing">
           <span className="s-big-label">Next big thing</span>
           {nextBig ? (
@@ -167,15 +199,25 @@ export default function SoftCalendar() {
 
       {isError && <p className="s-empty small" role="alert">Could not load your schedule. Check your connection and try again.</p>}
       <section className={`s-week${view === 'month' ? '' : ' is-grid'}`} aria-label="Schedule">
-        {view === 'month' ? (
+        {view === 'agenda' ? (
+          <AgendaView todos={shown} from={startOfDay()} toneFor={toneFor} onPick={openTask} />
+        ) : view === 'month' ? (
           <div className="s-month">
             {weekdayNames(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => <span key={i} className="s-month-dow">{d}</span>)}
             {Array.from({ length: 42 }, (_, i) => addDays(gridStart, i)).map((d) => {
-              const items = todos.filter((t) => t.deadline && sameDay(t.deadline, d));
+              const items = shown.filter((t) => t.deadline && sameDay(t.deadline, d));
               return (
-                <button key={d.toISOString()} type="button" className={`s-month-cell${d.getMonth() === cursor.getMonth() ? '' : ' out'}${sameDay(d, new Date()) ? ' today' : ''}`} onClick={() => { setCursor(startOfDay(d)); setView('day'); }}>
+                <button
+                  key={d.toISOString()}
+                  type="button"
+                  className={`s-month-cell${d.getMonth() === cursor.getMonth() ? '' : ' out'}${sameDay(d, new Date()) ? ' today' : ''}${dropDay && sameDay(dropDay, d) ? ' drop' : ''}`}
+                  onClick={() => { setCursor(startOfDay(d)); setView('day'); }}
+                  onDragOver={(e) => { e.preventDefault(); setDropDay(d); }}
+                  onDragLeave={() => setDropDay(null)}
+                  onDrop={(e) => { e.preventDefault(); setDropDay(null); const id = e.dataTransfer.getData('text/peblo-todo'); if (id) moveToDay(id, d); }}
+                >
                   <span className="n">{d.getDate()}</span>
-                  {items.slice(0, 3).map((t) => { const c = toneFor(t); return <span key={t.id} className={`ev${t.completed ? ' done' : ''}`} style={{ background: c.bg, color: c.fg }}>{t.text}</span>; })}
+                  {items.slice(0, 3).map((t) => { const c = toneFor(t); return <span key={t.id} className={`ev${t.completed ? ' done' : ''}`} style={{ background: c.bg, color: c.fg, cursor: 'grab' }} draggable onDragStart={(e) => { e.dataTransfer.setData('text/peblo-todo', t.id); e.dataTransfer.effectAllowed = 'move'; }}>{t.text}</span>; })}
                   {items.length > 3 && <span className="more">+{items.length - 3}</span>}
                 </button>
               );
@@ -187,6 +229,7 @@ export default function SoftCalendar() {
           </>
         )}
       </section>
+      {peek && <PeekPanel t={peek} onClose={() => setPeek(null)} onOpen={(t) => { setPeek(null); goTask(t); }} onDone={toggleDone} />}
       {quick && <QuickCreate anchor={quick} todos={todos} onClose={() => setQuick(null)} onSay={say} />}
       <UndoToast toast={toast} dismiss={dismiss} />
     </div>
