@@ -1,7 +1,7 @@
-/* ==========================================================
+﻿/* ==========================================================
    Soft Studio: every rule is scoped to .soft so Studio and
    Console are never affected. Sizes follow the Soft Studio
-   mockups (1440 × 900 frame: 48px sides, 52px header, dock).
+   mockups (1440 Ã— 900 frame: 48px sides, 52px header, dock).
    ========================================================== */
 
 .soft {
@@ -10,7 +10,7 @@
   --s-line: #EADFD0;
   --s-fg: #241F1A;
   --s-fg2: #564D43;
-  --s-fg3: #6E6559;
+  --s-fg3: #5E564B;
   --s-peach: #FFD9C4;
   --s-mint: #CDEBD9;
   --s-butter: #FFE9A6;
@@ -48,7 +48,7 @@
   --s-line: #2F2839;
   --s-fg: #F5F0F7;
   --s-fg2: #CFC6D8;
-  --s-fg3: #A59BB0;
+  --s-fg3: #BDB3C7;
   --s-peach: #3A261E;
   --s-mint: #18302A;
   --s-butter: #332B13;
