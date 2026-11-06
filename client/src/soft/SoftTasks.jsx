@@ -579,17 +579,18 @@ export default function SoftTasks() {
           <h1 className="s-h1">{selMode ? `${sel.size} selected` : 'Tasks'}</h1>
           <span className="s-sub">{selMode ? 'Click tasks to select them, Shift-click for a range.' : subtitle}</span>
         </div>
-        <form className="s-addbar" onSubmit={add}>
-          <label htmlFor="task-add" className="s-sr">Add a task</label>
-          <input id="task-add" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder='Add a task… try "revise BCNF tomorrow !high #exams"' autoComplete="off" />
-          <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
-        </form>
+        <span className="s-grow" />
         {selMode && <button type="button" className="s-selbtn" onClick={exitSelect}>Cancel</button>}
         {!selMode && <Link to="/tasks/plan" className="s-planbtn plan-link"><Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />Plan my day</Link>}
         <div className="s-seg" role="tablist" aria-label="View">
           {VIEWS.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
         </div>
       </div>
+      <form className="s-addbar" onSubmit={add}>
+        <label htmlFor="task-add" className="s-sr">Add a task</label>
+        <input id="task-add" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder='Add a task… try "revise BCNF tomorrow !high #exams"' autoComplete="off" />
+        <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
+      </form>
 
       {parsed ? (
         <div className="s-understood" aria-live="polite" data-testid="understood">
@@ -613,24 +614,30 @@ export default function SoftTasks() {
       {err && <p className="s-empty small" role="alert" style={{ margin: '4px 0' }}>{err}</p>}
 
       <div className="s-tasktools">
-        <SavedViews views={views} setViews={setViews} current={{ q, pill, lg, ls }} activeId={activeView} setActiveId={setActiveView} onApply={(v) => { setQ(v.q || ''); setPill(v.pill || 'all'); setLg(v.lg || 'when'); setLs(v.ls || 'due'); setGPick(null); }} say={say} />
-        <label htmlFor="s-task-search" className="s-sr">Search tasks</label>
-        <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks" />
-        <div className="s-filter" role="tablist" aria-label="Filter tasks">
-          {SMART.map(([k, name]) => (
-            <button key={k} type="button" role="tab" aria-selected={pill === k} className={pill === k ? 'on' : ''} onClick={() => setPill(k)}>{name}{k !== 'all' && smartCounts[k] > 0 && <span className="s-pcount">{smartCounts[k]}</span>}</button>
-          ))}
+        <div className="s-trow a">
+          <SavedViews views={views} setViews={setViews} current={{ q, pill, lg, ls }} activeId={activeView} setActiveId={setActiveView} onApply={(v) => { setQ(v.q || ''); setPill(v.pill || 'all'); setLg(v.lg || 'when'); setLs(v.ls || 'due'); setGPick(null); }} say={say} />
+          <span className="s-grow" />
+          <label htmlFor="s-task-search" className="s-sr">Search tasks</label>
+          <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks and tags" />
+          <button type="button" className={`s-selbtn${showLists ? ' on' : ''}`} aria-pressed={showLists} onClick={toggleLists}>Lists</button>
+          <button type="button" className={`s-selbtn${selMode ? ' on' : ''}`} aria-pressed={selMode} onClick={() => (selMode ? exitSelect() : setSelMode(true))}>Select</button>
+          <button type="button" className="s-selbtn" onClick={() => setReview(true)}>Review</button>
         </div>
-        <button type="button" className={`s-selbtn${showLists ? ' on' : ''}`} aria-pressed={showLists} onClick={toggleLists}>Lists</button>
-        <button type="button" className={`s-selbtn${selMode ? ' on' : ''}`} aria-pressed={selMode} onClick={() => (selMode ? exitSelect() : setSelMode(true))}>Select</button>
-        <button type="button" className="s-selbtn" onClick={() => setReview(true)}>Review</button>
-        {view === 'list' && (
-          <>
-            <button type="button" className={`s-selbtn${dense ? ' on' : ''}`} aria-pressed={dense} onClick={toggleDense}>{dense ? 'Compact' : 'Comfortable'}</button>
-            <div className="tl-seg" role="group" aria-label="Group tasks by">{[['none', 'None'], ['when', 'Date'], ['list', 'List'], ['tag', 'Tag'], ['priority', 'Priority']].map(([k, n]) => <button key={k} type="button" className={lg === k ? 'on' : ''} aria-pressed={lg === k} onClick={() => { setLg(k); setGPick(null); }}>{n}</button>)}</div>
-            <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.filter(([k]) => lg !== 'when' || k === 'due' || k === 'manual').map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
-          </>
-        )}
+        <div className="s-trow b">
+          <div className="s-filter" role="tablist" aria-label="Filter tasks">
+            {SMART.map(([k, name]) => (
+              <button key={k} type="button" role="tab" aria-selected={pill === k} className={pill === k ? 'on' : ''} onClick={() => setPill(k)}>{name}{k !== 'all' && smartCounts[k] > 0 && <span className="s-pcount">{smartCounts[k]}</span>}</button>
+            ))}
+          </div>
+          {view === 'list' && (
+            <>
+              <span className="s-grow" />
+              <div className="tl-seg" role="group" aria-label="Group tasks by">{[['none', 'None'], ['when', 'Date'], ['list', 'List'], ['tag', 'Tag'], ['priority', 'Priority']].map(([k, n]) => <button key={k} type="button" className={lg === k ? 'on' : ''} aria-pressed={lg === k} onClick={() => { setLg(k); setGPick(null); }}>{n}</button>)}</div>
+              <label className="s-tt-sel">Sort <select value={ls} onChange={(e) => setLs(e.target.value)} aria-label="Sort tasks by">{SORT_OPTIONS.filter(([k]) => lg !== 'when' || k === 'due' || k === 'manual').map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
+              <button type="button" className={`s-selbtn${dense ? ' on' : ''}`} aria-pressed={dense} onClick={toggleDense}>{dense ? 'Compact' : 'Comfortable'}</button>
+            </>
+          )}
+        </div>
       </div>
 
       {showLists && <ListCards lists={allLists.filter((l) => showArch || !l.archived)} stats={listStats} sel={listSel} dragging={!!dragId} onOpen={(n) => { setListSel(listSel === n ? null : n); setGPick(null); }} onNew={() => setNewList(true)} onMenu={(l, el) => setMenu({ list: l, anchor: el })} onDropTask={dropOnList} />}

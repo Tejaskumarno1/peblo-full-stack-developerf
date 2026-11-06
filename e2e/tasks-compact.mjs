@@ -1,5 +1,5 @@
 import { boot } from './lib.mjs';
-// Tasks v3 (docs mockups TasksV3*): compact header, one filter row, board starts high, Plan my day is visible.
+// Tasks v4 (docs mockups TasksV4*): comfortable spacing, title row, add bar row, two tool rows, flat cards.
 const { base, api, page, check, finish } = await boot();
 try {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -8,14 +8,15 @@ try {
   await page.goto(base + '/tasks');
   await page.locator('.s-board').waitFor({ timeout: 8000 });
   const box = (sel) => page.locator(sel).first().boundingBox();
-  const head = await box('.s-page-title'); const add = await box('.s-addbar'); const plan = await box('.plan-link'); const seg = await box('.s-page-head .s-seg'); const board = await box('.s-board'); const tools = await box('.s-tasktools');
-  check('add bar sits in the header row beside the title', Math.abs((add.y + add.height / 2) - (head.y + head.height / 2)) < 30 && add.x > head.x + head.width - 5, JSON.stringify({ head, add }));
-  check('Plan my day is visible, same row, between the add bar and the view switch', plan.width > 100 && plan.x >= add.x + add.width - 2 && plan.x + plan.width <= seg.x + 2 && Math.abs(plan.y - add.y) < 6, JSON.stringify({ add, plan, seg }));
-  check('filter row is a single line', tools.height < 50, 'height ' + tools.height);
-  check('the board starts high on the page (was ~540px)', board.y < 240, 'board.y ' + board.y);
-  check('the board is tall (more than 520px)', board.height > 520, 'height ' + board.height);
+  const head = await box('.s-page-head'); const add = await box('.s-addbar'); const plan = await box('.plan-link'); const seg = await box('.s-page-head .s-seg'); const board = await box('.s-board'); const ra = await box('.s-trow.a'); const rb = await box('.s-trow.b'); const title = await box('.s-page-title');
+  check('title row: Plan my day and the view switch sit on the right, same row as the title', plan.x > title.x + title.width && plan.x + plan.width <= seg.x + 2 && Math.abs(plan.y - title.y) < 30, JSON.stringify({ title, plan, seg }));
+  check('add bar is full width on its own row below the title', add.y >= head.y + head.height && add.width > 1000, JSON.stringify({ head, add }));
+  check('breathing room: 12px or more between title row, add bar and tool rows', add.y - (head.y + head.height) >= 10 && ra.y - (add.y + add.height) >= 12 && rb.y - (ra.y + ra.height) >= 8, JSON.stringify({ head, add, ra, rb }));
+  check('two tool rows: saved views and search on row A, filters on row B', rb.y > ra.y + ra.height - 1, JSON.stringify({ ra, rb }));
+  check('the board still starts above 340px and is tall (>420px)', board.y < 360 && board.height > 420, JSON.stringify(board));
+  check('cards are flat: no stacked shadow', (await page.locator('.s-card').first().evaluate((e) => getComputedStyle(e).boxShadow)).split('),').length === 1);
   check('no "No saved views yet" hint', (await page.getByText('No saved views yet').count()) === 0);
-  check('All tasks and Save view share the filter row', (await page.getByRole('button', { name: 'All tasks' }).boundingBox()).y < tools.y + tools.height);
+  check('search sits on the saved-views row', (await page.locator('#s-task-search').boundingBox()).y < ra.y + ra.height);
   await page.screenshot({ path: 'D:/Peblo/_shots/tasks-compact.png' });
   await page.getByRole('tab', { name: 'List' }).click();
   await page.waitForTimeout(400);
