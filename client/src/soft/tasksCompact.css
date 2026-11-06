@@ -1,0 +1,31 @@
+/* Tasks v3 (mockups TasksV3*): one compact header row, one filter row. The board gets the space back. */
+.soft .s-tasks { gap: 10px; }
+.soft .s-page-head { align-items: center; gap: 14px; }
+.soft .s-page-title { flex: none; gap: 3px; }
+.soft .s-page-title .s-h1 { font-size: 32px; line-height: 1; }
+.soft .s-page-title .s-sub { font-size: 12px; white-space: nowrap; }
+.soft .s-page-head .s-addbar { flex: 1; min-width: 0; height: 48px; padding: 0 6px 0 20px; }
+.soft .s-page-head .s-addbar input { font-size: 15px; }
+.soft .s-page-head .s-addbar .s-accent-btn { height: 38px; padding: 0 20px; }
+.soft .s-planbtn { flex: none; height: 48px; padding: 0 20px 0 16px; border-radius: 999px; background: var(--s-fg); color: var(--s-bg); font: 800 14px var(--s-body); display: inline-flex; align-items: center; gap: 8px; text-decoration: none; box-shadow: var(--s-shadow); cursor: pointer; }
+.soft .s-planbtn:hover { filter: brightness(1.12); }
+.soft .s-planbtn:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 3px; }
+.soft .s-page-head .s-seg { flex: none; }
+
+.soft .s-tasktools { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 2px; }
+.soft .s-views, .soft .s-views-row { display: contents; }
+.soft .s-views-row::after { content: ''; width: 1px; height: 22px; background: var(--s-line); margin: 0 4px; flex: none; }
+.soft .s-vchip { height: 32px; padding: 0 12px; font-size: 13px; flex: none; }
+.soft .s-vchip.ghost { border: 0; box-shadow: inset 0 0 0 1.5px var(--s-line); background: transparent; }
+.soft .s-vwrap { position: relative; display: inline-flex; flex: none; }
+.soft .s-vmenu { top: 38px; right: auto; left: 0; }
+.soft .s-vrename input { height: 32px; border-radius: 999px; border: 0; padding: 0 12px; background: var(--s-surface); color: var(--s-fg); caret-color: var(--s-accent); font: 600 13px var(--s-body); outline: 2px solid var(--s-accent); width: 160px; }
+.soft .s-vpop, .soft .s-vconfirm { position: absolute; top: 40px; left: 0; z-index: 30; width: 340px; }
+.soft .s-tasktools input[type=search] { flex: 0 1 140px; min-width: 110px; max-width: 150px; height: 34px; }
+.soft .s-filter { flex-wrap: nowrap; gap: 6px; max-height: none; overflow: visible; }
+.soft .s-filter button { height: 32px; padding: 0 10px; }
+.soft .s-tasktools .s-selbtn { background: transparent; color: var(--s-fg2); padding: 0 10px; }
+.soft .s-tasktools .s-selbtn.on { background: #2a1f17; color: #fff; }
+.soft .s-tasktools .s-selbtn:hover:not(.on) { color: var(--s-fg); background: var(--s-chip-solid); }
+.soft .s-filter + .s-selbtn { margin-left: auto; }
+@media (max-width: 1100px) { .soft .s-page-head { flex-wrap: wrap; } .soft .s-page-head .s-addbar { order: 5; flex-basis: 100%; } }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Repeat, Target } from 'lucide-react';
+import { X, Repeat, Target, Sparkles } from 'lucide-react';
 import { todosAPI } from '../api';
 import { parseTask } from '../utils/parseTask';
 import { askScope } from '../utils/askScope';
@@ -15,6 +15,7 @@ import './lists.css';
 import TaskReview from './TaskReview';
 import { ChevronDown, GripVertical } from 'lucide-react';
 import SavedViews from './SavedViews';
+import './tasksCompact.css';
 import { loadViews } from './viewStore';
 import './taskreview.css';
 import { ShortcutSheet, BulkBar, UndoRedo, DeleteConfirm } from './TaskBulk';
@@ -578,19 +579,18 @@ export default function SoftTasks() {
           <h1 className="s-h1">{selMode ? `${sel.size} selected` : 'Tasks'}</h1>
           <span className="s-sub">{selMode ? 'Click tasks to select them, Shift-click for a range.' : subtitle}</span>
         </div>
-        <span className="grow" />
+        <form className="s-addbar" onSubmit={add}>
+          <label htmlFor="task-add" className="s-sr">Add a task</label>
+          <input id="task-add" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder='Add a task… try "revise BCNF tomorrow !high #exams"' autoComplete="off" />
+          <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
+        </form>
         {selMode && <button type="button" className="s-selbtn" onClick={exitSelect}>Cancel</button>}
-        {!selMode && <Link to="/tasks/plan" className="s-selbtn plan-link">Plan my day</Link>}
+        {!selMode && <Link to="/tasks/plan" className="s-planbtn plan-link"><Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />Plan my day</Link>}
         <div className="s-seg" role="tablist" aria-label="View">
           {VIEWS.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
         </div>
       </div>
 
-      <form className="s-addbar" onSubmit={add}>
-        <label htmlFor="task-add" className="s-sr">Add a task</label>
-        <input id="task-add" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder='Add a task… try "revise BCNF tomorrow !high #exams"' autoComplete="off" />
-        <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
-      </form>
       {parsed ? (
         <div className="s-understood" aria-live="polite" data-testid="understood">
           <span className="lead">Understood</span>
@@ -612,13 +612,13 @@ export default function SoftTasks() {
       ) : null}
       {err && <p className="s-empty small" role="alert" style={{ margin: '4px 0' }}>{err}</p>}
 
-      <SavedViews views={views} setViews={setViews} current={{ q, pill, lg, ls }} activeId={activeView} setActiveId={setActiveView} onApply={(v) => { setQ(v.q || ''); setPill(v.pill || 'all'); setLg(v.lg || 'when'); setLs(v.ls || 'due'); setGPick(null); }} say={say} />
       <div className="s-tasktools">
+        <SavedViews views={views} setViews={setViews} current={{ q, pill, lg, ls }} activeId={activeView} setActiveId={setActiveView} onApply={(v) => { setQ(v.q || ''); setPill(v.pill || 'all'); setLg(v.lg || 'when'); setLs(v.ls || 'due'); setGPick(null); }} say={say} />
         <label htmlFor="s-task-search" className="s-sr">Search tasks</label>
-        <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks and tags…" />
+        <input id="s-task-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} placeholder="Search tasks" />
         <div className="s-filter" role="tablist" aria-label="Filter tasks">
           {SMART.map(([k, name]) => (
-            <button key={k} type="button" role="tab" aria-selected={pill === k} className={pill === k ? 'on' : ''} onClick={() => setPill(k)}>{name}{k !== 'all' && <span className="s-pcount">{smartCounts[k]}</span>}</button>
+            <button key={k} type="button" role="tab" aria-selected={pill === k} className={pill === k ? 'on' : ''} onClick={() => setPill(k)}>{name}{k !== 'all' && smartCounts[k] > 0 && <span className="s-pcount">{smartCounts[k]}</span>}</button>
           ))}
         </div>
         <button type="button" className={`s-selbtn${showLists ? ' on' : ''}`} aria-pressed={showLists} onClick={toggleLists}>Lists</button>

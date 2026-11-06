@@ -51,7 +51,7 @@ try {
   await lcard('Home').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Rename' }).click();
   await page.getByLabel('List name').fill('House');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForTimeout(1500);
   check('Rename changes it on every task', (await find('Pay rent')).meta?.list === 'House' && (await find('Renew card')).meta?.list === 'House');
   await lcard('House').click({ button: 'right' });

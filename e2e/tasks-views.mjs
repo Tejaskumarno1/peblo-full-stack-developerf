@@ -17,7 +17,7 @@ try {
   await page.locator('.s-list').waitFor({ timeout: 5000 });
 
   // Saved views
-  check('empty state shows before any view is saved', (await page.locator('.s-vempty').count()) === 1);
+  check('no hint paragraph is wasting space before any view is saved', (await page.locator('.s-vempty').count()) === 0 && (await page.getByRole('button', { name: 'Save view' }).count()) === 1);
   await page.locator('.s-filter button', { hasText: 'High priority' }).click().catch(() => {});
   await page.locator('.tl-seg button', { hasText: 'Priority' }).click();
   await page.locator('.s-vchip.ghost').click();
@@ -42,7 +42,7 @@ try {
   check('duplicate adds a copy', (await page.locator('.s-vchip', { hasText: 'Work focus copy' }).count()) === 1);
   await page.locator('.s-vmore').click();
   await page.locator('.s-vmenu button', { hasText: 'Rename' }).click();
-  await page.locator('.s-vinfo input').fill('Copy renamed');
+  await page.locator('.s-vrename input').fill('Copy renamed');
   await page.keyboard.press('Enter');
   check('rename works', (await page.locator('.s-vchip', { hasText: 'Copy renamed' }).count()) === 1);
   await page.locator('.s-vmore').click();

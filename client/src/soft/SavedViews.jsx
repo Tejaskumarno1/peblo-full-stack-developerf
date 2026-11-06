@@ -46,7 +46,7 @@ export default function SavedViews({ views, setViews, current, activeId, setActi
         {views.map((v) => (
           <button key={v.id} type="button" className={`s-vchip${activeId === v.id ? ' on' : ''}`} aria-pressed={activeId === v.id} onClick={() => apply(v)}>{v.name}</button>
         ))}
-        <button type="button" className="s-vchip ghost" aria-expanded={saving} onClick={() => { setSaving(!saving); setMenu(null); }}><Plus size={14} /> Save this view</button>
+        <button type="button" className="s-vchip ghost" aria-expanded={saving} title="Keeps the search, filter, group and sort you have now" onClick={() => { setSaving(!saving); setMenu(null); }}><Plus size={14} /> Save view</button>
       </div>
 
       {saving && (
@@ -62,24 +62,21 @@ export default function SavedViews({ views, setViews, current, activeId, setActi
       )}
 
       {active && (
-        <div className="s-vactive">
-          <div className="s-vinfo">
-            {renaming === active.id
-              ? <form onSubmit={doRename}><input ref={nameRef} defaultValue={active.name} maxLength={40} aria-label="View name" /></form>
-              : <b>{active.name}</b>}
-            <span className="s-vdesc">{describe(active).map((t) => <i key={t}>{t}</i>)}</span>
-          </div>
-          {dirty && <button type="button" className="s-vupd" onClick={() => { commit(updateView(views, active.id, cur)); say?.(`Updated "${active.name}"`); }}>Update to current filters</button>}
-          <button type="button" className="s-vmore" aria-label="View menu" aria-haspopup="menu" aria-expanded={menu === active.id} onClick={() => setMenu(menu ? null : active.id)}><MoreHorizontal size={16} /></button>
-          {menu === active.id && (
-            <div className="s-vmenu" role="menu">
-              <button type="button" role="menuitem" onClick={() => { setRenaming(active.id); setMenu(null); }}>Rename</button>
-              <button type="button" role="menuitem" disabled={!dirty} onClick={() => { commit(updateView(views, active.id, cur)); setMenu(null); }}>Update to current filters</button>
-              <button type="button" role="menuitem" onClick={() => { const next = duplicateView(views, active.id); commit(next); setActiveId(next.at(-1).id); setMenu(null); }}>Duplicate</button>
-              <button type="button" role="menuitem" className="danger" onClick={() => { setConfirm(active); setMenu(null); }}>Delete view</button>
-            </div>
-          )}
-        </div>
+        <>
+          {renaming === active.id && <form className="s-vrename" onSubmit={doRename}><input ref={nameRef} defaultValue={active.name} maxLength={40} aria-label="View name" /></form>}
+          {dirty && <button type="button" className="s-vchip ghost s-vupd" title={`Save the current filters into "${active.name}"`} onClick={() => { commit(updateView(views, active.id, cur)); say?.(`Updated "${active.name}"`); }}><Plus size={14} /> Update view</button>}
+          <span className="s-vwrap" title={describe(active).join(' · ')}>
+            <button type="button" className="s-vmore" aria-label="View menu" aria-haspopup="menu" aria-expanded={menu === active.id} onClick={() => setMenu(menu ? null : active.id)}><MoreHorizontal size={16} /></button>
+            {menu === active.id && (
+              <div className="s-vmenu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setRenaming(active.id); setMenu(null); }}>Rename</button>
+                <button type="button" role="menuitem" disabled={!dirty} onClick={() => { commit(updateView(views, active.id, cur)); setMenu(null); }}>Update to current filters</button>
+                <button type="button" role="menuitem" onClick={() => { const next = duplicateView(views, active.id); commit(next); setActiveId(next.at(-1).id); setMenu(null); }}>Duplicate</button>
+                <button type="button" role="menuitem" className="danger" onClick={() => { setConfirm(active); setMenu(null); }}>Delete view</button>
+              </div>
+            )}
+          </span>
+        </>
       )}
 
       {confirm && (
@@ -92,7 +89,6 @@ export default function SavedViews({ views, setViews, current, activeId, setActi
           </div>
         </div>
       )}
-      {views.length === 0 && !saving && <p className="s-vempty">No saved views yet. Set a filter, then press Save this view.</p>}
     </div>
   );
 }
