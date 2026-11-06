@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { aiConnectionsAPI } from '../../api';
 import { connectionModelsQuery } from './ConnectionModelOptions';
 import './aiConnections.css';
+import ProviderBadge from './ProviderBadge';
 
 const errText = (e, fallback) => e?.response?.data?.error || fallback;
 
@@ -32,9 +33,12 @@ function Row({ c, first, last, onChange, onMove, onRemove, busy }) {
   };
   return (
     <li className={`ac-row${c.enabled ? '' : ' off'}`}>
-      <div className="ac-row-main">
-        <b>{c.label}</b>
-        <span className="ac-sub">{c.provider === 'custom' ? c.baseUrl : 'Key saved'}{c.unreadable ? ' · the saved key cannot be read here: add it again' : ''}</span>
+      <div className="ac-row-main" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <ProviderBadge id={c.provider} />
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <b>{c.label}</b>
+          <span className="ac-sub">{c.provider === 'custom' ? c.baseUrl : 'Key saved'}{c.unreadable ? ' · the saved key cannot be read here: add it again' : ''}</span>
+        </div>
       </div>
       <ModelSelect c={c} onPick={onChange} />
       <button type="button" className="ac-btn" onClick={runTest} disabled={test === 'busy'} aria-label={`Test ${c.label}`}>{test === 'busy' ? 'Testing…' : 'Test'}</button>
@@ -165,7 +169,7 @@ export default function AiConnections({ theme }) {
 
       {found && (
         <div className="ac-found">
-          <p className="ac-msg ok"><Check size={14} strokeWidth={2.6} /> <span><b>{found.label}</b> key{found.models.length ? ` · ${found.models.length} model${found.models.length === 1 ? '' : 's'} available` : ''}</span></p>
+          <p className="ac-msg ok"><ProviderBadge id={found.provider} size={24} /> <Check size={14} strokeWidth={2.6} /> <span><b>{found.label}</b> key{found.models.length ? ` · ${found.models.length} model${found.models.length === 1 ? '' : 's'} available` : ''}</span></p>
           <div className="ac-pick">
             <label htmlFor="ac-model">Model</label>
             {found.models.length

@@ -47,3 +47,5 @@
 .ac-row > .ac-btn:not(.danger) { height: 34px; padding: 0 14px; font-size: 13px; }
 .ac-row .ac-move { margin-left: auto; }
 .ac-test { flex: 1 1 100%; }
+
+.ac input { caret-color: var(--ac-accent); }
