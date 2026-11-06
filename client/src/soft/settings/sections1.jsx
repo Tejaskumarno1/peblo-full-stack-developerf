@@ -230,33 +230,41 @@ export function NotesSection() {
   const list = zones.includes(zone) ? zones : [zone, ...zones];
   return (
     <>
+      <div className="lay-wrap">
+      <Card title="Notes list layout" hint="How Group by shows your notes. You can change this any time; every layout keeps all of your notes.">
+        <span className="set-layouts" role="group" aria-label="Notes list layout">
+          {[['cards', 'Folder cards', 'Date, tag and folder groups open like folders. Best for many notes.'], ['sections', 'Folded sections', 'Groups as folded containers with a jump bar.'], ['classic', 'Classic list', 'One list with small group headings.']].map(([id, name, sub]) => {
+            const on = (['cards', 'sections', 'classic'].includes(settings?.noteLayout) ? settings.noteLayout : 'cards') === id;
+            return (
+              <button key={id} type="button" className="set-layout" aria-pressed={on} onClick={() => save({ noteLayout: id })}>
+                <span className={`pv ${id}`} aria-hidden="true">
+                  {id === 'cards' && ['pe', 'mi', 'bu', 'li'].map((c) => <span key={c} className={`pc ${c}`}><i className="d" /><i className="l" /></span>)}
+                  {id === 'sections' && [0, 1].map((k) => <span key={k} className="ps"><i className="d" /></span>)}
+                  {id === 'classic' && [0, 1, 2, 3].map((k) => <span key={k} className="pl"><i className="d" /><i className="l" /></span>)}
+                </span>
+                <span className="nm"><span className="rd" aria-hidden="true" /><b>{name}</b>{id === 'cards' && <em>Default</em>}</span>
+                <small>{sub}</small>
+              </button>
+            );
+          })}
+        </span>
+        <Row label="Default grouping" hint="What the list starts with when you open Notes.">
+          <Seg label="Default grouping" value={['date', 'tag', 'folder', 'none'].includes(settings?.noteGroup) ? settings.noteGroup : 'date'} onChange={(v) => save({ noteGroup: v })} options={[{ id: 'date', label: 'Date' }, { id: 'folder', label: 'Folder' }, { id: 'tag', label: 'Tag' }, { id: 'none', label: 'None' }]} />
+        </Row>
+        <Row label="Density" hint="Cozy shows a preview line under each title.">
+          <Seg label="Density" value={settings?.noteDensity === 'compact' ? 'compact' : 'cozy'} onChange={(v) => save({ noteDensity: v })} options={[{ id: 'cozy', label: 'Cozy' }, { id: 'compact', label: 'Compact' }]} />
+        </Row>
+        <Row label="Remember folded groups" hint="Applies to the Folded sections layout.">
+          <Switch label="Remember folded groups" checked={settings?.rememberFolds !== false} onChange={(v) => save({ rememberFolds: v })} />
+        </Row>
+      </Card>
+      </div>
       <Card title="Writing">
         <Row label="Text size in notes" hint="Only changes what you read and write in a note.">
           <Seg label="Text size" value={settings?.fontSize || 'medium'} onChange={(v) => save({ fontSize: v })} options={[{ id: 'small', label: 'Small' }, { id: 'medium', label: 'Medium' }, { id: 'large', label: 'Large' }]} />
         </Row>
         <Row label="Check spelling" hint="Underline misspelled words while you type in a note.">
           <Switch label="Check spelling" checked={settings?.spellcheck !== false} onChange={(v) => save({ spellcheck: v })} />
-        </Row>
-      </Card>
-      <Card title="Notes list" hint="How the notes panel groups what you wrote.">
-        <Row label="List layout" hint="Folder cards show each date or tag as a folder you open." stack>
-          <span className="set-layouts" role="group" aria-label="Notes list layout">
-            {[['cards', 'Folder cards', 'Date and tag groups open like folders', 'cards', 6], ['sections', 'Folded sections', 'Groups as containers you fold', 'sec', 3], ['classic', 'Classic list', 'Plain headings, no containers', 'cls', 5]].map(([id, name, sub, cls, n]) => (
-              <button key={id} type="button" className="set-layout" aria-pressed={(['cards', 'sections', 'classic'].includes(settings?.noteLayout) ? settings.noteLayout : 'cards') === id} onClick={() => save({ noteLayout: id })}>
-                <span className={`pv ${cls}`} aria-hidden="true">{Array.from({ length: n }).map((_, i) => <span key={i} />)}</span>
-                <b>{name}</b><small>{sub}</small>
-              </button>
-            ))}
-          </span>
-        </Row>
-        <Row label="Default grouping" hint="Used when this device has not picked a grouping yet.">
-          <Seg label="Default grouping" value={['date', 'tag', 'folder', 'none'].includes(settings?.noteGroup) ? settings.noteGroup : 'date'} onChange={(v) => save({ noteGroup: v })} options={[{ id: 'date', label: 'Date' }, { id: 'tag', label: 'Tag' }, { id: 'folder', label: 'Folder' }, { id: 'none', label: 'None' }]} />
-        </Row>
-        <Row label="Density">
-          <Seg label="Density" value={settings?.noteDensity === 'compact' ? 'compact' : 'cozy'} onChange={(v) => save({ noteDensity: v })} options={[{ id: 'cozy', label: 'Cozy' }, { id: 'compact', label: 'Compact' }]} />
-        </Row>
-        <Row label="Remember folded groups" hint="Keep sections folded or open the way you left them.">
-          <Switch label="Remember folded groups" checked={settings?.rememberFolds !== false} onChange={(v) => save({ rememberFolds: v })} />
         </Row>
       </Card>
       <Card title="Calendar and time">
