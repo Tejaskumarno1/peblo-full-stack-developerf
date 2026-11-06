@@ -1,0 +1,21 @@
+/* Calendar quick create (mockup: Calendar create). Uses the Soft Studio tokens. */
+.s-qc-back { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--s-backdrop); }
+.s-qc { width: min(420px, calc(100vw - 32px)); box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 30px; background: var(--s-surface); color: var(--s-fg); box-shadow: var(--s-capture-shadow); font-family: var(--s-body); }
+.s-qc-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--s-display); font-size: 18px; }
+.s-qc-head button { width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--s-chip-solid); color: var(--s-fg); display: grid; place-items: center; cursor: pointer; }
+.s-qc-text { height: 48px; border: 0; border-radius: 999px; padding: 0 18px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-size: 15px; font-weight: 600; outline: none; }
+.s-qc-text:focus-visible { box-shadow: 0 0 0 2px var(--s-accent); }
+.s-qc-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 12px; }
+.s-qc-chips .cap { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--s-fg3); }
+.s-qc-chip { height: 28px; padding: 0 11px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 700; background: var(--s-peach); }
+.s-qc-clash { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 18px; background: var(--s-butter); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.s-qc-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; }
+.s-qc-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--s-fg3); }
+.s-qc-row input { height: 40px; border: 0; border-radius: 999px; padding: 0 12px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0; text-transform: none; min-width: 0; }
+.s-qc-err { margin: 0; font-size: 13px; font-weight: 700; color: var(--s-accent-ink); }
+.s-qc-actions { display: flex; gap: 8px; }
+.s-qc-go { flex: 1; height: 44px; border: 0; border-radius: 999px; background: var(--s-accent); color: var(--s-on-accent); font: inherit; font-weight: 800; cursor: pointer; }
+.s-qc-go:disabled { opacity: 0.6; cursor: default; }
+.s-qc-no { height: 44px; padding: 0 18px; border-radius: 999px; border: 1.5px solid var(--s-dash); background: transparent; color: var(--s-fg2); font: inherit; font-weight: 700; cursor: pointer; }
+.s-qc-go:focus-visible, .s-qc-no:focus-visible, .s-qc-head button:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+.s-qc-row input { width: 100%; box-sizing: border-box; padding: 0 8px; }

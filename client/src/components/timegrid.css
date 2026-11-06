@@ -63,3 +63,16 @@
 .tg-rail .tick { position: absolute; left: 0; right: 0; height: 5px; margin-top: -2px; border-radius: 3px; background: var(--tg-blue); box-shadow: 0 0 0 1px var(--tg-card); pointer-events: none; }
 .tg-rail .tick.now { background: #fff; opacity: 0.9; box-shadow: 0 0 0 1px rgba(42, 31, 23, 0.35); }
 .tg-day.over { box-shadow: inset 0 0 0 2px var(--tg-accent); border-radius: 12px; }
+
+/* Drag to move, resize from the bottom edge, drag empty space to create */
+.tg-canvas.dragging { user-select: none; cursor: grabbing; }
+.tg-ev.movable { cursor: grab; }
+.tg-ev.lifted { opacity: 0.35; }
+.tg-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; cursor: ns-resize; touch-action: none; }
+.tg-grip::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 26px; height: 3px; margin-left: -13px; border-radius: 2px; background: currentColor; opacity: 0; transition: opacity 0.12s; }
+.tg-ev:hover .tg-grip::after, .tg-ev:focus-visible .tg-grip::after { opacity: 0.5; }
+.tg-ghost { position: absolute; left: 4px; right: 4px; z-index: 4; border: 2px dashed var(--tg-ink); border-radius: 10px; background: color-mix(in srgb, var(--tg-accent) 14%, transparent); pointer-events: none; box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14); }
+.tg-ghost.create { background: color-mix(in srgb, var(--tg-blue) 16%, transparent); }
+.tg-ghost .tip { position: absolute; left: 6px; top: -30px; white-space: nowrap; padding: 4px 9px; border-radius: 9px; background: var(--tg-ink); color: var(--tg-on-ink); font-size: 12px; font-weight: 800; }
+.tg-ev.clash { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tg-accent) 55%, transparent); }
+.tg-clash { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--tg-ink); color: var(--tg-on-ink); }

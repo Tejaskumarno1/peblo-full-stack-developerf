@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
+import QuickCreate from './QuickCreate';
+import UndoToast from '../components/UndoToast';
+import { useUndoToast } from '../utils/useUndoToast';
 import NewMeeting from '../components/NewMeeting';
 import TimeGrid from '../components/TimeGrid';
 import { startOfWeek, weekdayNames } from '../utils/weekStart';
@@ -17,6 +20,9 @@ export default function SoftCalendar() {
   const navigate = useNavigate();
   const [view, setView] = useState('week');
   const [cursor, setCursor] = useState(() => startOfDay());
+  const qc = useQueryClient();
+  const { toast, say, dismiss } = useUndoToast();
+  const [quick, setQuick] = useState(null);
 
   const weekStart = startOfWeek(cursor);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -65,6 +71,27 @@ export default function SoftCalendar() {
     }
   }
   const gridAllDay = allDay.flatMap(({ t }) => days.filter((d) => sameDay(t.deadline, d)).map((d) => { const c = toneFor(t); return { id: t.id, day: d, title: t.text, bg: c.bg, fg: c.fg, bar: c.bar, done: t.completed, props: { onClick: () => openTask(t) } }; }));
+
+  // Drag to a new time or day, or drag the bottom edge: save at once, show it at once, and offer Undo
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const hm = (h) => { const m = Math.min(24 * 60 - 1, Math.round(h * 60)); return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`; };
+  const patchCache = (id, patch) => qc.setQueriesData({ queryKey: ['todos', 'range'] }, (old) => (Array.isArray(old) ? old.map((t) => (t.id === id ? { ...t, ...patch } : t)) : old));
+  const onMove = async (ev, day, start, end) => {
+    const t = todos.find((x) => x.id === ev.id);
+    if (!t) return;
+    const before = { deadline: t.deadline, startTime: t.startTime || null, endTime: t.endTime || null };
+    const [sh, sm] = hm(start).split(':').map(Number);
+    const after = { deadline: (t.startTime ? new Date(day.getFullYear(), day.getMonth(), day.getDate()) : new Date(day.getFullYear(), day.getMonth(), day.getDate(), sh, sm)).toISOString(), startTime: hm(start), endTime: hm(end) };
+    patchCache(t.id, after);
+    try {
+      await todosAPI.update(t.id, after);
+      qc.invalidateQueries({ queryKey: ['todos'] });
+      say(`Moved "${t.text.length > 30 ? `${t.text.slice(0, 30)}...` : t.text}" to ${hm(start)}`, async () => { patchCache(t.id, before); await todosAPI.update(t.id, before); qc.invalidateQueries({ queryKey: ['todos'] }); });
+    } catch {
+      qc.invalidateQueries({ queryKey: ['todos'] });
+      say('Could not move it. Nothing changed.');
+    }
+  };
 
   const move = (dir) => setCursor((c) => (view === 'month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'day' ? 1 : 7))));
   const title = view === 'day' ? (sameDay(cursor, new Date()) ? 'Today' : weekdayLong(cursor)) : view === 'month' ? fmt(cursor, { month: 'long' }) : (sameDay(weekStart, addDays(startOfDay(), -startOfDay().getDay())) ? 'This week' : `Week of ${fmt(weekStart, { day: 'numeric', month: 'short' })}`);
@@ -156,10 +183,12 @@ export default function SoftCalendar() {
           </div>
         ) : (
           <>
-            <TimeGrid days={days} events={gridEvents} allDay={gridAllDay} headClass="s-week-day" onToday={() => setCursor(startOfDay())} label="Schedule" />
+            <TimeGrid days={days} events={gridEvents} allDay={gridAllDay} headClass="s-week-day" onToday={() => setCursor(startOfDay())} onMove={onMove} onCreate={(day, start, end) => setQuick({ day, start, end })} label="Schedule" />
           </>
         )}
       </section>
+      {quick && <QuickCreate anchor={quick} todos={todos} onClose={() => setQuick(null)} onSay={say} />}
+      <UndoToast toast={toast} dismiss={dismiss} />
     </div>
   );
 }

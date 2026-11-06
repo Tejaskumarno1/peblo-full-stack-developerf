@@ -52,8 +52,21 @@ function lanesFor(list) {
   return out;
 }
 
-export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, onToday, onDayDrop, headClass = '', label = 'Schedule' }) {
+const SNAP = 0.25; // 15 minutes
+const snap = (h) => Math.round(h / SNAP) * SNAP;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const clock12 = (h) => {
+  const m = Math.round(h * 60);
+  const hh = Math.floor(m / 60) % 24;
+  return `${hh % 12 === 0 ? 12 : hh % 12}:${pad(m % 60)} ${hh < 12 ? 'AM' : 'PM'}`;
+};
+
+export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, onToday, onDayDrop, onMove, onCreate, headClass = '', label = 'Schedule' }) {
   const scroller = useRef(null);
+  const canvas = useRef(null);
+  const [drag, setDrag] = useState(null); // { mode: 'move' | 'resize' | 'create', id, day, start, end }
+  const dragRef = useRef(null);
+  const swallow = useRef(false);
   const track = useRef(null);
   const [pos, setPos] = useState({ top: 0, h: 0 });
   const [now, setNow] = useState(() => new Date());
@@ -147,6 +160,75 @@ export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, 
 
   const byDay = useMemo(() => days.map((d) => lanesFor(events.filter((ev) => sameDate(ev.day, d)))), [days, events]);
 
+  // Drag to move, drag the bottom edge to resize, drag empty space to create. Snaps to 15 minutes.
+  const hourAt = (y) => (y - canvas.current.getBoundingClientRect().top) / hourPx;
+  const dayAt = (x) => {
+    const cols = canvas.current?.querySelectorAll('.tg-col') || [];
+    for (let i = 0; i < cols.length; i += 1) {
+      const r = cols[i].getBoundingClientRect();
+      if (x >= r.left && x < r.right) return days[i];
+    }
+    return null;
+  };
+  const startDrag = (e, mode, ev, day) => {
+    if (e.button !== 0 || (mode !== 'create' && !onMove) || (mode === 'create' && !onCreate)) return;
+    const h0 = hourAt(e.clientY);
+    const st = { mode, ev, day, x0: e.clientX, y0: e.clientY, h0, active: false, last: null };
+    dragRef.current = st;
+    const move = (m) => {
+      const s = dragRef.current;
+      if (!s) return;
+      if (!s.active && Math.hypot(m.clientX - s.x0, m.clientY - s.y0) < 5) return;
+      s.active = true;
+      const box = scroller.current.getBoundingClientRect();
+      if (m.clientY < box.top + 36) scroller.current.scrollTop -= 14;
+      else if (m.clientY > box.bottom - 36) scroller.current.scrollTop += 14;
+      const h = hourAt(m.clientY);
+      let next;
+      if (s.mode === 'move') {
+        const dur = s.ev.end - s.ev.start;
+        const start = clamp(snap(s.ev.start + (h - s.h0)), 0, DAY_H - dur);
+        next = { mode: 'move', id: s.ev.id, day: dayAt(m.clientX) || s.day, start, end: start + dur };
+      } else if (s.mode === 'resize') {
+        next = { mode: 'resize', id: s.ev.id, day: s.day, start: s.ev.start, end: clamp(snap(h), s.ev.start + SNAP, DAY_H) };
+      } else {
+        const a = snap(Math.min(s.h0, h)); const b = snap(Math.max(s.h0, h));
+        next = { mode: 'create', day: s.day, start: clamp(a, 0, DAY_H - 0.5), end: clamp(Math.max(b, a + 0.5), 0.5, DAY_H) };
+      }
+      s.last = next;
+      setDrag(next);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const s = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (!s) return;
+      if (s.active && s.last) {
+        swallow.current = true;
+        setTimeout(() => { swallow.current = false; }, 0);
+        if (s.mode === 'create') onCreate?.(s.last.day, s.last.start, s.last.end);
+        else if (s.last.start !== s.ev.start || s.last.end !== s.ev.end || !sameDate(s.last.day, s.ev.day)) onMove?.(s.ev, s.last.day, s.last.start, s.last.end);
+      } else if (s.mode === 'create') {
+        const start = clamp(Math.floor(s.h0 * 2) / 2, 0, DAY_H - 1);
+        onCreate?.(s.day, start, start + 1);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+  // Keyboard: Alt + arrows moves by 15 minutes, Alt + Shift + arrows changes the length
+  const evKey = (e, ev) => {
+    if (!onMove || ev.cont || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const d = e.key === 'ArrowUp' ? -SNAP : SNAP;
+    if (e.shiftKey) onMove(ev, ev.day, ev.start, clamp(ev.end + d, ev.start + SNAP, DAY_H));
+    else if (ev.start + d >= 0 && ev.end + d <= DAY_H) onMove(ev, ev.day, ev.start + d, ev.end + d);
+  };
+
   // Events out of view (above or below the visible hours)
   const topH = pos.top / hourPx;
   const botH = (pos.top + pos.h) / hourPx;
@@ -198,7 +280,7 @@ export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, 
             onScroll={sync}
             onKeyDown={onKey}
           >
-            <div className="tg-canvas" style={{ height: total, gridTemplateColumns: cols }}>
+            <div ref={canvas} className={`tg-canvas${drag ? ' dragging' : ''}`} style={{ height: total, gridTemplateColumns: cols }}>
               <div className="tg-hours" aria-hidden="false">
                 {Array.from({ length: 24 }, (_, h) => (
                   <span key={h} className={`tg-lbl${h === 0 ? ' first' : ''}`} style={{ top: h * hourPx }}>{hourLabel(h)}</span>
@@ -211,11 +293,17 @@ export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, 
                     key={dayKey(d)}
                     className={`tg-col${isToday ? ' today' : ''}${over === dayKey(d) ? ' over' : ''}`}
                     data-day={dayKey(d)}
+                    onPointerDown={onCreate ? (e) => { if (e.target === e.currentTarget || e.target.classList.contains('tg-hr')) startDrag(e, 'create', null, d); } : undefined}
                     onDragOver={onDayDrop ? (e) => { e.preventDefault(); setOver(dayKey(d)); } : undefined}
                     onDragLeave={onDayDrop ? () => setOver(null) : undefined}
                     onDrop={onDayDrop ? (e) => { e.preventDefault(); setOver(null); onDayDrop(d, e); } : undefined}
                   >
                     {Array.from({ length: 24 }, (_, h) => <i key={h} className="tg-hr" style={{ top: h * hourPx }} />)}
+                    {drag && sameDate(drag.day, d) && (
+                      <div className={`tg-ghost ${drag.mode}`} style={{ top: drag.start * hourPx, height: Math.max(12, (drag.end - drag.start) * hourPx - 3) }} aria-hidden="true">
+                        <span className="tip">{clock12(drag.start)} - {clock12(drag.end)} · {Math.round((drag.end - drag.start) * 60)} min</span>
+                      </div>
+                    )}
                     {byDay[i].map((ev) => {
                       const top = ev.start * hourPx;
                       const height = Math.max(22, (Math.min(DAY_H, ev.end) - ev.start) * hourPx - 3);
@@ -223,7 +311,7 @@ export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, 
                         <button
                           key={`${ev.id}-${ev.cont ? 'c' : 'a'}`}
                           type="button"
-                          className={`tg-ev${ev.done ? ' done' : ''}${height < 44 ? ' short' : ''}${ev.cont ? ' cont' : ''}`}
+                          className={`tg-ev${ev.done ? ' done' : ''}${height < 44 ? ' short' : ''}${ev.cont ? ' cont' : ''}${onMove && !ev.cont && !ev.fixed ? ' movable' : ''}${drag && drag.id === ev.id && drag.mode !== 'create' ? ' lifted' : ''}${ev.lanes > 1 ? ' clash' : ''}`}
                           style={{
                             top,
                             height,
@@ -237,9 +325,14 @@ export default function TimeGrid({ days, events, allDay = [], hourPx = HOUR_PX, 
                           data-start={ev.start}
                           data-end={ev.end}
                           {...(ev.props || {})}
+                          onClickCapture={(e) => { if (swallow.current) { e.stopPropagation(); e.preventDefault(); } }}
+                          onPointerDown={onMove && !ev.cont && !ev.fixed ? (e) => startDrag(e, 'move', ev, d) : undefined}
+                          onKeyDown={(e) => evKey(e, ev)}
                         >
                           <span className="t">{ev.title}</span>
                           {ev.meta && <small>{ev.meta}</small>}
+                          {ev.lanes > 1 && height >= 44 && <em className="tg-clash" title="Overlaps another event">Clash</em>}
+                          {onMove && !ev.cont && !ev.fixed && <i className="tg-grip" aria-hidden="true" onPointerDown={(e) => { e.stopPropagation(); startDrag(e, 'resize', ev, d); }} />}
                         </button>
                       );
                     })}
