@@ -66,3 +66,13 @@
 .soft .s-year-days button:hover { outline: 2px solid var(--s-fg); outline-offset: 1px; }
 .soft .s-year-days button:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
 @media (max-width: 900px) { .soft .s-year { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* round day markers: fixed squares so border-radius makes true circles */
+.soft .s-mini-day { width: 34px; justify-self: center; aspect-ratio: 1; font-variant-numeric: tabular-nums; }
+.soft .s-month-cell .n { min-width: 26px; height: 26px; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.soft .s-month-cell.today .n { padding: 0; width: 26px; align-self: flex-start; }
+.soft .s-mini-day { width: 30px; height: 30px; font-size: 12.5px; }
+.soft .s-minical-blank { height: 30px; }
+.soft .s-minical { padding: 14px 18px; gap: 6px; }
+.soft .s-cal-side { overflow-y: auto; scrollbar-width: none; }
+.soft .s-cal-side::-webkit-scrollbar { display: none; }
