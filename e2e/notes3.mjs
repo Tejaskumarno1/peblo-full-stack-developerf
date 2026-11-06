@@ -73,7 +73,7 @@ try {
   await page.waitForTimeout(400);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('the folder filter shows only that folder', rows.length === 1 && /Zebra/.test(rows[0]), rows.join('|'));
-  await page.getByRole('tab', { name: /^All/ }).click();
+  await page.getByRole('button', { name: 'Show all notes' }).click();
   await page.locator('.s-notes-foot').getByRole('button', { name: 'Pictures' }).click(); // the pictures gallery replaced the With pictures filter
   check('the pictures view shows only notes with pictures (none here)', await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByText(/No pictures yet/).waitFor({ timeout: 4000 }).then(() => true, () => false));
   await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByRole('button', { name: 'Close' }).click();

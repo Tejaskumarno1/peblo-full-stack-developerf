@@ -12,20 +12,21 @@ await page.getByRole('radio', { name: 'Folder' }).click();
 if (await page.locator('.np-pop').count()) await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('group by Folder shows folder cards and no note rows', (await page.locator('.np-card:not(.mini)').count()) === 2 && (await page.locator('.s-note-row').count()) === 0);
 await page.locator('.np-card', { hasText: 'Orbit' }).click();
-check('a folder card opens its notes with a one-line breadcrumb', (await page.locator('.np-crumbs b', { hasText: 'Orbit' }).count()) === 1 && (await page.locator('.s-note-row').count()) === 4);
-const bc = await page.locator('.np-crumbs').boundingBox();
-check('breadcrumb is a single compact row', bc && bc.height < 34, JSON.stringify(bc));
+check('a folder card opens its notes with a one-line breadcrumb', (await page.locator('.np-fhead .s-notes-h1', { hasText: 'Orbit' }).count()) === 1 && (await page.locator('.s-note-row').count()) === 4);
+const bc = await page.locator('.np-fhead').boundingBox();
+check('breadcrumb is a single compact row', bc && bc.height < 60, JSON.stringify(bc));
 
 // Group by Tag shows tag cards that filter
-await page.locator('.np-crumb-all').click();
+await page.getByRole('button', { name: 'Show all notes' }).click();
 await page.getByRole('button', { name: /View/ }).click();
 await page.getByRole('radio', { name: 'Tag' }).click();
 if (await page.locator('.np-pop').count()) await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('group by Tag shows a card per tag', (await page.locator('.np-card.mini').count()) >= 2);
 await page.locator('.np-card.mini', { hasText: '#alpha' }).click();
-check('a tag card filters to its notes', (await page.locator('.s-note-row').count()) === 5);
-await page.locator('.np-card.mini', { hasText: '#alpha' }).click();
-check('tapping it again shows everything', (await page.locator('.s-note-row').count()) === 11);
+check('a tag card jumps to its group and opens it', await page.locator('.s-grp-h', { hasText: '#alpha' }).first().getAttribute('aria-expanded') === 'true' && (await page.locator('.s-note-row').count()) >= 5);
+await page.locator('.s-grp-h', { hasText: '#alpha' }).first().click();
+check('a group header folds its notes', (await page.locator('.s-grp-h', { hasText: '#alpha' }).first().getAttribute('aria-expanded')) === 'false');
+await page.locator('.s-grp-h', { hasText: '#alpha' }).first().click();
 
 // None changes nothing
 await page.getByRole('button', { name: /View/ }).click();

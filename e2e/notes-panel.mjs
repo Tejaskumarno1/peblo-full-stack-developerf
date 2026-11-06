@@ -25,7 +25,7 @@ try {
   await list.getByRole('button', { name: 'View' }).click();
   const pop = page.getByRole('dialog', { name: 'View options' });
   check('6 View menu shows sort, group, density and 4 switches', await pop.isVisible() && (await pop.getByRole('radio').count()) === 9 && (await pop.getByRole('switch').count()) === 4);
-  check('7 summary chips show while View is open', await list.locator('.np-sum').isVisible());
+  check('7 View shows what is set in its own label, no summary row', (await list.locator('.np-sum').count()) === 0);
   await pop.getByRole('radio', { name: 'Title' }).click();
   await pop.getByRole('radio', { name: 'Tag' }).click();
   await pop.getByRole('radio', { name: 'Compact' }).click();
@@ -48,11 +48,11 @@ try {
   check('13 collect switch counts tagged notes', (await sheet.innerText()).includes('2 notes already have this tag'));
   await sheet.getByRole('radio', { name: 'mint' }).click();
   await sheet.getByRole('button', { name: 'Create folder' }).click();
-  check('14 the new folder opens with its breadcrumb and 2 tagged notes', await until(async () => (await list.locator('.np-crumbs b').filter({ hasText: 'Orbit Work' }).count()) === 1));
+  check('14 the new folder opens with its breadcrumb and 2 tagged notes', await until(async () => (await list.locator('.np-fhead .s-notes-h1').filter({ hasText: 'Orbit Work' }).count()) === 1));
   check('15 the list shows only Alpha and Gamma', (await list.locator('.s-note-row').count()) === 2);
   const prof = await api('GET', '/api/profile');
   check('16 the folder is saved on the account', Array.isArray(prof.user?.settings?.noteFolders) && prof.user.settings.noteFolders[0]?.name === 'Orbit Work' && prof.user.settings.noteFolders[0].color === 'mint', JSON.stringify(prof.user?.settings));
-  await list.getByRole('tab', { name: /^All/ }).click();
+  await ((await list.getByRole('button', { name: 'Show all notes' }).count()) ? list.getByRole('button', { name: 'Show all notes' }) : list.getByRole('tab', { name: /^All/ })).click();
 
   // ---- Select and move (M3)
   await list.getByRole('button', { name: 'Select notes' }).click();
@@ -102,15 +102,15 @@ try {
   check('29 a second rule joins with AND', (await sp.getByText('AND', { exact: true }).count()) === 1);
   await sp.getByLabel('Remove rule').last().click();
   await sp.getByRole('button', { name: 'Save smart folder' }).click();
-  check('30 the smart folder opens with its breadcrumb and filters the list', await until(async () => (await list.locator('.np-crumbs b').filter({ hasText: 'Urgent things' }).count()) === 1) && (await list.locator('.s-note-row').count()) === 1);
+  check('30 the smart folder opens with its breadcrumb and filters the list', await until(async () => (await list.locator('.np-fhead .s-notes-h1').filter({ hasText: 'Urgent things' }).count()) === 1) && (await list.locator('.s-note-row').count()) === 1);
 
   // ---- edit and delete a folder, outside-click on the note menu
-  await list.getByRole('tab', { name: /^All/ }).click(); await list.getByRole('tab', { name: /^Folders/ }).click(); await list.locator('.np-card', { hasText: 'Orbit Work' }).click({ button: 'right' });
+  await ((await list.getByRole('button', { name: 'Show all notes' }).count()) ? list.getByRole('button', { name: 'Show all notes' }) : list.getByRole('tab', { name: /^All/ })).click(); await list.getByRole('tab', { name: /^Folders/ }).click(); await list.locator('.np-card', { hasText: 'Orbit Work' }).click({ button: 'right' });
   const ed = page.getByRole('dialog', { name: 'Edit folder' });
   await ed.getByLabel('Folder name').fill('Orbit Team');
   await ed.getByRole('button', { name: 'Save folder' }).click();
   check('31 renaming a folder renames it on its notes', await until(async () => (await api('GET', `/api/notes/${B.id}`)).note?.meta?.folder === 'Orbit Team'));
-  await list.getByRole('tab', { name: /^All/ }).click();
+  await ((await list.getByRole('button', { name: 'Show all notes' }).count()) ? list.getByRole('button', { name: 'Show all notes' }) : list.getByRole('tab', { name: /^All/ })).click();
   await list.locator('.s-note-row').first().click();
   await page.getByRole('button', { name: 'More' }).click();
   const menu = page.locator('.s-menu[role="menu"]').first();

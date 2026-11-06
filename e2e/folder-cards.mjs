@@ -8,10 +8,11 @@ check('no per-folder chips, one Folders chip', (await page.locator('.np-chip', {
 await page.getByRole('tab', { name: /^Folders/ }).click();
 check('cards show for top-level folders and hide the notes', (await page.locator('.np-card').count()) === 2 && (await page.locator('.s-note-row').count()) === 0);
 await page.locator('.np-card', { hasText: 'Orbit' }).click();
-check('opening a card shows breadcrumb, sub-folder card and the notes', (await page.locator('.np-crumbs b', { hasText: 'Orbit' }).count()) === 1 && (await page.locator('.np-card', { hasText: 'Kid' }).count()) === 1 && (await page.locator('.s-note-row').count()) >= 1);
+check('opening a card shows breadcrumb, sub-folder card and the notes', (await page.locator('.np-fhead .s-notes-h1', { hasText: 'Orbit' }).count()) === 1 && (await page.locator('.np-card', { hasText: 'Kid' }).count()) === 1 && (await page.locator('.s-note-row').count()) >= 1);
 await page.locator('.np-card', { hasText: 'Kid' }).click();
-check('sub-folder opens with path Folders / Orbit / Kid', (await page.locator('.np-crumbs').innerText()).replace(/\s+/g, ' ').includes('Folders / Orbit / Kid') && (await page.locator('.s-note-row .t').allTextContents()).join('|') === 'Two');
-await page.locator('.np-crumbs button', { hasText: /^Folders$/ }).click();
+check('sub-folder opens with path Folders / Orbit / Kid', (await page.locator('.np-ftitle').innerText()).replace(/\s+/g, ' ').includes('Folders / Orbit Kid') && (await page.locator('.s-note-row .t').allTextContents()).join('|') === 'Two');
+await page.getByRole('button', { name: 'Back to folders' }).click();
+await page.getByRole('button', { name: 'Back to folders' }).click();
 check('breadcrumb Folders goes back to the cards', (await page.locator('.np-card').count()) === 2);
 await page.getByRole('tab', { name: /^All/ }).click();
 check('All shows notes again', (await page.locator('.np-card').count()) === 0 && (await page.locator('.s-note-row').count()) === 3);

@@ -14,7 +14,7 @@ import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { aiAPI, notesAPI, todosAPI } from '../api/index';
+import { aiAPI, notesAPI, tagsAPI, todosAPI } from '../api/index';
 import { fileToAttachment } from '../utils/imageData';
 import { copyImage } from '../utils/copyImage';
 import { Copy as CopyIcon, Check as CheckIcon } from 'lucide-react';
@@ -43,6 +43,7 @@ import { setNoteLive, peekExternalEdit, clearExternalEdit } from '../utils/noteS
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
+import './editorChrome.css';
 
 // A picture, video, audio clip or file picked from the computer becomes a data address inside the note
 // (pictures are shrunk first). Bigger than 4 MB is refused with a message instead of silently bloating the note.
@@ -1007,6 +1008,32 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return found.map((i, n) => [i, n]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
   };
 
+  // Hashtags: type # to pick an existing tag or make a new one. The tag is written in the text and added to the note.
+  const tagCache = useRef({ at: 0, tags: [] });
+  const getTagItems = async (query) => {
+    if (Date.now() - tagCache.current.at > 5000) {
+      try { const { data } = await tagsAPI.list(); tagCache.current = { at: Date.now(), tags: (data.tags || []).filter((t) => t.name !== 'private') }; } catch { /* keep the last list */ }
+    }
+    const raw = String(query || '').trim().replace(/^#/, '');
+    const q = raw.toLowerCase();
+    const pick = async (name) => {
+      editor.insertInlineContent([{ type: 'text', text: `#${name}`, styles: { bold: true } }, ' ']);
+      if (!noteId) return;
+      try {
+        const { data } = await notesAPI.get(noteId);
+        const have = data.note?.tags || data.tags || [];
+        if (!have.includes(name)) await notesAPI.update(noteId, { tags: [...have, name] });
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['tags'] });
+      } catch { /* the tag stays in the text */ }
+    };
+    const items = tagCache.current.tags.filter((t) => t.name.toLowerCase().includes(q)).sort((a, b) => (b.name.toLowerCase().startsWith(q) - a.name.toLowerCase().startsWith(q)) || ((b.notes || 0) + (b.todos || 0)) - ((a.notes || 0) + (a.todos || 0))).slice(0, 7)
+      .map((t) => ({ title: `#${t.name}`, group: 'Tags', subtext: `${t.notes || 0} note${t.notes === 1 ? '' : 's'}${t.todos ? ` · ${t.todos} task${t.todos === 1 ? '' : 's'}` : ''}`, onItemClick: () => pick(t.name) }));
+    const clean = raw.toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+    if (clean && !tagCache.current.tags.some((t) => t.name.toLowerCase() === clean)) items.push({ title: `Create tag #${clean}`, group: 'Tags', subtext: 'New tag, added to this note', onItemClick: () => pick(clean) });
+    return items;
+  };
+
   const getNoteLinkItems = async (query) => {
     if (Date.now() - linkCache.current.at > 5000) {
       try {
@@ -1114,6 +1141,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BlockMenu} />} />
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
+        {!guest && editable && <SuggestionMenuController triggerCharacter={'#'} getItems={getTagItems} />}
         {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} floatingUIOptions={toolbarFloat} />}
         {editable && <TableHandlesController tableHandle={(p) => <TableHandle {...p} tableHandleMenu={TableMenu} />} />}
       </BlockNoteView>

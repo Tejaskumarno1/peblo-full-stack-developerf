@@ -13,7 +13,7 @@ export default function Backlinks({ noteId, mentions = true }) {
     if (!noteId) return () => {};
     let alive = true;
     notesAPI.backlinks(noteId).then((r) => { if (alive) setRows(r.data.backlinks || []); }).catch(() => {});
-    if (mentions) notesAPI.mentions(noteId).then((r) => { if (alive) setSaid(r.data.mentions || []); }).catch(() => {});
+    if (mentions) notesAPI.mentions(noteId).then((r) => { if (alive) setSaid((r.data.mentions || []).filter((m) => !/^Plan for /i.test(m.title || ''))); }).catch(() => {});
     return () => { alive = false; };
   }, [noteId, mentions]);
 

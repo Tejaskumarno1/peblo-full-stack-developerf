@@ -193,7 +193,7 @@ export default function SoftFocus() {
         <div className="s-focus-editor">
           {noteId && noteLoading ? <p className="s-empty small">Loading the note</p> : (
             <Suspense fallback={<p className="s-empty small">Loading editor</p>}>
-              <BlockEditor key={noteId || 'new'} noteId={noteId || undefined} initialContent={note?.content || ''} onChange={onNote} />
+              <BlockEditor key={noteId || 'new'} noteId={noteId || undefined} initialContent={note?.content || ''} onChange={onNote} mentions={false} />
             </Suspense>
           )}
         </div>

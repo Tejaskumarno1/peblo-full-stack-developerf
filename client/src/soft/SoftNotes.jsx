@@ -3,7 +3,7 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon , MousePointer2, MoreHorizontal } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -12,6 +12,7 @@ import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFA
 import { colorOf, withLegacy, inFolder, smartMatch } from './folders';
 import { useAuth } from '../context/AuthContext';
 import './notespanel.css';
+import './notesV2.css';
 import TagManager from './TagManager';
 import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
@@ -72,6 +73,10 @@ export default function SoftNotes() {
     try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ }
     return n;
   });
+  const jumpTo = (k) => {
+    setCollapsed((c) => { const n = { ...c }; delete n[`${group}:${k}`]; try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ } return n; });
+    requestAnimationFrame(() => { const el = [...document.querySelectorAll('[data-gk]')].find((e) => e.getAttribute('data-gk') === k); el?.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  };
   const [focus, setFocus] = useState(false);
   const [cursorsOn, setCursors] = usePresence();
   // in full screen people's live cursors are on by themselves; leaving it puts the earlier choice back (off unless it was turned on)
@@ -636,6 +641,13 @@ export default function SoftNotes() {
       <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
         {selectMode ? (
           <div className="np-selhead"><button type="button" onClick={() => { setSelectMode(false); setPicked([]); setSheet(null); }}>Cancel</button><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(picked.length === shownList.length ? [] : shownList.map((n) => n.id))}>{picked.length && picked.length === shownList.length ? 'Clear' : 'Select all'}</button></div>
+        ) : fSel && selDef && filter !== 'archive' && filter !== 'trash' ? (
+          <div className="np-head np-fhead">
+            <button type="button" className="np-ib" aria-label="Back to folders" title="Back to folders" onClick={() => { setFSel(selDef.parent ? { kind: 'folder', id: selDef.parent } : null); if (!selDef.parent) setCards(true); }}><ChevronLeft size={18} strokeWidth={1.9} /></button>
+            <div className="np-ftitle"><small>{selDef.smart ? 'Smart folder' : selDef.parent ? `Folders / ${normalDefs.find((d) => d.id === selDef.parent)?.name || ''}` : 'Folders'}</small><h1 className="s-notes-h1">{selDef.name}</h1></div>
+            <button type="button" className="np-ib" aria-label="Edit this folder" title="Edit this folder" onClick={() => openEdit(selDef)}><Pencil size={15} strokeWidth={1.8} /></button>
+            <button type="button" className="np-ib" aria-label="Show all notes" title="Show all notes" onClick={() => { setFSel(null); setCards(false); if (folderMode) setView({ ...view, group: 'date' }); }}><X size={16} strokeWidth={2} /></button>
+          </div>
         ) : (
           <div className="np-head">
             <h1 className="s-notes-h1">{listTitle}</h1>
@@ -648,11 +660,11 @@ export default function SoftNotes() {
         {!selectMode && (
           <div className="np-bar">
             <label className="s-nsearch"><Search size={18} strokeWidth={1.8} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
-            <button type="button" className="np-view" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />View</button>
+            <button type="button" className={`np-view${group !== 'date' || sort !== 'updated' ? ' set' : ''}`} aria-label="View options" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />{group !== 'date' || sort !== 'updated' ? { date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group] : 'View'}</button>
           </div>
         )}
         {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
-        {filter !== 'archive' && filter !== 'trash' && (
+        {filter !== 'archive' && filter !== 'trash' && !(fSel && selDef) && (
           <div className="np-row" role="tablist" aria-label="Folders">
             <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards(false); }}>All <i>{allNotes.length}</i></button>
             <button type="button" role="tab" aria-selected={filter === 'inbox'} className={`np-chip${filter === 'inbox' ? ' on' : ''}`} onClick={() => { setFilter('inbox'); setFSel(null); }}><span className="np-dot" style={{ background: '#FFB48C' }} />Inbox <i>{inboxCount}</i></button>
@@ -660,8 +672,8 @@ export default function SoftNotes() {
             <button type="button" className="np-chip new" aria-label="New folder" title="New folder" onClick={() => openNew(false)}><Plus size={15} strokeWidth={1.8} /></button>
           </div>
         )}
-        {!selectMode && filter !== 'archive' && filter !== 'trash' && (viewOpen || sort !== 'updated' || group !== 'date' || selTags.length > 0) && (
-          <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
+        {!selectMode && filter !== 'archive' && filter !== 'trash' && selTags.length > 0 && (
+          <div className="np-sum">{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
         )}
         {(cards || folderMode || fSel) && filter !== 'archive' && filter !== 'trash' && (() => {
           const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
@@ -675,7 +687,7 @@ export default function SoftNotes() {
           );
           return (
             <div className="np-cards-wrap">
-              {fSel && (
+              {fSel && !selDef && (
                 <nav className="np-crumbs" aria-label="Folder path">
                   <button type="button" onClick={() => { setFSel(null); setCards(true); }}>Folders</button>
                   {top && <><span>/</span><button type="button" onClick={() => setFSel({ kind: 'folder', id: top.id })}>{top.name}</button></>}
@@ -690,15 +702,15 @@ export default function SoftNotes() {
           );
         })()}
         {!dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
-          <div className="np-cards mini" role="list" aria-label={group === 'tag' ? 'Tags' : 'Dates'}>
+          <div className="np-cards mini" role="list" aria-label={group === 'tag' ? 'Jump to a tag' : 'Jump to a date'}>
             {groups.map((g) => (
-              <button key={g.key} type="button" role="listitem" className={`np-card mini${gSel === g.key ? ' on' : ''}`} aria-pressed={gSel === g.key} onClick={() => setGSel(gSel === g.key ? null : g.key)}><b>{g.label}</b><i>{g.notes.length}</i></button>
+              <button key={g.key} type="button" role="listitem" className={`np-card mini${gSel === g.key ? ' on' : ''}`} onClick={() => jumpTo(g.key)}><b>{g.label}</b><i>{g.notes.length}</i></button>
             ))}
           </div>
         )}
         {((!cards && !folderMode) || fSel) && <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
-          {shownGroups.map((g) => (<div key={g.key} className="s-grp">{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
+          {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
         </div>}
