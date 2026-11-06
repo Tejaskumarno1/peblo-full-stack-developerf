@@ -1,4 +1,0 @@
-Update share test for the MCP opt-in
-
-Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01B9GpWaduMaqknHFdWAqMR9
