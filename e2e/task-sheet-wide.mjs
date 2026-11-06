@@ -14,6 +14,7 @@ try {
   await page.locator('.s-mcal-day').first().waitFor({ timeout: 4000 });
   const sq = await page.locator('.s-mcal-day').evaluateAll((els) => els.every((e) => { const r = e.getBoundingClientRect(); return Math.abs(r.width - r.height) < 1.5; }));
   check('date picker days are true circles (square boxes)', sq);
+  check('sheet does not scroll while the picker is open', await page.evaluate(() => { const s = document.querySelector('.s-sheet'); return s.scrollHeight <= s.clientHeight + 2; }));
   await page.screenshot({ path: 'D:/Peblo/_shots/sheet-picker.png' });
   await page.getByRole('button', { name: 'Pick a date' }).click().catch(() => {});
   await page.fill('#s-sheet-title', 'Write the spec v2');
