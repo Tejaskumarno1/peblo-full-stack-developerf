@@ -623,3 +623,10 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-sheet.wide .s-sheet-time { background: var(--s-bg); }
 .soft .s-sheet.wide .s-sheet-pills > button.ghost:not(.on), .soft .s-sheet.wide .s-sheet-linkbtn { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-line); }
 .soft .s-sheet.wide .s-sheet-foot .s-sheet-del { box-shadow: inset 0 0 0 1.5px var(--s-line); }
+
+/* v2 sheet: title never squashes; date picker fills the column with compact round days */
+.soft .s-sheet.wide .s-sheet-title { flex-shrink: 0; min-height: 50px; }
+.soft .s-sheet.wide .s-mcal { width: 100%; background: var(--s-bg); border-radius: 22px; padding: 8px 12px 6px; }
+.soft .s-sheet.wide .s-mcal-day { width: 28px; height: 28px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.soft .s-sheet.wide .s-mcal-grid { row-gap: 1px; }
+.soft .s-sheet.wide .s-mcal-head { margin-bottom: 2px; }
