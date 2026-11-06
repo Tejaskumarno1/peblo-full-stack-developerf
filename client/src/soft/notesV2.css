@@ -65,3 +65,43 @@
 .soft .set-layout .rd { width: 17px; height: 17px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--s-fg); flex: none; }
 .soft .set-layout[aria-pressed="true"] .rd { background: radial-gradient(var(--s-fg) 0 4.5px, transparent 5px); }
 .soft .set-layout small { font-size: 12.5px; font-weight: 500; opacity: .75; line-height: 1.35; }
+
+/* Notes on a phone (mockups: Phone Notes). One pane at a time: the list, or the note with a back button. */
+.soft .ph-back, .soft .ph-chips, .soft .ph-close { display: none; }
+@media (max-width: 700px) {
+  .soft .s-notes { grid-template-columns: minmax(0, 1fr); gap: 0; height: auto; min-height: 0; }
+  .soft .s-notes.ph-list .s-note-main, .soft .s-notes.ph-list .s-note-side { display: none; }
+  .soft .s-notes.ph-note .s-notes-list { display: none; }
+  .soft .s-notes-list { padding: 4px 2px 90px; border-radius: 0; background: transparent; overflow: visible; }
+  .soft .s-note-main { padding: 12px 14px 90px; border-radius: 24px; box-shadow: none; overflow: visible; }
+  .soft .s-notes.ph-note .ph-back { display: flex; align-items: center; gap: 8px; font-family: var(--s-display); font-size: 20px; }
+  .soft .s-notes.ph-note .s-tabs, .soft .s-notes.ph-note .s-tabbar { display: none; }
+  .soft .ph-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: none; }
+  .soft .ph-chips button { flex: none; height: 34px; padding: 0 13px; border: 0; border-radius: 999px; background: var(--s-chip-solid); color: var(--s-fg); font: inherit; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .soft .ph-chips button:first-child { background: var(--s-lilac, #DDD8FF); }
+  .soft .s-note-side { display: none; }
+  .soft .s-note-side.open { display: flex; flex-direction: column; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; max-height: 72vh; overflow-y: auto; z-index: 60; padding: 18px 14px 26px; border-radius: 28px 28px 0 0; background: var(--s-surface); box-shadow: 0 -12px 40px rgba(36,31,26,.22); }
+  .soft .s-note-side.open .ph-close { display: grid; place-items: center; position: absolute; right: 12px; top: 12px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--s-chip-solid); color: var(--s-fg); cursor: pointer; }
+  .soft .s-note-side[data-rail="ask"] > :not(.rl-ask):not(.ph-close), .soft .s-note-side[data-rail="tasks"] > :not(.rl-tasks):not(.ph-close), .soft .s-note-side[data-rail="ment"] > :not(.rl-ment):not(.ph-close) { display: none; }
+  .soft .s-note-side[data-rail="ver"] > :not(.rl-ver):not(.ph-close) { display: none; }
+  .soft .s-note-side.open .s-menu { position: static; box-shadow: none; border: 0; min-width: 0; }
+  .soft .np-cards.gcards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Settings on a phone: section chips scroll sideways, the layout tiles stack as rows (mockup: Phone Settings) */
+html.pb-phone .soft .s-set-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+html.pb-phone .soft .s-set-group { flex-wrap: nowrap; flex: none; }
+html.pb-phone .soft .s-set-group > span { display: none; }
+html.pb-phone .soft .s-set-link { flex: none; white-space: nowrap; }
+html.pb-phone .soft .s-set-h2 { font-size: 26px; }
+html.pb-phone .soft .s-set-main { padding: 0 0 20px; }
+html.pb-phone .soft .lay-wrap .s-set-card { padding: 16px 14px; border-radius: 26px; gap: 12px; }
+html.pb-phone .soft .set-layouts { grid-template-columns: 1fr; gap: 10px; }
+html.pb-phone .soft .set-layout { display: grid; grid-template-columns: 96px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 12px; row-gap: 3px; padding: 10px; border-radius: 22px; align-items: center; }
+html.pb-phone .soft .set-layout .pv { grid-row: 1 / span 2; height: 72px; padding: 7px; gap: 4px; }
+html.pb-phone .soft .set-layout .pc { height: 24px; padding: 5px; gap: 3px; border-radius: 7px; }
+html.pb-phone .soft .set-layout .ps { height: 26px; padding: 5px; border-radius: 8px; }
+html.pb-phone .soft .set-layout .pl { margin-bottom: 1px; gap: 2px; }
+html.pb-phone .soft .set-layout .nm { margin-top: 0; align-self: end; flex-wrap: wrap; }
+html.pb-phone .soft .set-layout small { align-self: start; font-size: 12px; }
+html.pb-phone .soft .s-notes-list .np-cards-wrap { padding-left: 0; padding-right: 0; }

@@ -897,3 +897,18 @@
 /* the header picture clips itself, so it never depends on another stylesheet to stay in its circle */
 .soft-avatar { position: relative; overflow: hidden; }
 .soft-avatar img { width: 100%; height: 100%; max-width: 100%; object-fit: cover; display: block; }
+
+/* ---------- Phone width (Notes and Settings have a real phone layout; see utils/fitCanvas.js) ---------- */
+html.pb-phone .soft { padding: 14px 14px 0; gap: 12px; height: 100dvh; }
+html.pb-phone .soft-header { height: 40px; gap: 10px; }
+html.pb-phone .soft-brand .blob { width: 26px; height: 23px; }
+html.pb-phone .soft-brand .word { font-size: 21px; }
+html.pb-phone .soft-header > .grow:last-of-type { display: none; }
+html.pb-phone .soft-search { width: 40px; height: 40px; padding: 0; justify-content: center; margin-left: auto; }
+html.pb-phone .soft-search .grow, html.pb-phone .soft-search kbd { display: none; }
+html.pb-phone .soft-round, html.pb-phone .soft-avatar { width: 40px; height: 40px; }
+html.pb-phone .soft-page { margin-bottom: 84px; overflow-y: auto; overflow-x: hidden; }
+html.pb-phone .soft-dock { height: 60px; padding: 6px; gap: 2px; bottom: 14px; max-width: calc(100vw - 20px); }
+html.pb-phone .soft-dock-btn { width: 44px; height: 44px; }
+html.pb-phone .soft-dock-sep { display: none; }
+html.pb-phone .soft-dock-capture { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 0; gap: 0; margin-left: 4px; }

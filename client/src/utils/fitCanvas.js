@@ -10,12 +10,15 @@ export function fitScale(width, height) {
 }
 
 /** Starts fitting the signed-in screens to the window; returns a function that stops it and restores the page. */
-export function startFitCanvas() {
+export function startFitCanvas(phoneReady = () => false) {
   if (typeof window === 'undefined' || window.pebloDesktop) return () => {};
   const root = document.documentElement;
-  const clear = () => { root.style.removeProperty('zoom'); root.style.removeProperty('--pb-canvas-w'); root.style.removeProperty('--pb-canvas-h'); };
+  const clear = () => { root.classList.remove('pb-phone'); root.style.removeProperty('zoom'); root.style.removeProperty('--pb-canvas-w'); root.style.removeProperty('--pb-canvas-h'); };
   const apply = () => {
     if (root.classList.contains('pb-canvas-capture')) return clear();
+    // Screens with a real phone layout (Notes, Settings) use the phone's own width instead of a shrunken desktop.
+    if (window.innerWidth <= 700 && phoneReady()) { root.classList.add('pb-phone'); root.style.removeProperty('zoom'); root.style.setProperty('--pb-canvas-w', '100vw'); root.style.setProperty('--pb-canvas-h', '100dvh'); return; }
+    root.classList.remove('pb-phone');
     const s = fitScale(window.innerWidth, window.innerHeight);
     if (s >= 0.999) return clear();
     root.style.zoom = String(s);

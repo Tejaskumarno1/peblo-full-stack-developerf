@@ -19,7 +19,8 @@ export default function AppShell({ children }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // In a browser window smaller than the 1440 x 900 design, show the whole screen scaled down instead of cutting it off.
-  useEffect(() => startFitCanvas(), []);
+  useEffect(() => startFitCanvas(() => /^\/(notes|settings)(\/|$)/.test(window.location.pathname)), []);
+  useEffect(() => { window.dispatchEvent(new Event('resize')); }, [pathname]); // re-fit when the screen changes
 
   // Ctrl/Cmd+J opens the AI Hub from anywhere, except inside an open note,
   // where it toggles that note's Ask AI panel instead.

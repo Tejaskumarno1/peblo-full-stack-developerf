@@ -13,6 +13,18 @@ try {
   await page.locator('.np-card.gcard').first().click(); await page.waitForTimeout(500);
   await page.screenshot({ path: 'D:/Peblo/_shots/m-open.png' });
   await noScroll('opened card');
+  b.check('phone list: the editor is not shown beside the list', !(await page.locator('.s-note-main').isVisible()));
+  await page.locator('.s-note-row').first().click(); await page.waitForTimeout(800);
+  b.check('opening a note shows only the editor', await page.locator('.s-note-main').isVisible() && !(await page.locator('.s-notes-list').isVisible()));
+  b.check('back button and helper chips show', await page.getByRole('button', { name: 'Back to notes' }).isVisible() && await page.locator('.ph-chips').isVisible());
+  await page.screenshot({ path: 'D:/Peblo/_shots/m-editor.png' });
+  await noScroll('editor');
+  await page.getByRole('button', { name: /^Tasks/ }).click(); await page.waitForTimeout(300);
+  b.check('Tasks chip opens the helper sheet', await page.locator('.s-note-side.open .rl-tasks').isVisible() && !(await page.locator('.s-note-side.open .rl-ask').isVisible()));
+  await page.screenshot({ path: 'D:/Peblo/_shots/m-sheet.png' });
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Back to notes' }).click(); await page.waitForTimeout(500);
+  b.check('back returns to the list', await page.locator('.s-notes-list').isVisible());
   await page.goto(`${b.base}/settings/notes`); await page.waitForTimeout(1200);
   await page.screenshot({ path: 'D:/Peblo/_shots/m-settings.png', fullPage: true });
   await noScroll('settings');

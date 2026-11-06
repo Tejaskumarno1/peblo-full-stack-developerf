@@ -77,6 +77,9 @@ export default function SoftNotes() {
     setCollapsed((c) => { const n = { ...c }; delete n[`${group}:${k}`]; try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ } return n; });
     requestAnimationFrame(() => { const el = [...document.querySelectorAll('[data-gk]')].find((e) => e.getAttribute('data-gk') === k); el?.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
   };
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches);
+  useEffect(() => { const m = window.matchMedia('(max-width: 700px)'); const f = () => setPhone(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  const [phRail, setPhRail] = useState(null); // phone: which helper card is open as a sheet ('ask' | 'tasks' | 'ment')
   const [focus, setFocus] = useState(false);
   const [cursorsOn, setCursors] = usePresence();
   // in full screen people's live cursors are on by themselves; leaving it puts the earlier choice back (off unless it was turned on)
@@ -260,7 +263,7 @@ export default function SoftNotes() {
       return;
     }
     if (!routeId) {
-      if (!doc && allNotes[0]) navigate(`/notes/${allNotes[0].id}`, { replace: true });
+      if (!doc && allNotes[0] && !phone) navigate(`/notes/${allNotes[0].id}`, { replace: true });
       return;
     }
     if (doc?.id === routeId) return;
@@ -636,7 +639,7 @@ export default function SoftNotes() {
   );
   const quickTask = async (text) => { await todosAPI.create({ text, priority: 'medium', noteId: doc.id }); queryClient.invalidateQueries({ queryKey: ['todos'] }); };
   return (
-    <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
+    <div className={`soft-page s-notes${focus ? ' focus' : ''}${phone ? (routeId ? ' ph-note' : ' ph-list') : ''}`} data-width={wide}>
       {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
@@ -774,6 +777,7 @@ export default function SoftNotes() {
           </div>
         ) : (
           <>
+            <div className="ph-back"><button type="button" className="np-ib" aria-label="Back to notes" onClick={() => { forceSaveRef.current(); navigate('/notes'); }}><ChevronLeft size={18} strokeWidth={1.9} /></button><b>Notes</b></div>
             <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
             <div className="s-note-bar s-note-head">
               <label htmlFor="s-note-title" className="s-sr">Title</label>
@@ -825,6 +829,12 @@ export default function SoftNotes() {
               noteNode={renderMenuItems()}
               shareNode={<>{fsParts ? fsParts.full : <p className="fsx-muted">This note is not shared yet.</p>}<button type="button" className="fsx-wide" data-testid="fs-share-open" onClick={() => setShareOpen(true)}><Share2 size={15} />Share link</button></>}
               onQuickTask={quickTask} />
+            <div className="ph-chips" role="group" aria-label="About this note">
+              <button type="button" onClick={() => setPhRail('ask')}><Sparkles size={14} strokeWidth={2} />Ask</button>
+              <button type="button" onClick={() => setPhRail('tasks')}>Tasks {linked.length}</button>
+              <button type="button" onClick={() => setPhRail('ment')}>Mentioned {mentions.length}</button>
+              {noteId && <button type="button" onClick={() => { setPhRail('ver'); setHistoryOpen(true); }}><History size={14} strokeWidth={2} />Versions</button>}
+            </div>
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
           mentions={false}
@@ -844,8 +854,9 @@ export default function SoftNotes() {
       </main>
 
       {/* ---------- helpers ---------- */}
-      <aside className="s-note-side" aria-label="About this note">
-        <form className="s-note-ask" onSubmit={(e) => { e.preventDefault(); ask(question); setQuestion(''); }}>
+      <aside className={`s-note-side${phRail ? ' open' : ''}`} data-rail={phRail || ''} aria-label="About this note">
+        <button type="button" className="ph-close" aria-label="Close" onClick={() => setPhRail(null)}><X size={16} strokeWidth={2.2} /></button>
+        <form className="s-note-ask rl-ask" onSubmit={(e) => { e.preventDefault(); ask(question); setQuestion(''); }}>
           <label htmlFor="s-note-ask" className="s-ask-label" style={{ fontSize: 15 }}><Sparkles size={17} /> Ask about this note</label>
           <div className="s-ask-row small">
             <input id="s-note-ask" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={noteId ? 'What should I remember from this?' : 'Save the note to ask about it'} disabled={!noteId} autoComplete="off" />
@@ -858,7 +869,7 @@ export default function SoftNotes() {
           </div>
         </form>
 
-        <section className="s-side-card" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
+        <section className="s-side-card rl-tasks" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
           <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>
           {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
           {linked.slice(0, 8).map((t) => (
@@ -894,14 +905,14 @@ export default function SoftNotes() {
           {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
 
-        <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
+        <section className="s-side-card rl-ment" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
           <h3 id="s-mentions" className="s-h3">Mentioned in</h3>
           {mentions.length === 0 && <p className="s-empty small">{(doc?.title || '').trim().length < 4 ? 'Give the note a title to see where it is mentioned.' : 'No other note mentions this one yet.'}</p>}
           {mentions.map((n) => <Link key={n.id} to={`/notes/${n.id}`} className="s-side-link">{n.title || 'Untitled'}</Link>)}
         </section>
 
         {noteId && (
-          <div className="s-menu-wrap" ref={outsideHist}>
+          <div className="s-menu-wrap rl-ver" ref={outsideHist}>
             <button type="button" className="s-versions" onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
               <History size={15} strokeWidth={2.2} /> {versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'} kept` : 'No earlier versions'}
             </button>
