@@ -151,7 +151,14 @@ export default function SoftPlan() {
     const lines = [`# Plan for ${weekdayLong(new Date())} ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}`, '', `Free time: ${nice(free)}. Tasks need: ${nice(needs)}.`, '', '## Today'];
     const items = [...meetings.map((t) => ({ s: toMin(t.startTime), line: `- ${t.startTime} Meeting: ${t.text}` })), ...planned.map((t) => ({ s: toMin(t.startTime), line: `- ${t.startTime} ${t.text} (${nice(estOf(t))})` }))].sort((a, b) => a.s - b.s);
     lines.push(...(items.length ? items.map((i) => i.line) : ['- Nothing planned yet']), '', '## Still to pick', ...(pick.length ? pick.map((t) => `- [ ] ${t.text}`) : ['- Nothing waiting']));
-    try { const r = await notesAPI.create({ title: `Plan for ${new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`, content: lines.join('\n') }); const id = r.data?.note?.id || r.data?.id; if (id) navigate(`/notes/${id}`); } catch { setMsg('Could not write the briefing note.'); }
+    // one briefing note per day: pressing the button again refreshes today's note instead of making another
+    const title = `Plan for ${new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
+    try {
+      let id = null;
+      try { const found = await notesAPI.getAll({ search: title, limit: 10, snippet: '1' }); const hit = (found.data?.notes || []).find((n) => n.title === title && !n.isDeleted); if (hit) { await notesAPI.update(hit.id, { content: lines.join('\n') }); id = hit.id; } } catch { /* fall through to a new note */ }
+      if (!id) { const r = await notesAPI.create({ title, content: lines.join('\n') }); id = r.data?.note?.id || r.data?.id; }
+      if (id) navigate(`/notes/${id}`);
+    } catch { setMsg('Could not write the briefing note.'); }
   };
 
   const dateLine = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });

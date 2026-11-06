@@ -34,6 +34,19 @@ try {
   check('note stored as plain Markdown, not HTML', !/<p>/.test(via.content) && /A line from Claude\.\n\nSecond paragraph\./.test(via.content), JSON.stringify(via.content));
   const found = await call('search_notes', { query: 'Hello' });
   check('search_notes finds it', Array.isArray(found.json) && found.json.some((n) => n.id === id), found.text);
+  // big and messy notes: embedded audio is hidden, long notes come in parts, empty and duplicate results are tidied
+  const audio = 'data:audio/webm;base64,' + 'A'.repeat(400000);
+  const big = (await api('POST', '/api/notes', { title: 'Voice memo', content: `# Memo\n\n[voice](${audio})\n\n` + 'word '.repeat(9000) + ' broken \uFFFD\uFFFD\uFFFD char' })).note;
+  const gb = await call('get_note', { id: big.id });
+  check('get_note hides embedded audio and stays small', !/AAAAAAAAAA/.test(gb.text) && gb.text.length < 40000 && gb.json?.embeddedFilesHidden === 1, String(gb.text).length);
+  check('get_note pages long notes and drops damaged characters', gb.json?.truncated === true && typeof gb.json?.nextOffset === 'number' && !/\uFFFD/.test(gb.text), JSON.stringify(gb.json?.nextOffset));
+  const gb2 = await call('get_note', { id: big.id, offset: gb.json.nextOffset, max_chars: 60000 });
+  check('the next part continues and finishes', gb2.json?.offset === gb.json.nextOffset && gb2.json?.truncated === false);
+  for (let i = 0; i < 3; i++) await api('POST', '/api/notes', { title: 'Plan for Fri 6 Nov', content: 'Free time: 7 h. Tasks need: 30 min.' });
+  await api('POST', '/api/notes', { title: '', content: '' });
+  const tidy = await call('search_notes', { query: '', limit: 50 });
+  const rows = tidy.json?.notes || tidy.json || [];
+  check('search_notes merges duplicate daily plans and hides empty notes', rows.filter((n) => n.title === 'Plan for Fri 6 Nov').length === 1 && rows.find((n) => n.title === 'Plan for Fri 6 Nov')?.duplicates === 2 && !rows.some((n) => !n.title), JSON.stringify(tidy.json).slice(0, 300));
   const task = await call('create_task', { text: 'Task from MCP', priority: 'high' });
   check('create_task works', !task.err && task.json?.id, task.text);
   const done = await call('complete_task', { id: task.json.id });

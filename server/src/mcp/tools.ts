@@ -32,6 +32,16 @@ const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const toHtml = (s: string) => s.trim(); // notes are stored as Markdown now, so plain text and Markdown go in as they are
 const strip = (md: string) => String(md || '').replace(/<figure>[\s\S]*?<\/figure>/g, ' [attachment] ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' [picture] ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
+/** What an AI should see of a note: embedded files become a short marker, broken characters are dropped, nothing is huge. */
+const cleanContent = (md: string) => {
+  let embedded = 0; let corrupt = 0;
+  const text = String(md || '')
+    .replace(/data:([a-z]+\/[\w.+-]+)(?:;[\w=.+-]+)*;base64,[A-Za-z0-9+/=\s]{200,}/gi, (m, mime) => { embedded += 1; return `[embedded ${mime}, about ${Math.max(1, Math.round((m.length * 0.75) / 1024))} KB, not shown]`; })
+    .replace(/\uFFFD+/g, () => { corrupt += 1; return ' '; });
+  return { text, embedded, corrupt };
+};
+const norm = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
 const server = new McpServer({ name: 'peblo', version: '1.1.0' });
 // every tool call is noted (what, and whether it worked) so the person can see it in Settings > Connect apps
 const summaryOf = (a: any) => String(a?.title ?? a?.text ?? a?.query ?? a?.tag ?? a?.date ?? a?.from ?? a?.id ?? '').replace(/\s+/g, ' ').trim();
@@ -45,24 +55,49 @@ const readOnly = { readOnlyHint: true, openWorldHint: false };
 const writes = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
 server.registerTool('search_notes', {
-  description: 'Search the user\'s Peblo notes by text, optionally by tag. Returns titles, tags and a short preview.',
-  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional() },
+  description: 'Search the user\'s Peblo notes by text, optionally by tag. Returns titles, tags and a short preview. Empty notes are left out and near-identical results are merged (the count is reported); pass include_empty or include_duplicates to see them.',
+  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional(), include_empty: z.boolean().optional(), include_duplicates: z.boolean().optional() },
   annotations: readOnly,
-}, ({ query, tag, limit }) => run(async () => {
+}, ({ query, tag, limit, include_empty, include_duplicates }) => run(async () => {
   const q = new URLSearchParams({ limit: String(limit ?? 20), snippet: '1' });
   if (query) q.set('search', query);
   if (tag) q.set('tag', tag);
   const { notes } = await api('GET', '/notes?' + q);
-  return (notes || []).map((n: any) => ({ id: n.id, title: n.title, tags: n.tags, updatedAt: n.updatedAt, preview: n.snippet ?? strip(n.content).slice(0, 200) }));
+  let skippedEmpty = 0; let merged = 0;
+  const seen = new Map<string, any>();
+  const out: any[] = [];
+  for (const n of notes || []) {
+    const clean = cleanContent(n.snippet ?? n.content);
+    const preview = strip(clean.text).slice(0, 200);
+    const untitled = !n.title || /^untitled$/i.test(String(n.title).trim());
+    if (!include_empty && untitled && !preview) { skippedEmpty += 1; continue; }
+    const row = { id: n.id, title: n.title, tags: n.tags, updatedAt: n.updatedAt, preview, ...(clean.corrupt ? { damagedCharacters: true } : {}) };
+    const key = norm(n.title) + '|' + norm(preview);
+    if (!include_duplicates && seen.has(key)) { seen.get(key).duplicates = (seen.get(key).duplicates || 0) + 1; merged += 1; continue; }
+    seen.set(key, row); out.push(row);
+  }
+  return skippedEmpty || merged ? { notes: out, skippedEmpty, mergedDuplicates: merged } : out;
 }));
 
 server.registerTool('get_note', {
-  description: 'Read one note in full by id.',
-  inputSchema: { id: z.string() },
+  description: 'Read one note by id. Long notes come back in parts: pass offset (the nextOffset of the last answer) to continue. Embedded audio, video and files are replaced by a short marker, so the answer stays small.',
+  inputSchema: { id: z.string(), offset: z.number().int().min(0).optional().describe('Character to start from (default 0)'), max_chars: z.number().int().min(1000).max(60000).optional().describe('Most characters to return (default 20000)') },
   annotations: readOnly,
-}, ({ id }) => run(async () => {
+}, ({ id, offset, max_chars }) => run(async () => {
   const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
-  return { id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt, text: strip(note.content), markdown: note.content };
+  const clean = cleanContent(note.content);
+  const from = offset ?? 0; const size = max_chars ?? 20000;
+  const part = clean.text.slice(from, from + size);
+  const next = from + size < clean.text.length ? from + size : null;
+  return {
+    id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt,
+    totalChars: clean.text.length, offset: from, nextOffset: next, truncated: next !== null,
+    ...(clean.embedded ? { embeddedFilesHidden: clean.embedded } : {}),
+    ...(clean.corrupt ? { note: 'Some characters in this note were damaged when it was saved and were dropped.' } : {}),
+    ...(clean.text.trim() === '' ? { empty: true } : {}),
+    markdown: part,
+    ...(part.length <= 6000 ? { text: strip(part) } : {}),
+  };
 }));
 
 // Pictures. A picture comes back as a real image result, so the AI sees it instead of only reading its address.
