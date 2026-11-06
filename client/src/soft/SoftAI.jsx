@@ -1,14 +1,17 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { todosAPI } from '../api';
 import { Plus, ArrowUp, Square, Lock, X, RotateCcw } from 'lucide-react';
 import useHubChat, { renderAnswer } from '../hooks/useHubChat';
 import ConnectionModelOptions from '../components/hub/ConnectionModelOptions';
 import { MicButton, SpeakButton } from '../components/VoiceButtons';
 import './aimodes.css';
+import { taskLines } from './aiTasks';
 
 // Modes and slash commands (mockup: AI chat). A mode adds a short instruction in front of what you type, so it works with any model.
 export const MODES = [
-  { id: 'ask', name: 'Ask notes', cmd: 'ask', prefix: '', hint: 'Answer from my notes', ph: 'Ask about your notes, tasks and calendar…' },
+  { id: 'ask', name: 'Ask notes', cmd: 'ask', prefix: '', hint: 'Answer from my notes', ph: 'Ask about your notes, tasks and calendarâ€¦' },
   { id: 'plan', name: 'Plan', cmd: 'plan', prefix: 'Make a short, step-by-step plan for: ', hint: 'Turn a goal into steps', ph: 'What do you want a plan for?' },
   { id: 'sum', name: 'Summarise', cmd: 'summarise', prefix: 'Summarise this in a few bullet points: ', hint: 'Short bullet summary', ph: 'What should I summarise?' },
   { id: 'quiz', name: 'Quiz me', cmd: 'quiz', prefix: 'Quiz me, one question at a time, on: ', hint: 'Test what I know', ph: 'What should I quiz you on?' },
@@ -21,7 +24,39 @@ const SLASH = [...MODES, ...EXTRA_CMDS];
 const TILTS = [-1.5, 1.2, -0.6, 0.9, -1];
 const FOLLOW_UPS = ['Quiz me on this', 'Explain it more simply', 'Make flashcards from this'];
 
-/** Soft Studio · AI Hub (mockup: SoftAI). Same chat engine as the other styles, friendlier layout. */
+/** Action card (mockup: AI action cards): the answer proposes tasks, you tick the ones you want, nothing is added until you press the button. */
+function ActionCard({ items, onClose }) {
+  const qc = useQueryClient();
+  const [on, setOn] = useState(() => new Set(items.map((_, i) => i)));
+  const [state, setState] = useState('idle'); // idle | busy | done | error
+  const add = async () => {
+    setState('busy');
+    try {
+      for (const i of [...on].sort((a, b) => a - b)) await todosAPI.create({ text: items[i], priority: 'medium' });
+      qc.invalidateQueries({ queryKey: ['todos'] });
+      setState('done');
+    } catch { setState('error'); }
+  };
+  return (
+    <div className="s-action" role="group" aria-label="Add these as tasks">
+      <b>Add these as tasks?</b>
+      <ul>
+        {items.map((t, i) => (
+          <li key={i}><label><input type="checkbox" checked={on.has(i)} disabled={state === 'busy' || state === 'done'} onChange={() => setOn((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })} /> <span>{t}</span></label></li>
+        ))}
+      </ul>
+      {state === 'done' ? <p className="ok" role="status">Added {on.size} task{on.size === 1 ? '' : 's'}. <Link to="/tasks">Open Tasks</Link></p> : (
+        <div className="s-bot-actions">
+          <button type="button" className="s-act dark" disabled={on.size === 0 || state === 'busy'} onClick={add}>{state === 'busy' ? 'Addingâ€¦' : `Add ${on.size} task${on.size === 1 ? '' : 's'}`}</button>
+          <button type="button" className="s-act" onClick={onClose}>Not now</button>
+          {state === 'error' && <span className="s-bot-meta" role="alert">Could not add them. Nothing was lost.</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Soft Studio Â· AI Hub (mockup: SoftAI). Same chat engine as the other styles, friendlier layout. */
 export default function SoftAI() {
   const {
     chats, activeId, setActiveId, active, input, setInput, attached, setAttached, streaming,
@@ -34,6 +69,7 @@ export default function SoftAI() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachQuery, setAttachQuery] = useState('');
   const [copied, setCopied] = useState(null);
+  const [cardFor, setCardFor] = useState(null);
   const [mode, setMode] = useState('ask');
   const [cmdIdx, setCmdIdx] = useState(0);
   const cur = SLASH.find((m) => m.id === mode) || MODES[0];
@@ -68,8 +104,8 @@ export default function SoftAI() {
     .filter((n) => !attachQuery || (n.title || '').toLowerCase().includes(attachQuery.toLowerCase()))
     .slice(0, 6);
 
-  const modelText = currentModelLabel.kind === 'local' ? `${currentModelLabel.name} · on this computer`
-    : currentModelLabel.kind === 'cloud' ? `${currentModelLabel.name} · cloud` : 'No AI set up';
+  const modelText = currentModelLabel.kind === 'local' ? `${currentModelLabel.name} Â· on this computer`
+    : currentModelLabel.kind === 'cloud' ? `${currentModelLabel.name} Â· cloud` : 'No AI set up';
 
   const copy = (m) => { (navigator.clipboard ? navigator.clipboard.writeText(m.content) : Promise.reject(new Error('no clipboard'))).then(() => setCopied(m.id), () => setCopied(`fail-${m.id}`)).finally(() => setTimeout(() => setCopied(null), 1500)); };
 
@@ -142,9 +178,9 @@ export default function SoftAI() {
                 )}
                 <div className="s-bot-actions">
                   <span className="s-bot-meta">
-                    {m.meta ? `${m.meta.local ? 'On this computer' : 'Cloud'} · ${m.meta.model} · ${m.sources?.length || 0} source${m.sources?.length === 1 ? '' : 's'}`
-                      : m.status === 'thinking' ? `Reading your notes${m.sources?.length ? ` · found ${m.sources.length}` : ''}…`
-                        : m.status === 'streaming' ? 'Writing…' : m.status === 'stopped' ? 'Stopped' : ''}
+                    {m.meta ? `${m.meta.local ? 'On this computer' : 'Cloud'} Â· ${m.meta.model} Â· ${m.sources?.length || 0} source${m.sources?.length === 1 ? '' : 's'}`
+                      : m.status === 'thinking' ? `Reading your notes${m.sources?.length ? ` Â· found ${m.sources.length}` : ''}â€¦`
+                        : m.status === 'streaming' ? 'Writingâ€¦' : m.status === 'stopped' ? 'Stopped' : ''}
                   </span>
                   {m.status === 'done' && m.content && (
                     <>
@@ -152,9 +188,11 @@ export default function SoftAI() {
                       <button type="button" className="s-act" onClick={() => copy(m)}>{copied === m.id ? 'Copied' : copied === `fail-${m.id}` ? 'Could not copy' : 'Copy'}</button>
               <SpeakButton className="s-act" text={m.content} />
                       <button type="button" className="s-act" onClick={() => regenerate(m)}>Try again</button>
+                      {taskLines(m.content).length >= 2 && <button type="button" className="s-act" onClick={() => setCardFor(cardFor === m.id ? null : m.id)}>Add as tasks</button>}
                     </>
                   )}
                 </div>
+                {cardFor === m.id && <ActionCard items={taskLines(m.content)} onClose={() => setCardFor(null)} />}
                 {m.status === 'done' && m.content && i === active.messages.length - 1 && (
                   <div className="s-suggest">
                     {FOLLOW_UPS.map((s) => <button key={s} type="button" className="s-dashed s-suggest-btn" onClick={() => send(s)}>{s}</button>)}
@@ -188,7 +226,7 @@ export default function SoftAI() {
               value={input}
               onChange={(e) => { setInput(e.target.value); setCmdIdx(0); }}
               onKeyDown={onKey}
-              placeholder={mode !== 'ask' ? cur.ph : active?.messages.length ? 'Ask a follow-up…' : 'Ask about your notes, tasks and calendar…'}
+              placeholder={mode !== 'ask' ? cur.ph : active?.messages.length ? 'Ask a follow-upâ€¦' : 'Ask about your notes, tasks and calendarâ€¦'}
               autoComplete="off"
             />
             <MicButton className="s-send big" onText={(t) => setInput((v) => (v ? v + ' ' : '') + t)} />
@@ -209,7 +247,7 @@ export default function SoftAI() {
               <button type="button" className="s-dashed s-add-note" onClick={() => setAttachOpen((v) => !v)} aria-expanded={attachOpen}>+ Add a note</button>
               {attachOpen && (
                 <div className="s-menu up s-attach">
-                  <input autoFocus value={attachQuery} onChange={(e) => setAttachQuery(e.target.value)} placeholder="Find a note…" aria-label="Find a note to add" />
+                  <input autoFocus value={attachQuery} onChange={(e) => setAttachQuery(e.target.value)} placeholder="Find a noteâ€¦" aria-label="Find a note to add" />
                   {matches.map((n) => (
                     <button key={n.id} type="button" onClick={() => { setAttached((l) => [...l, { id: n.id, title: n.title || 'Untitled' }]); setAttachOpen(false); setAttachQuery(''); }}>{n.title || 'Untitled'}</button>
                   ))}
@@ -224,12 +262,12 @@ export default function SoftAI() {
               </button>
               {pickerOpen && (
                 <div className="s-menu up right" role="listbox">
-                  <button type="button" role="option" aria-selected={!modelChoice} onClick={() => { setModelChoice(null); setPickerOpen(false); }}>Automatic · follows Your AI</button>
+                  <button type="button" role="option" aria-selected={!modelChoice} onClick={() => { setModelChoice(null); setPickerOpen(false); }}>Automatic Â· follows Your AI</button>
                   {localModels.map((m) => (
-                    <button key={m} type="button" role="option" aria-selected={modelChoice?.model === m} onClick={() => { setModelChoice({ provider: 'ollama', model: m }); setPickerOpen(false); }}>{m} · on this computer</button>
+                    <button key={m} type="button" role="option" aria-selected={modelChoice?.model === m} onClick={() => { setModelChoice({ provider: 'ollama', model: m }); setPickerOpen(false); }}>{m} Â· on this computer</button>
                   ))}
                   {cloudModels.filter((c) => !c.provider.startsWith('conn:')).map((c) => (
-                    <button key={c.provider} type="button" role="option" aria-selected={modelChoice?.provider === c.provider} disabled={routing === 'ollama'} onClick={() => { setModelChoice({ provider: c.provider, model: c.model }); setPickerOpen(false); }}>{c.model} · cloud{routing === 'ollama' ? ' (off)' : ''}</button>
+                    <button key={c.provider} type="button" role="option" aria-selected={modelChoice?.provider === c.provider} disabled={routing === 'ollama'} onClick={() => { setModelChoice({ provider: c.provider, model: c.model }); setPickerOpen(false); }}>{c.model} Â· cloud{routing === 'ollama' ? ' (off)' : ''}</button>
                   ))}
                   <ConnectionModelOptions cloud={cloudModels} modelChoice={modelChoice} open={pickerOpen} disabledFor={(c) => routing === 'ollama' && !c.local} onPick={(choice) => { setModelChoice(choice); setPickerOpen(false); }} />
                   {!localModels.length && !cloudModels.length && <Link to="/ai/connections" className="s-menu-link">{local?.enabled ? 'Ollama is not running. Open Your AI' : 'Set up AI in Your AI'}</Link>}

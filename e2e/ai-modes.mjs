@@ -36,6 +36,24 @@ try {
   check('the @ text is removed', (await input.inputValue()).trim() === 'look at');
   await input.fill('/zzz');
   check('no match shows no menu and Enter does not break', (await page.locator('.s-slash').count()) === 0);
+
+  // Action card: an answer with a list can be added as tasks, only after you press the button
+  await page.evaluate(() => localStorage.setItem('peblo-ai-hub-v1', JSON.stringify([{ id: 'c1', title: 'Plan', updatedAt: Date.now(), messages: [
+    { id: 'u1', role: 'user', content: 'Plan my week' },
+    { id: 'a1', role: 'assistant', status: 'done', content: 'Here is a plan:\n1. Draft the spec\n2. Review the PRs\n3. Book flights', sources: [], meta: { local: false, model: 'test' } }] }])));
+  await page.reload();
+  await page.locator('.s-bot').first().waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Add as tasks' }).click();
+  check('the card lists the three steps, all ticked', (await page.locator('.s-action li').count()) === 3 && (await page.locator('.s-action input:checked').count()) === 3);
+  const before = (await api('GET', '/api/todos')).todos?.length ?? ((await api('GET', '/api/todos')).length || 0);
+  check('nothing is added before the button', before === 0, String(before));
+  await page.locator('.s-action li', { hasText: 'Book flights' }).locator('input').uncheck();
+  await page.screenshot({ path: 'ai-action.png' });
+  await page.getByRole('button', { name: 'Add 2 tasks' }).click();
+  await page.locator('.s-action .ok').waitFor({ timeout: 5000 });
+  const list = (await api('GET', '/api/todos')); const todos = list.todos || list;
+  const names = todos.map((t) => t.text).sort();
+  check('only the ticked steps were added', names.length === 2 && names[0] === 'Draft the spec' && names[1] === 'Review the PRs', names.join('|'));
 } catch (e) {
   check('no crash', false, String(e).slice(0, 300));
 }
