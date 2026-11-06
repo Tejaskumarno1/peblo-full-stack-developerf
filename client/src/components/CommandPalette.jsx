@@ -16,6 +16,9 @@ export default function CommandPalette() {
   const [tasks, setTasks] = useState([]);
   const queryClient = useQueryClient();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [scope, setScope] = useState('all'); // all | notes | tasks (Tab cycles)
+  const SCOPES = [['all', 'All'], ['notes', 'Notes'], ['tasks', 'Tasks']];
+  const inScope = (k) => scope === 'all' || scope === k;
   const navigate = useNavigate();
   const { uiStyle, setUiStyle } = useAuth();
   const inputRef = useRef(null);
@@ -39,6 +42,7 @@ export default function CommandPalette() {
   useEffect(() => {
     if (isOpen) {
       setQuery('');
+      setScope('all');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
       
@@ -62,7 +66,7 @@ export default function CommandPalette() {
     }, 200);
     return () => clearTimeout(timer);
   }, [query]);
-  const filteredNotes = query.trim()
+  const filteredNotes = inScope('notes') && query.trim()
     ? (hits && hits.q === query.trim() ? hits.notes.slice(0, 6) : notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5))
     : [];
 
@@ -109,10 +113,10 @@ export default function CommandPalette() {
     : [];
   const tq = query.trim().toLowerCase().replace(/^#/, '');
   const seenSeries = new Set();
-  const taskHits = tq.length >= 2 && !addMatch
+  const taskHits = inScope('tasks') && tq.length >= 2 && !addMatch
     ? tasks.filter((t) => !t.completed && String(t.text).toLowerCase().includes(tq) && (!t.seriesId || (!seenSeries.has(t.seriesId) && seenSeries.add(t.seriesId)))).slice(0, 4)
     : [];
-  const tagHits = tq.length >= 2 && !addMatch
+  const tagHits = inScope('tasks') && tq.length >= 2 && !addMatch
     ? [...new Set(tasks.flatMap((t) => t.todoTags || []))].filter((g) => String(g).toLowerCase().includes(tq)).slice(0, 3)
     : [];
 
@@ -120,11 +124,11 @@ export default function CommandPalette() {
     ? navigationCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
     : navigationCommands;
   // Anything typed can also be asked in the AI Hub, answered from your notes.
-  const filteredCommands = query.trim().length > 2
+  const filteredCommands = scope !== 'all' ? [] : query.trim().length > 2
     ? [...addCmd, { id: 'ask-ai', title: `Ask AI: "${query.trim()}"`, icon: <Sparkles size={16} />, action: () => navigate(`/ai?q=${encodeURIComponent(query.trim())}`) }, ...matchingCommands]
     : [...addCmd, ...matchingCommands];
 
-  const pictureHits = picHits.q === query.trim() && !addMatch ? picHits.list : [];
+  const pictureHits = scope === 'all' && picHits.q === query.trim() && !addMatch ? picHits.list : [];
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),
     ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id })),
@@ -135,7 +139,7 @@ export default function CommandPalette() {
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [query, scope]);
 
   // keep the highlighted row on screen when moving with the arrow keys
   useEffect(() => {
@@ -165,6 +169,10 @@ export default function CommandPalette() {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((prev) => (prev - 1 + allItems.length) % Math.max(1, allItems.length));
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const i = SCOPES.findIndex(([k]) => k === scope);
+      setScope(SCOPES[(i + (e.shiftKey ? SCOPES.length - 1 : 1)) % SCOPES.length][0]);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (allItems.length > 0) {
@@ -188,12 +196,15 @@ export default function CommandPalette() {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
           />
+          <div className="cmd-tabs" role="tablist" aria-label="Search in">
+            {SCOPES.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={scope === k} className={scope === k ? 'on' : ''} onClick={() => { setScope(k); inputRef.current?.focus(); }}>{name}</button>)}
+          </div>
           <div className="cmd-badge">esc</div>
         </div>
         
         <div className="cmd-body" ref={listRef}>
           {allItems.length === 0 ? (
-            <div className="cmd-empty">No results found for "{query}"</div>
+            <div className="cmd-empty">{query.trim() ? `No results found for "${query}"` : scope === 'all' ? 'Nothing here yet.' : `Type to search ${scope}.`}</div>
           ) : (
             <div className="cmd-list">
               {filteredCommands.length > 0 && <div className="cmd-section-title">Navigation & Actions</div>}
@@ -261,6 +272,7 @@ export default function CommandPalette() {
         <div className="cmd-footer">
           <span><kbd>Up</kbd><kbd>Down</kbd> to navigate</span>
           <span><kbd>Enter</kbd> to select</span>
+          <span><kbd>Tab</kbd> to filter</span>
         </div>
       </div>
     </div>,
