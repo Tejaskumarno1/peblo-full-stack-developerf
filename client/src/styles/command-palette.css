@@ -187,4 +187,6 @@
 .cmd-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--bg-hover, rgba(128,128,128,.14)); }
 .cmd-tabs button { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 700; padding: 5px 12px; border-radius: 999px; cursor: pointer; }
 .cmd-tabs button.on { background: var(--text-primary); color: var(--bg-surface); }
-.cmd-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cmd-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }.cmd-tabs { flex: none; margin-right: 6px; }
+.cmd-header .cmd-input { min-width: 0; flex: 1; }
+.cmd-header .cmd-badge { flex: none; }

@@ -11,6 +11,7 @@ try {
   await page.locator('.cmd-item', { hasText: 'Plan sprint review' }).waitFor({ timeout: 8000 });
   await page.locator('.cmd-item', { hasText: 'Sprint notes' }).waitFor({ timeout: 8000 });
   check('All shows notes and tasks', true);
+  await page.waitForTimeout(700);
   await page.screenshot({ path: 'D:/Peblo/_shots/palette-all.png' });
   await page.keyboard.press('Tab');
   check('Tab moves to Notes', (await page.locator('.cmd-tabs .on').innerText()) === 'Notes');
@@ -26,4 +27,5 @@ try {
   check('palette reopens on All', (await page.locator('.cmd-tabs .on').innerText()) === 'All');
 } catch (e) { check('no crash', false, String(e).slice(0, 300)); }
 await finish();
+
 
