@@ -105,3 +105,12 @@ html.pb-phone .soft .set-layout .pl { margin-bottom: 1px; gap: 2px; }
 html.pb-phone .soft .set-layout .nm { margin-top: 0; align-self: end; flex-wrap: wrap; }
 html.pb-phone .soft .set-layout small { align-self: start; font-size: 12px; }
 html.pb-phone .soft .s-notes-list .np-cards-wrap { padding-left: 0; padding-right: 0; }
+
+/* Empty states, dark inputs in the side cards, and room for the comment button on a phone */
+.soft .np .np-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 26px 18px; }
+.soft .np .np-empty-ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--s-chip-solid); color: var(--s-fg2); margin-bottom: 4px; }
+.soft .np .np-empty b { font-size: 15px; font-weight: 800; }
+.soft .np .np-empty small { font-size: 12.5px; color: var(--s-fg2); line-height: 1.4; max-width: 30ch; }
+.soft .np .np-empty-btn { margin-top: 8px; height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--s-accent); color: var(--s-on-accent); font: inherit; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.soft .s-side-card input:not([type=checkbox]) { background: var(--s-surface); color: var(--s-fg); }
+@media (max-width: 700px) { html.pb-phone .soft .s-note-body { padding-right: 40px; } }

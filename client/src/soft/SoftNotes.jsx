@@ -207,7 +207,7 @@ export default function SoftNotes() {
     if (group === 'tag') {
       const m = new Map();
       for (const n of rest) { const t = (n.tags || []).find((x) => x !== 'inbox') || 'untagged'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
-      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: `#${t}`, notes });
+      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: t === 'untagged' ? 'Untagged' : `#${t}`, notes });
     } else if (group === 'folder') {
       const m = new Map();
       for (const n of rest) { const t = n.meta?.folder || 'No folder'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
@@ -708,7 +708,9 @@ export default function SoftNotes() {
                 </nav>
               )}
               {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => card(d))}</div>}
-              {!fSel && list.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No folders yet. Use + to make one.</p>}
+              {!fSel && list.length === 0 && (
+                <div className="np-empty"><span className="np-empty-ic"><Folder size={22} strokeWidth={1.8} /></span><b>No folders yet</b><small>Folders keep related notes together. Smart folders fill themselves from a rule.</small><button type="button" className="np-empty-btn" onClick={() => openNew(false)}><Plus size={15} strokeWidth={2.2} />New folder</button></div>
+              )}
             </div>
           );
         })()}
@@ -736,7 +738,10 @@ export default function SoftNotes() {
           </div>
         )}
         {((!cards && !folderMode && !(dateTagCards && !gSel)) || fSel) && <div className="s-notes-rows">
-          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && filter === 'trash' && (
+            <div className="np-empty"><span className="np-empty-ic"><Trash2 size={22} strokeWidth={1.8} /></span><b>The Trash is empty</b><small>Deleted notes wait here until you remove them for good.</small></div>
+          )}
+          {shownList.length === 0 && filter !== 'trash' && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
           {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
