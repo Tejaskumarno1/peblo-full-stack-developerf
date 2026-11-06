@@ -594,3 +594,17 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-card:hover .s-grip, .soft .s-card:focus-within .s-grip { color: var(--s-fg); }
 .soft .s-card.drop-here { box-shadow: 0 -3px 0 0 var(--s-accent); }
 @media (hover: none) { .soft .s-grip { color: var(--s-fg2); } }
+
+/* Task sheet: two columns on the pop-up, single column when inline in quick capture */
+.soft .s-sheet-cols, .soft .s-sheet-col { display: contents; }
+.soft .s-sheet.wide { width: min(1080px, 100%); max-height: calc(100vh - 28px); gap: 12px; padding: 18px 26px 16px; }
+.soft .s-sheet.wide .s-sheet-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.soft .s-sheet.wide .s-sheet-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.soft .s-sheet.wide .s-sheet-title { background: var(--s-bg); border: 0; border-radius: 999px; padding: 0 22px; height: 50px; font-size: 22px; caret-color: var(--s-accent); }
+.soft .s-sheet.wide .s-sheet-title:focus { box-shadow: 0 0 0 2px var(--s-accent); }
+.soft .s-sheet.wide .s-sheet-foot { position: sticky; bottom: -16px; background: var(--s-surface); padding-top: 10px; border-top: 1px solid var(--s-line); }
+.soft .s-sheet-keys { color: var(--s-fg3); font-size: 12px; margin-right: 12px; display: inline-flex; gap: 4px; align-items: center; }
+.soft .s-sheet-keys kbd { font: 800 11px var(--s-body); background: var(--s-bg); padding: 2px 7px; border-radius: 7px; color: var(--s-fg2); }
+@media (max-width: 860px) { .soft .s-sheet.wide .s-sheet-cols { grid-template-columns: 1fr; } }
+.soft .s-sheet-sec input[type="url"] { height: 42px; border: 0; border-radius: 999px; padding: 0 16px; background: var(--s-bg); color: var(--s-fg); caret-color: var(--s-accent); font: 500 14px var(--s-body); }
+.soft .s-sheet-sec input[type="url"]:focus { outline: 2px solid var(--s-accent); }

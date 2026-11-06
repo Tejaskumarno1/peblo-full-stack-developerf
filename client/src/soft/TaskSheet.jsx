@@ -179,7 +179,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const dueLabel = date ? new Date(`${date}T00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : null;
 
   const body = (
-    <div className={`s-sheet${inline ? ' inline' : ''}`} role={inline ? undefined : 'dialog'} aria-label={isNew ? 'Set up your new task' : 'Edit task'} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); if (confirmEsc) setConfirmEsc(false); else requestClose(); } }}>
+    <div className={`s-sheet${inline ? ' inline' : ' wide'}`} role={inline ? undefined : 'dialog'} aria-label={isNew ? 'Set up your new task' : 'Edit task'} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && text.trim() && !saving) { e.preventDefault(); save(); return; } if (e.key === 'Escape') { e.stopPropagation(); if (confirmEsc) setConfirmEsc(false); else requestClose(); } }}>
       <div className="s-sheet-top">
         <span className={`s-sheet-kicker${isNew ? ' new' : ''}`}>{isNew ? <><Check size={13} strokeWidth={3} /> Task added</> : 'Task'}</span>
         <span className="grow" />
@@ -190,6 +190,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       <label className="s-sr" htmlFor="s-sheet-title">Task</label>
       <input id="s-sheet-title" className="s-sheet-title" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }} autoFocus={!inline} />
 
+      <div className="s-sheet-cols">
+        <div className="s-sheet-col">
       <section className="s-sheet-sec" aria-label="Due">
         <span className="s-sheet-lab">Due{dueLabel ? ` · ${dueLabel}${time ? `, ${label12(time)}` : ''}` : ''}</span>
         <div className="s-sheet-pills">
@@ -240,25 +242,6 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         <p className="s-sheet-hint">When it rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
       </section>
 
-      <section className="s-sheet-sec" aria-label="Priority">
-        <span className="s-sheet-lab">Priority</span>
-        <div className="s-sheet-pills" role="radiogroup" aria-label="Priority">
-          {[['high', 'High', 'var(--s-accent)'], ['medium', 'Normal', 'var(--s-sky)'], ['low', 'Low', 'var(--s-mint)']].map(([p, name, dot]) => (
-            <button key={p} type="button" role="radio" aria-checked={priority === p} className={priority === p ? 'on' : ''} onClick={() => setPriority(p)}><i style={{ background: dot }} />{name}</button>
-          ))}
-        </div>
-      </section>
-
-      <section className="s-sheet-sec" aria-label="Estimate">
-        <span className="s-sheet-lab">Estimate</span>
-        <div className="s-sheet-pills" role="radiogroup" aria-label="Estimate">
-          {ESTIMATES.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={estimate === m} className={estimate === m ? 'on' : ''} onClick={() => setEstimate(estimate === m ? null : m)}>{name}</button>)}
-          <input type="number" min="1" max="1440" aria-label="Estimate in minutes" className="s-sheet-time" style={{ width: 96 }} placeholder="minutes" value={estimate && !ESTIMATES.some(([m]) => m === estimate) ? estimate : ''} onChange={(e) => setEstimate(e.target.value ? Number(e.target.value) : null)} />
-        </div>
-      </section>
-
-      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} taskText={text} taskDetails={task.meta?.details || ''} /></section>
-
       {source && (
         <section className="s-sheet-sec" aria-label="Where it came from">
           <span className="s-sheet-lab">Where it came from</span>
@@ -281,6 +264,25 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         </div>
       </section>
 
+        </div>
+        <div className="s-sheet-col">
+      <section className="s-sheet-sec" aria-label="Priority">
+        <span className="s-sheet-lab">Priority</span>
+        <div className="s-sheet-pills" role="radiogroup" aria-label="Priority">
+          {[['high', 'High', 'var(--s-accent)'], ['medium', 'Normal', 'var(--s-sky)'], ['low', 'Low', 'var(--s-mint)']].map(([p, name, dot]) => (
+            <button key={p} type="button" role="radio" aria-checked={priority === p} className={priority === p ? 'on' : ''} onClick={() => setPriority(p)}><i style={{ background: dot }} />{name}</button>
+          ))}
+        </div>
+      </section>
+
+      <section className="s-sheet-sec" aria-label="Estimate">
+        <span className="s-sheet-lab">Estimate</span>
+        <div className="s-sheet-pills" role="radiogroup" aria-label="Estimate">
+          {ESTIMATES.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={estimate === m} className={estimate === m ? 'on' : ''} onClick={() => setEstimate(estimate === m ? null : m)}>{name}</button>)}
+          <input type="number" min="1" max="1440" aria-label="Estimate in minutes" className="s-sheet-time" style={{ width: 96 }} placeholder="minutes" value={estimate && !ESTIMATES.some(([m]) => m === estimate) ? estimate : ''} onChange={(e) => setEstimate(e.target.value ? Number(e.target.value) : null)} />
+        </div>
+      </section>
+
       <section className="s-sheet-sec" aria-label="Tags">
         <span className="s-sheet-lab">Tags</span>
         <div className="s-sheet-pills">
@@ -299,6 +301,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           </div>
         )}
       </section>
+
+      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} taskText={text} taskDetails={task.meta?.details || ''} /></section>
 
       <section className="s-sheet-sec" aria-label="Connected note">
         <span className="s-sheet-lab">Connected note</span>
@@ -324,6 +328,10 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         )}
       </section>
 
+
+        </div>
+      </div>
+
       {shareOpen && <ShareDialog kind="todo" id={task.id} title={text} onClose={() => setShareOpen(false)} />}
       {error && <p className="s-sheet-error" role="alert">{error}</p>}
       {confirmEsc && (
@@ -339,6 +347,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         {!isNew && <button type="button" className="s-sheet-del" style={{ marginRight: 8 }} onClick={() => setShareOpen(true)}>Share</button>}
           {!isNew && <button type="button" className="s-sheet-del" onClick={remove}>Delete</button>}
         <span className="grow" />
+        {!inline && <span className="s-sheet-keys"><kbd>Ctrl</kbd> <kbd>Enter</kbd> to save</span>}
         {isNew && <button type="button" className="s-sheet-skip" onClick={onClose}>Skip</button>}
         <button type="button" className="s-capture-add" disabled={!text.trim() || saving} onClick={save}>{saving ? 'Saving…' : isNew ? 'Done' : 'Save'}</button>
       </div>
