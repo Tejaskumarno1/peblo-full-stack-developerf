@@ -8,7 +8,7 @@ try {
   }
   await page.goto(`${b.base}/notes`); await page.waitForTimeout(1500);
   ok(await page.locator('.np-card.gcard').count() >= 1, 'date groups render as folder cards');
-  ok(await page.locator('.s-note-row').count() === 0, 'no note rows until a card is opened');
+  ok(await page.locator('.s-notes-rows').count() === 0 && await page.locator('.np-recent .s-note-row').count() >= 1 && await page.locator('.np-recent .s-note-row').count() <= 3, 'only the Recent strip lists notes until a card is opened');
   await page.screenshot({ path: 'D:/Peblo/_shots/v3-date.png' });
   await page.locator('.np-card.gcard').first().click();
   ok(await page.locator('.np-fhead small', { hasText: 'Date' }).count() === 1, 'opened card shows slim header with Date label');

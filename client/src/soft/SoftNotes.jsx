@@ -79,6 +79,7 @@ export default function SoftNotes() {
   };
   const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches);
   useEffect(() => { const m = window.matchMedia('(max-width: 700px)'); const f = () => setPhone(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  const [railOpen, setRailOpen] = useState({}); // empty side cards fold to one line until clicked
   const [phRail, setPhRail] = useState(null); // phone: which helper card is open as a sheet ('ask' | 'tasks' | 'ment')
   const [focus, setFocus] = useState(false);
   const [cursorsOn, setCursors] = usePresence();
@@ -735,6 +736,14 @@ export default function SoftNotes() {
               })}
               {groups.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No notes here yet.</p>}
             </div>
+            {shownList.length > 0 && (
+              <div className="np-recent" aria-label="Recent notes">
+                <h3>Recent</h3>
+                {[...shownList].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).slice(0, 3).map((n) => (
+                  <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={false} sel={false} preview={view.preview} labels={view.labels} dq="" fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
+                ))}
+              </div>
+            )}
           </div>
         )}
         {((!cards && !folderMode && !(dateTagCards && !gSel)) || fSel) && <div className="s-notes-rows">
@@ -874,7 +883,7 @@ export default function SoftNotes() {
           </div>
         </form>
 
-        <section className="s-side-card rl-tasks" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
+        <section className={`s-side-card rl-tasks${!phone && !linked.length && !railOpen.tasks ? ' min' : ''}`} style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked" onClick={(e) => { if (e.currentTarget.classList.contains('min')) setRailOpen((o) => ({ ...o, tasks: true })); }}>
           <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>
           {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
           {linked.slice(0, 8).map((t) => (
@@ -910,7 +919,7 @@ export default function SoftNotes() {
           {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
 
-        <section className="s-side-card rl-ment" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
+        <section className={`s-side-card rl-ment${!phone && !mentions.length && !railOpen.ment ? ' min' : ''}`} style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions" onClick={(e) => { if (e.currentTarget.classList.contains('min')) setRailOpen((o) => ({ ...o, ment: true })); }}>
           <h3 id="s-mentions" className="s-h3">Mentioned in</h3>
           {mentions.length === 0 && <p className="s-empty small">{(doc?.title || '').trim().length < 4 ? 'Give the note a title to see where it is mentioned.' : 'No other note mentions this one yet.'}</p>}
           {mentions.map((n) => <Link key={n.id} to={`/notes/${n.id}`} className="s-side-link">{n.title || 'Untitled'}</Link>)}
