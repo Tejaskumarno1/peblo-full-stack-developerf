@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
@@ -8,6 +8,7 @@ import UndoToast from '../components/UndoToast';
 import { useUndoToast } from '../utils/useUndoToast';
 import NewMeeting from '../components/NewMeeting';
 import TimeGrid from '../components/TimeGrid';
+import { exportCalendar, importCalendar } from '../river/calendarIO';
 import { startOfWeek, weekdayNames } from '../utils/weekStart';
 import { startOfDay, addDays, sameDay, daysFromToday, spanOf, timeOf, toneOf, tagsOf, weekdayLong } from './softUtils';
 
@@ -20,6 +21,8 @@ const fmt = (d, o) => new Date(d).toLocaleDateString('en-GB', o);
 export default function SoftCalendar() {
   const navigate = useNavigate();
   const [view, setView] = useState('week');
+  const [fileMenu, setFileMenu] = useState(false);
+  const fileRef = useRef(null);
   const [cursor, setCursor] = useState(() => startOfDay());
   const qc = useQueryClient();
   const { toast, say, dismiss } = useUndoToast();
@@ -144,6 +147,17 @@ export default function SoftCalendar() {
         <button type="button" className="s-round46" aria-label="Previous" onClick={() => move(-1)}>‹</button>
         <button type="button" className="s-pill46" onClick={() => setCursor(startOfDay())}>Today</button>
         <button type="button" className="s-round46" aria-label="Next" onClick={() => move(1)}>›</button>
+        <div style={{ position: 'relative' }}>
+          <button type="button" className="s-pill46" aria-haspopup="menu" aria-expanded={fileMenu} onClick={() => setFileMenu((v) => !v)}>Calendar file</button>
+          {fileMenu && (
+            <div className="s-menu" role="menu" onMouseLeave={() => setFileMenu(false)}>
+              <button type="button" role="menuitem" onClick={() => { setFileMenu(false); fileRef.current?.click(); }}>Import .ics</button>
+              <button type="button" role="menuitem" onClick={() => { setFileMenu(false); exportCalendar().then((n) => say(`Downloaded ${n} item${n === 1 ? '' : 's'} (.ics)`)).catch(() => say('Could not export')); }}>Export .ics</button>
+              <button type="button" role="menuitem" onClick={() => { setFileMenu(false); window.print(); }}>Print this view</button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept=".ics,text/calendar" hidden data-testid="ics-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importCalendar(f).then((r) => { say(`Added ${r.added} meeting${r.added === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped}` : ''}`); qc.invalidateQueries({ queryKey: ['todos'] }); }).catch(() => say('Could not read that file')); }} />
+        </div>
         <NewMeeting className="s-pill46" day={cursor} />
         <div className="s-seg small" role="tablist" aria-label="View">
           {['day', 'week', 'month', 'agenda'].map((v) => (
