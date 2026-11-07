@@ -198,6 +198,16 @@ try {
     ok(seen.notes?.some((n) => n.title === 'Welcome to the team'), 'the new member reads team notes');
     const mTodo = await as2('POST', '/api/todos', { text: 'Mate task', assigneeId: mateId }, { 'x-peblo-space': made.spaceId });
     ok(mTodo.status === 201, 'the new member can add a team task', JSON.stringify(mTodo).slice(0, 160));
+    const trashNote = await team('POST', '/api/notes', { title: 'Trash me', content: 'x' });
+    const mTrash = await as2('DELETE', `/api/notes/${trashNote.note.id}`, undefined, { 'x-peblo-space': made.spaceId });
+    ok(mTrash.status === 200, 'a member can move a team note to the trash', mTrash.status);
+    const mForever = await as2('DELETE', `/api/notes/${trashNote.note.id}?permanent=1`, undefined, { 'x-peblo-space': made.spaceId });
+    ok(mForever.status === 403, 'a member cannot delete a team note forever', mForever.status);
+    const mRestore = await as2('POST', `/api/notes/${trashNote.note.id}/restore`, undefined, { 'x-peblo-space': made.spaceId });
+    ok(mRestore.status === 200, 'a member can restore it from the team trash', mRestore.status);
+    await as2('DELETE', `/api/notes/${trashNote.note.id}`, undefined, { 'x-peblo-space': made.spaceId });
+    const lForever = await team('DELETE', `/api/notes/${trashNote.note.id}?permanent=1`);
+    ok(lForever.status === 200, 'a lead can delete it forever', lForever.status);
     const cant = await as2('POST', `/api/workspaces/orgs/${made.id}/invites`, { email: 'z@z.co' });
     ok(cant.status === 403, 'a plain member cannot invite', cant.status);
     const lastOwner = await b.api('PATCH', `/api/workspaces/orgs/${made.id}/members/${me.id}`, { role: 'member' });

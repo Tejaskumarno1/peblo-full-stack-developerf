@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { noteScope } from '../utils/scope.js';
+import { can, spaceAccess } from '../utils/access.js';
 import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
@@ -547,6 +548,11 @@ export async function deleteNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
+    // In a team only a lead can delete forever; the team trash is never emptied on a timer.
+    if ('spaceId' in own) {
+      const acc = await spaceAccess(userId, own.spaceId);
+      if (!acc || !can('space.manage', acc.org, acc.role)) return res.status(403).json({ error: 'Only a team lead can delete a note forever.' });
+    }
     const { count: hardDeleted } = await prisma.note.deleteMany({
       where: { id: noteId, ...own, isDeleted: true }
     });

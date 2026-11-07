@@ -55,5 +55,19 @@ try {
   ok(await p.getByTestId('viewer-note').isVisible(), 'a viewer sees that the note is read only');
   ok((await p.getByRole('button', { name: '+ tag' }).count()) === 0, 'and has no tag or move controls');
   await p.screenshot({ path: shots + '\\ws-viewer.png' });
+
+  await p.evaluate(async (sp) => {
+    const t = localStorage.getItem('peblo-token'); const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t, 'x-peblo-space': sp };
+    const w = await (await fetch('/api/workspaces', { headers: h })).json();
+    await fetch(`/api/workspaces/spaces/${sp}/members/${w.me.id}`, { method: 'PUT', headers: h, body: JSON.stringify({ role: 'lead' }) });
+    const n = await (await fetch('/api/notes', { method: 'POST', headers: h, body: JSON.stringify({ title: 'Binned page', content: 'bye' }) })).json();
+    await fetch(`/api/notes/${n.note.id}`, { method: 'DELETE', headers: h });
+  }, org.spaceId);
+  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  await p.getByRole('button', { name: /Trash/ }).first().click();
+  await p.getByTestId('team-trash-note').waitFor({ timeout: 8000 });
+  ok((await p.content()).includes('Binned page'), 'the team trash lists the binned note');
+  ok((await p.getByRole('button', { name: /Empty/ }).count()) === 1, 'a lead can empty the team trash');
+  await p.screenshot({ path: shots + '\\ws-team-trash.png' });
 } catch (e) { ok(false, 'workspaces-tasks-ui ran without crashing', e?.stack || e); }
 await b.finish();
