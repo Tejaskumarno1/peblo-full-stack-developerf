@@ -57,3 +57,9 @@ export async function spaceAccess(userId: string, spaceId: string): Promise<{ or
   const [org, role] = await Promise.all([orgAccess(userId, orgId), spaceRole(userId, spaceId)]);
   return org && role ? { org, role } : null;
 }
+
+/** User ids of everyone in a space (used to check an assignee). */
+export async function spaceMembers(spaceId: string): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM space_members WHERE space_id = ${spaceId}`;
+  return rows.map((r) => r.user_id);
+}

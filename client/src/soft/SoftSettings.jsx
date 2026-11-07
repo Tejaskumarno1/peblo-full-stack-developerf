@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Search, User, Users, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop } from 'lucide-react';
+import { Search, User, Users, Building2, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SaveCtx, isDesktopApp } from './settings/ui';
 import { ProfileSection, AccountsSection, AppearanceSection, NotesSection } from './settings/sections1';
+import { OrganizationsSection } from './settings/OrgSections';
 import { AISection, ConnectSection, SharedSection, DataSection, ShortcutsSection, AboutSection, NotificationsSection, SystemSection } from './settings/sections2';
 import './soft.css';
 import './soft2.css';
@@ -13,6 +14,7 @@ const GROUPS = [
   { label: 'You', items: [
     { id: 'profile', name: 'Profile', icon: User, view: ProfileSection, words: 'name role photo email bio about' },
     { id: 'accounts', name: 'Accounts and sign-in', icon: Users, view: AccountsSection, words: 'password switch account sign out delete security' },
+    { id: 'organizations', name: 'Organizations', icon: Building2, view: OrganizationsSection, words: 'organization team office workspace company members space create' },
   ] },
   { label: 'Look and feel', items: [
     { id: 'appearance', name: 'Appearance', icon: Palette, view: AppearanceSection, words: 'style theme dark light midnight compact soft river orbit colours' },
@@ -43,6 +45,7 @@ const TONES = { You: 'mint', 'Look and feel': 'butter', Reminders: 'sky', AI: 'l
 const SUBS = {
   profile: 'How you appear in Peblo and in notes you share.',
   accounts: 'Who you are, and which account Peblo is using right now.',
+  organizations: 'Teams and offices you share notes and tasks with. Personal always stays yours.',
   appearance: 'Make Peblo look the way you like to work.',
   notes: 'Writing, calendar and voice.',
   notifications: 'Heads-up before meetings, and pop-up alerts.',

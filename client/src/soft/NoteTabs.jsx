@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pin, Copy, X, Undo2, Plus } from 'lucide-react';
 
-const KEY = 'peblo-note-tabs';
+import { getSpace } from '../api/space';
+// Open tabs are remembered per space, so a team note never lingers as a tab in Personal (and the other way round).
+const keyOf = () => 'peblo-note-tabs' + (getSpace() ? ':' + getSpace() : '');
 export const MAX_TABS = 8;
-const load = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
+const load = () => { try { const s = JSON.parse(localStorage.getItem(keyOf())); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
 
 // Open notes as tabs above the page, with back / forward, pin, duplicate, close others and reopen closed.
 export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dirty }) {
@@ -16,7 +18,7 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
   const closedRef = useRef(closed); closedRef.current = closed;
   const docId = doc && !doc.isDraft ? doc.id : null;
 
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs]);
+  useEffect(() => { try { localStorage.setItem(keyOf(), JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs]);
 
   const titleOf = useCallback((t) => {
     if (doc && t.id === doc.id) return doc.title || 'Untitled';

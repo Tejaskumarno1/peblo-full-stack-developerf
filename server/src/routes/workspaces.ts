@@ -31,7 +31,8 @@ router.get('/', async (req, res) => {
     if (!orgs.has(r.org_id)) orgs.set(r.org_id, { id: r.org_id, name: r.org_name, status: r.org_status, role: r.org_role, spaces: [] });
     if (r.space_id && r.space_name) orgs.get(r.org_id).spaces.push({ id: r.space_id, kind: r.kind, name: r.space_name, role: r.space_role, members: r.members ?? 0 });
   }
-  res.json({ personal: { id: null, name: 'Personal' }, orgs: [...orgs.values()] });
+  const me = await prisma.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM users WHERE id = ${userId}`;
+  res.json({ me: me[0] ?? { id: userId, name: '' }, personal: { id: null, name: 'Personal' }, orgs: [...orgs.values()] });
 });
 
 /** Create an organization; the creator becomes its owner and the lead of its first space (a team, or the Office). */

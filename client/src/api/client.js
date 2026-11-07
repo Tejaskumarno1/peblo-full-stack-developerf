@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getToken, clearToken } from './token';
+import { getSpace } from './space';
 
 // The desktop app serves the UI and the API from the same local server,
 // so relative /api URLs always work. VITE_API_URL is only for unusual dev setups.
@@ -12,6 +13,9 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Notes and tasks belong to a space: say which one (nothing means Personal).
+  const space = getSpace();
+  if (space && /^\/?(notes|todos)(\/|\?|$)/.test(config.url || '')) config.headers['x-peblo-space'] = space;
   // The server works out "today" for us, so it needs our zone (e.g. Asia/Kolkata)
   try { config.headers['X-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* leave it to the server */ }
   return config;

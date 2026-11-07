@@ -159,3 +159,9 @@ export const calSyncAPI = {
   events: (from, to) => api.get('/calendar-sync/events', { params: { from, to } }),
   share: (data) => api.put('/calendar-sync/share', data),
 };
+
+export const workspacesAPI = {
+  list: () => api.get('/workspaces'),
+  createOrg: (data) => api.post('/workspaces/orgs', data),
+  createSpace: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/spaces`, data),
+};

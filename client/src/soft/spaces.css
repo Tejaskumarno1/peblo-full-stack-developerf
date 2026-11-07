@@ -1,0 +1,32 @@
+/* Space pill, its menu, and the organization dialogs (mockups A01, A03, C09, C10, C16). Soft Studio tokens only. */
+.soft .s-space { position: relative; flex: none; }
+.soft .s-space-pill { height: 40px; padding: 0 14px 0 12px; border-radius: 999px; border: 0; display: inline-flex; align-items: center; gap: 8px; color: var(--s-fg); font: 800 14px var(--s-body); white-space: nowrap; box-shadow: inset 0 0 0 1px var(--s-line); cursor: pointer; max-width: 240px; }
+.soft .s-space-pill span { overflow: hidden; text-overflow: ellipsis; }
+.soft .s-space-menu { position: absolute; right: 0; top: 48px; width: 310px; padding: 10px; border-radius: 28px; background: var(--s-surface); box-shadow: var(--s-shadow), inset 0 0 0 1px var(--s-line); display: flex; flex-direction: column; gap: 2px; z-index: 60; }
+.soft .s-space-cap { font: 800 11.5px var(--s-body); letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); padding: 8px 12px 2px; }
+.soft .s-space-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 18px; border: 0; background: transparent; color: var(--s-fg); text-align: left; cursor: pointer; font: 600 13.5px var(--s-body); }
+.soft .s-space-row:hover, .soft .s-space-row.on { background: var(--s-col); }
+.soft .s-space-row i { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.soft .s-space-row span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.soft .s-space-row b { font-weight: 800; }
+.soft .s-space-row small { color: var(--s-fg2); font-weight: 600; font-size: 12.5px; }
+.soft .s-space-row.plain { font-weight: 800; font-size: 13px; gap: 10px; padding: 8px 12px; }
+.soft .s-space-sep { height: 1px; background: var(--s-line); margin: 6px 4px; }
+.soft .s-space-form { display: flex; flex-direction: column; gap: 10px; }
+.soft .s-space-form label { display: flex; flex-direction: column; gap: 6px; font: 800 12px var(--s-body); letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); }
+.soft .s-space-form input, .soft .s-space-form select { height: 46px; border-radius: 999px; border: 0; background: var(--s-col); padding: 0 18px; font: 600 14px var(--s-body); color: var(--s-fg); text-transform: none; letter-spacing: 0; }
+.soft .s-space-start { display: flex; gap: 10px; }
+.soft .s-space-start button { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border: 0; border-radius: 22px; padding: 14px; text-align: left; color: var(--s-fg); cursor: pointer; font: 600 13px var(--s-body); }
+.soft .s-space-start button.on { box-shadow: 0 0 0 2px var(--s-fg); }
+.soft .s-space-start small { color: var(--s-fg2); font-weight: 600; }
+.soft .s-space-btns { display: flex; gap: 10px; }
+.soft .s-space-ghost { height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-dash); font: 800 14px var(--s-body); color: var(--s-fg); cursor: pointer; }
+.soft .s-space-err { color: #B3261E; font-weight: 700; font-size: 13px; margin: 0; }
+.soft .s-org-list { display: flex; flex-direction: column; gap: 10px; }
+.soft .s-org-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 24px; background: var(--s-col); }
+.soft .s-org-row > i { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--s-sky); flex: none; }
+.soft .s-org-row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.soft .s-org-row small { color: var(--s-fg2); font-weight: 600; }
+html.pb-phone .soft .s-space-pill span { display: none; }
+html.pb-phone .soft .s-space-pill { padding: 0 12px; }
+html.pb-phone .soft .s-space-menu { position: fixed; left: 12px; right: 12px; top: 64px; width: auto; }

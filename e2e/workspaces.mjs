@@ -75,5 +75,26 @@ try {
   ok(out.status === 404, 'a person outside the space gets 404, not 403', out.status);
   const out2 = await fetch(b.base + `/api/notes/${tn.note.id}`, { headers: { Authorization: `Bearer ${so.token}` } });
   ok(out2.status === 404, 'and cannot reach the note by its id either', out2.status);
+
+  // tasks in a space
+  const me = (await b.api('GET', '/api/workspaces')).me || {};
+  await b.api('POST', '/api/todos', { text: 'Buy milk' });
+  const tt1 = await team('POST', '/api/todos', { text: 'Write rollout note', deadline: new Date(Date.now() + 86400000).toISOString(), recurrence: 'daily', assigneeId: me.id });
+  const teamTodoId = tt1.todo?.id || tt1.id;
+  ok(tt1.status === 201 && teamTodoId, 'a task can be created in a team space', JSON.stringify(tt1).slice(0, 200));
+  const tl = await team('GET', '/api/todos');
+  ok((tl.todos || []).length === 1 && tl.todos[0].text === 'Write rollout note', 'team tasks list shows only team tasks', JSON.stringify((tl.todos || []).map((t) => t.text)));
+  const pl = await b.api('GET', '/api/todos');
+  ok((pl.todos || []).length === 1 && pl.todos[0].text === 'Buy milk', 'Personal tasks never show team tasks', JSON.stringify((pl.todos || []).map((t) => t.text)));
+  const upd = await team('PATCH', `/api/todos/${teamTodoId}`, { completed: true });
+  ok(upd.status === 200, 'a team task can be completed', JSON.stringify(upd).slice(0, 160));
+  const badAssign = await team('PATCH', `/api/todos/${teamTodoId}`, { assigneeId: 'someone-else' });
+  ok(badAssign.status === 400, 'assigning to someone outside the space is refused', badAssign.status);
+  const personalCannot = await b.api('PATCH', `/api/todos/${teamTodoId}`, { completed: false });
+  ok(personalCannot.error, 'a team task cannot be changed through Personal', JSON.stringify(personalCannot).slice(0, 120));
+  const rng = await team('GET', `/api/todos/range?from=${new Date().toISOString()}&to=${new Date(Date.now() + 3 * 86400000).toISOString()}`);
+  ok((rng.todos || []).length === 1, 'the calendar range works inside a space', JSON.stringify(rng).slice(0, 140));
+  const dl = await team('DELETE', `/api/todos/${teamTodoId}`);
+  ok(dl.status === 200, 'a team task can be deleted by a writer');
 } catch (e) { ok(false, 'workspaces ran without crashing', e?.stack || e); }
 await b.finish();

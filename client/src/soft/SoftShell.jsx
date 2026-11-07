@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import SoftCapture from './SoftCapture';
 import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
+import { SpacePill, useCurrentSpace } from './spaces';
 import './soft.css';
 import './soft2.css';
 import './phone.css';
@@ -26,6 +27,7 @@ const DOCK = [
 export default function SoftShell({ children, onOpenSettings }) {
   const { user, theme, setTheme } = useAuth();
   const [captureOpen, setCaptureOpen] = useState(false);
+  const space = useCurrentSpace();
 
   // Pages can open the capture card with window.dispatchEvent(new Event('peblo:capture')).
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function SoftShell({ children, onOpenSettings }) {
           <kbd>Ctrl K</kbd>
         </button>
         <span className="grow" />
+        <SpacePill />
         <Link to="/notifications" className="soft-round soft-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} title="Notifications" data-testid="soft-bell"><Bell size={19} />{unread > 0 && <i aria-hidden="true" />}</Link>
         <button type="button" className="soft-round" aria-label={`Switch to ${nextTheme} theme`} title="Theme" onClick={() => setTheme(nextTheme)}>
           <ThemeIcon size={19} />
@@ -61,7 +64,7 @@ export default function SoftShell({ children, onOpenSettings }) {
       </header>
 
       <OfflineBar />
-      {children}
+      <Fragment key={space || 'personal'}>{children}</Fragment>
       <div className="river" style={{ display: 'contents' }}><MeetingReminders /></div>
 
       <nav aria-label="Main" className="soft-dock">
