@@ -70,5 +70,22 @@ try {
   await p.waitForTimeout(1000);
   await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
   ok((await p.content()).includes('Personal diary'), 'Undo brings the note back to Personal');
+
+  const sid = await p.evaluate(async () => {
+    const t = localStorage.getItem('peblo-token');
+    const w = await (await fetch('/api/workspaces', { headers: { Authorization: 'Bearer ' + t } })).json();
+    const sp = w.orgs[0].spaces[0].id;
+    await fetch('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t, 'x-peblo-space': sp }, body: JSON.stringify({ text: 'Review the rollout plan', deadline: new Date(Date.now() - 600000).toISOString(), assigneeId: w.me.id }) });
+    return sp;
+  });
+  await p.goto(b.base + '/', { waitUntil: 'networkidle' });
+  await p.getByTestId('home-teams').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('home-teams').innerText()).includes('Review the rollout plan'), 'Home shows my team tasks under From your teams');
+  ok((await p.getByTestId('home-teams').innerText()).includes('Studio Co team'), 'with the team name beside each');
+  await p.screenshot({ path: shots + '\\ws-home.png' });
+  await p.getByTestId('home-teams').getByRole('checkbox').first().click();
+  await p.waitForTimeout(900);
+  ok((await p.getByTestId('home-teams').count()) === 0, 'ticking it completes it and it leaves Home');
+  void sid;
 } catch (e) { ok(false, 'workspaces-ui ran without crashing', e?.stack || e); }
 await b.finish();

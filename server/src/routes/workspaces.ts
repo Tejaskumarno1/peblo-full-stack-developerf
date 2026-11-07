@@ -35,6 +35,23 @@ router.get('/', async (req, res) => {
   res.json({ me: me[0] ?? { id: userId, name: '' }, personal: { id: null, name: 'Personal' }, orgs: [...orgs.values()] });
 });
 
+/** Home "My Day" across spaces (mockup B05): team tasks assigned to me that are due today or overdue, from every space I can still read. */
+router.get('/my-day', async (req, res) => {
+  const userId = uid(req);
+  const end = new Date(); end.setHours(23, 59, 59, 999);
+  const until = Number.isFinite(Date.parse(String(req.query.until))) ? new Date(String(req.query.until)) : end;
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT t.id, t.text, t.priority, t.deadline, t.start_time AS "startTime", t.is_completed AS completed, t.space_id AS "spaceId", s.name AS "spaceName", s.kind AS "spaceKind", o.name AS "orgName", sm.role AS "spaceRole"
+    FROM todos t
+    JOIN spaces s ON s.id = t.space_id AND s.closed_at IS NULL
+    JOIN organizations o ON o.id = s.org_id AND o.closed_at IS NULL
+    JOIN org_members m ON m.org_id = o.id AND m.user_id = ${userId} AND m.status = 'active' AND (m.guest_until IS NULL OR m.guest_until > now())
+    JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = ${userId}
+    WHERE t.assignee_id = ${userId} AND t.is_completed = false AND t.deadline IS NOT NULL AND t.deadline <= ${until}
+    ORDER BY t.deadline ASC LIMIT 30`;
+  res.json({ tasks: rows });
+});
+
 /** Create an organization; the creator becomes its owner and the lead of its first space (a team, or the Office). */
 router.post('/orgs', async (req, res) => {
   const userId = uid(req);

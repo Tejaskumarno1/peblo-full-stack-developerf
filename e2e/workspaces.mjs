@@ -97,6 +97,21 @@ try {
   const dl = await team('DELETE', `/api/todos/${teamTodoId}`);
   ok(dl.status === 200, 'a team task can be deleted by a writer');
 
+  // Home across spaces
+  const dueSoon = new Date(Date.now() - 3600000).toISOString();
+  const md1 = await team('POST', '/api/todos', { text: 'Mine and due', deadline: dueSoon, assigneeId: me.id });
+  const md2 = await team('POST', '/api/todos', { text: 'Unassigned and due', deadline: dueSoon });
+  const md3 = await team('POST', '/api/todos', { text: 'Mine but next month', deadline: new Date(Date.now() + 30 * 86400000).toISOString(), assigneeId: me.id });
+  const myDay = await b.api('GET', '/api/workspaces/my-day');
+  const names = (myDay.tasks || []).map((t) => t.text);
+  ok(names.includes('Mine and due') && !names.includes('Unassigned and due') && !names.includes('Mine but next month'), 'My Day lists only my team tasks that are due', JSON.stringify(names));
+  ok(myDay.tasks?.[0]?.spaceName === 'Studio team', 'each task carries its space name');
+  const outDay = await fetch(b.base + '/api/workspaces/my-day', { headers: { Authorization: `Bearer ${so.token}` } }).then((r) => r.json());
+  ok((outDay.tasks || []).length === 0, 'an outsider sees none of them');
+  await team('PATCH', `/api/todos/${md1.todo?.id || md1.id}`, { completed: true });
+  ok(!((await b.api('GET', '/api/workspaces/my-day')).tasks || []).some((t) => t.text === 'Mine and due'), 'a completed task leaves My Day');
+  void md2; void md3;
+
   // move and copy
   const pn = await b.api('POST', '/api/notes', { title: 'Move me', content: 'wandering note' });
   const mv = await b.api('POST', `/api/notes/${pn.note.id}/move`, { to: made.spaceId });

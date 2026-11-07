@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, ArrowUp, Plus, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { dashboardAPI, todosAPI, notesAPI, hubAPI } from '../api';
+import { dashboardAPI, todosAPI, notesAPI, hubAPI, workspacesAPI } from '../api';
+import { useCurrentSpace, useSwitchSpace } from './spaces';
 import HomeWidgets from './HomeWidgets';
 import { buildTimeline, hhmm } from './homeTimeline';
 import { timeOf, startOfDay, addDays, sameDay, daysFromToday, weekdayShort, weekdayLong, numberWord, snippetOf, firstNameOf, toneOf, toneVar, tagsOf } from './softUtils';
@@ -25,6 +26,11 @@ export default function SoftHome() {
   const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-home-view', v); } catch { /* not saved */ } };
 
   const today = startOfDay();
+  const space = useCurrentSpace();
+  const switchTo = useSwitchSpace();
+  const { data: mine } = useQuery({ queryKey: ['my-day'], enabled: !space, queryFn: () => workspacesAPI.myDay().then((r) => r.data.tasks || []) });
+  const fromTeams = !space ? (mine || []) : [];
+  const doneTeam = async (t) => { try { await todosAPI.update(t.id, { completed: true }, t.spaceId); queryClient.invalidateQueries({ queryKey: ['my-day'] }); } catch { setErr('Could not update that task. Try again.'); } };
   const { data: todayData } = useQuery({ queryKey: ['todos', 'today'], queryFn: () => todosAPI.getToday().then((r) => r.data) });
   const { data: week = [] } = useQuery({
     queryKey: ['todos', 'range', 'soft-home', today.toDateString()],
@@ -168,6 +174,19 @@ export default function SoftHome() {
             });
           })()}
           {todayTasks.length > 3 && <Link to="/tasks" className="s-more">+ {todayTasks.length - 3} more today</Link>}
+          {fromTeams.length > 0 && (
+            <div className="s-home-teams" data-testid="home-teams">
+              <small className="s-cap">From your teams</small>
+              {fromTeams.slice(0, 3).map((t) => (
+                <label key={t.id} className="s-home-task">
+                  <input type="checkbox" className="s-check" checked={false} aria-label={`Complete ${t.text}`} onChange={() => doneTeam(t)} />
+                  <span className="t">{t.text}</span>
+                  <button type="button" className="s-chip-tag s-team-chip" onClick={(e) => { e.preventDefault(); switchTo(t.spaceId); navigate('/tasks'); }}>{t.spaceName}</button>
+                </label>
+              ))}
+              {fromTeams.length > 3 && <small className="s-more">+ {fromTeams.length - 3} more from your teams</small>}
+            </div>
+          )}
           <span className="grow" />
           {overdue[0] ? (
             <Link to="/tasks" className="s-leftover">

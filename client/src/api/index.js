@@ -78,7 +78,7 @@ export const todosAPI = {
   getToday: () => api.get('/todos/today'),
   getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-  update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  update: (id, data, space) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, space ? { headers: { 'x-peblo-space': space } } : undefined),
   delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined })
 };
 
@@ -166,6 +166,7 @@ export const workspacesAPI = {
   list: () => api.get('/workspaces'),
   createOrg: (data) => api.post('/workspaces/orgs', data),
   createSpace: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/spaces`, data),
+  myDay: () => api.get('/workspaces/my-day'),
   members: (orgId) => api.get(`/workspaces/orgs/${orgId}/members`),
   invite: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/invites`, data),
   revokeInvite: (orgId, id) => api.delete(`/workspaces/orgs/${orgId}/invites/${id}`),
