@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { todosAPI, calSyncAPI } from '../api';
+import { todosAPI, calSyncAPI, workspacesAPI } from '../api';
+import { useCurrentSpace } from './spaces';
 import QuickCreate from './QuickCreate';
 import { AgendaView, FindSlot, PeekPanel, YearView } from './CalExtras';
 import UndoToast from '../components/UndoToast';
@@ -60,11 +61,19 @@ export default function SoftCalendar() {
     queryFn: () => todosAPI.getRange(startOfDay().toISOString(), addDays(startOfDay(), 60).toISOString()).then((r) => r.data.todos || []),
   });
 
-  const { data: feedEvents = [] } = useQuery({
+  const inSpace = useCurrentSpace();
+  const { data: teamEvents = [] } = useQuery({
+    queryKey: ['cal-team', from.toDateString()],
+    enabled: !inSpace,
+    staleTime: 60000,
+    queryFn: () => workspacesAPI.teamRange(from.toISOString(), to.toISOString()).then((r) => r.data.events || []),
+  });
+  const { data: ownFeedEvents = [] } = useQuery({
     queryKey: ['cal-sync', 'events', from.toDateString()],
     queryFn: () => calSyncAPI.events(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10)).then((r) => r.data.events || []),
     staleTime: 60000,
   });
+  const feedEvents = useMemo(() => [...ownFeedEvents, ...(inSpace ? [] : teamEvents)], [ownFeedEvents, teamEvents, inSpace]);
   const feedList = useMemo(() => { const m = new Map(); feedEvents.forEach((e) => m.set(e.feedId, { id: e.feedId, name: e.feed, color: e.color })); return [...m.values()]; }, [feedEvents]);
   const feedShown = feedEvents.filter((e) => !offFeeds.includes(e.feedId));
 

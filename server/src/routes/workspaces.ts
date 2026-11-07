@@ -52,6 +52,34 @@ router.get('/my-day', async (req, res) => {
   res.json({ tasks: rows });
 });
 
+/** Calendar team layers (mockup B06): the open, dated tasks of every space I can read, shaped like a calendar feed so the calendar can show them as read-only layers. */
+router.get('/team-range', async (req, res) => {
+  const userId = uid(req);
+  const from = new Date(String(req.query.from)); const to = new Date(String(req.query.to));
+  if (!Number.isFinite(+from) || !Number.isFinite(+to)) return res.status(400).json({ error: 'from and to are required.' });
+  let tz = String(req.query.tz || 'UTC');
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); } catch { tz = 'UTC'; }
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT t.id, t.text, t.deadline, t.start_time AS "startTime", t.end_time AS "endTime", s.id AS "spaceId", s.name AS "spaceName", s.kind
+    FROM todos t
+    JOIN spaces s ON s.id = t.space_id AND s.closed_at IS NULL
+    JOIN organizations o ON o.id = s.org_id AND o.closed_at IS NULL
+    JOIN org_members m ON m.org_id = o.id AND m.user_id = ${userId} AND m.status = 'active' AND (m.guest_until IS NULL OR m.guest_until > now())
+    JOIN space_members sm ON sm.space_id = s.id AND sm.user_id = ${userId}
+    WHERE t.is_completed = false AND t.deadline >= ${from} AND t.deadline < ${to}
+    ORDER BY t.deadline ASC LIMIT 500`;
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: tz });
+  const colors = ['sky', 'mint', 'butter', 'lilac'];
+  const order = [...new Set(rows.map((r) => r.spaceId))];
+  const next = (d: string) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+  const events = rows.map((r) => {
+    const d = day.format(new Date(r.deadline));
+    const timed = r.startTime && r.endTime;
+    return { feedId: r.spaceId, feed: r.spaceName, color: colors[order.indexOf(r.spaceId) % colors.length], uid: r.id, title: r.text, allDay: !timed, start: timed ? `${d}T${r.startTime}` : d, end: timed ? `${d}T${r.endTime}` : next(d) };
+  });
+  res.json({ events });
+});
+
 /** Create an organization; the creator becomes its owner and the lead of its first space (a team, or the Office). */
 router.post('/orgs', async (req, res) => {
   const userId = uid(req);

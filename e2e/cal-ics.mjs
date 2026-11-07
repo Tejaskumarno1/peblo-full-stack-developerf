@@ -13,7 +13,7 @@ try {
   fs.writeFileSync(file, ics);
   await page.goto(base + '/calendar');
   await page.locator('button', { hasText: 'Calendar file' }).click();
-  check('menu lists import, export and print', (await page.locator('[role=menuitem]').allInnerTexts()).join(',') === 'Import .ics,Export .ics,Print this view');
+  check('menu lists import, export and print', (await page.locator('[role=menuitem]').allInnerTexts()).join(',') === 'Import .ics,Export .ics,Print this view,Calendar sync');
   await page.screenshot({ path: 'D:/Peblo/_shots/cal-file-menu.png' });
   await page.locator('[data-testid="ics-input"]').setInputFiles(file);
   await page.waitForTimeout(1500);

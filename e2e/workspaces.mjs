@@ -112,6 +112,16 @@ try {
   ok(!((await b.api('GET', '/api/workspaces/my-day')).tasks || []).some((t) => t.text === 'Mine and due'), 'a completed task leaves My Day');
   void md2; void md3;
 
+  // calendar team layers
+  const ranged = await team('POST', '/api/todos', { text: 'Layered task', deadline: new Date(Date.now() + 86400000).toISOString() });
+  const tr = await b.api('GET', `/api/workspaces/team-range?from=${encodeURIComponent(new Date().toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 5 * 86400000).toISOString())}&tz=Asia/Kolkata`);
+  const ev = (tr.events || []).find((e) => e.title === 'Layered task');
+  ok(ev && ev.feed === 'Studio team' && ev.allDay && /^\d{4}-\d\d-\d\d$/.test(ev.start), 'a team task appears as a calendar layer named after its space', JSON.stringify(tr).slice(0, 200));
+  const trOut = await fetch(b.base + `/api/workspaces/team-range?from=${encodeURIComponent(new Date().toISOString())}&to=${encodeURIComponent(new Date(Date.now() + 5 * 86400000).toISOString())}`, { headers: { Authorization: `Bearer ${so.token}` } }).then((r) => r.json());
+  ok((trOut.events || []).length === 0, 'an outsider gets no layer events');
+  ok((await b.api('GET', '/api/workspaces/team-range')).error, 'a missing range is refused');
+  void ranged;
+
   // move and copy
   const pn = await b.api('POST', '/api/notes', { title: 'Move me', content: 'wandering note' });
   const mv = await b.api('POST', `/api/notes/${pn.note.id}/move`, { to: made.spaceId });

@@ -28,5 +28,13 @@ try {
   await p.evaluate(() => localStorage.removeItem('peblo-space'));
   await p.goto(b.base + '/tasks', { waitUntil: 'networkidle' });
   ok(!(await p.content()).includes('Draft the launch checklist'), 'Personal tasks do not show the team task');
+
+  await p.evaluate(() => localStorage.removeItem('peblo-space'));
+  await p.goto(b.base + '/calendar', { waitUntil: 'networkidle' });
+  await p.locator('[data-feed-layer="Studio team"]').waitFor({ timeout: 8000 });
+  ok(await p.locator('[data-feed-layer="Studio team"]').isVisible(), 'the Personal calendar offers the team as a layer');
+  await p.screenshot({ path: shots + '\\ws-cal-layer.png' });
+  await p.locator('[data-feed-layer="Studio team"]').click();
+  ok((await p.locator('[data-feed-layer="Studio team"]').getAttribute('aria-pressed')) === 'false', 'the layer can be switched off');
 } catch (e) { ok(false, 'workspaces-tasks-ui ran without crashing', e?.stack || e); }
 await b.finish();

@@ -166,6 +166,7 @@ export const workspacesAPI = {
   list: () => api.get('/workspaces'),
   createOrg: (data) => api.post('/workspaces/orgs', data),
   createSpace: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/spaces`, data),
+  teamRange: (from, to) => api.get('/workspaces/team-range', { params: { from, to, tz: Intl.DateTimeFormat().resolvedOptions().timeZone } }),
   myDay: () => api.get('/workspaces/my-day'),
   members: (orgId) => api.get(`/workspaces/orgs/${orgId}/members`),
   invite: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/invites`, data),
