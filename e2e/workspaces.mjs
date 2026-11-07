@@ -141,6 +141,14 @@ try {
   ok(cp.ok && cp.note?.id && cp.note.id !== pn.note.id, 'a copy can be shared into the team', JSON.stringify(cp));
   ok((await b.api('GET', '/api/notes')).notes.some((n) => n.id === pn.note.id) && (await team('GET', '/api/notes')).notes.some((n) => n.id === cp.note.id), 'the original stays and the copy lands in the team');
 
+  // AI never reads a team note
+  const aiTeam = await team('POST', `/api/notes/${tn.note.id}/ai/summary`, {});
+  ok(aiTeam.status >= 400 && aiTeam.status !== 500, 'AI refuses a team note when asked inside the space', aiTeam.status);
+  const aiPers = await b.api('POST', `/api/notes/${tn.note.id}/ai/summary`, {});
+  ok(aiPers.error || aiPers.status >= 400, 'AI cannot reach a team note from Personal either', JSON.stringify(aiPers).slice(0, 120));
+  const aiChat = await b.api('POST', '/api/ai/chat', { message: 'What did the sprint retro say?', noteId: tn.note.id });
+  ok(!JSON.stringify(aiChat).includes('team text'), 'AI chat never shows team note text', JSON.stringify(aiChat).slice(0, 160));
+
   // members and invites
   const email2 = `mate-${Date.now()}@peblo.test`;
   const mate = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email2, password: 'correct horse battery', name: 'Mate' }) }).then((r) => r.json());

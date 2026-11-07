@@ -56,3 +56,4 @@ html.pb-phone .soft .s-space-menu { position: fixed; left: 12px; right: 12px; to
 .soft .s-team-chip { border: 0; cursor: pointer; font: inherit; font-weight: 800; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .soft .s-home-teams .s-cap { font-weight: 800; color: var(--s-fg2); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
 .soft .s-mini.s-assignee { background: var(--s-sky); font-weight: 800; } .soft .s-mini.s-assignee.mine { background: var(--s-accent); color: #fff; }
+.soft .s-ai-scope { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--s-fg2); font-weight: 600; font-size: 12.5px; }

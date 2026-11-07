@@ -5,6 +5,7 @@ import { Image as ImageIcon, Search, LayoutDashboard, FileText, Calendar, CheckS
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, todosAPI, mediaSearchAPI } from '../api/index';
+import { useSpaceName } from '../soft/spaces';
 import { parseTask } from '../utils/parseTask';
 import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
@@ -25,6 +26,7 @@ const snipOf = (n, q) => {
 };
 
 export default function CommandPalette() {
+  const spaceName = useSpaceName();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [notes, setNotes] = useState([]);
@@ -210,7 +212,7 @@ export default function CommandPalette() {
           <input
             ref={inputRef}
             className="cmd-input"
-            placeholder="Search notes and tasks, or type a command..."
+            placeholder={spaceName ? `Search in ${spaceName}, or type a command...` : 'Search notes and tasks, or type a command...'}
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}

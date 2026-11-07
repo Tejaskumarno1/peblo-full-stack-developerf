@@ -10,7 +10,7 @@ import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
 import { MoveToast } from './MoveNote';
-import { SpacePill, useCurrentSpace } from './spaces';
+import { SpacePill, useCurrentSpace, useSpaceName } from './spaces';
 import './soft.css';
 import './soft2.css';
 import './phone.css';
@@ -29,6 +29,7 @@ export default function SoftShell({ children, onOpenSettings }) {
   const { user, theme, setTheme } = useAuth();
   const [captureOpen, setCaptureOpen] = useState(false);
   const space = useCurrentSpace();
+  const spaceName = useSpaceName();
 
   // Pages can open the capture card with window.dispatchEvent(new Event('peblo:capture')).
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function SoftShell({ children, onOpenSettings }) {
         <span className="grow" />
         <button type="button" className="soft-search" onClick={openCommandPalette}>
           <Search size={18} />
-          <span className="grow">Search notes, tasks, anything</span>
+          <span className="grow">{spaceName ? `Search in ${spaceName}` : 'Search notes, tasks, anything'}</span>
           <kbd>Ctrl K</kbd>
         </button>
         <span className="grow" />

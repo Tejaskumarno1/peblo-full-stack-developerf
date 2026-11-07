@@ -22,6 +22,13 @@ export function useSpaceMembers() {
   return { people, me: data?.me?.id || null, canAssign: people.length > 0 };
 }
 
+/** The name of the space being worked in, or null in Personal. */
+export function useSpaceName() {
+  const { data } = useWorkspaces();
+  const current = useCurrentSpace();
+  return (data?.orgs || []).flatMap((o) => o.spaces).find((s) => s.id === current)?.name || null;
+}
+
 export function useCurrentSpace() {
   const [id, setId] = useState(getSpace);
   useEffect(() => {

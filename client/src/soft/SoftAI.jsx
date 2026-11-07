@@ -7,6 +7,7 @@ import useHubChat, { renderAnswer } from '../hooks/useHubChat';
 import ConnectionModelOptions from '../components/hub/ConnectionModelOptions';
 import { MicButton, SpeakButton } from '../components/VoiceButtons';
 import './aimodes.css';
+import { useSpaceName } from './spaces';
 import { taskLines } from './aiTasks';
 
 // Modes and slash commands (mockup: AI chat). A mode adds a short instruction in front of what you type, so it works with any model.
@@ -58,6 +59,7 @@ function ActionCard({ items, onClose }) {
 
 /** Soft Studio · AI Hub (mockup: SoftAI). Same chat engine as the other styles, friendlier layout. */
 export default function SoftAI() {
+  const spaceName = useSpaceName();
   const {
     chats, activeId, setActiveId, active, input, setInput, attached, setAttached, streaming,
     focusedSource, setFocusedSource, modelChoice, setModelChoice, allNotes,
@@ -218,6 +220,7 @@ export default function SoftAI() {
               ))}
             </div>
           )}
+          {spaceName && <p className="s-ai-scope" data-testid="ai-scope"><Lock size={13} /> Peblo AI reads only your Personal notes and tasks. Nothing in {spaceName} is sent to an AI.</p>}
           <div className="s-composer-row">
             <label htmlFor="s-ai-input" className="s-sr">Message</label>
             <input
