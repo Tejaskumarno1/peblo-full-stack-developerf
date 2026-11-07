@@ -11,6 +11,7 @@
     "email": "boddutejaskumar@gmail.com"
   },
   "main": "electron/main.cjs",
+  "engines": { "node": ">=22 <23" },
   "scripts": {
     "postinstall": "prisma generate --schema server/prisma/schema.prisma",
     "install:all": "npm install && npm --prefix client install",
