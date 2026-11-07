@@ -1,6 +1,6 @@
 # Peblo · project memory index
 
-Peblo is an Electron desktop app (also runnable as a hosted web server) for notes, tasks, a calendar and an AI assistant over your own notes. Stack: React 19 + Vite client, Express + Prisma 6 + MySQL 8 server, Socket.IO, OpenAI / Gemini / Ollama.
+Peblo is an Electron desktop app (also runnable as a hosted web server) for notes, tasks, a calendar and an AI assistant over your own notes. Stack: React 19 + Vite client, Express + Prisma 6 + Postgres (Supabase in production) server, Socket.IO, OpenAI / Gemini / Ollama.
 
 **Full memory: [`docs/memory/`](docs/memory/README.md).** Read `01-overview.md` first, then the file for the area you are touching. Known problems and their Jira keys (project PEB) are in `06-issues.md`; which of them were proved by running the code is in `08-verification.md`.
 

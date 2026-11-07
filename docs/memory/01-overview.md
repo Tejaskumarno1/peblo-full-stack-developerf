@@ -1,5 +1,8 @@
 # 01 · Peblo at a glance
 
+> **Correction (7 Nov 2026):** this report was written against the MySQL-era code on branch pp. The database is now **Postgres** (Supabase, CITEXT, transaction-level advisory lock, migrations in server/prisma/sql/), the live branch is supabase, password reset and email verification exist, the desktop app has an auto-updater, and packaged builds default to the hosted server. Treat MySQL details below as history; see [07-history-and-decisions.md](07-history-and-decisions.md).
+
+
 Last verified against the code: 8 Oct 2026, branch `app`, commit `8b0a99b`.
 
 ## What Peblo is

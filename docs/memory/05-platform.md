@@ -1,5 +1,8 @@
 # Peblo: platform reverse-engineering report (shell, build, config, DB, tooling, docs)
 
+> **Correction (7 Nov 2026):** this report was written against the MySQL-era code on branch pp. The database is now **Postgres** (Supabase, CITEXT, transaction-level advisory lock, migrations in server/prisma/sql/), the live branch is supabase, password reset and email verification exist, the desktop app has an auto-updater, and packaged builds default to the hosted server. Treat MySQL details below as history; see [07-history-and-decisions.md](07-history-and-decisions.md).
+
+
 Repo: `the repo` (git repo, branch `app`, 79 commits, clean tree; other branches `main`, `desktop-app`; remote `origin` (a stale `pc` ref remains; the remote itself is gone). GitHub default branch is `main`, the obsolete web app — see PEB-100).
 Nothing in the repo was modified. `node_modules`, `server/generated`, `dist`, `client/dist` are absent, so nothing was built or run.
 
