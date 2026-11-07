@@ -96,5 +96,56 @@ try {
   ok((rng.todos || []).length === 1, 'the calendar range works inside a space', JSON.stringify(rng).slice(0, 140));
   const dl = await team('DELETE', `/api/todos/${teamTodoId}`);
   ok(dl.status === 200, 'a team task can be deleted by a writer');
+
+  // members and invites
+  const email2 = `mate-${Date.now()}@peblo.test`;
+  const mate = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email2, password: 'correct horse battery', name: 'Mate' }) }).then((r) => r.json());
+  const as2 = async (method, url, body, extra = {}) => { const res = await fetch(b.base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mate.token}`, ...extra }, body: body ? JSON.stringify(body) : undefined }); return { ...(await res.json().catch(() => ({}))), status: res.status }; };
+  const { default: dbp } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'db.js')).href);
+  await dbp.user.updateMany({ where: { email: email2 }, data: { emailVerifiedAt: new Date() } });
+  const unv = await dbp.$queryRaw`SELECT 1`; void unv;
+  const mateId = (await as2('GET', '/api/workspaces')).me?.id;
+  await team('POST', '/api/notes', { title: 'Welcome to the team', content: 'hi' });
+  const inv0 = await b.api('POST', `/api/workspaces/orgs/${made.id}/invites`, { email: 'nope' });
+  ok(inv0.error, 'a bad email is refused', JSON.stringify(inv0));
+  const noAdmin = await as2('POST', `/api/workspaces/orgs/${made.id}/invites`, { email: 'x@y.co' });
+  ok(noAdmin.status === 404, 'a stranger cannot invite into an organization', noAdmin.status);
+  const inv = await b.api('POST', `/api/workspaces/orgs/${made.id}/invites`, { email: email2, orgRole: 'member', spaceIds: [made.spaceId], spaceRole: 'member' });
+  ok(inv.id && inv.link?.includes('/invite?token='), 'an invite is created with a link', JSON.stringify(inv));
+  const tok = new URL(inv.link).searchParams.get('token');
+  const pending = await b.api('GET', `/api/workspaces/orgs/${made.id}/members`);
+  ok(pending.invites?.length === 1 && pending.members?.length === 1, 'the pending invite is listed', JSON.stringify(pending).slice(0, 200));
+  const bad2 = await as2('GET', '/api/workspaces/invites/lookup?token=garbage');
+  ok(bad2.state === 'invalid', 'a made-up token is invalid', JSON.stringify(bad2));
+  const look = await as2('GET', `/api/workspaces/invites/lookup?token=${tok}`);
+  ok(look.state === 'ready', 'the verified invitee can accept', JSON.stringify(look));
+  const wrong = await fetch(b.base + `/api/workspaces/invites/lookup?token=${tok}`, { headers: { Authorization: `Bearer ${so.token}` } }).then((r) => r.json());
+  ok(wrong.state === 'wrong_account', 'another account gets the wrong-account state', JSON.stringify(wrong));
+  if (look.state === 'ready') {
+    const acc = await as2('POST', '/api/workspaces/invites/accept', { token: tok });
+    ok(acc.ok, 'the invite is accepted', JSON.stringify(acc));
+    const again2 = await as2('POST', '/api/workspaces/invites/accept', { token: tok });
+    ok(again2.status === 409, 'an invite works once', again2.status);
+    const mw = await as2('GET', '/api/workspaces');
+    ok(mw.orgs?.[0]?.name === 'Studio Co' && mw.orgs[0].spaces?.[0]?.role === 'member', 'the new member sees the team', JSON.stringify(mw).slice(0, 200));
+    const seen = await as2('GET', '/api/notes', undefined, { 'x-peblo-space': made.spaceId });
+    ok(seen.notes?.some((n) => n.title === 'Welcome to the team'), 'the new member reads team notes');
+    const mTodo = await as2('POST', '/api/todos', { text: 'Mate task', assigneeId: mateId }, { 'x-peblo-space': made.spaceId });
+    ok(mTodo.status === 201, 'the new member can add a team task', JSON.stringify(mTodo).slice(0, 160));
+    const cant = await as2('POST', `/api/workspaces/orgs/${made.id}/invites`, { email: 'z@z.co' });
+    ok(cant.status === 403, 'a plain member cannot invite', cant.status);
+    const lastOwner = await b.api('PATCH', `/api/workspaces/orgs/${made.id}/members/${me.id}`, { role: 'member' });
+    ok(lastOwner.error, 'the only owner cannot be demoted', JSON.stringify(lastOwner));
+    const leaveOwner = await b.api('POST', `/api/workspaces/orgs/${made.id}/leave`);
+    ok(leaveOwner.error, 'the only owner cannot leave', JSON.stringify(leaveOwner));
+    const aud = await b.api('GET', `/api/workspaces/orgs/${made.id}/audit`);
+    ok(aud.events?.some((e) => e.action === 'member.joined') && aud.events.some((e) => e.action === 'invite.sent'), 'the audit log records the invite and the join', JSON.stringify(aud).slice(0, 200));
+    const rm = await b.api('DELETE', `/api/workspaces/orgs/${made.id}/members/${mateId}`);
+    ok(rm.ok, 'an admin can remove a member', JSON.stringify(rm));
+    const gone = await as2('GET', '/api/notes', undefined, { 'x-peblo-space': made.spaceId });
+    ok(gone.status === 404, 'a removed member loses access at once', gone.status);
+  } else {
+    console.log('note: signup users are unverified here; accept path skipped');
+  }
 } catch (e) { ok(false, 'workspaces ran without crashing', e?.stack || e); }
 await b.finish();
