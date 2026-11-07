@@ -40,5 +40,19 @@ try {
   await p.screenshot({ path: shots + '\\ws-back-personal.png' });
   ok(html.includes('Personal diary') && !html.includes('Sprint retro notes'), 'back in Personal: the diary shows and the team note does not', `diary=${html.includes('Personal diary')} team=${html.includes('Sprint retro notes')} url=${p.url()}`);
   ok(/Personal/.test(await p.getByTestId('space-pill').innerText()), 'the pill reads Personal');
+
+  await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });
+  await p.getByTestId('org-open').first().click();
+  ok(await p.getByTestId('org-detail').isVisible(), 'Members opens under the organization');
+  await p.getByTestId('member-list').getByText('E2E').first().waitFor({ timeout: 8000 }).catch(() => {});
+  ok((await p.getByTestId('member-list').innerText()).includes('E2E'), 'the owner is listed as a member');
+  await p.getByTestId('invite-email').fill('colleague@example.com');
+  await p.screenshot({ path: shots + '\\ws-members-pre.png' });
+  await p.getByTestId('invite-send').click({ timeout: 5000 });
+  await p.waitForTimeout(800);
+  ok((await p.getByTestId('org-detail').innerText()).includes('colleague@example.com'), 'the invite shows as waiting to join');
+  await p.screenshot({ path: shots + '\\ws-members.png' });
+  await p.goto(b.base + '/invite?token=nonsense', { waitUntil: 'networkidle' });
+  ok((await p.getByTestId('invite-card').innerText()).includes('not valid'), 'a bad invite link says so');
 } catch (e) { ok(false, 'workspaces-ui ran without crashing', e?.stack || e); }
 await b.finish();

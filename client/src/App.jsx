@@ -12,6 +12,7 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const SharedPage = lazy(() => import('./pages/SharedPage'));
 const SharedList = lazy(() => import('./soft/SharedList'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const InvitePage = lazy(() => import('./pages/InvitePage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const OAuthConsent = lazy(() => import('./pages/OAuthConsent'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
@@ -145,6 +146,7 @@ export default function App() {
         <Route path="/s/list/:token" element={<SharedList />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/invite" element={<InvitePage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth/consent" element={<OAuthConsent />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />
