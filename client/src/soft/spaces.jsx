@@ -11,6 +11,17 @@ export function useWorkspaces() {
   return useQuery({ queryKey: ['workspaces'], queryFn: () => workspacesAPI.list().then((r) => r.data), staleTime: 60000 });
 }
 
+/** The people in the space being worked in (empty in Personal): used to assign tasks and to name an assignee. */
+export function useSpaceMembers() {
+  const { data } = useWorkspaces();
+  const current = useCurrentSpace();
+  const org = (data?.orgs || []).find((o) => o.spaces.some((s) => s.id === current));
+  const { data: m } = useQuery({ queryKey: ['org-members', org?.id], enabled: !!org, staleTime: 60000, queryFn: () => workspacesAPI.members(org.id).then((r) => r.data) });
+  if (!org) return { people: [], me: data?.me?.id || null, canAssign: false };
+  const people = (m?.members || []).filter((x) => x.status === 'active' && x.spaces.some((s) => s.id === current)).map((x) => ({ id: x.userId, name: x.name }));
+  return { people, me: data?.me?.id || null, canAssign: people.length > 0 };
+}
+
 export function useCurrentSpace() {
   const [id, setId] = useState(getSpace);
   useEffect(() => {

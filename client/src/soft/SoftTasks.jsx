@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSpaceMembers } from './spaces';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Repeat, Target, Sparkles } from 'lucide-react';
@@ -479,6 +480,7 @@ export default function SoftTasks() {
     return () => window.removeEventListener('keydown', onKey, true);
   });
 
+  const team = useSpaceMembers();
   const chipsFor = (t, column) => {
     const out = [];
     const days = t.deadline ? daysFromToday(t.deadline) : null;
@@ -506,6 +508,7 @@ export default function SoftTasks() {
           {chipsFor(t, column).map((c) => <span key={c.label} className={`s-mini ${c.kind || ''}`}>{c.kind === 'repeat' && <Repeat size={11} />}{c.label}</span>)}
           {stepsOf(t).length > 0 && <StepsBar steps={stepsOf(t)} />}
           {t.note && <Link to={`/notes/${t.note.id}`} className="s-mini note">{t.note.title || 'Note'}</Link>}
+          {t.assigneeId && <span className={`s-mini s-assignee${t.assigneeId === team.me ? ' mine' : ''}`} data-testid="assignee-chip">{t.assigneeId === team.me ? 'You' : (team.people.find((x) => x.id === t.assigneeId)?.name || 'Someone').split(' ')[0]}</span>}
         </span>
       </div>
       {!selMode && !t.completed && <Link to={`/tasks/focus/${t.id}`} className="s-card-x focus" aria-label={`Focus on "${t.text}"`} title="Focus on this task"><Target size={14} strokeWidth={2.4} /></Link>}

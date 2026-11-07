@@ -6,6 +6,7 @@ import { notesAPI, todosAPI } from '../api';
 import TaskSteps from '../components/TaskSteps';
 import ShareDialog from './ShareDialog';
 import { askScope } from '../utils/askScope';
+import { useSpaceMembers } from './spaces';
 import './tasks2.css';
 import { tagsOf, addDays, startOfDay, snippetOf } from './softUtils';
 
@@ -63,6 +64,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [cal, setCal] = useState(false);
   const [customTime, setCustomTime] = useState(false);
   const [priority, setPriority] = useState(task.priority || 'medium');
+  const team = useSpaceMembers();
+  const [assignee, setAssignee] = useState(task.assigneeId || '');
   const [tags, setTags] = useState(tagsOf(task));
   const [tagMenu, setTagMenu] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -82,7 +85,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [estimate, setEstimate] = useState(task.meta?.estimateMin ?? null);
   const [confirmEsc, setConfirmEsc] = useState(false);
   const snap0 = useRef(null);
-  const snapNow = JSON.stringify({ text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
+  const snapNow = JSON.stringify({ assignee, text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
   if (snap0.current === null) snap0.current = snapNow;
   const dirty = snapNow !== snap0.current || !!tagDraft.trim();
   const requestClose = () => { if (dirty && !saving) setConfirmEsc(true); else onClose(); };
@@ -138,6 +141,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       await todosAPI.update(task.id, {
         text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, scope,
         ...(ruleChanged ? { recurrence } : {}),
+        ...(team.canAssign && assignee !== (task.assigneeId || '') ? { assigneeId: assignee || null } : {}),
         meta: { link: link.trim() || null, subtasks: steps, remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
       });
       refresh();
@@ -290,6 +294,16 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           ))}
         </div>
       </section>
+
+      {team.canAssign && (
+        <section className="s-sheet-sec" aria-label="Assigned to">
+          <span className="s-sheet-lab">Assigned to</span>
+          <div className="s-sheet-pills" role="radiogroup" aria-label="Assigned to">
+            <button type="button" role="radio" aria-checked={!assignee} className={!assignee ? 'on' : ''} onClick={() => setAssignee('')}>Anyone</button>
+            {team.people.map((p) => <button key={p.id} type="button" role="radio" aria-checked={assignee === p.id} className={assignee === p.id ? 'on' : ''} data-testid="assign-pill" onClick={() => setAssignee(p.id)}>{p.id === team.me ? 'Me' : p.name.split(' ')[0]}</button>)}
+          </div>
+        </section>
+      )}
 
       <section className="s-sheet-sec" aria-label="Estimate">
         <span className="s-sheet-lab">Estimate</span>
