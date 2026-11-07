@@ -21,8 +21,8 @@ export function useCurrentSpace() {
   return id;
 }
 
-const iconOf = (kind) => (kind === 'office' ? Building2 : kind === 'team' ? Users : User);
-const toneOf = (kind) => (kind === 'office' ? 'peach' : kind === 'team' ? 'sky' : 'chip');
+export const iconOf = (kind) => (kind === 'office' ? Building2 : kind === 'team' ? Users : User);
+export const toneOf = (kind) => (kind === 'office' ? 'peach' : kind === 'team' ? 'sky' : 'chip');
 
 /** Switch space: forget what was loaded for the old one, then show the notes of the new one. */
 export function useSwitchSpace() {
@@ -99,7 +99,7 @@ export function SpacePill() {
   );
 }
 
-function Backdrop({ onClose, label, children }) {
+export function Backdrop({ onClose, label, children }) {
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="s-share" role="dialog" aria-label={label}>{children}</div>

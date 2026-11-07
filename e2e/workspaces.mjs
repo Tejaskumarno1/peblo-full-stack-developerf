@@ -97,6 +97,25 @@ try {
   const dl = await team('DELETE', `/api/todos/${teamTodoId}`);
   ok(dl.status === 200, 'a team task can be deleted by a writer');
 
+  // move and copy
+  const pn = await b.api('POST', '/api/notes', { title: 'Move me', content: 'wandering note' });
+  const mv = await b.api('POST', `/api/notes/${pn.note.id}/move`, { to: made.spaceId });
+  ok(mv.ok && mv.to === made.spaceId && mv.from === null, 'a Personal note moves into a team', JSON.stringify(mv));
+  ok(!(await b.api('GET', '/api/notes')).notes.some((n) => n.title === 'Move me'), 'it leaves Personal');
+  ok((await team('GET', '/api/notes')).notes.some((n) => n.title === 'Move me'), 'it appears in the team');
+  const same = await team('POST', `/api/notes/${pn.note.id}/move`, { to: made.spaceId });
+  ok(same.status === 400, 'moving to where it already is is refused', same.status);
+  const outMove = await fetch(b.base + `/api/notes/${pn.note.id}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${so.token}`, 'x-peblo-space': made.spaceId }, body: JSON.stringify({ to: null }) });
+  ok(outMove.status === 404, 'an outsider cannot move a team note', outMove.status);
+  const toBad = await team('POST', `/api/notes/${pn.note.id}/move`, { to: 'no-such-space' });
+  ok(toBad.status === 404, 'moving to an unknown space is refused', toBad.status);
+  const back = await team('POST', `/api/notes/${pn.note.id}/move`, { to: null });
+  ok(back.ok && back.to === null, 'Undo: it moves back to Personal', JSON.stringify(back));
+  ok((await b.api('GET', '/api/notes')).notes.some((n) => n.title === 'Move me'), 'it is in Personal again');
+  const cp = await b.api('POST', `/api/notes/${pn.note.id}/copy`, { to: made.spaceId });
+  ok(cp.ok && cp.note?.id && cp.note.id !== pn.note.id, 'a copy can be shared into the team', JSON.stringify(cp));
+  ok((await b.api('GET', '/api/notes')).notes.some((n) => n.id === pn.note.id) && (await team('GET', '/api/notes')).notes.some((n) => n.id === cp.note.id), 'the original stays and the copy lands in the team');
+
   // members and invites
   const email2 = `mate-${Date.now()}@peblo.test`;
   const mate = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email2, password: 'correct horse battery', name: 'Mate' }) }).then((r) => r.json());

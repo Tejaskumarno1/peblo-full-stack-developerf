@@ -9,6 +9,7 @@ import SoftCapture from './SoftCapture';
 import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
+import { MoveToast } from './MoveNote';
 import { SpacePill, useCurrentSpace } from './spaces';
 import './soft.css';
 import './soft2.css';
@@ -65,6 +66,7 @@ export default function SoftShell({ children, onOpenSettings }) {
 
       <OfflineBar />
       <Fragment key={space || 'personal'}>{children}</Fragment>
+      <MoveToast />
       <div className="river" style={{ display: 'contents' }}><MeetingReminders /></div>
 
       <nav aria-label="Main" className="soft-dock">

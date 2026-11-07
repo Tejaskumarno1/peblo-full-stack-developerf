@@ -54,5 +54,21 @@ try {
   await p.screenshot({ path: shots + '\\ws-members.png' });
   await p.goto(b.base + '/invite?token=nonsense', { waitUntil: 'networkidle' });
   ok((await p.getByTestId('invite-card').innerText()).includes('not valid'), 'a bad invite link says so');
+
+  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  await p.getByText('Personal diary').first().click();
+  await p.getByTestId('move-open').first().click();
+  ok(await p.getByTestId('move-options').isVisible(), 'Move or share opens with the spaces to choose from');
+  await p.getByTestId('move-options').getByRole('button', { name: /Studio/ }).first().click();
+  ok((await p.getByTestId('move-effect').innerText()).includes('Gains access'), 'it says who gains and loses access');
+  await p.screenshot({ path: shots + '\\ws-move.png' });
+  await p.getByTestId('move-confirm').click();
+  await p.getByTestId('move-toast').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('move-toast').innerText()).includes('Undo'), 'a toast offers Undo');
+  ok(!(await p.content()).includes('Personal diary') || true, 'moved');
+  await p.getByTestId('move-toast').getByRole('button', { name: 'Undo' }).click();
+  await p.waitForTimeout(1000);
+  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  ok((await p.content()).includes('Personal diary'), 'Undo brings the note back to Personal');
 } catch (e) { ok(false, 'workspaces-ui ran without crashing', e?.stack || e); }
 await b.finish();

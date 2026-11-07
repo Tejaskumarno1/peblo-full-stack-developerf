@@ -7,6 +7,7 @@ import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHori
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
+import MoveNote from './MoveNote';
 import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
 import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
@@ -616,6 +617,7 @@ export default function SoftNotes() {
                     placeholder="tag"
                   />
                 )}
+                {!doc.isDeleted && !doc.isDraft && <MoveNote noteId={doc.id} title={doc.title} />}
               </div>
   );
   const renderMenuItems = () => (

@@ -25,6 +25,8 @@ export const notesAPI = {
   get: (id) => api.get(`/notes/${id}`),
   backlinks: (id) => api.get(`/notes/${id}/backlinks`),
   daily: (date) => api.post('/notes/daily', { date }),
+  move: (id, to, space) => api.post(`/notes/${id}/move`, { to }, space !== undefined ? { headers: { 'x-peblo-space': space || 'personal' } } : undefined),
+  copy: (id, to) => api.post(`/notes/${id}/copy`, { to }),
   create: (data) => api.post('/notes', data),
   update: (id, data) => api.patch(`/notes/${id}`, data),
   // Without { permanent: true } a note is only moved to the trash (and a repeat call on a trashed note does nothing).

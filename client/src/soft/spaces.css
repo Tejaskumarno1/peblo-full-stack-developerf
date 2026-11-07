@@ -44,3 +44,10 @@ html.pb-phone .soft .s-space-menu { position: fixed; left: 12px; right: 12px; to
 .soft .s-leave { align-self: flex-start; }
 .soft .s-soft-btn { height: 40px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--s-col); color: var(--s-fg); font: inherit; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .soft .s-soft-btn:hover { filter: brightness(0.96); }
+.soft .s-move-modes { display: flex; gap: 6px; margin: 4px 0 10px; }
+.soft .s-move-modes button { height: 36px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--s-col); color: var(--s-fg); font: inherit; font-weight: 800; cursor: pointer; }
+.soft .s-move-modes button.on { background: var(--s-ink, #2a2320); color: var(--s-bg, #fff); }
+.soft .s-move-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow: auto; }
+.soft .s-move-toast { display: inline-flex; align-items: center; gap: 10px; }
+.soft .s-move-toast button { border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; }
+.soft .s-move-toast { position: fixed; bottom: 96px; z-index: 80; }

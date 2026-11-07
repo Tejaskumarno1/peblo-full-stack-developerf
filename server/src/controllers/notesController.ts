@@ -98,7 +98,8 @@ async function syncLinks(userId: string, noteId: string, content: string) {
     const ids = [...new Set([...String(content || '').matchAll(/\]\(\/notes\/([\w-]+)(?:#[^)]*)?\)/g)].map((m) => m[1]))].filter((x) => x !== noteId).slice(0, 200);
     await prisma.$executeRaw`DELETE FROM note_links WHERE source_id = ${noteId}`;
     if (!ids.length) return;
-    const valid = await prisma.note.findMany({ where: { id: { in: ids }, userId }, select: { id: true } });
+    const src = await prisma.$queryRaw<{ space_id: string | null }[]>`SELECT space_id FROM notes WHERE id = ${noteId}`;
+    const valid = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM notes WHERE id = ANY(${ids}::text[]) AND space_id IS NOT DISTINCT FROM ${src[0]?.space_id ?? null} AND (${src[0]?.space_id ?? null}::text IS NOT NULL OR user_id = ${userId})`;
     for (const v of valid) await prisma.$executeRaw`INSERT INTO note_links (source_id, target_id) VALUES (${noteId}, ${v.id}) ON CONFLICT DO NOTHING`;
   } catch { /* rebuilt by the next save */ }
 }
