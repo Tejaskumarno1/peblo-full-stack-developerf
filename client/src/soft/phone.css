@@ -1,0 +1,106 @@
+/* Phone layouts (width <= 700px, html.pb-phone): Home, Tasks, Calendar, AI, Connect, Notifications.
+   Drawn in PhoneTasks / PhoneCal / PhoneAI / PhoneConnect. Every rule starts with "html.pb-phone body .soft" so it beats the page styles that load later. */
+
+/* ---------- everywhere ---------- */
+html.pb-phone body .soft-brand { min-height: 40px; display: inline-flex; align-items: center; }
+html.pb-phone body .soft-page { padding-bottom: 8px; }
+html.pb-phone body .soft button, html.pb-phone body .soft [role="tab"], html.pb-phone body .soft [role="radio"] { min-height: 32px; }
+html.pb-phone body .soft input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) { min-height: 34px; }
+html.pb-phone body .soft .s-check { width: 28px; height: 28px; }
+html.pb-phone body .soft .s-check.small { width: 32px; height: 32px; }
+html.pb-phone body .soft .s-seg, html.pb-phone body .soft .s-seg.small { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+html.pb-phone body .soft .s-seg button { flex: none; min-height: 36px; }
+html.pb-phone body .soft .s-h1 { font-size: 30px; line-height: 1.05; }
+html.pb-phone body .soft .s-sub { display: none; }
+
+/* ---------- Home ---------- */
+html.pb-phone body .soft .s-home { overflow-y: auto; overflow-x: hidden; gap: 14px; }
+html.pb-phone body .soft .s-home-hero { grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+html.pb-phone body .soft .s-home-hero-text { gap: 10px; }
+html.pb-phone body .soft .s-home-title { font-size: 34px; line-height: 1.02; letter-spacing: -0.03em; }
+html.pb-phone body .soft .s-home-lead { font-size: 15px; line-height: 1.45; }
+html.pb-phone body .soft .s-date-pill { white-space: nowrap; }
+html.pb-phone body .soft .s-home-ask { padding: 16px; border-radius: 26px; gap: 10px; min-width: 0; }
+html.pb-phone body .soft .s-home-ask .s-ask-row { min-width: 0; }
+html.pb-phone body .soft .s-home-ask .s-ask-row input { min-width: 0; flex: 1 1 0; }
+html.pb-phone body .soft .s-home-ask .s-chips { flex-wrap: wrap; }
+html.pb-phone body .soft .s-home-tiles { grid-template-columns: minmax(0, 1fr); flex: none; margin-bottom: 8px; gap: 12px; }
+html.pb-phone body .soft .s-home-tiles > .s-tile { min-width: 0; }
+
+/* ---------- Tasks ---------- */
+html.pb-phone body .soft .s-tasks { overflow-y: auto; overflow-x: hidden; gap: 10px; }
+html.pb-phone body .soft .s-tasks .s-page-head { flex-wrap: wrap; gap: 8px; }
+html.pb-phone body .soft .s-tasks .s-page-title { flex: 1 1 auto; min-width: 0; }
+html.pb-phone body .soft .s-tasks .s-grow { display: none; }
+html.pb-phone body .soft .s-tasks .s-planbtn { height: 40px; padding: 0 14px; font-size: 13px; }
+html.pb-phone body .soft .s-tasks .s-page-head > .s-seg { order: 3; flex: 1 1 100%; }
+html.pb-phone body .soft .s-tasks .s-addbar { min-width: 0; padding: 6px 6px 6px 14px; }
+html.pb-phone body .soft .s-tasks .s-addbar input { min-width: 0; flex: 1 1 0; }
+html.pb-phone body .soft .s-tasks .s-trow { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+html.pb-phone body .soft .s-tasks .s-trow > input { min-width: 110px; flex: 1 0 110px; }
+html.pb-phone body .soft .s-tasks .s-filter { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+html.pb-phone body .soft .s-tasks .s-filter button, html.pb-phone body .soft .s-tasks .s-trow button { flex: none; white-space: nowrap; min-height: 34px; }
+html.pb-phone body .soft .s-tasks .s-board { display: flex; flex-direction: column; gap: 12px; overflow: visible; height: auto; min-height: 0; }
+html.pb-phone body .soft .s-tasks .s-col { width: 100%; min-height: 0; height: auto; flex: none; border-radius: 28px; padding: 14px; }
+html.pb-phone body .soft .s-tasks .s-col-cards { overflow: visible; height: auto; }
+html.pb-phone body .soft .s-tasks .s-card { min-width: 0; }
+html.pb-phone body .soft .s-tasks .s-card-x { width: 32px; height: 32px; }
+html.pb-phone body .soft .s-tasks .s-col-title { font-size: 22px; }
+html.pb-phone body .soft .s-tasks table, html.pb-phone body .soft .s-tasks .s-table { display: block; max-width: 100%; overflow-x: auto; }
+
+/* ---------- Calendar ---------- */
+html.pb-phone body .soft .s-cal { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overflow-x: hidden; }
+html.pb-phone body .soft .s-cal .s-cal-head { flex-wrap: wrap; gap: 8px; align-items: center; }
+html.pb-phone body .soft .s-cal .s-cal-head .s-page-title { flex: 1 1 100%; min-width: 0; }
+html.pb-phone body .soft .s-cal .s-cal-head .s-h1 { font-size: 28px; white-space: normal; }
+html.pb-phone body .soft .s-cal .s-cal-head .grow { display: none; }
+html.pb-phone body .soft .s-cal .s-round46 { width: 40px; height: 40px; }
+html.pb-phone body .soft .s-cal .s-pill46 { height: 40px; padding: 0 14px; font-size: 13px; }
+html.pb-phone body .soft .s-cal .s-cal-head > .s-seg { order: -1; flex: 1 1 100%; }
+html.pb-phone body .soft .s-cal .s-cal-side { width: 100%; max-width: 100%; flex: none; gap: 10px; }
+html.pb-phone body .soft .s-cal .s-minical { width: 100%; padding: 14px; }
+html.pb-phone body .soft .s-cal .s-mini-dow, html.pb-phone body .soft .s-cal .s-mini-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); width: 100%; }
+html.pb-phone body .soft .s-cal .s-mini-day { width: 100%; min-height: 36px; height: 36px; }
+html.pb-phone body .soft .s-cal .s-layers { flex-wrap: wrap; }
+html.pb-phone body .soft .s-cal .s-hol { flex-wrap: wrap; }
+html.pb-phone body .soft .s-cal .s-week { width: 100%; min-height: 560px; flex: none; }
+
+/* ---------- AI ---------- */
+html.pb-phone body .soft .s-ai { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+html.pb-phone body .soft .s-ai .s-chats { flex: none; flex-direction: row; align-items: center; gap: 8px; width: 100%; max-width: 100%; height: auto; padding: 8px 10px; border-radius: 24px; overflow-x: auto; scrollbar-width: none; }
+html.pb-phone body .soft .s-ai .s-chats .s-tile-head { flex: none; gap: 8px; }
+html.pb-phone body .soft .s-ai .s-chats .s-tile-head h1 { font-size: 20px; }
+html.pb-phone body .soft .s-ai .s-chats .s-chat-list { flex: 1 1 auto; flex-direction: row; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+html.pb-phone body .soft .s-ai .s-chats .s-chat-list > * { flex: none; white-space: nowrap; }
+html.pb-phone body .soft .s-ai .s-chats .s-chats-note { display: none; }
+html.pb-phone body .soft .s-ai .s-convo { flex: 1 1 0; min-width: 0; min-height: 0; width: 100%; }
+html.pb-phone body .soft .s-ai .s-thread { min-width: 0; overflow-y: auto; }
+html.pb-phone body .soft .s-ai .s-welcome { min-width: 0; padding: 12px; }
+html.pb-phone body .soft .s-ai .s-welcome-title { font-size: 26px; }
+html.pb-phone body .soft .s-ai .s-composer { min-width: 0; width: 100%; padding: 12px; border-radius: 26px; }
+html.pb-phone body .soft .s-ai .s-modes { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+html.pb-phone body .soft .s-ai .s-modes button { flex: none; white-space: nowrap; min-height: 34px; }
+html.pb-phone body .soft .s-ai .s-composer-row { min-width: 0; }
+html.pb-phone body .soft .s-ai .s-composer-row input { min-width: 0; flex: 1 1 0; }
+html.pb-phone body .soft .s-ai .s-composer-chips { flex-wrap: wrap; }
+html.pb-phone body .soft .s-ai .s-composer-chips button { min-height: 34px; white-space: nowrap; }
+html.pb-phone body .soft .s-ai .s-sources { flex: none; width: 100%; max-width: 100%; height: auto; max-height: 30%; padding: 10px 14px; border-radius: 24px; overflow-y: auto; }
+html.pb-phone body .soft .s-ai .s-sources:has(.s-source-list:empty) { display: none; }
+
+/* ---------- Connect ---------- */
+html.pb-phone body .soft .s-conn { overflow-y: auto; overflow-x: hidden; gap: 10px; }
+html.pb-phone body .soft .s-hub, html.pb-phone body .soft .s-hub.s-hub-all { display: flex; flex-direction: column; flex: none; height: auto; min-height: auto; gap: 12px; }
+html.pb-phone body .soft .s-hub-col, html.pb-phone body .soft .s-hub-col.narrow { flex: none; min-width: 0; min-height: auto; height: auto; overflow: visible; padding: 16px; border-radius: 26px; }
+html.pb-phone body .soft .s-hub-col.narrow { padding: 0; }
+html.pb-phone body .soft .s-hub-col .s-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ---------- Notifications ---------- */
+html.pb-phone body .soft .s-notif { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; }
+html.pb-phone body .soft .s-notif-main, html.pb-phone body .soft .s-notif-side { width: 100%; min-width: 0; max-width: 100%; flex: none; }
+html.pb-phone body .soft .s-notif .s-sg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+html.pb-phone body .soft .s-cal .s-week { order: 1; }
+html.pb-phone body .soft .s-cal .s-cal-side { order: 2; }
+
+/* ---------- Notes and Settings: tap sizes, nothing past the edge ---------- */
+html.pb-phone body .soft .np-ib { min-width: 36px; min-height: 36px; }
+html.pb-phone body .soft .s-add-tag, html.pb-phone body .soft .cp-chip { min-height: 32px; }

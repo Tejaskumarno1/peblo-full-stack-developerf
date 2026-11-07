@@ -83,7 +83,7 @@ try {
   await page.getByText(/Reconnecting/).first().waitFor({ timeout: 15000 });
   check('owner sees a reconnecting indicator when offline', true);
   await ctx.setOffline(false);
-  await page.getByText(/Back online/).first().waitFor({ timeout: 15000 });
+  await page.getByText(/back online/i).first().waitFor({ timeout: 15000 });
   check('and a synced message when back', true);
 
   // turning sharing off from the panel

@@ -1,8 +1,8 @@
 // PEB-167/171: Help dialog (shortcuts, what's new, feedback) in every style; ? key, palette, Orbit tour link.
 import { boot } from './lib.mjs';
 const { base, page, check, finish } = await boot();
-const go = async (style, path = '/tasks') => {
-  await page.goto(base + '/tasks');
+const go = async (style, path = '/calendar') => {
+  await page.goto(base + '/calendar');
   await page.evaluate((s) => { localStorage.setItem('peblo-style', s); localStorage.setItem('peblo-orbit-help-seen', '1'); }, style);
   await page.goto(base + path);
   await page.waitForTimeout(1000);
@@ -43,7 +43,7 @@ try {
 
   // Command palette entry
   await page.keyboard.press('Control+k');
-  await page.getByPlaceholder('Search notes or type a command...').fill('help');
+  await page.getByPlaceholder('Search notes and tasks, or type a command...').fill('help');
   await page.waitForTimeout(300);
   await page.getByText('Help and shortcuts', { exact: true }).first().click();
   await page.waitForTimeout(400);

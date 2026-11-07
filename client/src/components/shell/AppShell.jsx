@@ -19,7 +19,8 @@ export default function AppShell({ children }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // In a browser window smaller than the 1440 x 900 design, show the whole screen scaled down instead of cutting it off.
-  useEffect(() => startFitCanvas(() => /^\/(notes|settings)(\/|$)/.test(window.location.pathname)), []);
+  // Only Soft has real phone layouts (Home, Notes, Tasks, Calendar, AI, Connect, Notifications, Settings); River and Orbit are scaled.
+  useEffect(() => startFitCanvas(() => uiStyle === 'soft' && (/^\/(notes|settings|tasks|calendar|ai|notifications)(\/|$)|^\/$/.test(window.location.pathname))), [uiStyle]);
   useEffect(() => { window.dispatchEvent(new Event('resize')); }, [pathname]); // re-fit when the screen changes
 
   // Ctrl/Cmd+J opens the AI Hub from anywhere, except inside an open note,

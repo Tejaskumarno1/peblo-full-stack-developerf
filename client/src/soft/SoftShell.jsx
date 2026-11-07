@@ -11,6 +11,7 @@ import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
 import './soft.css';
 import './soft2.css';
+import './phone.css';
 
 const DOCK = [
   { to: '/', end: true, label: 'Home', icon: Home },

@@ -32,6 +32,7 @@ import { shareRoutes, publicRoutes, shortRedirect } from './routes/share.js';
 import { listMcpRoutes } from './mcp/listMcp.js';
 import { listShareRoutes, listPublicRoutes, listMarkdownHandler, listPdfHandler } from './routes/listShare.js';
 import mediaRoutes from './routes/media.js';
+import { calendarSyncRoutes, calendarPublicRoutes } from './routes/calendarSync.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -159,6 +160,8 @@ app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);
 app.use('/api/task-lists', listShareRoutes);
 app.use('/api/public/list', listPublicRoutes);
+app.use('/api/public', calendarPublicRoutes);
+app.use('/api/calendar-sync', calendarSyncRoutes);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 

@@ -354,7 +354,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         <div className="s-sheet-confirm" role="alertdialog" aria-label="Unsaved changes">
           <b>You have unsaved changes.</b>
           <span className="grow" />
-          <button type="button" autoFocus onClick={() => { setConfirmEsc(false); setTimeout(() => document.getElementById('s-sheet-title')?.focus(), 0); }}>Keep editing</button>
+          <button type="button" autoFocus onClick={() => { document.getElementById('s-sheet-title')?.focus(); setConfirmEsc(false); }}>Keep editing</button>
           <button type="button" className="warn" onClick={onClose}>Discard</button>
         </div>
       )}

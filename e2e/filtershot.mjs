@@ -13,7 +13,7 @@ try {
   check('extra view options are folded by default', (await page.getByRole('dialog', { name: 'View options' }).count()) === 0);
   check('the notes area has real room (>= 380px at 720px high)', closed >= 380, String(closed));
   await page.screenshot({ path: 'C:/Users/tejas/Documents/peblo-full-stack-developerf/.shots/list-closed.png' });
-  await page.getByRole('button', { name: 'View', exact: true }).click(); // the View options dialog replaced the old .s-filters-toggle row
+  await page.getByRole('button', { name: 'View options', exact: true }).click(); // the View options dialog replaced the old .s-filters-toggle row
   const dlg = page.getByRole('dialog', { name: 'View options' });
   await dlg.waitFor();
   const seg = dlg.getByRole('radiogroup', { name: 'Sort by' });

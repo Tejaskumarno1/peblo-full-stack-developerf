@@ -28,6 +28,7 @@ const SoftTasks = lazy(() => import('./soft/SoftTasks'));
 const SoftPlan = lazy(() => import('./soft/SoftPlan'));
 const SoftFocus = lazy(() => import('./soft/SoftFocus'));
 const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
+const SoftCalendarSync = lazy(() => import('./soft/SoftCalendarSync'));
 const SoftAI = lazy(() => import('./soft/SoftAI'));
 const SoftConnections = lazy(() => import('./soft/SoftConnections'));
 const SoftNotifications = lazy(() => import('./soft/SoftNotifications'));
@@ -132,6 +133,7 @@ export default function App() {
           <Route path="/tasks/plan" element={<SoftPlan />} />
 <Route path="/tasks" element={<Styled soft={SoftTasks} river={RiverTasks} orbit={OrbitTasks} other={TasksPage} />} />
           <Route path="/notifications" element={<SoftNotifications />} />
+          <Route path="/calendar/sync" element={<SoftCalendarSync />} />
           <Route path="/calendar" element={<Styled soft={SoftCalendar} river={RiverCalendar} orbit={OrbitCalendar} other={CalendarPage} />} />
           <Route path="/quiz/:topic" element={<Styled orbit={OrbitQuiz} other={GoHome} />} />
           <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />

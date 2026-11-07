@@ -534,3 +534,9 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .doc .pic-pill button, .pb-shared .doc .pic-all button { flex: none; height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: color-mix(in srgb, currentColor 90%, transparent); color: Canvas; cursor: pointer; font-weight: 700; font-size: 12px; line-height: 1; }
 .pb-shared .doc .pic-all { display: flex; align-items: center; gap: 8px; width: max-content; max-width: 100%; margin: 0 0 18px; padding: 4px 5px 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: color-mix(in srgb, currentColor 7%, transparent); border: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
 @media (max-width: 640px) { .pb-shared .doc .pic-pill { width: auto; } }
+/* phone: comfortable taps on the picture-link pills */
+@media (max-width: 640px) {
+  .pb-shared .doc .pic-pill button, .pb-shared .doc .pic-all button { height: 32px; }
+  .pb-shared .doc .pic-pill a { display: inline-flex; align-items: center; min-height: 32px; }
+  .pb-shared .doc .pic-all, .pb-shared .doc .pic-pill { padding-top: 3px; padding-bottom: 3px; }
+}

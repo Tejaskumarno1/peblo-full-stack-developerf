@@ -83,11 +83,11 @@ try {
   check('soft tasks: the High priority filter keeps only those', /Pay rent/.test(body) && !/Call mum/.test(body), body.slice(0, 200));
   await page.getByRole('tab', { name: 'All' }).click();
   await page.getByRole('tab', { name: 'List' }).click();
-  await page.getByLabel('Group tasks by').selectOption('priority');
+  await page.getByRole('group', { name: 'Group tasks by' }).getByRole('button', { name: 'Priority', exact: true }).click();
   await page.waitForTimeout(300);
   body = await page.locator('.s-tasks').innerText();
   check('soft tasks: the list can be grouped by priority', /High priority/.test(body) && /Low priority/.test(body), body.slice(0, 250));
-  await page.getByLabel('Group tasks by').selectOption('tag');
+  await page.getByRole('group', { name: 'Group tasks by' }).getByRole('button', { name: 'Tag', exact: true }).click();
   await page.waitForTimeout(300);
   check('soft tasks: ...or by tag', /#exams/.test(await page.locator('.s-tasks').innerText()));
 

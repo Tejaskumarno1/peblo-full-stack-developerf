@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { todosAPI } from '../api';
+import { todosAPI, calSyncAPI } from '../api';
 import QuickCreate from './QuickCreate';
 import { AgendaView, FindSlot, PeekPanel, YearView } from './CalExtras';
 import UndoToast from '../components/UndoToast';
@@ -26,7 +26,7 @@ export default function SoftCalendar() {
   const hol = { on: true, country: 'IN', festivals: true, observances: false, ...(settings?.holidays || {}) };
     const lookupHol = useMemo(() => makeHolidayLookup(hol), [hol.on, hol.country, hol.festivals, hol.observances]); // eslint-disable-line react-hooks/exhaustive-deps
   const setHol = (patch) => updateSettings({ holidays: { ...hol, ...patch } });
-  const [view, setView] = useState('week');
+  const [view, setView] = useState(() => (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 700px)').matches ? 'day' : 'week')); // phones open on Day
   const [fileMenu, setFileMenu] = useState(false);
   const fileRef = useRef(null);
   const [cursor, setCursor] = useState(() => startOfDay());
@@ -36,6 +36,9 @@ export default function SoftCalendar() {
   const [peek, setPeek] = useState(null);
   const [dropDay, setDropDay] = useState(null);
   const [layers, setLayers] = useState({ tasks: true, meetings: true, done: true });
+  // Layers of calendar links (Calendar sync): which are switched off is remembered on this device
+  const [offFeeds, setOffFeeds] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-cal-layers') || '[]'); } catch { return []; } });
+  const toggleFeed = (id) => setOffFeeds((o) => { const n = o.includes(id) ? o.filter((x) => x !== id) : [...o, id]; try { localStorage.setItem('peblo-cal-layers', JSON.stringify(n)); } catch { /* not remembered */ } return n; });
 
   const weekStart = startOfWeek(cursor);
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -56,6 +59,14 @@ export default function SoftCalendar() {
     queryKey: ['todos', 'range', 'soft-cal-ahead', startOfDay().toDateString()],
     queryFn: () => todosAPI.getRange(startOfDay().toISOString(), addDays(startOfDay(), 60).toISOString()).then((r) => r.data.todos || []),
   });
+
+  const { data: feedEvents = [] } = useQuery({
+    queryKey: ['cal-sync', 'events', from.toDateString()],
+    queryFn: () => calSyncAPI.events(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10)).then((r) => r.data.events || []),
+    staleTime: 60000,
+  });
+  const feedList = useMemo(() => { const m = new Map(); feedEvents.forEach((e) => m.set(e.feedId, { id: e.feedId, name: e.feed, color: e.color })); return [...m.values()]; }, [feedEvents]);
+  const feedShown = feedEvents.filter((e) => !offFeeds.includes(e.feedId));
 
   const nextBig = useMemo(() => {
     const open = ahead.filter((t) => !t.completed && t.deadline && new Date(t.deadline) >= new Date()).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
@@ -91,6 +102,18 @@ export default function SoftCalendar() {
       else if (s.end > 24 && sameDay(t.deadline, prev)) gridEvents.push({ ...common, id: t.id, start: 0, end: s.end - 24, cont: true });
     }
   }
+  const feedTone = (e) => ({ bg: `var(--s-${e.color === 'rose' ? 'peach' : e.color})`, fg: 'var(--s-fg)', bar: BAR[e.color === 'rose' ? 'peach' : e.color] || BAR.sky });
+  for (const d of days) {
+    for (const e of feedShown) {
+      if (e.allDay) continue;
+      const st = new Date(e.start), en = new Date(e.end);
+      if (!sameDay(st, d)) continue;
+      const sh = st.getHours() + st.getMinutes() / 60; const eh = Math.max(sh + 0.5, Math.min(24, sh + (en - st) / 3600000));
+      const c = feedTone(e);
+      gridEvents.push({ id: `feed-${e.feedId}-${e.uid}-${e.start}`, title: e.title, meta: `${e.feed} · ${String(st.getHours()).padStart(2, '0')}:${String(st.getMinutes()).padStart(2, '0')}`, bg: c.bg, fg: c.fg, bar: c.bar, day: d, start: sh, end: eh, props: { 'data-feed': e.feed, title: `${e.title} (${e.feed})` } });
+    }
+  }
+  const feedAllDay = days.flatMap((d) => feedShown.filter((e) => e.allDay && e.start <= d.toLocaleDateString('en-CA') && d.toLocaleDateString('en-CA') < e.end).map((e) => { const c = feedTone(e); return { id: `feedad-${e.feedId}-${e.uid}-${e.start}-${d.toDateString()}`, day: d, title: e.title, bg: c.bg, fg: c.fg, bar: 'transparent', props: { 'data-feed': e.feed, tabIndex: -1, title: `${e.title} (${e.feed})` } }; }));
   const gridAllDay = allDay.flatMap(({ t }) => days.filter((d) => sameDay(t.deadline, d)).map((d) => { const c = toneFor(t); return { id: t.id, day: d, title: t.text, bg: c.bg, fg: c.fg, bar: c.bar, done: t.completed, props: { onClick: () => openTask(t) } }; }));
 
   // Drag to a new time or day, or drag the bottom edge: save at once, show it at once, and offer Undo
@@ -167,6 +190,7 @@ export default function SoftCalendar() {
               <button type="button" role="menuitem" onClick={() => { setFileMenu(false); fileRef.current?.click(); }}>Import .ics</button>
               <button type="button" role="menuitem" onClick={() => { setFileMenu(false); exportCalendar().then((n) => say(`Downloaded ${n} item${n === 1 ? '' : 's'} (.ics)`)).catch(() => say('Could not export')); }}>Export .ics</button>
               <button type="button" role="menuitem" onClick={() => { setFileMenu(false); window.print(); }}>Print this view</button>
+              <button type="button" role="menuitem" onClick={() => { setFileMenu(false); navigate('/calendar/sync'); }}>Calendar sync</button>
             </div>
           )}
           <input ref={fileRef} type="file" accept=".ics,text/calendar" hidden data-testid="ics-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importCalendar(f).then((r) => { say(`Added ${r.added} meeting${r.added === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped}` : ''}`); qc.invalidateQueries({ queryKey: ['todos'] }); }).catch(() => say('Could not read that file')); }} />
@@ -207,6 +231,9 @@ export default function SoftCalendar() {
         <div className="s-layers" role="group" aria-label="Layers">
           {[['tasks', 'Tasks', '#E8825E'], ['meetings', 'Meetings', '#6FA8DC'], ['done', 'Done', '#7BC59A']].map(([k, label, c]) => (
             <button key={k} type="button" aria-pressed={layers[k]} onClick={() => setLayers((l) => ({ ...l, [k]: !l[k] }))}><i style={{ background: c }} />{label}</button>
+          ))}
+          {feedList.map((f) => (
+            <button key={f.id} type="button" aria-pressed={!offFeeds.includes(f.id)} data-feed-layer={f.name} onClick={() => toggleFeed(f.id)}><i style={{ background: BAR[f.color === 'rose' ? 'peach' : f.color] || BAR.sky }} />{f.name}</button>
           ))}
           <button type="button" role="switch" aria-checked={hol.on} aria-label="Show holidays" aria-pressed={hol.on} onClick={() => setHol({ on: !hol.on })}><i style={{ background: '#E5B53C' }} />Holidays</button>
         </div>
@@ -263,7 +290,7 @@ export default function SoftCalendar() {
           </div>
         ) : (
           <>
-            <TimeGrid days={days} events={gridEvents} allDay={[...holAllDay, ...gridAllDay]} headClass="s-week-day" onToday={() => setCursor(startOfDay())} onMove={onMove} onCreate={(day, start, end) => setQuick({ day, start, end })} label="Schedule" />
+            <TimeGrid days={days} events={gridEvents} allDay={[...holAllDay, ...feedAllDay, ...gridAllDay]} headClass="s-week-day" onToday={() => setCursor(startOfDay())} onMove={onMove} onCreate={(day, start, end) => setQuick({ day, start, end })} label="Schedule" />
           </>
         )}
       </section>

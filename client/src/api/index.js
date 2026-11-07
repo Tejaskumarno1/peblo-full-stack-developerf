@@ -149,3 +149,13 @@ export const backupAPI = {
   addExample: () => api.post('/example'),
   clearExample: () => api.post('/example/clear'),
 };
+
+export const calSyncAPI = {
+  get: () => api.get('/calendar-sync'),
+  addFeed: (data) => api.post('/calendar-sync/feeds', data),
+  patchFeed: (id, data) => api.patch(`/calendar-sync/feeds/${id}`, data),
+  removeFeed: (id) => api.delete(`/calendar-sync/feeds/${id}`),
+  refreshFeed: (id) => api.post(`/calendar-sync/feeds/${id}/refresh`),
+  events: (from, to) => api.get('/calendar-sync/events', { params: { from, to } }),
+  share: (data) => api.put('/calendar-sync/share', data),
+};

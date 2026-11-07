@@ -185,6 +185,12 @@ export default function SharedPage() {
   const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
   const typedAt = useRef(0);
+  // In a live room the editor's change event is handled by the room, so also count real key presses in the editor as typing.
+  useEffect(() => {
+    const onKey = (event) => { if (event.ctrlKey || event.metaKey || event.altKey || ['Shift', 'Control', 'Alt', 'Meta', 'Escape', 'Tab', 'CapsLock'].includes(event.key)) return; if (event.target?.closest?.('.bn-editor')) typedAt.current = Date.now(); };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
   const cursorRef = useRef(null);
   const selRef = useRef(null);
   const [guestName, setGuestName] = useState(() => { try { return localStorage.getItem('peblo-guest-name') || ''; } catch { return ''; } });

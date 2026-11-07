@@ -20,7 +20,7 @@ export async function boot(opts = {}) {
   process.env.SIGNUP_RATE_MAX = '1000';
   delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_API_KEYS;
   const { startServer } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'index.js')).href);
-  const { server, port } = await startServer({ port: 0, staticDir: path.join(REPO, 'client', 'dist') });
+  const { server, port } = await startServer({ port: 0, staticDir: process.env.PEBLO_STATIC_DIR || path.join(REPO, 'client', 'dist') });
   const base = `http://127.0.0.1:${port}`;
   process.env.PUBLIC_URL = base; // links use the "public" address; in a test that is this server
   const email = `e2e-${Date.now()}@peblo.test`;
