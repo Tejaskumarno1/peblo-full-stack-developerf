@@ -38,7 +38,7 @@
     "jspdf": "^4.0.0",
     "lucide-react": "^1.16.0",
     "marked": "^15.0.6",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^6.5.438",
     "pptx-preview": "^1.0.5",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
