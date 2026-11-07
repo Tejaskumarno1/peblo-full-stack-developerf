@@ -76,7 +76,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     }
     // A token is also not for taking the whole library out or putting a backup over it: those need a real sign-in
     // (an export or backup includes #private notes, and a restore replaces everything).
-    if (user.viaToken && /^\/api\/(export|backup|restore|import|example|calendar-sync)(\/|\?|$)/i.test(req.originalUrl)) {
+    if (user.viaToken && /^\/api\/(export|backup|restore|import|example|calendar-sync|workspaces)(\/|\?|$)/i.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot export, back up, import or restore the whole library. Sign in to Peblo to do that.' });
     }
     if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {

@@ -33,6 +33,7 @@ import { listMcpRoutes } from './mcp/listMcp.js';
 import { listShareRoutes, listPublicRoutes, listMarkdownHandler, listPdfHandler } from './routes/listShare.js';
 import mediaRoutes from './routes/media.js';
 import { calendarSyncRoutes, calendarPublicRoutes } from './routes/calendarSync.js';
+import workspaceRoutes from './routes/workspaces.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -162,6 +163,7 @@ app.use('/api/task-lists', listShareRoutes);
 app.use('/api/public/list', listPublicRoutes);
 app.use('/api/public', calendarPublicRoutes);
 app.use('/api/calendar-sync', calendarSyncRoutes);
+app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 
