@@ -55,6 +55,12 @@ try {
   ok((await call('trash_note', { id: priv.id })).isError, 'trash_note on #private is refused');
   ok((await call('create_share_link', { kind: 'note', id: priv.id })).isError, 'create_share_link on #private is refused');
   ok((await call('get_backlinks', { id: priv.id })).isError, 'get_backlinks on #private is refused');
+  const gn = (await call('get_note', { id: pub.id })).json;
+  const w1 = await call('update_note', { id: pub.id, title: 'Orbit plan v2', if_updated_at: gn.updatedAt });
+  ok(!w1.isError && w1.json?.updatedAt && w1.json.title === 'Orbit plan v2', 'update_note with a fresh if_updated_at writes', w1.text);
+  const w2 = await call('update_note', { id: pub.id, title: 'Orbit plan v3', if_updated_at: gn.updatedAt });
+  const after = (await call('get_note', { id: pub.id })).json;
+  ok(w2.isError && /changed since/.test(w2.text) && after.title === 'Orbit plan v2', 'update_note with a stale if_updated_at is refused and writes nothing', w2.text);
   const sa = await call('search_all', { query: 'orbit' });
   ok(sa.json && JSON.stringify(sa.json.notes).includes(pub.id) && !JSON.stringify(sa.json).includes(priv.id), 'search_all: grouped, and without the #private note', sa.text.slice(0, 200));
   const tg = await call('list_tags');

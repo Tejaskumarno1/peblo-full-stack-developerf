@@ -298,17 +298,21 @@ server.registerTool('complete_task', {
 
 server.registerTool('update_note', {
   description: 'Change a note: rename it, replace its text (Markdown) or set its tags. Only the fields you give are changed. To add text without replacing, use append_to_note.',
-  inputSchema: { id: z.string(), title: z.string().min(1).optional(), content: z.string().optional().describe('The whole new text. Replaces what is there.'), tags: z.array(z.string()).optional().describe('The full list of tags the note should have') },
+  inputSchema: { id: z.string(), title: z.string().min(1).optional(), content: z.string().optional().describe('The whole new text. Replaces what is there.'), if_updated_at: z.string().optional().describe('Safety check: the updatedAt you last saw. If the note changed since, nothing is written.'), tags: z.array(z.string()).optional().describe('The full list of tags the note should have') },
   annotations: { ...writes, idempotentHint: true },
-}, ({ id, title, content, tags }) => run(async () => {
+}, ({ id, title, content, tags, if_updated_at }) => run(async () => {
   const patch: Record<string, unknown> = {};
   if (title !== undefined) patch.title = title;
   if (content !== undefined) patch.content = toHtml(content);
   if (tags !== undefined) patch.tags = tags;
   if (!Object.keys(patch).length) throw new Error('Give a title, content or tags to change.');
+  if (if_updated_at) {
+    const cur = (await api('GET', '/notes/' + encodeURIComponent(id))).note;
+    if (new Date(cur.updatedAt).getTime() !== new Date(if_updated_at).getTime()) throw new Error('This note changed since you read it (now ' + new Date(cur.updatedAt).toISOString() + '). Read it again, merge, then retry. Nothing was written.');
+  }
   await api('PATCH', '/notes/' + encodeURIComponent(id), patch);
   const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
-  return { id: note.id, title: note.title, tags: note.tags };
+  return { id: note.id, title: note.title, tags: note.tags, updatedAt: note.updatedAt };
 }));
 
 server.registerTool('update_task', {
