@@ -35,5 +35,45 @@ try {
   ok(nope.error, 'creating a team in an organization you are not in is refused', JSON.stringify(nope));
   const notes = await b.api('GET', '/api/notes');
   ok(!JSON.stringify(notes).includes('Studio'), 'Personal notes are untouched');
+
+  // notes in a space
+  const asSpace = (spaceId) => async (method, url, body) => {
+    const res = await fetch(b.base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${b.token}`, 'x-peblo-space': spaceId }, body: body ? JSON.stringify(body) : undefined });
+    return { ...(await res.json().catch(() => ({}))), status: res.status };
+  };
+  const team = asSpace(made.spaceId);
+  await b.api('POST', '/api/notes', { title: 'My private diary', content: 'personal only' });
+  const tn = await team('POST', '/api/notes', { title: 'Sprint retro notes', content: 'team text' });
+  ok(tn.status === 201 && tn.note?.id, 'a note can be written in a team space', JSON.stringify(tn).slice(0, 200));
+  const teamList = await team('GET', '/api/notes');
+  ok(teamList.notes?.length === 1 && teamList.notes[0].title === 'Sprint retro notes', 'the team list shows only team notes', JSON.stringify(teamList.notes?.map((n) => n.title)));
+  const personalList = await b.api('GET', '/api/notes');
+  ok(personalList.notes?.length === 1 && personalList.notes[0].title === 'My private diary', 'Personal never shows a team note', JSON.stringify(personalList.notes?.map((n) => n.title)));
+  const viaPersonal = await b.api('GET', `/api/notes/${tn.note.id}`);
+  ok(!viaPersonal.note, 'a team note cannot be opened as a Personal note', JSON.stringify(viaPersonal).slice(0, 120));
+  const got = await team('GET', `/api/notes/${tn.note.id}`);
+  ok(got.note?.title === 'Sprint retro notes', 'a team note opens inside its space');
+  const up = await team('PATCH', `/api/notes/${tn.note.id}`, { title: 'Sprint retro v2', content: 'team text 2', baseUpdatedAt: got.note.updatedAt, baseContent: 'team text' });
+  ok(up.status === 200, 'a team note saves (with the safe merge path)', JSON.stringify(up).slice(0, 160));
+  const again = await team('GET', `/api/notes/${tn.note.id}`);
+  ok(again.note?.content === 'team text 2', 'the saved text is there', JSON.stringify(again.note?.content));
+  const search = await team('GET', '/api/notes?search=retro');
+  ok(search.notes?.length === 1, 'search inside the space finds it');
+  const psearch = await b.api('GET', '/api/notes?search=retro');
+  ok(psearch.notes?.length === 0, 'Personal search does not find it', JSON.stringify(psearch.notes?.map((n) => n.title)));
+  const del = await team('DELETE', `/api/notes/${tn.note.id}`);
+  ok(del.status === 200, 'a team note moves to the space trash');
+  const tt = await team('GET', '/api/notes?deleted=true');
+  ok(tt.notes?.length === 1, 'it sits in that space trash', JSON.stringify(tt.notes?.length));
+  const res = await team('POST', `/api/notes/${tn.note.id}/restore`);
+  ok(res.status === 200 && res.note?.id === tn.note.id, 'and can be restored', JSON.stringify(res).slice(0, 140));
+  const arch = await team('POST', `/api/notes/${tn.note.id}/archive`);
+  ok(arch.status === 200 && arch.note?.isArchived === true, 'and archived', JSON.stringify(arch).slice(0, 140));
+  // somebody who is not in the space
+  const so = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `out-${Date.now()}@peblo.test`, password: 'correct horse battery', name: 'Out' }) }).then((r) => r.json());
+  const out = await fetch(b.base + '/api/notes', { headers: { Authorization: `Bearer ${so.token}`, 'x-peblo-space': made.spaceId } });
+  ok(out.status === 404, 'a person outside the space gets 404, not 403', out.status);
+  const out2 = await fetch(b.base + `/api/notes/${tn.note.id}`, { headers: { Authorization: `Bearer ${so.token}` } });
+  ok(out2.status === 404, 'and cannot reach the note by its id either', out2.status);
 } catch (e) { ok(false, 'workspaces ran without crashing', e?.stack || e); }
 await b.finish();

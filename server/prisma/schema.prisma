@@ -68,6 +68,8 @@ model Note {
   shareToken String? @unique @map("share_token")
   shareEdit  Boolean  @default(false) @map("share_edit")
   shareExpiresAt DateTime? @map("share_expires_at")
+  /// null = Personal. Set for notes that live in a Team or the Office (035_workspaces_expand.sql).
+  spaceId    String?  @map("space_id")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -158,6 +160,9 @@ model Todo {
   shareEdit  Boolean  @default(false) @map("share_edit")
   shareNote  Boolean  @default(false) @map("share_note")
   shareExpiresAt DateTime? @map("share_expires_at")
+  /// null = Personal. Set for tasks that live in a Team (035_workspaces_expand.sql).
+  spaceId    String?  @map("space_id")
+  assigneeId String?  @map("assignee_id")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

@@ -48,3 +48,12 @@ export function can(action: Action, org: OrgAccess | null, space: SpaceRole | nu
 export async function audit(orgId: string, actorId: string | null, action: string, target: string | null, detail: Record<string, unknown> = {}): Promise<void> {
   await prisma.$executeRaw`INSERT INTO audit_log (id, org_id, actor_id, action, target, detail) VALUES (${crypto.randomUUID()}, ${orgId}, ${actorId}, ${action}, ${target}, ${JSON.stringify(detail)}::jsonb)`;
 }
+
+/** One lookup for "who am I in this space": the organization membership and the space role together. */
+export async function spaceAccess(userId: string, spaceId: string): Promise<{ org: OrgAccess; role: SpaceRole } | null> {
+  const rows = await prisma.$queryRaw<{ org_id: string }[]>`SELECT org_id FROM spaces WHERE id = ${spaceId} AND closed_at IS NULL`;
+  const orgId = rows[0]?.org_id;
+  if (!orgId) return null;
+  const [org, role] = await Promise.all([orgAccess(userId, orgId), spaceRole(userId, spaceId)]);
+  return org && role ? { org, role } : null;
+}
