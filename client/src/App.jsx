@@ -24,7 +24,7 @@ const QuickCapturePage = lazy(() => import('./pages/QuickCapturePage'));
 
 // Soft Studio has its own screens (only used when Settings > Style is Soft Studio)
 const SoftHome = lazy(() => import('./soft/SoftHome'));
-const SoftNotes = lazy(() => import('./soft/SoftNotes'));
+const SoftNotes = lazy(() => import('./soft/SoftNotesGate'));
 const SoftTasks = lazy(() => import('./soft/SoftTasks'));
 const SoftPlan = lazy(() => import('./soft/SoftPlan'));
 const SoftFocus = lazy(() => import('./soft/SoftFocus'));

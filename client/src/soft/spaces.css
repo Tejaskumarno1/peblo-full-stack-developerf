@@ -58,3 +58,19 @@ html.pb-phone .soft .s-space-menu { position: fixed; left: 12px; right: 12px; to
 .soft .s-mini.s-assignee { background: var(--s-sky); font-weight: 800; } .soft .s-mini.s-assignee.mine { background: var(--s-accent); color: #fff; }
 .soft .s-ai-scope { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--s-fg2); font-weight: 600; font-size: 12.5px; }
 .soft .s-viewer-note { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--s-fg2); font-weight: 700; font-size: 13px; }
+.soft .s-office { display: flex; }
+.soft .s-office-card { flex: 1; min-width: 0; background: var(--s-card, #fff); border-radius: 30px; padding: 26px 30px; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+.soft .s-office-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.soft .s-office-head h1 { margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 34px; letter-spacing: -.03em; }
+.soft .s-office-note { display: flex; align-items: center; gap: 10px; background: var(--s-col); border-radius: 20px; padding: 12px 16px; font-weight: 600; }
+.soft .s-office-empty { background: var(--s-sky); border-radius: 30px; padding: 28px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.soft .s-office-empty b { font-size: 22px; }
+.soft .s-office-list { display: flex; flex-direction: column; gap: 12px; }
+.soft .s-post { border-radius: 26px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-post.retracted { opacity: .6; }
+.soft .s-post.retracted b { text-decoration: line-through; }
+.soft .s-post.suggested { background: var(--s-col); }
+.soft .s-post header, .soft .s-post footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.soft .s-post header b { font-size: 17px; flex: 1; }
+.soft .s-post p { margin: 0; font-weight: 500; line-height: 1.5; white-space: pre-wrap; }
+.soft .s-space-form textarea { border-radius: 18px; border: 1px solid var(--s-line, transparent); background: var(--s-bg, #fff); color: var(--s-fg); padding: 10px 14px; font: inherit; resize: vertical; }

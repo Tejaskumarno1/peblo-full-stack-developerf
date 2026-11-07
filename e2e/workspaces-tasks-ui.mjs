@@ -69,5 +69,27 @@ try {
   ok((await p.content()).includes('Binned page'), 'the team trash lists the binned note');
   ok((await p.getByRole('button', { name: /Empty/ }).count()) === 1, 'a lead can empty the team trash');
   await p.screenshot({ path: shots + '\\ws-team-trash.png' });
+
+  const off = await b.api('POST', `/api/workspaces/orgs/${org.id}/spaces`, { name: 'Warangal office', kind: 'office' });
+  await p.evaluate((sp) => localStorage.setItem('peblo-space', sp), off.id);
+  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  await p.getByTestId('office-empty').waitFor({ timeout: 8000 });
+  ok(await p.getByTestId('office-feed').isVisible(), 'an Office opens as an announcement feed, not a notes list');
+  await p.screenshot({ path: shots + '\\ws-office-empty.png' });
+  await p.getByTestId('office-write').click();
+  await p.getByTestId('office-title').fill('Holiday on Monday');
+  await p.getByTestId('office-body').fill('Office closed for Diwali. Files due Friday 5 pm.');
+  await p.getByTestId('office-save').click();
+  await p.getByTestId('office-post').first().waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('office-post').first().innerText()).includes('Version 1'), 'the publisher posts an announcement');
+  await p.screenshot({ path: shots + '\\ws-office-post.png' });
+  await p.getByTestId('office-post').first().getByRole('button', { name: 'Edit' }).click();
+  await p.getByTestId('office-body').fill('Office closed for Diwali. Files due Thursday 5 pm.');
+  await p.getByTestId('office-save').click();
+  await p.waitForTimeout(900);
+  ok((await p.getByTestId('office-post').first().innerText()).includes('Version 2'), 'an edit makes version 2');
+  await p.getByTestId('office-retract').first().click();
+  await p.waitForTimeout(900);
+  ok((await p.getByTestId('office-post').first().innerText()).includes('Retracted'), 'a retracted post stays visible as retracted');
 } catch (e) { ok(false, 'workspaces-tasks-ui ran without crashing', e?.stack || e); }
 await b.finish();
