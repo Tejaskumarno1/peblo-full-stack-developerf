@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun } from 'lucide-react';
+import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import MeetingReminders from '../river/MeetingReminders';
@@ -8,6 +8,7 @@ import { openCommandPalette } from '../components/shell/commandPalette';
 import SoftCapture from './SoftCapture';
 import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
+import { useNotificationCount } from './useNotifications';
 import './soft.css';
 import './soft2.css';
 
@@ -34,6 +35,7 @@ export default function SoftShell({ children, onOpenSettings }) {
 
   const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light';
   const ThemeIcon = theme === 'light' ? Moon : theme === 'dark' ? MoonStar : Sun;
+  const unread = useNotificationCount();
   const initial = (firstNameOf(user) || 'You').charAt(0).toUpperCase();
 
   return (
@@ -50,6 +52,7 @@ export default function SoftShell({ children, onOpenSettings }) {
           <kbd>Ctrl K</kbd>
         </button>
         <span className="grow" />
+        <Link to="/notifications" className="soft-round soft-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} title="Notifications" data-testid="soft-bell"><Bell size={19} />{unread > 0 && <i aria-hidden="true" />}</Link>
         <button type="button" className="soft-round" aria-label={`Switch to ${nextTheme} theme`} title="Theme" onClick={() => setTheme(nextTheme)}>
           <ThemeIcon size={19} />
         </button>

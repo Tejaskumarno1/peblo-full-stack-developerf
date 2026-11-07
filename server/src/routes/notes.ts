@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, archiveNote, getBackups, getBackup, revertBackup, nameVersion, renameBackup, getBacklinks, getMentions, linkMention, openDailyNote } from '../controllers/notesController.js';
 import { authenticate } from '../middleware/auth.js';
+import { hidePrivateFromTokens } from '../middleware/tokenPrivacy.js';
 import { validate } from '../middleware/validate.js';
 import { noteSchemas } from '../schemas/index.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); });
 
 router.get('/', getNotes);
 router.post('/', validate(noteSchemas.create), createNote);

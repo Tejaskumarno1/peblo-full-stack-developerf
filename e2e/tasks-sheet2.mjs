@@ -24,7 +24,7 @@ try {
   // repeat + reminder + estimate
   await dlg.getByRole('radio', { name: 'Monthly' }).click();
   check('a repeat note says what it means', /Every month on the/.test(await dlg.innerText()));
-  await dlg.getByRole('radio', { name: '1 hour before' }).click();
+  await dlg.getByRole('group', { name: 'Remind me' }).getByRole('button', { name: '1 hour before' }).click();
   await dlg.getByRole('radio', { name: '30 min' }).click();
   check('steps show a progress bar and count', (await dlg.locator('.pb-steps-bar').count()) === 1 && /1 of 2/.test(await dlg.innerText()));
   check('where it came from shows the quote and the line', /joint account/.test(await dlg.innerText()) && /line 2/.test(await dlg.innerText()));

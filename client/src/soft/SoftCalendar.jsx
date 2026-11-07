@@ -8,6 +8,8 @@ import UndoToast from '../components/UndoToast';
 import { useUndoToast } from '../utils/useUndoToast';
 import NewMeeting from '../components/NewMeeting';
 import TimeGrid from '../components/TimeGrid';
+import { useAuth } from '../context/AuthContext';
+import { COUNTRIES, makeHolidayLookup } from './holidays';
 import { exportCalendar, importCalendar } from '../river/calendarIO';
 import { startOfWeek, weekdayNames } from '../utils/weekStart';
 import { startOfDay, addDays, sameDay, daysFromToday, spanOf, timeOf, toneOf, tagsOf, weekdayLong } from './softUtils';
@@ -20,6 +22,10 @@ const fmt = (d, o) => new Date(d).toLocaleDateString('en-GB', o);
 /** Soft Studio · Calendar (mockup: SoftCalendar). Week view with a mini month and a countdown. */
 export default function SoftCalendar() {
   const navigate = useNavigate();
+  const { settings, updateSettings } = useAuth();
+  const hol = { on: true, country: 'IN', festivals: true, observances: false, ...(settings?.holidays || {}) };
+    const lookupHol = useMemo(() => makeHolidayLookup(hol), [hol.on, hol.country, hol.festivals, hol.observances]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setHol = (patch) => updateSettings({ holidays: { ...hol, ...patch } });
   const [view, setView] = useState('week');
   const [fileMenu, setFileMenu] = useState(false);
   const fileRef = useRef(null);
@@ -141,6 +147,8 @@ export default function SoftCalendar() {
 
   const bigDays = nextBig ? daysFromToday(nextBig.deadline) : null;
 
+  const holAllDay = days.flatMap((d) => lookupHol(d).map((h, i) => ({ id: `hol-${d.toDateString()}-${i}`, day: d, title: h.name, bg: h.kind === 'public' ? 'var(--s-peach)' : h.kind === 'festival' ? 'var(--s-butter)' : 'var(--s-sky)', fg: 'var(--s-fg)', bar: 'transparent', props: { 'data-holiday': h.kind, tabIndex: -1, title: `${h.name} (${h.kind === 'public' ? 'public holiday' : h.kind})` } })));
+
   return (
     <div className="soft-page s-cal">
       <div className="s-page-head s-cal-head">
@@ -200,7 +208,15 @@ export default function SoftCalendar() {
           {[['tasks', 'Tasks', '#E8825E'], ['meetings', 'Meetings', '#6FA8DC'], ['done', 'Done', '#7BC59A']].map(([k, label, c]) => (
             <button key={k} type="button" aria-pressed={layers[k]} onClick={() => setLayers((l) => ({ ...l, [k]: !l[k] }))}><i style={{ background: c }} />{label}</button>
           ))}
+          <button type="button" role="switch" aria-checked={hol.on} aria-label="Show holidays" aria-pressed={hol.on} onClick={() => setHol({ on: !hol.on })}><i style={{ background: '#E5B53C' }} />Holidays</button>
         </div>
+        {hol.on && (
+          <div className="s-hol" role="group" aria-label="Holidays">
+            <select aria-label="Holiday country" value={hol.country} onChange={(e) => setHol({ country: e.target.value })}>{COUNTRIES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>
+            <button type="button" aria-pressed={hol.festivals} onClick={() => setHol({ festivals: !hol.festivals })}>Festivals</button>
+            <button type="button" aria-pressed={hol.observances} onClick={() => setHol({ observances: !hol.observances })}>Observances</button>
+          </div>
+        )}
         <FindSlot todos={todos} from={new Date()} onPick={(s) => setQuick({ day: s.day, start: s.start, end: s.end })} />
         <section className="s-big" aria-label="Next big thing">
           <span className="s-big-label">Next big thing</span>
@@ -238,15 +254,16 @@ export default function SoftCalendar() {
                   onDrop={(e) => { e.preventDefault(); setDropDay(null); const id = e.dataTransfer.getData('text/peblo-todo'); if (id) moveToDay(id, d); }}
                 >
                   <span className="n">{d.getDate()}</span>
-                  {items.slice(0, 3).map((t) => { const c = toneFor(t); return <span key={t.id} className={`ev${t.completed ? ' done' : ''}`} style={{ background: c.bg, color: c.fg, cursor: 'grab' }} draggable onDragStart={(e) => { e.dataTransfer.setData('text/peblo-todo', t.id); e.dataTransfer.effectAllowed = 'move'; }}>{t.text}</span>; })}
-                  {items.length > 3 && <span className="more">+{items.length - 3}</span>}
+                  {lookupHol(d).slice(0, 1).map((h) => <span key={h.name} className={`s-hol-chip ${h.kind}`} data-holiday={h.kind} title={h.name}>{h.name}</span>)}
+                  {items.slice(0, lookupHol(d).length ? 2 : 3).map((t) => { const c = toneFor(t); return <span key={t.id} className={`ev${t.completed ? ' done' : ''}`} style={{ background: c.bg, color: c.fg, cursor: 'grab' }} draggable onDragStart={(e) => { e.dataTransfer.setData('text/peblo-todo', t.id); e.dataTransfer.effectAllowed = 'move'; }}>{t.text}</span>; })}
+                  {items.length > (lookupHol(d).length ? 2 : 3) && <span className="more">+{items.length - (lookupHol(d).length ? 2 : 3)}</span>}
                 </button>
               );
             })}
           </div>
         ) : (
           <>
-            <TimeGrid days={days} events={gridEvents} allDay={gridAllDay} headClass="s-week-day" onToday={() => setCursor(startOfDay())} onMove={onMove} onCreate={(day, start, end) => setQuick({ day, start, end })} label="Schedule" />
+            <TimeGrid days={days} events={gridEvents} allDay={[...holAllDay, ...gridAllDay]} headClass="s-week-day" onToday={() => setCursor(startOfDay())} onMove={onMove} onCreate={(day, start, end) => setQuick({ day, start, end })} label="Schedule" />
           </>
         )}
       </section>

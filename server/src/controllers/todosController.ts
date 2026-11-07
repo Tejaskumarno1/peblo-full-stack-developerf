@@ -170,6 +170,12 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       recurrence: safeRecurrence, todoTags: cleanTags, noteId: noteId || null, userId,
     } as any;
     const cleanMeta = cleanTodoMeta(meta);
+    // "Ask me before Claude adds tasks" (Plan my day): a task added through an access token / MCP waits in the approval inbox.
+    // Decided here, on the server, because an access token may not read account settings.
+    if (req.user!.viaToken && !(cleanMeta as any).proposal) {
+      const me = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+      if ((me?.settings as any)?.aiApproval === true) (cleanMeta as any).proposal = { by: 'Claude' };
+    }
     if (Object.keys(cleanMeta).length) base.meta = cleanMeta;
 
     let todo;

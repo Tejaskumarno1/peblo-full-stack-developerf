@@ -1,0 +1,79 @@
+{
+  "version": "1.2.0",
+  "required": {
+    "get_status": [],
+    "search_all": [
+      "query"
+    ],
+    "search_notes": [],
+    "get_note": [
+      "id"
+    ],
+    "get_image": [
+      "image"
+    ],
+    "read_shared_link": [
+      "url"
+    ],
+    "create_note": [
+      "title"
+    ],
+    "append_to_note": [
+      "id",
+      "text"
+    ],
+    "list_tasks": [],
+    "create_task": [
+      "text"
+    ],
+    "complete_task": [
+      "id"
+    ],
+    "update_note": [
+      "id"
+    ],
+    "update_task": [
+      "id"
+    ],
+    "get_calendar": [
+      "from",
+      "to"
+    ],
+    "create_share_link": [
+      "id",
+      "kind"
+    ],
+    "stop_sharing": [
+      "id",
+      "kind"
+    ],
+    "archive_note": [
+      "id"
+    ],
+    "pin_note": [
+      "id"
+    ],
+    "trash_note": [
+      "id"
+    ],
+    "restore_note": [
+      "id"
+    ],
+    "list_trash": [],
+    "get_backlinks": [
+      "id"
+    ],
+    "list_note_history": [
+      "id"
+    ],
+    "restore_note_version": [
+      "id",
+      "versionId"
+    ],
+    "rename_tag": [
+      "from",
+      "to"
+    ],
+    "list_tags": []
+  }
+}

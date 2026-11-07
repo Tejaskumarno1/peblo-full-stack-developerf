@@ -1,3 +1,4 @@
+import { hidePrivateFromTokens } from '../middleware/tokenPrivacy.js';
 import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
@@ -12,6 +13,7 @@ import { accessFor, approvalOn, listWaiting, guestHash, SESSION_RE } from '../se
  */
 export const shareRoutes = Router();
 shareRoutes.use(authenticate);
+shareRoutes.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); }); // an AI client cannot publish a #private note
 
 const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);

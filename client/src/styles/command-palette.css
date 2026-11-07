@@ -1,5 +1,5 @@
 /* ============================
-   COMMAND PALETTE â€” Component Styles
+   COMMAND PALETTE — Component Styles
    ============================ */
 
 .cmd-overlay {
@@ -190,3 +190,11 @@
 .cmd-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }.cmd-tabs { flex: none; margin-right: 6px; }
 .cmd-header .cmd-input { min-width: 0; flex: 1; }
 .cmd-header .cmd-badge { flex: none; }
+
+.cmd-gh{display:flex;align-items:center;gap:8px;margin-top:8px}
+.cmd-count{min-width:20px;padding:1px 7px;border-radius:999px;background:var(--cmd-chip,rgba(128,110,90,.16));font-size:11px;font-weight:800;text-align:center}
+.cmd-gh .grow{flex:1}
+.cmd-seeall{border:0;background:none;color:var(--accent,#C4441C);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-transform:none;letter-spacing:0}
+.cmd-item-text{display:flex;flex-direction:column;min-width:0;flex:1}
+.cmd-item-sub{font-size:12px;opacity:.65;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-hl{background:#FFE9A6;color:#241F1A;border-radius:4px;padding:0 2px}

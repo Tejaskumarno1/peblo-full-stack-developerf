@@ -74,6 +74,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     if (user.viaToken && /^\/api\/(auth|tokens|profile|ai\/connections)(\/|\?|$)/i.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot change account settings. Sign in to do that.' });
     }
+    // A token is also not for taking the whole library out or putting a backup over it: those need a real sign-in
+    // (an export or backup includes #private notes, and a restore replaces everything).
+    if (user.viaToken && /^\/api\/(export|backup|restore|import|example)(\/|\?|$)/i.test(req.originalUrl)) {
+      return res.status(403).json({ error: 'An access token cannot export, back up, import or restore the whole library. Sign in to Peblo to do that.' });
+    }
     if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       return res.status(403).json({ error: 'This access token is read-only.' });
     }

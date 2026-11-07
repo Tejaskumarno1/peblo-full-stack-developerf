@@ -6,21 +6,56 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+/** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
+export const MCP_VERSION = '1.2.0';
+
 export type ToolLog = (tool: string, summary: string, ok: boolean) => void;
 
+/** What went wrong, in words the person (and the model) can act on. */
+export function explainFailure(status: number, serverMessage: string | undefined): { message: string; retryable: boolean } {
+  const m = serverMessage || '';
+  if (status === 401) return { message: 'Peblo does not accept this connection any more (the token was removed, or it is wrong). Connect again in Peblo: Settings > Connect apps.', retryable: false };
+  if (status === 403) return { message: m || 'Peblo refused this. The token may be read-only, or the note is #private.', retryable: false };
+  if (status === 404) return { message: m || 'Peblo could not find that. Check the id (use search_notes or list_tasks to find it).', retryable: false };
+  if (status === 408 || status === 425) return { message: 'Peblo took too long. Try again.', retryable: true };
+  if (status === 429) return { message: 'Peblo is rate limiting this connection. Wait a minute, then try again.', retryable: true };
+  if (status >= 500) return { message: m || `Peblo had a problem (${status}). If it was asleep it is waking up: try again in a minute.`, retryable: true };
+  return { message: m || `Peblo answered ${status}.`, retryable: false };
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export function createPebloMcp(BASE: string, TOKEN: string, log?: ToolLog): McpServer {
+/** One call to Peblo. Reads (GET) are retried a few times when the server is waking up, busy or briefly unreachable; writes never are, so nothing is saved twice. */
 async function api(method: string, path: string, body?: unknown): Promise<any> {
-  const res = await fetch(BASE + '/api' + path, {
-    method,
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const text = await res.text();
-  let data: any = {};
-  try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text.slice(0, 200) }; }
-  if (!res.ok) throw new Error(data?.error || `Peblo answered ${res.status}`);
-  return data;
+  const reads = method === 'GET';
+  const tries = reads ? 4 : 1;
+  let last: Error = new Error('Peblo could not be reached.');
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(BASE + '/api' + path, {
+        method,
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'peblo-mcp/' + MCP_VERSION },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(reads ? 45_000 : 60_000),
+      });
+      const text = await res.text();
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text.slice(0, 200) }; }
+      if (res.ok) return data;
+      const f = explainFailure(res.status, data?.error);
+      last = new Error(f.message);
+      if (!(reads && f.retryable) || i === tries - 1) throw last;
+      const wait = Number(res.headers.get('retry-after'));
+      await sleep(Math.min(Number.isFinite(wait) && wait > 0 ? wait * 1000 : 1500 * 2 ** i, 15_000));
+    } catch (e: any) {
+      if (e === last) throw e;
+      // network error or timeout (a sleeping host often shows up this way)
+      last = new Error(e?.name === 'TimeoutError' ? 'Peblo did not answer in time. It may be waking up: try again in a minute.' : 'Peblo could not be reached. Check that it is running and the address is right.');
+      if (i === tries - 1) throw last;
+      await sleep(Math.min(1500 * 2 ** i, 15_000));
+    }
+  }
+  throw last;
 }
 
 const ok = (value: unknown) => ({ content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] });
@@ -40,9 +75,25 @@ const cleanContent = (md: string) => {
     .replace(/\uFFFD+/g, () => { corrupt += 1; return ' '; });
   return { text, embedded, corrupt };
 };
+/** The same create asked twice within a minute (a client retry, a repeated message) is done once. */
+const recent = (() => {
+  const seen = new Map<string, { at: number; out: any }>();
+  const keyOf = (kind: string, a: any) => kind + ':' + JSON.stringify(a, Object.keys(a || {}).sort());
+  return {
+    find(kind: string, a: any) { const e = seen.get(keyOf(kind, a)); return e && Date.now() - e.at < 60_000 ? e.out : null; },
+    add(kind: string, a: any, out: any) { seen.set(keyOf(kind, a), { at: Date.now(), out }); if (seen.size > 200) for (const [k, v] of seen) if (Date.now() - v.at > 60_000) seen.delete(k); },
+  };
+})();
+/** Reminders (minutes before) and travel time live in the task's meta. */
+const taskMeta = (a: { reminders?: number[]; travelMin?: number | null }) => {
+  const m: Record<string, unknown> = {};
+  if (a.reminders !== undefined) { m.reminders = a.reminders; m.remindMin = a.reminders.length ? Math.min(...a.reminders) : null; }
+  if (a.travelMin !== undefined) m.travelMin = a.travelMin;
+  return m;
+};
 const norm = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-const server = new McpServer({ name: 'peblo', version: '1.1.0' });
+const server = new McpServer({ name: 'peblo', version: MCP_VERSION });
 // every tool call is noted (what, and whether it worked) so the person can see it in Settings > Connect apps
 const summaryOf = (a: any) => String(a?.title ?? a?.text ?? a?.query ?? a?.tag ?? a?.date ?? a?.from ?? a?.id ?? '').replace(/\s+/g, ' ').trim();
 const register = server.registerTool.bind(server) as any;
@@ -54,12 +105,46 @@ const register = server.registerTool.bind(server) as any;
 const readOnly = { readOnlyHint: true, openWorldHint: false };
 const writes = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
+server.registerTool('get_status', {
+  description: 'Check the connection: Peblo\'s version, the person\'s time zone and today\'s date there, whether this connection can change things (read-only or not), and that #private notes are hidden from it. Call this first when dates matter.',
+  inputSchema: {},
+  annotations: readOnly,
+}, () => run(async () => {
+  const me = await api('GET', '/whoami');
+  return { connector: 'peblo', version: MCP_VERSION, ...me, canWrite: !me.readOnly };
+}));
+
+server.registerTool('search_all', {
+  description: 'Search everything at once and get results grouped: notes, tasks, tags and calendar events that match the words. Good first step when the person says "find everything about X". #private notes are never included.',
+  inputSchema: { query: z.string().min(2), limit: z.number().int().min(1).max(10).optional().describe('Most results per group (default 5)') },
+  annotations: readOnly,
+}, ({ query, limit }) => run(async () => {
+  const per = limit ?? 5; const q = norm(query);
+  const [{ notes }, { todos }, tags] = await Promise.all([
+    api('GET', '/notes?' + new URLSearchParams({ search: query, limit: String(per), snippet: '1' })),
+    api('GET', '/todos'),
+    api('GET', '/tags').catch(() => ({ tags: [] })),
+  ]);
+  const hit = (t: any) => !t.completed && norm(t.text).includes(q);
+  const tasks = (todos || []).filter((t: any) => hit(t) && !t.startTime);
+  const events = (todos || []).filter((t: any) => hit(t) && t.startTime);
+  const tagList = ((tags as any).tags || tags || []).filter((g: any) => norm(g.name ?? g).includes(q.replace(/^#/, '')));
+  const slim = (t: any) => ({ id: t.id, text: t.text, deadline: t.deadline, ...(t.startTime ? { startTime: t.startTime, endTime: t.endTime } : {}), priority: t.priority });
+  return {
+    notes: (notes || []).map((n: any) => ({ id: n.id, title: n.title, tags: n.tags, preview: strip(cleanContent(n.snippet ?? n.content).text).slice(0, 160) })),
+    tasks: { count: tasks.length, items: tasks.slice(0, per).map(slim) },
+    tags: tagList.slice(0, per),
+    events: { count: events.length, items: events.slice(0, per).map(slim) },
+  };
+}));
+
 server.registerTool('search_notes', {
   description: 'Search the user\'s Peblo notes by text, optionally by tag. Returns titles, tags and a short preview. Empty notes are left out and near-identical results are merged (the count is reported); pass include_empty or include_duplicates to see them.',
-  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional(), include_empty: z.boolean().optional(), include_duplicates: z.boolean().optional() },
+  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional(), offset: z.number().int().min(0).max(5000).optional().describe('Skip this many results (to read the next page)'), include_empty: z.boolean().optional(), include_duplicates: z.boolean().optional() },
   annotations: readOnly,
-}, ({ query, tag, limit, include_empty, include_duplicates }) => run(async () => {
+}, ({ query, tag, limit, offset, include_empty, include_duplicates }) => run(async () => {
   const q = new URLSearchParams({ limit: String(limit ?? 20), snippet: '1' });
+  if (offset) q.set('offset', String(offset));
   if (query) q.set('search', query);
   if (tag) q.set('tag', tag);
   const { notes } = await api('GET', '/notes?' + q);
@@ -76,7 +161,8 @@ server.registerTool('search_notes', {
     if (!include_duplicates && seen.has(key)) { seen.get(key).duplicates = (seen.get(key).duplicates || 0) + 1; merged += 1; continue; }
     seen.set(key, row); out.push(row);
   }
-  return skippedEmpty || merged ? { notes: out, skippedEmpty, mergedDuplicates: merged } : out;
+  const more = (notes || []).length >= (limit ?? 20) ? { nextOffset: (offset ?? 0) + (notes || []).length } : {};
+  return skippedEmpty || merged || more.nextOffset !== undefined ? { notes: out, ...(skippedEmpty ? { skippedEmpty } : {}), ...(merged ? { mergedDuplicates: merged } : {}), ...more } : out;
 }));
 
 server.registerTool('get_note', {
@@ -147,8 +233,12 @@ server.registerTool('create_note', {
   inputSchema: { title: z.string().min(1), content: z.string().optional(), tags: z.array(z.string()).optional() },
   annotations: writes,
 }, ({ title, content, tags }) => run(async () => {
+  const dup = recent.find('note', { title, content, tags });
+  if (dup) return { ...dup, duplicate: 'You created this a moment ago, so it was not created again.' };
   const { note } = await api('POST', '/notes', { title, content: toHtml(content ?? ''), tags: tags ?? [] });
-  return { id: note.id, title: note.title };
+  const out = { id: note.id, title: note.title };
+  recent.add('note', { title, content, tags }, out);
+  return out;
 }));
 
 server.registerTool('append_to_note', {
@@ -182,14 +272,19 @@ server.registerTool('create_task', {
     text: z.string().min(1), deadline: z.string().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), tags: z.array(z.string()).optional(),
     startTime: z.string().optional().describe('Start time of day, HH:MM, to make it a calendar event'), endTime: z.string().optional().describe('End time, HH:MM'),
     recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(), noteId: z.string().optional().describe('Link the task to a note'),
+    reminders: z.array(z.number().int().min(0).max(43200)).max(6).optional().describe('Minutes before it starts to remind, e.g. [10, 1440]'), travelMin: z.number().int().min(1).max(600).optional().describe('Minutes it takes to get there; Peblo says when to leave'),
   },
   annotations: writes,
 }, (args) => run(async () => {
-  // When the person asked to approve what Claude adds (Plan my day), the task waits in their approval inbox.
-  let propose = false;
-  try { const me = await api('GET', '/profile'); propose = me?.user?.settings?.aiApproval === true; } catch { /* no setting: add it straight away */ }
-  const { todo } = await api('POST', '/todos', propose ? { ...args, meta: { proposal: { by: 'Claude' } } } : args);
-  return { id: todo.id, text: todo.text, deadline: todo.deadline, ...(propose ? { status: 'waiting for the person to approve it' } : {}) };
+  // When the person asked to approve what Claude adds (Plan my day), Peblo's server holds the task in their approval inbox.
+  const dup = recent.find('task', args);
+  if (dup) return { ...dup, duplicate: 'You added this a moment ago, so it was not added again.' };
+  const { reminders, travelMin, ...rest } = args as any;
+  const meta = taskMeta({ reminders, travelMin });
+  const { todo } = await api('POST', '/todos', Object.keys(meta).length ? { ...rest, meta } : rest);
+  const out = { id: todo.id, text: todo.text, deadline: todo.deadline, ...(todo.meta?.proposal ? { status: 'waiting for the person to approve it' } : {}) };
+  recent.add('task', args, out);
+  return out;
 }));
 
 server.registerTool('complete_task', {
@@ -222,10 +317,13 @@ server.registerTool('update_task', {
     id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional(),
     startTime: z.string().nullable().optional(), endTime: z.string().nullable().optional(), recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(),
     tags: z.array(z.string()).optional(), scope: z.enum(['this', 'following', 'all']).optional().describe('For repeating tasks: which occurrences to change'),
+    reminders: z.array(z.number().int().min(0).max(43200)).max(6).optional().describe('Minutes before it starts to remind; [] clears them'), travelMin: z.number().int().min(1).max(600).nullable().optional().describe('Minutes it takes to get there; null clears it'),
   },
   annotations: { ...writes, idempotentHint: true },
-}, ({ id, ...patch }) => run(async () => {
-  const body = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+}, ({ id, reminders, travelMin, ...patch }) => run(async () => {
+  const body: Record<string, unknown> = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const meta = taskMeta({ reminders, travelMin: travelMin === null ? (null as any) : travelMin });
+  if (Object.keys(meta).length) body.meta = meta;
   if (!Object.keys(body).length) throw new Error('Give something to change.');
   const { todo } = await api('PATCH', '/todos/' + encodeURIComponent(id), body);
   return { id: todo.id, text: todo.text, deadline: todo.deadline, priority: todo.priority, noteId: todo.noteId };

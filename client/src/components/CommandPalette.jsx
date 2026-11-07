@@ -1,13 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Image as ImageIcon, Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette, Hash } from 'lucide-react';
+import { Image as ImageIcon, Search, LayoutDashboard, FileText, Calendar, CheckSquare, Sparkles, File, FolderOpen, Palette, Hash, CalendarClock } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, todosAPI, mediaSearchAPI } from '../api/index';
 import { parseTask } from '../utils/parseTask';
 import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
+
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The query's words picked out in a result, so you can see why it matched. */
+function Hl({ text, q }) {
+  const w = (q || '').trim().replace(/^#/, '');
+  if (w.length < 2) return text;
+  return String(text).split(new RegExp('(' + esc(w) + ')', 'ig')).map((p, i) => (p.toLowerCase() === w.toLowerCase() ? <mark key={i} className="cmd-hl">{p}</mark> : p));
+}
+const snipOf = (n, q) => {
+  const txt = String(n.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!txt) return '';
+  const i = txt.toLowerCase().indexOf((q || '').trim().toLowerCase());
+  const a = Math.max(0, i - 20);
+  return (a > 0 ? '...' : '') + txt.slice(a, a + 70) + (txt.length > a + 70 ? '...' : '');
+};
 
 export default function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
@@ -114,12 +129,15 @@ export default function CommandPalette() {
   const tq = query.trim().toLowerCase().replace(/^#/, '');
   const seenSeries = new Set();
   const taskHits = inScope('tasks') && tq.length >= 2 && !addMatch
-    ? tasks.filter((t) => !t.completed && String(t.text).toLowerCase().includes(tq) && (!t.seriesId || (!seenSeries.has(t.seriesId) && seenSeries.add(t.seriesId)))).slice(0, 4)
+    ? tasks.filter((t) => !t.completed && !t.startTime && String(t.text).toLowerCase().includes(tq) && (!t.seriesId || (!seenSeries.has(t.seriesId) && seenSeries.add(t.seriesId)))).slice(0, 4)
     : [];
   const tagHits = inScope('tasks') && tq.length >= 2 && !addMatch
     ? [...new Set(tasks.flatMap((t) => t.todoTags || []))].filter((g) => String(g).toLowerCase().includes(tq)).slice(0, 3)
     : [];
 
+  const eventHits = inScope('tasks') && tq.length >= 2 && !addMatch
+    ? tasks.filter((t) => t.startTime && !t.completed && String(t.text).toLowerCase().includes(tq)).slice(0, 3)
+    : [];
   const matchingCommands = query.trim()
     ? navigationCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
     : navigationCommands;
@@ -131,9 +149,10 @@ export default function CommandPalette() {
   const pictureHits = scope === 'all' && picHits.q === query.trim() && !addMatch ? picHits.list : [];
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),
-    ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id })),
-    ...taskHits.map((t) => ({ id: `task-${t.id}`, title: t.text, icon: <CheckSquare size={16} />, type: 'task', taskId: t.id })),
-    ...tagHits.map((g) => ({ id: `tag-${g}`, title: `#${g}`, icon: <Hash size={16} />, type: 'tag', tag: g })),
+    ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id, sub: snipOf(n, query) })),
+    ...taskHits.map((t) => ({ id: `task-${t.id}`, title: t.text, icon: <CheckSquare size={16} />, type: 'task', taskId: t.id, sub: [t.deadline && 'Due ' + new Date(t.deadline).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }), (t.todoTags || [])[0]].filter(Boolean).join(', ') })),
+    ...tagHits.map((g) => ({ id: `tag-${g}`, title: `#${g}`, icon: <Hash size={16} />, type: 'tag', tag: g, sub: tasks.filter((t) => (t.todoTags || []).includes(g)).length + ' tasks' })),
+    ...eventHits.map((t) => ({ id: `ev-${t.id}`, title: t.text, icon: <CalendarClock size={16} />, type: 'event', taskId: t.id, sub: [t.deadline && new Date(t.deadline).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }), t.startTime].filter(Boolean).join(' ') })),
     ...pictureHits.map((p) => ({ id: `pic-${p.id}`, title: p.snippet, icon: <ImageIcon size={16} />, type: 'picture', url: p.url })),
   ];
 
@@ -153,7 +172,7 @@ export default function CommandPalette() {
       item.action();
     } else if (item.type === 'note') {
       navigate(`/notes/${item.noteId}`);
-    } else if (item.type === 'task') {
+    } else if (item.type === 'task' || item.type === 'event') {
       navigate(`/tasks?task=${item.taskId}`);
     } else if (item.type === 'picture') {
       window.open(item.url, '_blank', 'noopener');
@@ -220,49 +239,23 @@ export default function CommandPalette() {
                 </div>
               ))}
 
-              {filteredNotes.length > 0 && <div className="cmd-section-title" style={{ marginTop: '8px' }}>Notes</div>}
-              {allItems.filter(i => i.type === 'note').map((item, index) => {
-                // Adjust index based on how many commands precede it
-                const actualIndex = filteredCommands.length + index;
+              {[
+                ['note', 'Notes', filteredNotes.length, hits && hits.q === query.trim() ? hits.notes.length : filteredNotes.length, () => navigate('/notes?q=' + encodeURIComponent(query.trim()))],
+                ['task', 'Tasks', taskHits.length, taskHits.length, () => navigate('/tasks?q=' + encodeURIComponent(query.trim()))],
+                ['tag', 'Tags', tagHits.length, tagHits.length],
+                ['event', 'Events', eventHits.length, eventHits.length, () => navigate('/calendar')],
+                ['picture', 'Pictures', pictureHits.length, pictureHits.length],
+              ].filter(([, , n]) => n > 0).map(([type, name, n, total, seeAll]) => {
+                const base = allItems.findIndex((i) => i.type === type);
                 return (
-                  <div
-                    key={item.id}
-                    className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`}
-                    onMouseEnter={() => setSelectedIndex(actualIndex)}
-                    onClick={() => handleSelect(item)}
-                  >
-                    <span className="cmd-item-icon">{item.icon}</span>
-                    <span className="cmd-item-title">{item.title}</span>
-                  </div>
-                );
-              })}
-              {taskHits.length > 0 && <div className="cmd-section-title" style={{ marginTop: '8px' }}>Tasks</div>}
-              {allItems.filter((i) => i.type === 'task').map((item, index) => {
-                const actualIndex = filteredCommands.length + filteredNotes.length + index;
-                return (
-                  <div key={item.id} className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(actualIndex)} onClick={() => handleSelect(item)}>
-                    <span className="cmd-item-icon">{item.icon}</span>
-                    <span className="cmd-item-title">{item.title}</span>
-                  </div>
-                );
-              })}
-              {tagHits.length > 0 && <div className="cmd-section-title" style={{ marginTop: '8px' }}>Tags</div>}
-              {allItems.filter((i) => i.type === 'tag').map((item, index) => {
-                const actualIndex = filteredCommands.length + filteredNotes.length + taskHits.length + index;
-                return (
-                  <div key={item.id} className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(actualIndex)} onClick={() => handleSelect(item)}>
-                    <span className="cmd-item-icon">{item.icon}</span>
-                    <span className="cmd-item-title">{item.title}</span>
-                  </div>
-                );
-              })}
-              {pictureHits.length > 0 && <div className="cmd-section-title" style={{ marginTop: '8px' }}>Pictures</div>}
-              {allItems.filter((i) => i.type === 'picture').map((item, index) => {
-                const actualIndex = filteredCommands.length + filteredNotes.length + taskHits.length + tagHits.length + index;
-                return (
-                  <div key={item.id} data-testid="picture-hit" className={`cmd-item ${actualIndex === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(actualIndex)} onClick={() => handleSelect(item)}>
-                    <span className="cmd-item-icon">{item.icon}</span>
-                    <span className="cmd-item-title">{item.title}</span>
+                  <div key={type} className="cmd-group" data-testid={'cmd-group-' + type}>
+                    <div className="cmd-section-title cmd-gh"><span>{name}</span><span className="cmd-count">{total}</span><span className="grow" />{seeAll && total > 1 && <button type="button" className="cmd-seeall" onClick={() => { setIsOpen(false); seeAll(); }}>See all {total}</button>}</div>
+                    {allItems.filter((i) => i.type === type).map((item, k) => (
+                      <div key={item.id} data-testid={type === 'picture' ? 'picture-hit' : undefined} className={`cmd-item ${base + k === selectedIndex ? 'selected' : ''}`} onMouseEnter={() => setSelectedIndex(base + k)} onClick={() => handleSelect(item)}>
+                        <span className="cmd-item-icon">{item.icon}</span>
+                        <span className="cmd-item-text"><span className="cmd-item-title"><Hl text={item.title} q={query} /></span>{item.sub ? <span className="cmd-item-sub"><Hl text={item.sub} q={query} /></span> : null}</span>
+                      </div>
+                    ))}
                   </div>
                 );
               })}

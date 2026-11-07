@@ -35,7 +35,7 @@ import mediaRoutes from './routes/media.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { verifyToken } from './middleware/auth.js';
+import { verifyToken, authenticate } from './middleware/auth.js';
 import { securityHeaders, forceHttps, corsDelegate } from './middleware/security.js';
 import { rejectNulInUrl, cleanBody, inputErrors } from './middleware/cleanInput.js';
 import { apiLimiter } from './middleware/rateLimit.js';
@@ -123,6 +123,16 @@ app.use('/api', apiLimiter());
     res.json({ publicUrl });
   });
 
+  // What a connected app (MCP client) may know about the connection: its time zone, today's date there, and whether it can write.
+  app.get('/api/whoami', authenticate, async (req, res, next) => {
+    try {
+      const u = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { timezone: true } });
+      const timezone = u?.timezone || 'UTC';
+      let today = new Date().toISOString().slice(0, 10);
+      try { today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch { /* unknown zone: UTC date */ }
+      res.json({ timezone, today, now: new Date().toISOString(), viaToken: !!req.user!.viaToken, readOnly: !!req.user!.readOnly, privateNotesHidden: !!req.user!.viaToken });
+    } catch (e) { next(e); }
+  });
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);

@@ -102,7 +102,7 @@ export default function SoftNotes() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [question, setQuestion] = useState('');
   const [toast, setToast] = useState('');
-  const [q, setQ] = useState(''); // the search box
+  const [q, setQ] = useState(() => params.get('q') || ''); // the search box (the palette's "See all" arrives with ?q=)
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
   const [typewriter, setTypewriter] = useState(() => store('peblo-typewriter', 'off'));

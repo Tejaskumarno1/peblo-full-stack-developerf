@@ -30,6 +30,7 @@ const SoftFocus = lazy(() => import('./soft/SoftFocus'));
 const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
 const SoftAI = lazy(() => import('./soft/SoftAI'));
 const SoftConnections = lazy(() => import('./soft/SoftConnections'));
+const SoftNotifications = lazy(() => import('./soft/SoftNotifications'));
 const SoftSettings = lazy(() => import('./soft/SoftSettings'));
 
 // River: one timeline. Tasks and Calendar are the river itself, at Day and Week zoom.
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="/tasks/focus/:id" element={<SoftFocus />} />
           <Route path="/tasks/plan" element={<SoftPlan />} />
 <Route path="/tasks" element={<Styled soft={SoftTasks} river={RiverTasks} orbit={OrbitTasks} other={TasksPage} />} />
+          <Route path="/notifications" element={<SoftNotifications />} />
           <Route path="/calendar" element={<Styled soft={SoftCalendar} river={RiverCalendar} orbit={OrbitCalendar} other={CalendarPage} />} />
           <Route path="/quiz/:topic" element={<Styled orbit={OrbitQuiz} other={GoHome} />} />
           <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />

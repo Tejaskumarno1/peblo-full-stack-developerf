@@ -76,3 +76,12 @@
 .soft .s-minical { padding: 14px 18px; gap: 6px; }
 .soft .s-cal-side { overflow-y: auto; scrollbar-width: none; }
 .soft .s-cal-side::-webkit-scrollbar { display: none; }
+
+.s-hol{display:flex;gap:6px;align-items:center}
+.s-hol select{flex:1;min-width:0;height:30px;border-radius:999px;border:1px solid var(--s-line);background:var(--s-surface);color:var(--s-fg);font:700 12.5px var(--s-body);padding:0 10px}
+.s-hol button{height:30px;padding:0 10px;border:0;border-radius:999px;background:var(--s-chip-solid);color:var(--s-fg);font:700 12px var(--s-body);cursor:pointer}
+.s-hol button[aria-pressed="false"]{opacity:.55}
+.s-hol-chip{display:block;border-radius:999px;padding:1px 8px;font:700 11px var(--s-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--s-peach);color:var(--s-fg)}
+.s-hol-chip.festival{background:var(--s-butter)}
+.s-hol-chip.observance{background:var(--s-sky)}
+.soft .s-layers{gap:5px}.soft .s-layers button{padding:0 9px;font-size:12px;gap:5px}

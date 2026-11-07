@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, ArrowUp, Plus, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { dashboardAPI, todosAPI, notesAPI, hubAPI } from '../api';
+import HomeWidgets from './HomeWidgets';
 import { buildTimeline, hhmm } from './homeTimeline';
 import { timeOf, startOfDay, addDays, sameDay, daysFromToday, weekdayShort, weekdayLong, numberWord, snippetOf, firstNameOf, toneOf, toneVar, tagsOf } from './softUtils';
 
@@ -20,6 +21,8 @@ export default function SoftHome() {
   const queryClient = useQueryClient();
   const [ask, setAsk] = useState('');
   const [err, setErr] = useState('');
+  const [view, setViewState] = useState(() => { try { return localStorage.getItem('peblo-home-view') === 'widgets' ? 'widgets' : 'today'; } catch { return 'today'; } });
+  const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-home-view', v); } catch { /* not saved */ } };
 
   const today = startOfDay();
   const { data: todayData } = useQuery({ queryKey: ['todos', 'today'], queryFn: () => todosAPI.getToday().then((r) => r.data) });
@@ -103,10 +106,21 @@ export default function SoftHome() {
   };
   const topTag = insights?.topTags?.[0]?.name;
 
+  const switcher = (
+    <div className="s-home-switch s-seg small" role="tablist" aria-label="Home view">
+        <button type="button" role="tab" aria-selected={view === 'today'} className={view === 'today' ? 'on' : ''} onClick={() => setView('today')}>Today</button>
+        <button type="button" role="tab" aria-selected={view === 'widgets'} className={view === 'widgets' ? 'on' : ''} onClick={() => setView('widgets')} data-testid="home-widgets-tab">Widgets</button>
+      </div>
+  );
+
   return (
     <div className="soft-page s-home">
+      {view === 'widgets' ? (
+        <HomeWidgets switcher={switcher} streak={streak} lastWeek={lastWeek} greeting={`${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}${first ? ', ' + first : ''}`} />
+      ) : (<>
       <div className="s-home-hero">
         <div className="s-home-hero-text">
+          {switcher}
           <span className="s-date-pill">{new Date().toLocaleDateString('en-GB', { weekday: 'long' })} · {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}</span>
           <h1 className="s-home-title">{headline}</h1>
           <p className="s-home-lead">{lead.join(' ')}</p>
@@ -216,6 +230,7 @@ export default function SoftHome() {
           <Link to="/ai/connections" className="s-privacy"><Lock size={16} /> {aiLine}</Link>
         </section>
       </div>
+      </>)}
     </div>
   );
 }

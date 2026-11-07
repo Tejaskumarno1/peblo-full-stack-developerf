@@ -6,6 +6,7 @@ import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
+import { PRIVATE_TAG } from '../utils/aiAccess.js';
 import { aadOf, decryptText } from '../dataCrypto.js';
 
 // prisma imported from db.js
@@ -227,6 +228,8 @@ export async function getNotes(req: any, res: any, next: any) {
     const offset = Math.max(parseInt(String(req.query.offset ?? ''), 10) || 0, 0);
 
     const where: any = { userId };
+    // An access token (an AI client over MCP) never sees #private notes
+    if (req.user.viaToken) where.AND = [{ tags: { none: { tag: { name: PRIVATE_TAG } } } }];
 
     // Archive filter
     where.isArchived = archived === 'true';
@@ -325,12 +328,12 @@ export async function getNotes(req: any, res: any, next: any) {
     if (sq && found.length < 3 && sq.length >= 4) {
       // Few hits: also look for titles that are one or two letters off (typing "meetng" finds "Meeting").
       const words = searchWords(sq);
-      const titles = await prisma.note.findMany({ where: { userId, isArchived: where.isArchived, isDeleted: where.isDeleted }, select: { id: true, title: true } });
+      const titles = await prisma.note.findMany({ where: { userId, isArchived: where.isArchived, isDeleted: where.isDeleted, ...(req.user.viaToken ? { tags: { none: { tag: { name: PRIVATE_TAG } } } } : {}) }, select: { id: true, title: true } });
       const have = new Set(found.map((n: any) => n.id));
       const near = titles.filter((t) => !have.has(t.id) && nearTitle(t.title, words)).slice(0, 10).map((t) => t.id);
       if (near.length) {
         near.forEach((id) => fuzzy.add(id));
-        found = found.concat(await prisma.note.findMany({ where: { id: { in: near }, userId }, include: noteInclude }));
+        found = found.concat(await prisma.note.findMany({ where: { id: { in: near }, userId, ...(req.user.viaToken ? { tags: { none: { tag: { name: PRIVATE_TAG } } } } : {}) }, include: noteInclude }));
       }
     }
     let out: any[] = found.map(formatNote);
@@ -686,6 +689,7 @@ export async function getBacklinks(req: any, res: any, next: any) {
       SELECT n.id, n.title, n.updated_at AS "updatedAt"
       FROM note_links l JOIN notes n ON n.id = l.source_id
       WHERE l.target_id = ${id} AND n.user_id = ${req.user.id} AND n.is_deleted = false AND n.id <> ${id}
+        AND (${!req.user.viaToken} OR NOT EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = n.id AND t.name = ${PRIVATE_TAG}))
       ORDER BY n.updated_at DESC LIMIT 50`;
     res.json({ backlinks: rows });
   } catch (error) {

@@ -55,6 +55,9 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     status: (v) => (v === 'doing' ? 'doing' : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
+    // every reminder lead time in minutes (an event can ring more than once), and the trip time that makes "time to leave" ring
+    reminders: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => int(x, 0, 43200)).filter((x): x is number => x !== undefined))].sort((a, b) => a - b).slice(0, 6) : undefined),
+    travelMin: (v) => int(v, 1, 600),
     repeatFromDone: (v) => (v === true ? true : undefined),
     source: (v) => {
       if (!isObj(v)) return undefined;

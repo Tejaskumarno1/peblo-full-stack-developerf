@@ -19,6 +19,8 @@ const REPEATS = [['none', 'None'], ['daily', 'Daily'], ['weekdays', 'Weekdays'],
 const UNITS = [['day', 'days'], ['week', 'weeks'], ['month', 'months'], ['year', 'years']];
 const customOf = (r) => { const m = /^every:(\d+):(day|week|month|year)$/.exec(r || ''); return m ? { n: Number(m[1]), unit: m[2] } : null; };
 const REMINDS = [[0, 'At the time'], [10, '10 min before'], [60, '1 hour before'], [1440, '1 day before']];
+const MORE_REMINDS = [[5, '5 min before'], [30, '30 min before'], [120, '2 hours before']];
+const TRAVEL = [10, 15, 25, 30, 45, 60];
 const ESTIMATES = [[15, '15 min'], [30, '30 min'], [60, '1 hour']];
 const ordinal = (n) => { const v = n % 100; return n + (['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'); };
 const TAG_TONES = ['butter', 'mint', 'lilac', 'peach', 'sky'];
@@ -73,11 +75,14 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [error, setError] = useState('');
   const [recurrence, setRecurrence] = useState(task.recurrence || 'none');
   const [fromDone, setFromDone] = useState(!!task.meta?.repeatFromDone);
-  const [remind, setRemind] = useState(task.meta?.remindMin ?? null);
+  const [reminders, setReminders] = useState(() => (Array.isArray(task.meta?.reminders) ? task.meta.reminders : typeof task.meta?.remindMin === 'number' ? [task.meta.remindMin] : []));
+  const remind = reminders.length ? Math.min(...reminders) : null; // the single field older code reads
+  const [travel, setTravel] = useState(task.meta?.travelMin ?? null);
+  const toggleRemind = (m) => setReminders((r) => (r.includes(m) ? r.filter((x) => x !== m) : [...r, m].sort((a, b) => a - b)));
   const [estimate, setEstimate] = useState(task.meta?.estimateMin ?? null);
   const [confirmEsc, setConfirmEsc] = useState(false);
   const snap0 = useRef(null);
-  const snapNow = JSON.stringify({ text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, remind, estimate });
+  const snapNow = JSON.stringify({ text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
   if (snap0.current === null) snap0.current = snapNow;
   const dirty = snapNow !== snap0.current || !!tagDraft.trim();
   const requestClose = () => { if (dirty && !saving) setConfirmEsc(true); else onClose(); };
@@ -133,7 +138,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       await todosAPI.update(task.id, {
         text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, scope,
         ...(ruleChanged ? { recurrence } : {}),
-        meta: { link: link.trim() || null, subtasks: steps, remindMin: remind, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
+        meta: { link: link.trim() || null, subtasks: steps, remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
       });
       refresh();
       onChanged?.();
@@ -161,7 +166,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       await todosAPI.create({
         text: text.trim() || task.text, priority, tags, noteId: note?.id || null,
         deadline: date ? new Date(`${date}T${time || '09:00'}`).toISOString() : null,
-        meta: { link: link.trim() || null, subtasks: steps.map((x) => ({ ...x, done: false })), remindMin: remind, estimateMin: estimate },
+        meta: { link: link.trim() || null, subtasks: steps.map((x) => ({ ...x, done: false })), remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate },
       });
       refresh();
       onChanged?.();
@@ -235,12 +240,23 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
 
       <section className="s-sheet-sec" aria-label="Remind me">
         <span className="s-sheet-lab">Remind me</span>
-        <div className="s-sheet-pills" role="radiogroup" aria-label="Remind me">
-          {REMINDS.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={remind === m} className={remind === m ? 'on' : ''} onClick={() => setRemind(remind === m ? null : m)}>{name}</button>)}
-          <button type="button" className={`ghost${remind === null ? ' on' : ''}`} onClick={() => setRemind(null)}>No reminder</button>
+        <div className="s-sheet-pills" role="group" aria-label="Remind me">
+          {[...REMINDS, ...MORE_REMINDS].sort((x, y) => x[0] - y[0]).map(([m, name]) => <button key={m} type="button" aria-pressed={reminders.includes(m)} className={reminders.includes(m) ? 'on' : ''} onClick={() => toggleRemind(m)}>{name}</button>)}
+          <button type="button" className={`ghost${reminders.length === 0 ? ' on' : ''}`} onClick={() => setReminders([])}>No reminder</button>
         </div>
-        <p className="s-sheet-hint">When it rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
+        <p className="s-sheet-hint">Pick as many as you like. When one rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
       </section>
+
+      {time && (
+        <section className="s-sheet-sec" aria-label="Travel time">
+          <span className="s-sheet-lab">Travel time</span>
+          <div className="s-sheet-pills" role="group" aria-label="Travel time">
+            {TRAVEL.map((m) => <button key={m} type="button" aria-pressed={travel === m} className={travel === m ? 'on' : ''} onClick={() => setTravel(travel === m ? null : m)}>{m} min</button>)}
+            <button type="button" className={`ghost${!travel ? ' on' : ''}`} onClick={() => setTravel(null)}>None</button>
+          </div>
+          <p className="s-sheet-hint">{travel ? `Peblo tells you when to leave, ${travel} min before it starts, and the calendar shows a lighter block for the trip.` : 'Add the time it takes to get there and Peblo will tell you when to leave.'}</p>
+        </section>
+      )}
 
       {source && (
         <section className="s-sheet-sec" aria-label="Where it came from">
