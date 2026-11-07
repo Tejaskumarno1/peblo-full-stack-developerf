@@ -149,6 +149,20 @@ try {
   const aiChat = await b.api('POST', '/api/ai/chat', { message: 'What did the sprint retro say?', noteId: tn.note.id });
   ok(!JSON.stringify(aiChat).includes('team text'), 'AI chat never shows team note text', JSON.stringify(aiChat).slice(0, 160));
 
+  // mentions inside a space
+  const rA = await team('POST', '/api/notes', { title: 'Roadmap Q4', content: 'the plan' });
+  const rB = await team('POST', '/api/notes', { title: 'Standup', content: 'we should check Roadmap Q4 today' });
+  await b.api('POST', '/api/notes', { title: 'Personal musing', content: 'my own Roadmap Q4 thoughts' });
+  const mnt = await team('GET', `/api/notes/${rA.note.id}/mentions`);
+  const mids = (mnt.mentions || []).map((m) => m.title);
+  ok(mids.includes('Standup') && !mids.includes('Personal musing'), 'mentions in a team come only from that team', JSON.stringify(mids));
+  const lk = await team('POST', `/api/notes/${rA.note.id}/mentions/${rB.note.id}/link`);
+  ok(lk.ok, 'a mention can be turned into a link inside the team', JSON.stringify(lk));
+  const bl = await team('GET', `/api/notes/${rA.note.id}/backlinks`);
+  ok((bl.backlinks || []).some((x) => x.title === 'Standup'), 'the link shows as a backlink in the team', JSON.stringify(bl));
+  const blP = await b.api('GET', `/api/notes/${rA.note.id}/backlinks`);
+  ok(!(blP.backlinks || []).length, 'and not from Personal');
+
   // members and invites
   const email2 = `mate-${Date.now()}@peblo.test`;
   const mate = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email2, password: 'correct horse battery', name: 'Mate' }) }).then((r) => r.json());
@@ -199,5 +213,15 @@ try {
   } else {
     console.log('note: signup users are unverified here; accept path skipped');
   }
+
+  // a viewer can read but not write
+  await b.api('PUT', `/api/workspaces/spaces/${made.spaceId}/members/${me.id}`, { role: 'viewer' });
+  const vr = await team('GET', '/api/notes');
+  ok(vr.status === 200 && vr.notes?.length > 0, 'a viewer can read the team notes');
+  const vw = await team('POST', '/api/notes', { title: 'Viewer attempt', content: 'x' });
+  ok(vw.status === 403, 'a viewer cannot add a note', vw.status);
+  const vt = await team('POST', '/api/todos', { text: 'Viewer task' });
+  ok(vt.status === 403, 'a viewer cannot add a task', vt.status);
+  await b.api('PUT', `/api/workspaces/spaces/${made.spaceId}/members/${me.id}`, { role: 'lead' });
 } catch (e) { ok(false, 'workspaces ran without crashing', e?.stack || e); }
 await b.finish();

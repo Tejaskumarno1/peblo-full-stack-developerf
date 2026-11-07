@@ -107,14 +107,15 @@ async function syncLinks(userId: string, noteId: string, content: string) {
 /** Other notes that say this note's title but do not link to it yet. */
 export async function getMentions(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read'); if (!own) return;
     const id = String(req.params.id);
-    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
+    const me = await prisma.note.findFirst({ where: { id, ...own }, select: { title: true } });
     const title = (me?.title || '').trim();
     if (!me || title.length < 3 || /^untitled/i.test(title)) return res.json({ mentions: [] });
     // Note text is encrypted at rest, so the database cannot search it: read the person's notes (newest first) and look in JS.
     const needle = title.toLowerCase();
     const rows = (await prisma.note.findMany({
-      where: { userId: req.user.id, isDeleted: false, id: { not: id } },
+      where: { ...own, isDeleted: false, id: { not: id } },
       select: { id: true, title: true, content: true },
       orderBy: { updatedAt: 'desc' },
       take: 5000,
@@ -139,10 +140,11 @@ export async function getMentions(req: any, res: any, next: any) {
 /** Turns the first plain mention of this note's title, in another note, into a link to this note. */
 export async function linkMention(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write'); if (!own) return;
     const id = String(req.params.id);
     const otherId = String(req.params.otherId);
-    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
-    const other = await prisma.note.findFirst({ where: { id: otherId, userId: req.user.id, isDeleted: false }, select: { content: true } });
+    const me = await prisma.note.findFirst({ where: { id, ...own }, select: { title: true } });
+    const other = await prisma.note.findFirst({ where: { id: otherId, ...own, isDeleted: false }, select: { content: true } });
     if (!me || !other) return res.status(404).json({ error: 'Note not found' });
     const title = (me.title || '').trim();
     const content = other.content || '';
@@ -150,7 +152,7 @@ export async function linkMention(req: any, res: any, next: any) {
     if (!m) return res.status(404).json({ error: 'That note no longer mentions this one.' });
     const next2 = content.slice(0, m.index) + `[${m[0]}](/notes/${id})` + content.slice(m.index + m[0].length);
     await saveVersion(otherId, content, { force: true }).catch(() => {});
-    await prisma.note.update({ where: { id: otherId }, data: { content: next2 }, select: { id: true } });
+    await prisma.note.update({ where: { id: otherId, ...own }, data: { content: next2 }, select: { id: true } });
     await syncLinks(req.user.id, otherId, next2);
     invalidateNote(otherId, next2); // an open live room would otherwise write its old text back over the new link
     notify(req, 'notes_changed');
@@ -701,11 +703,13 @@ export async function saveEmbeddingForNote(userId: string, noteId: string, title
 /** Notes that link to this one. A link is written as a normal Markdown link to /notes/<id>, so it survives export and import. */
 export async function getBacklinks(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read'); if (!own) return;
     const id = String(req.params.id);
+    const inSpace: string | null = 'spaceId' in own ? own.spaceId : null;
     const rows = await prisma.$queryRaw`
       SELECT n.id, n.title, n.updated_at AS "updatedAt"
       FROM note_links l JOIN notes n ON n.id = l.source_id
-      WHERE l.target_id = ${id} AND n.user_id = ${req.user.id} AND n.is_deleted = false AND n.id <> ${id}
+      WHERE l.target_id = ${id} AND n.space_id IS NOT DISTINCT FROM ${inSpace} AND (${inSpace}::text IS NOT NULL OR n.user_id = ${req.user.id}) AND n.is_deleted = false AND n.id <> ${id}
         AND (${!req.user.viaToken} OR NOT EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = n.id AND t.name = ${PRIVATE_TAG}))
       ORDER BY n.updated_at DESC LIMIT 50`;
     res.json({ backlinks: rows });

@@ -42,5 +42,18 @@ try {
   ok((await p.getByTestId('ai-scope').innerText()).includes('only your Personal'), 'AI says it reads only Personal while a team is open');
   ok((await p.locator('.soft-search').innerText()).includes('Search in Studio team'), 'the search bar names the space it searches');
   await p.screenshot({ path: shots + '\\ws-ai-scope.png' });
+
+  const mine = await p.evaluate(async (sp) => {
+    const t = localStorage.getItem('peblo-token'); const h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t, 'x-peblo-space': sp };
+    const w = await (await fetch('/api/workspaces', { headers: h })).json();
+    const n = await (await fetch('/api/notes', { method: 'POST', headers: h, body: JSON.stringify({ title: 'Read only page', content: 'hello team' }) })).json();
+    await fetch(`/api/workspaces/spaces/${sp}/members/${w.me.id}`, { method: 'PUT', headers: h, body: JSON.stringify({ role: 'viewer' }) });
+    return n.note.id;
+  }, org.spaceId);
+  await p.goto(b.base + `/notes/${mine}`, { waitUntil: 'networkidle' });
+  await p.getByTestId('viewer-note').waitFor({ timeout: 8000 });
+  ok(await p.getByTestId('viewer-note').isVisible(), 'a viewer sees that the note is read only');
+  ok((await p.getByRole('button', { name: '+ tag' }).count()) === 0, 'and has no tag or move controls');
+  await p.screenshot({ path: shots + '\\ws-viewer.png' });
 } catch (e) { ok(false, 'workspaces-tasks-ui ran without crashing', e?.stack || e); }
 await b.finish();

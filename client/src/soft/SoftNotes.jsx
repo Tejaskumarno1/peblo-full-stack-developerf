@@ -3,11 +3,12 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft } from 'lucide-react';
+import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import MoveNote from './MoveNote';
+import { useSpaceRole } from './spaces';
 import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
 import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
@@ -103,6 +104,7 @@ export default function SoftNotes() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [question, setQuestion] = useState('');
   const [toast, setToast] = useState('');
+  const viewer = useSpaceRole() === 'viewer';
   const [q, setQ] = useState(() => params.get('q') || ''); // the search box (the palette's "See all" arrives with ?q=)
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
@@ -597,14 +599,15 @@ export default function SoftNotes() {
   const fsParts = useShareParts(doc?.id);
   const renderTags = () => (
     <div className="s-note-tags">
+      {viewer && <span className="s-viewer-note" data-testid="viewer-note"><Lock size={13} /> Read only</span>}
                 {doc.tags.map((t) => (
                   <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
                     #{t}
-                    {!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
+                    {!doc.isDeleted && !viewer && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
                   </span>
                 ))}
                 {tagDraft === null ? (
-                  !doc.isDeleted && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
+                  !doc.isDeleted && !viewer && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
                 ) : (
                   <input
                     className="s-tag-input"
@@ -617,7 +620,7 @@ export default function SoftNotes() {
                     placeholder="tag"
                   />
                 )}
-                {!doc.isDeleted && !doc.isDraft && <MoveNote noteId={doc.id} title={doc.title} />}
+                {!doc.isDeleted && !doc.isDraft && !viewer && <MoveNote noteId={doc.id} title={doc.title} />}
               </div>
   );
   const renderMenuItems = () => (
@@ -807,7 +810,7 @@ export default function SoftNotes() {
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                 onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                disabled={doc.isDeleted}
+                disabled={doc.isDeleted || viewer}
               />
               {!focus && renderTags()}
               <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad ? '' : 's-sr'}>{saved.text}</span></span>
@@ -858,7 +861,7 @@ export default function SoftNotes() {
                 key={editorKey}
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}
-                editable={!preview && !doc.isDeleted}
+                editable={!preview && !doc.isDeleted && !viewer}
                 focusMode={typewriter === 'on' || (focus && fsp.para)}
                 typewriter={typewriter === 'on' || (focus && fsp.type)}
                 formattingToolbar

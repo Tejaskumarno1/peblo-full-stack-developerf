@@ -29,6 +29,13 @@ export function useSpaceName() {
   return (data?.orgs || []).flatMap((o) => o.spaces).find((s) => s.id === current)?.name || null;
 }
 
+/** The person's role in the space being worked in: 'lead', 'member', 'viewer', or null in Personal. */
+export function useSpaceRole() {
+  const { data } = useWorkspaces();
+  const current = useCurrentSpace();
+  return (data?.orgs || []).flatMap((o) => o.spaces).find((s) => s.id === current)?.role || null;
+}
+
 export function useCurrentSpace() {
   const [id, setId] = useState(getSpace);
   useEffect(() => {
