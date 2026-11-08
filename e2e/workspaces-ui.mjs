@@ -49,18 +49,19 @@ try {
   await p.reload({ waitUntil: 'networkidle' });
   ok((await p.getByTestId('spaces-tip').count()) === 0, 'Got it dismisses the tip for good');
 
-  await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });
-  await p.getByTestId('org-open').first().click();
-  ok(await p.getByTestId('org-detail').isVisible(), 'Members opens under the organization');
+  await p.goto(b.base + '/settings/org-members', { waitUntil: 'networkidle' });
   await p.getByTestId('member-list').getByText('E2E').first().waitFor({ timeout: 8000 }).catch(() => {});
   ok((await p.getByTestId('member-list').innerText()).includes('E2E'), 'the owner is listed as a member');
+  await p.getByTestId('invite-open').click();
   await p.getByTestId('invite-email').fill('colleague@example.com');
   await p.screenshot({ path: shots + '\\ws-members-pre.png' });
   await p.getByTestId('invite-send').click({ timeout: 5000 });
-  await p.waitForTimeout(800);
-  ok((await p.getByTestId('org-detail').innerText()).includes('colleague@example.com'), 'the invite shows as waiting to join');
+  await p.getByText('Invites sent').waitFor({ timeout: 8000 });
+  const invLink = (await p.getByRole('dialog').innerText()).match(/https?:\/\/\S+\/invite\?token=\S+/)[0];
+  await p.getByRole('button', { name: 'Done' }).click();
+  await p.waitForTimeout(600);
+  ok((await p.getByTestId('member-list').innerText()).includes('colleague@example.com'), 'the invite shows as waiting to join');
   await p.screenshot({ path: shots + '\\ws-members.png' });
-  const invLink = await p.locator('.s-invite-link code').innerText();
   await p.goto(invLink.replace(/^https?:\/\/[^/]+/, b.base), { waitUntil: 'networkidle' });
   await p.getByTestId('invite-card').getByText('already in this organization').waitFor({ timeout: 8000 });
   ok((await p.getByTestId('invite-card').innerText()).includes('already in your spaces'), 'an invite to an organization you are in says so');
@@ -118,20 +119,22 @@ try {
   }
 
   // Organization settings: policy, export, team settings
-  await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });
-  await p.getByTestId('org-open').first().click();
+  await p.goto(b.base + '/settings/org-policy', { waitUntil: 'networkidle' });
   await p.getByTestId('org-policy').waitFor({ timeout: 8000 });
-  ok(!(await p.getByTestId('policy-guests').isChecked()), 'guests start off');
+  await p.getByTestId('policy-guests').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('policy-guests').getAttribute('aria-checked')) === 'false', 'guests start off');
   await p.getByTestId('policy-guests').click();
   await p.waitForTimeout(700);
   const pol = await p.evaluate(async (oid) => (await (await fetch('/api/workspaces/orgs/' + oid + '/policy', { headers: { Authorization: 'Bearer ' + localStorage.getItem('peblo-token') } })).json()).policy, (await b.api('GET', '/api/workspaces')).orgs[0].id);
   ok(pol.guests === true, 'turning guests on is saved');
   await p.screenshot({ path: shots + '\\ws-policy.png' });
+  await p.goto(b.base + '/settings/org-export', { waitUntil: 'networkidle' });
   const dl = p.waitForEvent('download', { timeout: 8000 });
   await p.getByTestId('org-export').click();
   ok(/export\.json$/.test((await dl).suggestedFilename()), 'Export downloads a file');
+  await p.goto(b.base + '/settings/org-teams', { waitUntil: 'networkidle' });
   await p.getByTestId('team-name').first().fill('Studio Crew');
-  await p.getByRole('button', { name: 'Save', exact: true }).click();
+  await p.getByTestId('team-name').first().press('Enter');
   await p.waitForTimeout(800);
   ok((await b.api('GET', '/api/workspaces')).orgs[0].spaces[0].name === 'Studio Crew', 'renaming the team is saved');
   await p.screenshot({ path: shots + '\\ws-team-settings.png' });

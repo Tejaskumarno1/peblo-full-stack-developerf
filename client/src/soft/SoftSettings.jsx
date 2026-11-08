@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Search, User, Users, Building2, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop } from 'lucide-react';
+import { Search, User, Users, Building2, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop, Shield, KeyRound, AlignLeft, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SaveCtx, isDesktopApp } from './settings/ui';
 import { ProfileSection, AccountsSection, AppearanceSection, NotesSection } from './settings/sections1';
-import { OrganizationsSection } from './settings/OrgSections';
+import { OrgsPage as OrganizationsSection, MembersPage, TeamsPage, PolicyPage, AiKeysPage, AuditPage, ExportPage, useActiveOrg } from './settings/OrgPages';
 import { AISection, ConnectSection, SharedSection, DataSection, ShortcutsSection, AboutSection, NotificationsSection, SystemSection } from './settings/sections2';
 import './soft.css';
 import './soft2.css';
@@ -41,11 +41,19 @@ const GROUPS = [
     { id: 'about', name: 'About', icon: Info, view: AboutSection, words: 'version feedback address' },
   ] },
 ];
-const TONES = { You: 'mint', 'Look and feel': 'butter', Reminders: 'sky', AI: 'lilac', Connections: 'sky', 'Your data': 'peach', 'This computer': 'line', Help: 'line' };
+const ORG_ITEMS = [
+  { id: 'org-members', name: 'Members', icon: Users, view: MembersPage, words: 'people invite roles owner admin member guest remove join', sub: (o) => `People in ${o} and what they can do.` },
+  { id: 'org-teams', name: 'Teams', icon: Users, view: TeamsPage, words: 'team office space rename close leave create join as viewer', sub: () => 'Each team has its own notes, tasks and members.' },
+  { id: 'org-policy', name: 'Policy', icon: Shield, view: PolicyPage, admin: true, words: 'policy guests public links ai features publishers', sub: (o) => `What people in ${o} are allowed to do.` },
+  { id: 'org-ai-keys', name: 'AI keys', icon: KeyRound, view: AiKeysPage, admin: true, words: 'ai key openai gemini organization', sub: () => 'Keys the organization pays for. Members never see them.' },
+  { id: 'org-audit', name: 'Audit log', icon: AlignLeft, view: AuditPage, admin: true, words: 'audit log history who did what', sub: () => 'Who did what, and when.' },
+  { id: 'org-export', name: 'Export and seats', icon: Download, view: ExportPage, admin: true, words: 'export seats plan trial download organization', sub: () => 'Take everything out, and see what your plan covers.' },
+];
+const TONES = { Organization: 'sky', You: 'mint', 'Look and feel': 'butter', Reminders: 'sky', AI: 'lilac', Connections: 'sky', 'Your data': 'peach', 'This computer': 'line', Help: 'line' };
 const SUBS = {
   profile: 'How you appear in Peblo and in notes you share.',
   accounts: 'Who you are, and which account Peblo is using right now.',
-  organizations: 'Teams and offices you share notes and tasks with. Personal always stays yours.',
+  organizations: 'Organizations you belong to. Personal always stays yours.',
   appearance: 'Make Peblo look the way you like to work.',
   notes: 'Writing, calendar and voice.',
   notifications: 'Heads-up before meetings, and pop-up alerts.',
@@ -58,7 +66,6 @@ const SUBS = {
   about: 'Version, address and feedback.',
 };
 GROUPS.forEach((g) => { g.tone = TONES[g.label]; g.items.forEach((i) => { i.sub = SUBS[i.id]; }); });
-const ALL = GROUPS.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })));
 // Single settings people look for, so "find a setting" can jump straight to the right page.
 const INDEX = [
   ['Change name', 'profile', 'name rename display'], ['Profile picture', 'profile', 'photo avatar image picture'], ['About you (bio)', 'profile', 'bio about role job title'],
@@ -69,6 +76,7 @@ const INDEX = [
   ['Meeting reminders', 'notifications', 'reminder meeting minutes before'], ['Pop-up alerts', 'notifications', 'popup notification desktop alert permission'],
   ['Turn off all AI', 'ai', 'ai off disable stop'], ['Add an AI key', 'ai', 'api key openai gemini claude groq model provider connect'], ['Where AI runs', 'ai', 'local cloud ollama privacy private'], ['Private notes', 'ai', 'private tag never sent'],
   ['Connect Claude', 'connect', 'claude cursor mcp connector address'], ['Connected apps', 'connect', 'revoke remove access apps'], ['Access tokens', 'connect', 'token script api'], ['App activity log', 'connect', 'activity log history'],
+  ['Invite people', 'org-members', 'invite people email member join'], ['Remove a member', 'org-members', 'remove member kick'], ['Create a team', 'org-teams', 'create team space'], ['Guests', 'org-policy', 'guest outside auditor'], ['Public share links', 'org-policy', 'public link share'], ['Organization audit log', 'org-audit', 'audit log history'], ['Organization export', 'org-export', 'export organization seats'],
   ['Shared links', 'shared', 'share link stop sharing public edit view'],
   ['Export notes', 'data', 'export backup download zip markdown'], ['Import notes', 'data', 'import notion markdown csv'], ['Calendar file (.ics)', 'data', 'ics calendar google outlook export import'], ['Trash', 'data', 'trash deleted restore bin'],
   ['Quick capture key', 'shortcuts', 'capture shortcut hotkey key'], ['Keyboard shortcuts', 'shortcuts', 'keyboard keys shortcuts'],
@@ -86,7 +94,14 @@ export default function SoftSettings({ skin = 'soft' }) {
   const lastTry = useRef(null);
   const [q, setQ] = useState('');
   const desktop = isDesktopApp();
-  const groups = useMemo(() => GROUPS.filter((g) => !g.desktopOnly || desktop), [desktop]);
+  const { org, admin, isLoading: orgsLoading } = useActiveOrg();
+  const groups = useMemo(() => {
+    const base = GROUPS.filter((g) => !g.desktopOnly || desktop);
+    if (!org) return base;
+    const items = ORG_ITEMS.filter((i) => !i.admin || admin).map((i) => ({ ...i, sub: i.sub(org.name) }));
+    return [base[0], { label: 'Organization', tone: TONES.Organization, items }, ...base.slice(1)];
+  }, [desktop, org, admin]);
+  const ALL = useMemo(() => groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label }))), [groups]);
 
   // save(patch) writes settings; save(fn) runs fn (which resolves true/false). Either way the header says what happened.
   const save = useCallback(async (what) => {
@@ -105,12 +120,13 @@ export default function SoftSettings({ skin = 'soft' }) {
     if (!s) return [];
     const visible = (i) => !i.desktopOnly || desktop;
     const bySection = ALL.filter((i) => visible(i) && `${i.name} ${i.group} ${i.words}`.toLowerCase().includes(s)).map((i) => ({ ...i, key: i.id, label: i.name, sub: i.group }));
-    const bySetting = INDEX.filter((x) => `${x.name} ${x.words}`.toLowerCase().includes(s) && visible(ALL.find((i) => i.id === x.id) || {})).map((x) => { const sec = ALL.find((i) => i.id === x.id); return { ...sec, key: `${x.id}:${x.name}`, label: x.name, sub: sec.name }; });
+    const bySetting = INDEX.filter((x) => `${x.name} ${x.words}`.toLowerCase().includes(s) && ALL.some((i) => i.id === x.id) && visible(ALL.find((i) => i.id === x.id))).map((x) => { const sec = ALL.find((i) => i.id === x.id); return { ...sec, key: `${x.id}:${x.name}`, label: x.name, sub: sec.name }; });
     const seen = new Set();
     return [...bySetting, ...bySection].filter((h) => (seen.has(h.key) ? false : seen.add(h.key))).slice(0, 8);
-  }, [q, desktop]);
+  }, [q, desktop, ALL]);
 
   const current = ALL.find((i) => i.id === section && (!i.desktopOnly || desktop));
+  if (!current && /^org-/.test(section || '')) return orgsLoading ? null : <Navigate to="/settings/organizations" replace />;
   if (!current) return <Navigate to="/settings/profile" replace />;
   const View = current.view;
 

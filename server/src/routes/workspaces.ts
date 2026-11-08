@@ -11,14 +11,14 @@ router.use(authenticate);
 const clean = (v: unknown, max = 80) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const uid = (req: any): string => req.user.id;
 
-type Row = { org_id: string; org_name: string; org_status: string; org_role: OrgRole; space_id: string | null; kind: string | null; space_name: string | null; space_role: SpaceRole | null; members: number | null; default_role: string | null };
+type Row = { org_id: string; org_name: string; org_status: string; org_role: OrgRole; space_id: string | null; kind: string | null; space_name: string | null; space_role: SpaceRole | null; members: number | null; default_role: string | null; public_links: boolean | null };
 
 /** Personal is always there. Organizations and their spaces appear only for people who belong to them. */
 router.get('/', async (req, res) => {
   const userId = uid(req);
   const rows = await prisma.$queryRaw<Row[]>`
     SELECT o.id AS org_id, o.name AS org_name, o.status AS org_status, m.role AS org_role,
-           s.id AS space_id, s.kind, s.name AS space_name, sm.role AS space_role, s.default_role,
+           s.id AS space_id, s.kind, s.name AS space_name, sm.role AS space_role, s.default_role, s.public_links,
            (SELECT count(*)::int FROM space_members x WHERE x.space_id = s.id) AS members
     FROM org_members m
     JOIN organizations o ON o.id = m.org_id AND o.closed_at IS NULL
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
   const orgs = new Map<string, any>();
   for (const r of rows) {
     if (!orgs.has(r.org_id)) orgs.set(r.org_id, { id: r.org_id, name: r.org_name, status: r.org_status, role: r.org_role, spaces: [] });
-    if (r.space_id && r.space_name) orgs.get(r.org_id).spaces.push({ id: r.space_id, kind: r.kind, name: r.space_name, role: r.space_role, members: r.members ?? 0, defaultRole: r.default_role });
+    if (r.space_id && r.space_name) orgs.get(r.org_id).spaces.push({ id: r.space_id, kind: r.kind, name: r.space_name, role: r.space_role, members: r.members ?? 0, defaultRole: r.default_role, publicLinks: r.public_links !== false });
   }
   const me = await prisma.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM users WHERE id = ${userId}`;
   res.json({ me: me[0] ?? { id: userId, name: '' }, personal: { id: null, name: 'Personal' }, orgs: [...orgs.values()] });

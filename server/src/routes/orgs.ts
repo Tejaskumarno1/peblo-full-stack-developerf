@@ -32,6 +32,7 @@ router.get('/orgs/:orgId/members', async (req, res) => {
   const orgId = req.params.orgId;
   const members = await prisma.$queryRaw<any[]>`
     SELECT m.user_id AS "userId", u.name, u.email, m.role, m.status, m.guest_until AS "guestUntil", m.joined_at AS "joinedAt",
+           (SELECT count(*)::int FROM todos t WHERE t.assignee_id = m.user_id AND t.is_completed = false AND t.space_id IN (SELECT id FROM spaces WHERE org_id = m.org_id)) AS "openTasks",
            COALESCE((SELECT json_agg(json_build_object('id', s.id, 'name', s.name, 'kind', s.kind, 'role', sm.role) ORDER BY s.created_at)
                      FROM space_members sm JOIN spaces s ON s.id = sm.space_id AND s.org_id = m.org_id AND s.closed_at IS NULL
                      WHERE sm.user_id = m.user_id), '[]'::json) AS spaces
@@ -151,9 +152,9 @@ router.patch('/orgs/:orgId/members/:userId', async (req, res) => {
 });
 
 /** Remove a member (or leave). Their tasks in this organization's spaces become unassigned; nothing they wrote is deleted. */
-async function removeMember(orgId: string, userId: string, actor: string) {
+async function removeMember(orgId: string, userId: string, actor: string, reassignTo: string | null = null) {
   await prisma.$transaction([
-    prisma.$executeRaw`UPDATE todos SET assignee_id = NULL WHERE assignee_id = ${userId} AND space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`,
+    prisma.$executeRaw`UPDATE todos SET assignee_id = ${reassignTo} WHERE assignee_id = ${userId} AND space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`,
     prisma.$executeRaw`DELETE FROM space_members WHERE user_id = ${userId} AND space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`,
     prisma.$executeRaw`DELETE FROM org_members WHERE org_id = ${orgId} AND user_id = ${userId}`,
   ]);
@@ -166,7 +167,8 @@ router.delete('/orgs/:orgId/members/:userId', async (req, res) => {
   const target = await prisma.$queryRaw<{ role: OrgRole }[]>`SELECT role FROM org_members WHERE org_id = ${orgId} AND user_id = ${userId}`;
   if (!target[0]) return res.status(404).json({ error: 'Member not found.' });
   if (target[0].role === 'owner' && (org.role !== 'owner' || (await ownerCount(orgId)) <= 1)) return res.status(409).json({ error: 'An owner cannot be removed. Transfer ownership first.' });
-  await removeMember(orgId, userId, uid(req));
+  const to = typeof req.query.reassignTo === 'string' && req.query.reassignTo === uid(req) ? uid(req) : null; // tasks can only be handed to the person removing
+  await removeMember(orgId, userId, uid(req), to);
   res.json({ ok: true });
 });
 
@@ -255,7 +257,9 @@ router.patch('/spaces/:spaceId', async (req, res) => {
   const role = req.body?.defaultRole === 'viewer' || req.body?.defaultRole === 'member' ? req.body.defaultRole : null;
   if (name) await prisma.$executeRaw`UPDATE spaces SET name = ${name} WHERE id = ${req.params.spaceId}`;
   if (role) await prisma.$executeRaw`UPDATE spaces SET default_role = ${role} WHERE id = ${req.params.spaceId}`;
-  await audit(g.orgId, uid(req), 'space.updated', req.params.spaceId, { name: name || undefined, defaultRole: role || undefined });
+  const links = typeof req.body?.publicLinks === 'boolean' ? req.body.publicLinks : null;
+  if (links !== null) await prisma.$executeRaw`UPDATE spaces SET public_links = ${links} WHERE id = ${req.params.spaceId}`;
+  await audit(g.orgId, uid(req), 'space.updated', req.params.spaceId, { name: name || undefined, defaultRole: role || undefined, publicLinks: links ?? undefined });
   res.json({ ok: true });
 });
 /** Leave a team: your open tasks there become unassigned; the last lead hands over first. */
