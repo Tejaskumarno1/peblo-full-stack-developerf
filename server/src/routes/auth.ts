@@ -59,7 +59,7 @@ router.post('/signup', signupLimit, signupEmailLimit, async (req, res, next) => 
 
     // Where this server can send mail, sign-up gives the same answer whether or not the address has an account (so it cannot be
     // used to find out who is registered): new addresses get a "finish signing up" link, existing ones a "someone tried" notice.
-    // Without a mail transport that cannot work (nobody could ever finish), so the older behaviour stays: the account is
+    // Without a mail transport (local development and tests only; production refuses) the account is
     // created at once, and a taken address is answered with 409. Both paths pay one bcrypt hash and one mail, so timing matches.
     const passwordHash = await bcrypt.hash(password, 12);
     const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -71,7 +71,11 @@ router.post('/signup', signupLimit, signupEmailLimit, async (req, res, next) => 
       }
       const raw = await storePendingSignup(email, name, passwordHash);
       if (await sendMail(finishSignupMail(email, `${publicBase(req)}/verify-email?token=${raw}`))) return res.status(202).json(SIGNUP_PENDING_REPLY);
-      await dropPendingSignup(email).catch(() => {}); // mail is down: do not lock people out, create the account at once like before
+      // The confirmation mail could not be sent: no account is made without a confirmed address.
+      await dropPendingSignup(email).catch(() => {});
+      return res.status(503).json({ error: 'We could not send the confirmation email, so the account was not created. Try again in a few minutes.' });
+    } else if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Sign-up is paused: this server cannot send the confirmation email yet.' });
     } else if (existing) {
       return res.status(409).json({ error: 'An account with that email already exists.' });
     }
