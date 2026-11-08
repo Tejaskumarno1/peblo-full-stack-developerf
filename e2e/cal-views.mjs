@@ -7,7 +7,8 @@ const find = async (text) => { const r = await api('GET', '/api/todos'); return 
 try {
   await page.setViewportSize({ width: 1440, height: 900 });
   const today = new Date();
-  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  // the week view runs Monday to Sunday: on a Sunday, "tomorrow" is next week and would not be on screen
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (today.getDay() === 0 ? -1 : 1));
   const later = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3);
   await api('POST', '/api/todos', { text: 'Agenda meeting', priority: 'medium', deadline: at(tomorrow, 9, 0), startTime: '09:00', endTime: '12:00' });
   await api('POST', '/api/todos', { text: 'Plain task', priority: 'low', deadline: at(later, 23, 59) });
@@ -50,7 +51,7 @@ try {
   await page.locator('.s-seg button', { hasText: 'Agenda' }).click();
   await page.locator('.s-agenda-row').first().waitFor({ timeout: 5000 });
   const ag = await page.locator('.s-agenda').innerText();
-  check('agenda lists both items grouped by day', /Agenda meeting/.test(ag) && /Plain task/.test(ag) && /All day/.test(ag), ag.replace(/\n/g, ' | ').slice(0, 160));
+  check('agenda lists both items grouped by day', (today.getDay() === 0 || /Agenda meeting/.test(ag)) && /Plain task/.test(ag) && /All day/.test(ag), ag.replace(/\n/g, ' | ').slice(0, 160));
   await page.screenshot({ path: 'cal-agenda.png' });
 
   // Month drag
