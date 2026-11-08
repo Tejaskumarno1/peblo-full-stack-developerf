@@ -198,3 +198,5 @@
 .cmd-item-text{display:flex;flex-direction:column;min-width:0;flex:1}
 .cmd-item-sub{font-size:12px;opacity:.65;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cmd-hl{background:#FFE9A6;color:#241F1A;border-radius:4px;padding:0 2px}
+.cmd-all { border: 0; background: var(--bg-hover, rgba(128,128,128,.14)); color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.cmd-all.on { background: var(--text-primary); color: var(--bg-surface); }

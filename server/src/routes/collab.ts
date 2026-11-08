@@ -1,3 +1,4 @@
+import { isOffice, noteLevel } from '../utils/noteAccess.js';
 import { accessFor } from '../services/shareAccess.js';
 import { Router } from 'express';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -27,9 +28,17 @@ router.post('/ticket', ticketLimit, async (req, res, next) => {
   try {
     if ((req.user as any).viaToken && (req.user as any).readOnly) return res.status(403).json({ error: 'This access token is read-only.' });
     const noteId = String(req.body?.noteId || '');
-    if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId) || !(await ownNote(req.user!.id, noteId))) return res.status(404).json({ error: 'Note not found' });
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId)) return res.status(404).json({ error: 'Note not found' });
+    let readOnly = false;
+    if (!(await ownNote(req.user!.id, noteId))) {
+      // an Office note shared with this person: edit joins live, view reads
+      const n = (await prisma.$queryRaw<{ spaceId: string | null }[]>`SELECT space_id AS "spaceId" FROM notes WHERE id = ${noteId} AND NOT is_deleted`)[0];
+      const lv = n?.spaceId && (await isOffice(n.spaceId)) ? await noteLevel(req.user!.id, noteId, n.spaceId) : null;
+      if (!lv?.level) return res.status(404).json({ error: 'Note not found' });
+      readOnly = lv.level === 'view';
+    }
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ ticket: issueTicket(req.user!.id, noteId) });
+    res.json({ ticket: issueTicket(req.user!.id, noteId), readOnly });
   } catch (err) { next(err); }
 });
 

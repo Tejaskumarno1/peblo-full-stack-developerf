@@ -1,3 +1,4 @@
+import { applyOrgAi } from '../utils/orgAiScope.js';
 import { decryptSecret, isUnreadable } from '../secrets.js';
 import { effectiveOllamaUrl, ollamaUrlProblem, hosted } from '../utils/ollamaPolicy.js';
 import { usableConnections, providerById } from './aiProviders.js';
@@ -28,7 +29,7 @@ async function getUserSettings(userId: string) {
   });
   // On a shared server a custom address is checked again each time it is used, not only when it was saved.
   if (user && hosted()) (user as any).aiConnections = await usableConnections(user.aiConnections);
-  return user;
+  return applyOrgAi(user);
 }
 
 /** An OpenAI-compatible chat provider: OpenAI itself, or a local Ollama server. */

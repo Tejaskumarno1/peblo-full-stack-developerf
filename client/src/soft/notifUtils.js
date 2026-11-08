@@ -23,8 +23,8 @@ export function buildNotifications({ server = [], todos = [], derivedRead = new 
   const today = dayOf(now);
   for (const n of server) {
     const mention = /mention/i.test(n.kind) || /mention/i.test(n.title || '');
-    const ws = ['office_post', 'office_suggestion', 'assigned', 'member_joined'].includes(n.kind) ? n.kind : null;
-    out.push({ id: 's:' + n.id, server: n.id, kind: ws || (mention ? 'mention' : 'note'), spaceId: n.spaceId || null, todoId: n.todoId || undefined, title: n.title, sub: n.body || (n.from ? 'From ' + n.from : ''), at: new Date(n.createdAt), read: !!n.read, noteId: n.noteId });
+    const ws = ['office_post', 'office_suggestion', 'assigned', 'member_joined', 'org_invite'].includes(n.kind) ? n.kind : null;
+    out.push({ id: 's:' + n.id, server: n.id, kind: ws || (mention ? 'mention' : 'note'), spaceId: n.spaceId || null, todoId: n.todoId || undefined, title: n.title, sub: n.kind === 'org_invite' ? 'Open to accept or decline' : n.body || (n.from ? 'From ' + n.from : ''), at: new Date(n.createdAt), read: !!n.read, noteId: n.noteId, path: n.kind === 'org_invite' && /^\/invite\?token=/.test(n.body || '') ? n.body : undefined });
   }
   for (const t of todos) {
     if (t.completed || !t.deadline) continue;
@@ -45,8 +45,8 @@ export function buildNotifications({ server = [], todos = [], derivedRead = new 
   return out.sort((a, b) => b.at - a.at);
 }
 
-export const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['mention', 'Mentions'], ['task', 'Tasks'], ['meeting', 'Meetings'], ['team', 'Teams']];
-export const TEAM_KINDS = ['office_post', 'office_suggestion', 'assigned', 'member_joined'];
+export const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['mention', 'Mentions'], ['task', 'Tasks'], ['meeting', 'Meetings'], ['team', 'Teams'], ['org_invite', 'Invites']];
+export const TEAM_KINDS = ['office_post', 'office_suggestion', 'assigned', 'member_joined', 'org_invite'];
 export const applyFilter = (list, f) => list.filter((n) => f === 'all' || (f === 'unread' ? !n.read : f === 'team' ? TEAM_KINDS.includes(n.kind) : n.kind === f));
 export const whenLabel = (d, now = new Date()) => {
   const x = new Date(d); const diff = dayOf(now) - dayOf(x);

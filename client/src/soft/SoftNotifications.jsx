@@ -1,3 +1,4 @@
+import { useWorkspaces } from './spaces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -10,8 +11,8 @@ import { useSwitchSpace } from './spaces';
 import { buildNotifications, applyFilter, FILTERS, readDerived, saveDerived, whenLabel, groupOf } from './notifUtils';
 import './notifications.css';
 
-const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, member_joined: UserPlus };
-const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', member_joined: 'mint' };
+const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, member_joined: UserPlus, org_invite: UserPlus };
+const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', member_joined: 'mint', org_invite: 'mint' };
 
 /** Soft Studio · Notification centre (mockup: NotifCentre). One list: mentions, meetings and tasks that need you. */
 export default function SoftNotifications() {
@@ -37,6 +38,7 @@ export default function SoftNotifications() {
   }, [derived, refetch]);
   const open = (n) => {
     void markRead([n]);
+    if (n.kind === 'org_invite') { navigate(n.path || '/settings/organizations'); return; }
     if (n.kind === 'member_joined') { navigate('/settings/organizations'); return; }
     if (n.spaceId && n.kind !== 'note') { switchTo(n.spaceId); navigate(n.kind === 'assigned' ? '/tasks?task=' + n.todoId : '/notes'); return; }
     if (n.noteId) navigate('/notes/' + n.noteId);
@@ -45,6 +47,9 @@ export default function SoftNotifications() {
   };
   const act = (n) => (n.kind === 'meeting' && /^https?:\/\//i.test(n.link || '') ? ['Join', () => { void markRead([n]); window.open(n.link, '_blank', 'noopener'); }] : [n.kind === 'mention' ? 'View' : 'Open', () => open(n)]);
 
+  const { data: ws } = useWorkspaces();
+  const spaces = (ws?.orgs || []).flatMap((o) => o.spaces);
+  const muted = settings?.spaceMute || {};
   const q = settings?.quietHours || { on: false, from: '22:00', to: '07:00' };
   const setQuiet = (patch) => updateSettings({ quietHours: { ...q, ...patch } });
   const groups = ['Today', 'Earlier'].map((g) => [g, shown.filter((n) => groupOf(n.at) === g)]).filter(([, l]) => l.length);
@@ -95,6 +100,14 @@ export default function SoftNotifications() {
           <div className="row off"><span>Email digest</span><em>Soon</em></div>
           <div className="row off"><span>Phone push</span><em>Soon</em></div>
         </div>
+        {spaces.length > 0 && (
+          <div className="s-notif-card sky" data-testid="per-space">
+            <b>Per space</b>
+            {spaces.map((sp) => (
+              <div key={sp.id} className="row"><span>{sp.name}</span><Switch label={`Pop-ups from ${sp.name}`} checked={!muted[sp.id]} onChange={(v) => updateSettings({ spaceMute: { ...muted, [sp.id]: !v } })} /></div>
+            ))}
+          </div>
+        )}
       </aside>
     </div>
   );

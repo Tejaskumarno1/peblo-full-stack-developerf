@@ -1,3 +1,4 @@
+import { isOffice, noteLevel } from '../utils/noteAccess.js';
 import { accessFor } from './shareAccess.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
@@ -304,12 +305,17 @@ class Room {
       try { c.ws.ping(); } catch { /* gone */ }
     }
     try {
-      const note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true, isDeleted: true, userId: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
+      const note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true, isDeleted: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
       if (!note || note.isDeleted) { this.closeAll(CLOSE_GONE, 'gone'); await this.forget(); this.dispose(); return; }
       const live = !note.shareExpiresAt || note.shareExpiresAt.getTime() > Date.now();
       const blocked = new Set((await prisma.$queryRawUnsafe<{ session_id: string }[]>('SELECT session_id FROM share_blocked WHERE kind = \'note\' AND share_token = $1', note.shareToken ?? '')).map((r) => r.session_id));
       for (const c of [...this.conns.values()]) {
         if (c.userId === note.userId) continue; // the owner
+        if (c.userId && note.spaceId) { // a person the author shared this Office note with
+          const lv = await noteLevel(c.userId, this.id, note.spaceId);
+          if (!lv.level || (!c.readOnly && lv.level !== 'edit')) c.ws.close(CLOSE_GONE, 'access ended');
+          continue;
+        }
         const okShare = !!note.shareToken && c.share === note.shareToken && live && !(c.session && blocked.has(c.session));
         if (!okShare) { c.ws.close(CLOSE_GONE, 'access ended'); continue; }
         const acc = await accessFor('note', note.shareToken ?? '', c.session, !!note.shareEdit);
@@ -390,9 +396,16 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
   if (!ticket || !noteParam || !/^[A-Za-z0-9-]{8,64}$/.test(noteParam)) return null;
   const userId = consumeTicket(ticket, noteParam);
   if (!userId) return null;
-  const note = await prisma.note.findFirst({ where: { id: noteParam, userId, isDeleted: false }, select: { id: true } });
+  const note = (await prisma.$queryRaw<{ id: string; userId: string; spaceId: string | null }[]>`SELECT id, user_id AS "userId", space_id AS "spaceId" FROM notes WHERE id = ${noteParam} AND NOT is_deleted`)[0];
   if (!note) return null;
-  return { noteId: note.id, readOnly: false, userId, share: null, session: null };
+  if (note.userId === userId) return { noteId: note.id, readOnly: false, userId, share: null, session: null };
+  // Someone the author shared an Office note with: edit joins the room, view reads it
+  if (note.spaceId && (await isOffice(note.spaceId))) {
+    const lv = await noteLevel(userId, note.id, note.spaceId);
+    if (lv.level === 'edit') return { noteId: note.id, readOnly: false, userId, share: null, session: null };
+    if (lv.level === 'view') return { noteId: note.id, readOnly: true, userId, share: null, session: null };
+  }
+  return null;
 }
 
 /**

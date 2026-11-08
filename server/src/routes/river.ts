@@ -1,3 +1,4 @@
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { Router } from 'express';
 import prisma from '../db.js';
 import { aadOf, decryptText, encryptText } from '../dataCrypto.js';
@@ -19,7 +20,7 @@ const isPrivate = (n: any) => (n.tags || []).some((t: any) => t.tag.name === 'pr
 const parse = (s: string, fallback: any) => { try { return JSON.parse(s); } catch { return fallback; } };
 
 // POST /api/river/brief { todoId }: points to read before a meeting, from the user's notes
-router.post('/brief', ...aiLimit, async (req, res, next) => {
+router.post('/brief', ...aiLimit, orgAiGate, async (req, res, next) => {
   try {
     const userId = req.user!.id;
     const todo = await prisma.todo.findFirst({ where: { id: String(req.body?.todoId || ''), userId } });
@@ -47,7 +48,7 @@ function promiseView(gen: any, noteTitle?: string) {
 }
 
 // POST /api/river/notes/:id/promises: reads the note and finds who promised what
-router.post('/notes/:id/promises', ...aiLimit, async (req, res, next) => {
+router.post('/notes/:id/promises', ...aiLimit, orgAiGate, async (req, res, next) => {
   try {
     const userId = req.user!.id;
     const note = await prisma.note.findFirst({

@@ -1,3 +1,4 @@
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { Router, raw } from 'express';
 import prisma from '../db.js';
 import { decField, encField } from '../dataCrypto.js';
@@ -59,7 +60,7 @@ router.get('/:id/text', async (req, res, next) => {
 });
 
 // Make (or redo) the words for one of your pictures with your AI.
-router.post('/:id/describe', authenticate, ...aiLimit, async (req: any, res, next) => {
+router.post('/:id/describe', authenticate, ...aiLimit, orgAiGate, async (req: any, res, next) => {
   try {
     const id = String(req.params.id);
     if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();

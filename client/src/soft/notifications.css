@@ -29,3 +29,4 @@
 .soft-bell{position:relative}
 .soft-bell i{position:absolute;top:10px;right:11px;width:10px;height:10px;border-radius:50%;background:var(--s-accent);border:2px solid var(--s-bg)}
 @media (max-width:700px){.s-notif{flex-direction:column}.s-notif-side{width:auto}.s-notif-main{padding:18px;border-radius:26px;max-height:none}.s-notif-main h1{font-size:26px}}
+.s-notif-card.sky{background:var(--s-sky);border-color:transparent}

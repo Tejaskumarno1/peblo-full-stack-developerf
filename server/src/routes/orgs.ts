@@ -76,6 +76,9 @@ router.post('/orgs/:orgId/invites', async (req, res) => {
   const names = await prisma.$queryRaw<{ org: string; me: string }[]>`SELECT (SELECT name FROM organizations WHERE id = ${orgId}) AS org, (SELECT name FROM users WHERE id = ${uid(req)}) AS me`;
   const link = `${publicBase(req)}/invite?token=${raw}`;
   const mailed = await sendMail(inviteMail(email, names[0]?.org ?? 'an organization', names[0]?.me ?? 'Someone', link)).catch(() => false);
+  // someone who already has a Peblo account also sees it in their notifications, with the invite page to open
+  const known = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM users WHERE lower(email) = ${email}`;
+  if (known[0]) await notifyUsers(req.app, [known[0].id], { kind: 'org_invite', title: `${names[0]?.me ?? 'Someone'} invited you to ${names[0]?.org ?? 'an organization'}`, body: `/invite?token=${raw}`, from: names[0]?.me ?? 'Someone' });
   res.status(201).json({ id, link, mailed });
 });
 
@@ -91,12 +94,12 @@ router.delete('/orgs/:orgId/invites/:id', async (req, res) => {
 async function lookup(token: string, userId: string) {
   const rows = await prisma.$queryRaw<any[]>`
     SELECT i.id, i.org_id AS "orgId", i.email::text AS email, i.org_role AS "orgRole", i.space_ids AS "spaceIds", i.space_role AS "spaceRole", i.invited_by AS "invitedBy",
-           i.expires_at AS "expiresAt", i.accepted_at AS "acceptedAt", i.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed"
+           i.expires_at AS "expiresAt", i.accepted_at AS "acceptedAt", i.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", (SELECT name FROM users WHERE id = i.invited_by) AS "inviterName"
     FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${hash(token)}`;
   const inv = rows[0];
   if (!inv) return { state: 'invalid' as const };
   const me = await prisma.$queryRaw<{ email: string; verified: boolean }[]>`SELECT email, (email_verified_at IS NOT NULL) AS verified FROM users WHERE id = ${userId}`;
-  const base = { orgName: inv.orgName, email: inv.email };
+  const base = { orgName: inv.orgName, email: inv.email, inviterName: inv.inviterName ?? null, role: inv.orgRole, signedInAs: me[0]?.email ?? null };
   if (inv.revokedAt || inv.orgClosed) return { state: 'revoked' as const, ...base };
   if (inv.acceptedAt) return { state: 'used' as const, ...base };
   if (new Date(inv.expiresAt) < new Date()) return { state: 'expired' as const, ...base };
@@ -111,6 +114,18 @@ router.get('/invites/lookup', async (req, res) => {
   const r: any = await lookup(String(req.query.token ?? ''), uid(req));
   const { inv: _inv, ...out } = r;
   res.json(out);
+});
+
+/** An expired invite: the person asks the one who invited them for a new one (mockup C08). It tells the inviter, and nothing else. */
+router.post('/invites/remind', async (req, res) => {
+  const userId = uid(req);
+  const rows = await prisma.$queryRaw<any[]>`SELECT i.invited_by AS "invitedBy", i.email::text AS email, o.name AS "orgName" FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${hash(String(req.body?.token ?? ''))} AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at < now()`;
+  const inv = rows[0];
+  if (!inv) return res.status(409).json({ error: 'There is nothing to remind about.' });
+  const me = await prisma.$queryRaw<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`;
+  if (!me[0] || me[0].email.toLowerCase() !== String(inv.email).toLowerCase()) return res.status(403).json({ error: 'This invite is for another address.' });
+  if (inv.invitedBy) await notifyUsers(req.app, [inv.invitedBy], { kind: 'invite_reminder', title: `${await nameOf(userId)} asked for a new invite to ${inv.orgName}`, from: await nameOf(userId) });
+  res.json({ ok: true });
 });
 
 router.post('/invites/accept', async (req, res) => {
@@ -417,7 +432,9 @@ router.get('/orgs/:orgId/seats', async (req, res) => {
     count(*) FILTER (WHERE role = 'guest' AND status = 'active')::int AS guests
     FROM org_members WHERE org_id = ${orgId}`)[0];
   const pol = (await prisma.$queryRaw<any[]>`SELECT policy FROM organizations WHERE id = ${orgId}`)[0]?.policy ?? {};
-  res.json({ used: c?.used ?? 0, guests: c?.guests ?? 0, limit: Number(pol.seatLimit) > 0 ? Number(pol.seatLimit) : 10 });
+  const made = (await prisma.$queryRaw<{ at: Date }[]>`SELECT created_at AS at FROM organizations WHERE id = ${orgId}`)[0]?.at;
+  const trialEndsAt = made ? new Date(new Date(made).getTime() + 14 * 86400000).toISOString() : null; // early access: a 14 day trial from creation, no billing behind it yet
+  res.json({ trialEndsAt, used: c?.used ?? 0, guests: c?.guests ?? 0, limit: Number(pol.seatLimit) > 0 ? Number(pol.seatLimit) : 10 });
 });
 router.get('/orgs/:orgId/exports', async (req, res) => {
   if (!(await gate(req, res, true))) return;

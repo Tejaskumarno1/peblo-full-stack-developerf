@@ -1,3 +1,4 @@
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { Router } from 'express';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
@@ -37,7 +38,7 @@ router.get('/mastery', async (req, res, next) => {
 });
 
 // POST /api/study/quiz { topic, count? }: writes a new quiz from the topic's notes
-router.post('/quiz', ...aiLimit, async (req, res, next) => {
+router.post('/quiz', ...aiLimit, orgAiGate, async (req, res, next) => {
   try {
     const userId = req.user!.id;
     const topic = clean(req.body?.topic);

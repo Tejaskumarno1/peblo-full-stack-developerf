@@ -5,7 +5,9 @@ import { Image as ImageIcon, Search, LayoutDashboard, FileText, Calendar, CheckS
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, todosAPI, mediaSearchAPI } from '../api/index';
-import { useSpaceName } from '../soft/spaces';
+import { useSpaceName, useWorkspaces, useSwitchSpace } from '../soft/spaces';
+import { getSpace } from '../api/space';
+import api from '../api/client';
 import { parseTask } from '../utils/parseTask';
 import { TEMPLATES } from '../orbit/noteTemplates';
 import '../styles/command-palette.css';
@@ -27,6 +29,10 @@ const snipOf = (n, q) => {
 
 export default function CommandPalette() {
   const spaceName = useSpaceName();
+  const { data: ws } = useWorkspaces();
+  const mySpaces = (ws?.orgs || []).flatMap((o) => o.spaces.map((x) => ({ ...x, org: o.name })));
+  const switchTo = useSwitchSpace();
+  const [everywhere, setEverywhere] = useState(false); // search Personal and every space I am in, not only this one
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [notes, setNotes] = useState([]);
@@ -78,13 +84,21 @@ export default function CommandPalette() {
     const t = query.trim();
     if (t.length < 2) { setHits(null); setPicHits({ q: '', list: [] }); return undefined; }
     const timer = setTimeout(() => {
-      notesAPI.getAll({ search: t, snippet: '1', limit: 6 }).then((r) => setHits({ q: t, notes: r.data.notes || [] })).catch(() => {});
+      if (everywhere && mySpaces.length) {
+        const here = getSpace() || null;
+        const targets = [{ id: null, name: 'Personal' }, ...mySpaces];
+        Promise.all(targets.map((sp) => api.get('/notes', { params: { search: t, snippet: '1', limit: 4 }, headers: { 'x-peblo-space': sp.id || 'personal' } })
+          .then((r) => (r.data.notes || []).map((n) => ({ ...n, _space: sp.id, _spaceName: sp.name, _other: (sp.id || null) !== here }))).catch(() => [])))
+          .then((lists) => setHits({ q: t, notes: lists.flat().slice(0, 12) }));
+      } else {
+        notesAPI.getAll({ search: t, snippet: '1', limit: 6 }).then((r) => setHits({ q: t, notes: r.data.notes || [] })).catch(() => {});
+      }
       mediaSearchAPI.search(t).then((r) => setPicHits({ q: t, list: r.data.pictures || [] })).catch(() => {});
     }, 200);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, everywhere]); // eslint-disable-line react-hooks/exhaustive-deps
   const filteredNotes = inScope('notes') && query.trim()
-    ? (hits && hits.q === query.trim() ? hits.notes.slice(0, 6) : notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5))
+    ? (hits && hits.q === query.trim() ? hits.notes.slice(0, everywhere ? 12 : 6) : notes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query.toLowerCase())).slice(0, 5))
     : [];
 
   const openNew = async (data) => {
@@ -151,7 +165,7 @@ export default function CommandPalette() {
   const pictureHits = scope === 'all' && picHits.q === query.trim() && !addMatch ? picHits.list : [];
   const allItems = [
     ...filteredCommands.map(c => ({ ...c, type: 'command' })),
-    ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id, sub: snipOf(n, query) })),
+    ...filteredNotes.map(n => ({ id: `note-${n.id}`, title: n.title || 'Untitled', icon: <File size={16} />, type: 'note', noteId: n.id, space: n._other ? (n._space || 'personal') : null, sub: (n._spaceName ? n._spaceName + ' · ' : '') + (snipOf(n, query) || '') })),
     ...taskHits.map((t) => ({ id: `task-${t.id}`, title: t.text, icon: <CheckSquare size={16} />, type: 'task', taskId: t.id, sub: [t.deadline && 'Due ' + new Date(t.deadline).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }), (t.todoTags || [])[0]].filter(Boolean).join(', ') })),
     ...tagHits.map((g) => ({ id: `tag-${g}`, title: `#${g}`, icon: <Hash size={16} />, type: 'tag', tag: g, sub: tasks.filter((t) => (t.todoTags || []).includes(g)).length + ' tasks' })),
     ...eventHits.map((t) => ({ id: `ev-${t.id}`, title: t.text, icon: <CalendarClock size={16} />, type: 'event', taskId: t.id, sub: [t.deadline && new Date(t.deadline).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }), t.startTime].filter(Boolean).join(' ') })),
@@ -173,6 +187,7 @@ export default function CommandPalette() {
     if (item.type === 'command') {
       item.action();
     } else if (item.type === 'note') {
+      if (item.space) switchTo(item.space === 'personal' ? null : item.space);
       navigate(`/notes/${item.noteId}`);
     } else if (item.type === 'task' || item.type === 'event') {
       navigate(`/tasks?task=${item.taskId}`);
@@ -217,6 +232,7 @@ export default function CommandPalette() {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
           />
+          {mySpaces.length > 0 && <button type="button" className={`cmd-all${everywhere ? ' on' : ''}`} aria-pressed={everywhere} data-testid="cmd-all-spaces" onClick={() => { setEverywhere((v) => !v); inputRef.current?.focus(); }}>All my spaces</button>}
           <div className="cmd-tabs" role="tablist" aria-label="Search in">
             {SCOPES.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={scope === k} className={scope === k ? 'on' : ''} onClick={() => { setScope(k); inputRef.current?.focus(); }}>{name}</button>)}
           </div>

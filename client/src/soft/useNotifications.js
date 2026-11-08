@@ -21,7 +21,7 @@ export function useNotificationCount() {
   useEffect(() => {
     const ids = server.filter((n) => !n.read).map((n) => n.id);
     if (seen.current === null) { seen.current = new Set(ids); return; }
-    const fresh = server.filter((n) => !n.read && !seen.current.has(n.id));
+    const fresh = server.filter((n) => !n.read && !seen.current.has(n.id) && !(n.spaceId && settings?.spaceMute?.[n.spaceId]));
     ids.forEach((i) => seen.current.add(i));
     if (!fresh.length || settings?.desktopNotify === false || settings?.notifyInApp === false || inQuietHours(settings)) return;
     try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(fresh[0].title, { body: fresh[0].body || '', tag: 'peblo-' + fresh[0].id }); } catch { /* blocked */ }
