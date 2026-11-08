@@ -105,6 +105,8 @@ router.post('/orgs', async (req, res) => {
 router.post('/orgs/:orgId/spaces', async (req, res) => {
   const userId = uid(req);
   const org = await orgAccess(userId, req.params.orgId);
+  const pol = (await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${req.params.orgId}`)[0]?.policy ?? {};
+  if (org?.role === 'member' && pol.membersCreateTeams === false) return res.status(403).json({ error: 'Only owners and admins can create teams here.' });
   if (!can('org.create_space', org)) return res.status(403).json({ error: 'You cannot create teams here.' });
   const name = clean(req.body?.name);
   if (name.length < 2) return res.status(400).json({ error: 'Give the team a name of at least 2 letters.' });
