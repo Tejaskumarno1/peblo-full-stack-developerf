@@ -37,6 +37,7 @@ import { docFileSpec } from './DocFile';
 import { packProps, unpackProps, isFileUrl } from '../utils/docFiles';
 import './docfile.css';
 import FindBar from './FindBar';
+import { NotePreview } from '../soft/Skeletons';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive, peekExternalEdit, clearExternalEdit } from '../utils/noteSync';
@@ -457,6 +458,11 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return base;
   };
   const [live, setLive] = useState({ connected: false, ready: false });
+  // The note's text is shown at once (plain, read only) while the editor parses it or the live copy connects, so opening a note is never blank.
+  const [parsing, setParsing] = useState(!rt && !!initialContent);
+  const [warmGaveUp, setWarmGaveUp] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setWarmGaveUp(true), 15000); return () => clearTimeout(t); }, []);
+  const warming = !!initialContent && !warmGaveUp && (rt ? !live.ready : parsing);
   const [metaStore] = useState(() => createMetaStore(rt?.doc)); // table settings Markdown cannot hold; shared with everyone in a live note
   const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin(), makeTablePlugin(metaStore)] }));
   const editor = useCreateBlockNote({
@@ -774,6 +780,8 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       } catch (err) {
         loadingRef.current = false;
         console.error('Failed to parse markdown:', err);
+      } finally {
+        setParsing(false);
       }
     }
     loadContent();
@@ -1127,6 +1135,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {rt && <Pointers rt={rt} rootRef={rootRef} ready={live.ready && live.connected} />}
       {rt && editable && <EditedBy rt={rt} editor={editor} ready={live.ready && live.connected} />}
       {rt && <Reactions rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} canReact={editable} dark={dark} />}
+      {warming && <NotePreview markdown={initialContent} />}
       <CommentsOn.Provider value={!!target}>
       <BlockNoteView
         editor={editor}

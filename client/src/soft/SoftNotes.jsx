@@ -15,6 +15,7 @@ import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './fold
 import { useAuth } from '../context/AuthContext';
 import './notespanel.css';
 import './notesV2.css';
+import { EditorSkeleton, RailSkeleton } from './Skeletons';
 import TagManager from './TagManager';
 import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
@@ -791,7 +792,9 @@ export default function SoftNotes() {
 
       {/* ---------- editor ---------- */}
       <main className="s-note-main" aria-label="Note">
-        {!doc ? (
+        {!doc && routeId ? (
+          <EditorSkeleton />
+        ) : !doc ? (
           <div className="s-note-empty">
             <h2 className="s-h2">Write something</h2>
             <p className="s-empty">Pick a note on the left, or start a new one.</p>

@@ -125,3 +125,18 @@ html.pb-phone .soft .s-notes-list .np-cards-wrap { padding-left: 0; padding-righ
 .soft .s-side-card.min .s-h3 { margin: 0; }
 .soft .s-side-card.min::after { content: 'Open'; font-size: 12px; font-weight: 700; opacity: .6; margin-left: auto; }
 .soft .s-side-card.min { display: flex; align-items: center; }
+
+/* Note side rail: every card lines up the same way (mockups WsD01 and WsD02). Collapsed cards are one row,
+   title on the left, "Open" on the right; the add-a-task field stays inside its card; the rail never scrolls sideways. */
+.soft .s-note-side { overflow-x: hidden; min-width: 0; }
+.soft .s-note-side > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.soft .s-side-card .s-h3 { display: flex; align-items: center; gap: 8px; text-align: left; margin: 0; }
+.soft .s-side-card.min { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: left; gap: 8px; }
+.soft .s-side-card.min > .s-h3 { flex: 1 1 auto; min-width: 0; }
+.soft .s-side-card.min::after { margin-left: auto; }
+.soft .s-side-card.rl-tasks.min::after { content: none; }
+.soft .s-side-card.rl-tasks.min .s-linked-add { flex: 1 1 100%; width: 100%; margin-top: 2px; }
+.soft .s-linked-add { width: 100%; box-sizing: border-box; align-items: center; }
+.soft .s-linked-add input { height: 40px; box-sizing: border-box; }
+.soft .s-linked-add button { width: 40px; height: 40px; flex: none; }
+.soft .s-linked-row, .soft .s-side-task { min-width: 0; }

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth, getSavedAccounts } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
@@ -6,6 +6,7 @@ import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
 import HelpDialog from './components/HelpDialog';
 import TaskReminders from './components/TaskReminders';
+import { NotesSkeleton } from './soft/Skeletons';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -60,6 +61,11 @@ const NotificationPill = lazy(() => import('./components/NotificationPill'));
 const AppMenu = lazy(() => import('./components/AppMenu'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
+/** While a page's code downloads: the Notes screen shows its own outline instead of a spinner. */
+function RouteLoader() {
+  const { pathname } = useLocation();
+  return pathname.startsWith('/notes') ? <NotesSkeleton /> : <Loader />;
+}
 
 /** Picks the screen for the current style (Soft, River or Orbit each have their own). */
 function Styled({ other: Other, ...byStyle }) {
@@ -84,6 +90,15 @@ function SettingsRoute() {
 /** Wait for the account to load, then show the app shell (or the sign-in screen when nobody is signed in). */
 function ShellLayout() {
   const { loading, user } = useAuth();
+  // Once signed in, fetch the Notes screen and its editor in the background so the first note opens without waiting for the download.
+  const signedIn = !!user;
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    const warm = () => { import('./soft/SoftNotesGate').catch(() => {}); };
+    const ric = window.requestIdleCallback;
+    if (ric) { const id = ric(warm, { timeout: 4000 }); return () => window.cancelIdleCallback?.(id); }
+    const t = setTimeout(warm, 1500); return () => clearTimeout(t);
+  }, [signedIn]);
   if (loading) return <Loader />;
   if (!user) return <AuthScreen />;
   // Several profiles on this computer: ask who is using Peblo, once each time it starts (like Chrome).
@@ -92,7 +107,7 @@ function ShellLayout() {
   } catch { /* storage blocked */ }
   return (
     <AppShell>
-      <Suspense fallback={<Loader />}><Outlet /></Suspense>
+      <Suspense fallback={<RouteLoader />}><Outlet /></Suspense>
       <Suspense fallback={null}>
         <SeriesScopeDialog />
         <CommandPalette />

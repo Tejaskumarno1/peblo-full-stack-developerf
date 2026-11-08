@@ -1,0 +1,24 @@
+/* Loading placeholders (mockups WsD03 to WsD05). The shimmer stops for people who ask for less motion. */
+.s-sk { display: block; max-width: 100%; background: var(--s-line, rgba(36, 31, 26, .1)); position: relative; overflow: hidden; }
+.s-sk::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent); animation: s-sk-slide 1.4s ease-in-out infinite; }
+@keyframes s-sk-slide { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .s-sk::after { animation: none; } }
+.s-sk-editor { display: flex; flex-direction: column; gap: 14px; padding: 6px 4px; min-width: 0; }
+.s-sk-title { margin: 0; font: 800 34px/1.1 var(--s-display, inherit); letter-spacing: -.03em; color: var(--s-fg); }
+.s-sk-chips { display: flex; gap: 8px; }
+.s-sk-lines { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.s-sk-rail { display: flex; flex-direction: column; gap: 12px; }
+.s-sk-card { border-radius: 28px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+.s-sk-notes { display: grid; grid-template-columns: 380px minmax(0, 1fr) 300px; gap: 16px; padding: 4px 0; width: 100%; }
+.s-sk-list { background: var(--s-surface, #fff); border-radius: 30px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.s-sk-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 22px; background: var(--s-item, rgba(36, 31, 26, .05)); }
+.s-sk-notes > .s-sk-editor { background: var(--s-surface, #fff); border-radius: 30px; padding: 26px 36px; }
+@media (max-width: 1100px) { .s-sk-notes { grid-template-columns: minmax(0, 1fr); } .s-sk-notes > .s-sk-list, .s-sk-notes > .s-sk-rail { display: none; } }
+/* what the editor shows for the first moments while the live copy connects */
+.block-editor-container { position: relative; }
+.s-sk-preview { position: absolute; left: 0; right: 0; top: 0; z-index: 3; pointer-events: none; background: var(--s-surface, var(--s-bg, #fff)); font-size: 16px; line-height: 1.6; color: var(--s-fg); padding: 6px 0 24px; min-height: 100%; overflow: hidden; word-break: break-word; }
+.s-sk-preview .h { font-weight: 800; margin-top: 10px; }
+.s-sk-preview .h1 { font-size: 28px; } .s-sk-preview .h2 { font-size: 22px; } .s-sk-preview .h3 { font-size: 18px; }
+.s-sk-preview .gap { height: 10px; }
+.s-sk-preview .li { display: flex; gap: 10px; }
+.s-sk-preview .li span { width: 16px; flex: none; }
