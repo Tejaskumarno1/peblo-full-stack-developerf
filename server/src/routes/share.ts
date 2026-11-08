@@ -15,6 +15,7 @@ export const shareRoutes = Router();
 shareRoutes.use(authenticate);
 shareRoutes.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); }); // an AI client cannot publish a #private note
 
+import { policyOfSpace } from '../utils/orgPolicy.js';
 const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);
 // A link whose end date has passed stops working (the owner can turn it on again from the share box).
@@ -263,6 +264,11 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
+    if (kind === 'note') {
+      const sp = (await prisma.$queryRaw<{ space_id: string | null }[]>`SELECT space_id FROM notes WHERE id = ${row.id}`)[0]?.space_id;
+      const pol = await policyOfSpace(sp);
+      if (pol && !pol.publicShares && !row.shareToken) return res.status(403).json({ error: 'Your organization has turned public links off.' });
+    }
     const edit = typeof req.body?.edit === 'boolean' ? req.body.edit : !!row.shareEdit;
     let token = row.shareToken;
     if (!token) token = newToken();

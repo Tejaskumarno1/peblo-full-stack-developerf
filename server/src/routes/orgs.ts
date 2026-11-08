@@ -4,6 +4,8 @@ import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
+import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
+import { encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
 
 /* Members, invitations and the audit trail of an organization. Tables: 035_workspaces_expand.sql. */
@@ -200,7 +202,6 @@ router.get('/orgs/:orgId/audit', async (req, res) => {
 
 
 /** Organization policy (mockup C04). Only settings that change what the app does are offered. */
-const policyOf = (p: any) => ({ guests: p?.guests === true, membersCreateTeams: p?.membersCreateTeams !== false });
 router.get('/orgs/:orgId/policy', async (req, res) => {
   if (!(await gate(req, res, false))) return;
   const r = await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${req.params.orgId}`;
@@ -210,7 +211,7 @@ router.patch('/orgs/:orgId/policy', async (req, res) => {
   if (!(await gate(req, res, true))) return;
   const cur = (await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${req.params.orgId}`)[0]?.policy ?? {};
   const next = { ...cur };
-  for (const k of ['guests', 'membersCreateTeams']) if (typeof req.body?.[k] === 'boolean') next[k] = req.body[k];
+  for (const k of POLICY_KEYS) if (typeof req.body?.[k] === 'boolean') next[k] = req.body[k];
   await prisma.$executeRaw`UPDATE organizations SET policy = ${JSON.stringify(next)}::jsonb WHERE id = ${req.params.orgId}`;
   await audit(req.params.orgId, uid(req), 'policy.changed', null, req.body ?? {});
   res.json({ policy: policyOf(next) });
@@ -279,6 +280,51 @@ router.post('/spaces/:spaceId/close', async (req, res) => {
   await prisma.$executeRaw`UPDATE spaces SET closed_at = now() WHERE id = ${req.params.spaceId}`;
   await audit(g.orgId, uid(req), 'space.closed', req.params.spaceId);
   res.json({ ok: true });
+});
+
+/** Organization AI keys (mockup C05). Owners and admins only; the key itself is never returned. */
+const AI_PROVIDERS = ['openai', 'gemini'];
+router.get('/orgs/:orgId/ai-keys', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const rows = await prisma.$queryRaw<any[]>`SELECT k.provider, k.added_at AS "addedAt", u.name AS "addedByName" FROM org_ai_keys k LEFT JOIN users u ON u.id = k.added_by WHERE k.org_id = ${req.params.orgId}`;
+  res.json({ keys: AI_PROVIDERS.map((p) => { const r = rows.find((x) => x.provider === p); return { provider: p, set: !!r, addedByName: r?.addedByName ?? null, addedAt: r?.addedAt ?? null }; }) });
+});
+router.put('/orgs/:orgId/ai-keys/:provider', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const provider = String(req.params.provider);
+  const key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+  if (!AI_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Use openai or gemini.' });
+  if (key.length < 8 || key.length > 400) return res.status(400).json({ error: 'That does not look like a key.' });
+  const enc = encryptSecret(key);
+  const had = (await prisma.$queryRaw<any[]>`SELECT 1 FROM org_ai_keys WHERE org_id = ${req.params.orgId} AND provider = ${provider}`).length > 0;
+  await prisma.$executeRaw`INSERT INTO org_ai_keys (org_id, provider, secret, added_by, added_at) VALUES (${req.params.orgId}, ${provider}, ${enc}, ${uid(req)}, now())
+    ON CONFLICT (org_id, provider) DO UPDATE SET secret = EXCLUDED.secret, added_by = EXCLUDED.added_by, added_at = now()`;
+  await audit(req.params.orgId, uid(req), had ? 'key.replaced' : 'key.added', provider, { provider });
+  res.json({ ok: true });
+});
+router.delete('/orgs/:orgId/ai-keys/:provider', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const provider = String(req.params.provider);
+  await prisma.$executeRaw`DELETE FROM org_ai_keys WHERE org_id = ${req.params.orgId} AND provider = ${provider}`;
+  await audit(req.params.orgId, uid(req), 'key.removed', provider, { provider });
+  res.json({ ok: true });
+});
+
+/** Seats: active members count, guests are free (mockup C07). */
+router.get('/orgs/:orgId/seats', async (req, res) => {
+  if (!(await gate(req, res, false))) return;
+  const orgId = req.params.orgId;
+  const c = (await prisma.$queryRaw<any[]>`SELECT
+    count(*) FILTER (WHERE role <> 'guest' AND status = 'active')::int AS used,
+    count(*) FILTER (WHERE role = 'guest' AND status = 'active')::int AS guests
+    FROM org_members WHERE org_id = ${orgId}`)[0];
+  const pol = (await prisma.$queryRaw<any[]>`SELECT policy FROM organizations WHERE id = ${orgId}`)[0]?.policy ?? {};
+  res.json({ used: c?.used ?? 0, guests: c?.guests ?? 0, limit: Number(pol.seatLimit) > 0 ? Number(pol.seatLimit) : 10 });
+});
+router.get('/orgs/:orgId/exports', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const rows = await prisma.$queryRaw<any[]>`SELECT a.id, a.at, u.name AS "byName" FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id WHERE a.org_id = ${req.params.orgId} AND a.action = 'org.exported' ORDER BY a.at DESC LIMIT 5`;
+  res.json({ exports: rows });
 });
 
 export default router;

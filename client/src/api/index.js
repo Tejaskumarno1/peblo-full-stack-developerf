@@ -188,6 +188,11 @@ export const workspacesAPI = {
   leaveSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/leave`),
   closeSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/close`),
   audit: (orgId) => api.get(`/workspaces/orgs/${orgId}/audit`),
+  aiKeys: (orgId) => api.get(`/workspaces/orgs/${orgId}/ai-keys`),
+  setAiKey: (orgId, provider, key) => api.put(`/workspaces/orgs/${orgId}/ai-keys/${provider}`, { key }),
+  removeAiKey: (orgId, provider) => api.delete(`/workspaces/orgs/${orgId}/ai-keys/${provider}`),
+  seats: (orgId) => api.get(`/workspaces/orgs/${orgId}/seats`),
+  exports: (orgId) => api.get(`/workspaces/orgs/${orgId}/exports`),
   lookupInvite: (token) => api.get('/workspaces/invites/lookup', { params: { token } }),
   acceptInvite: (token) => api.post('/workspaces/invites/accept', { token }),
 };
