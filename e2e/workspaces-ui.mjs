@@ -86,6 +86,30 @@ try {
   await p.getByTestId('home-teams').getByRole('checkbox').first().click();
   await p.waitForTimeout(900);
   ok((await p.getByTestId('home-teams').count()) === 0, 'ticking it completes it and it leaves Home');
+
+  // Organization settings: policy, export, team settings
+  await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });
+  await p.getByTestId('org-open').first().click();
+  await p.getByTestId('org-policy').waitFor({ timeout: 8000 });
+  ok(!(await p.getByTestId('policy-guests').isChecked()), 'guests start off');
+  await p.getByTestId('policy-guests').click();
+  await p.waitForTimeout(700);
+  const pol = await p.evaluate(async (oid) => (await (await fetch('/api/workspaces/orgs/' + oid + '/policy', { headers: { Authorization: 'Bearer ' + localStorage.getItem('peblo-token') } })).json()).policy, (await b.api('GET', '/api/workspaces')).orgs[0].id);
+  ok(pol.guests === true, 'turning guests on is saved');
+  await p.screenshot({ path: shots + '\\ws-policy.png' });
+  const dl = p.waitForEvent('download', { timeout: 8000 });
+  await p.getByTestId('org-export').click();
+  ok(/export\.json$/.test((await dl).suggestedFilename()), 'Export downloads a file');
+  await p.getByTestId('team-name').first().fill('Studio Crew');
+  await p.getByRole('button', { name: 'Save', exact: true }).click();
+  await p.waitForTimeout(800);
+  ok((await b.api('GET', '/api/workspaces')).orgs[0].spaces[0].name === 'Studio Crew', 'renaming the team is saved');
+  await p.screenshot({ path: shots + '\\ws-team-settings.png' });
+  await p.getByTestId('team-close').first().click();
+  ok((await p.getByTestId('team-settings').innerText()).includes('Nothing is deleted'), 'closing says nothing is deleted');
+  await p.getByTestId('team-close-confirm').click();
+  await p.waitForTimeout(900);
+  ok((await b.api('GET', '/api/workspaces')).orgs[0].spaces.length === 0, 'a closed team leaves the list');
   void sid;
 } catch (e) { ok(false, 'workspaces-ui ran without crashing', e?.stack || e); }
 await b.finish();

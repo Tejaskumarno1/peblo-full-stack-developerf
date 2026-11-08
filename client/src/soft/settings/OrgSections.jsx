@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Users, Copy, X, LogOut } from 'lucide-react';
+import { Building2, Users, Copy, X, LogOut, Download } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { workspacesAPI } from '../../api';
 import { Card } from './ui';
@@ -98,7 +98,68 @@ function OrgMembers({ org }) {
           {audit.data.slice(0, 12).map((e) => <div key={e.id} className="s-member-row"><div><b>{e.action.replace('.', ' ').replace('_', ' ')}</b><small>{e.actorName || 'System'} - {ago(e.at)}</small></div></div>)}
         </div>
       )}
+      {admin && <OrgPolicy org={org} run={run} />}
+      {org.spaces.length > 0 && <TeamSettings org={org} run={run} admin={admin} />}
       <button type="button" className="s-soft-btn s-leave" onClick={() => run(() => workspacesAPI.leave(org.id))}><LogOut size={14} /> Leave organization</button>
+    </div>
+  );
+}
+
+/** Policy toggles and export (mockups C04, C07). Only settings that change what the app does. */
+function OrgPolicy({ org, run }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['org-policy', org.id], queryFn: () => workspacesAPI.policy(org.id).then((r) => r.data.policy) });
+  const set = (k, v) => run(async () => { await workspacesAPI.setPolicy(org.id, { [k]: v }); qc.invalidateQueries({ queryKey: ['org-policy', org.id] }); });
+  const exportAll = () => run(async () => {
+    const r = await workspacesAPI.exportOrg(org.id);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${org.name.replace(/[^\w-]+/g, '-')}-export.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+  if (!data) return null;
+  return (
+    <div className="s-member-list" data-testid="org-policy">
+      <small className="s-set-sub">Policy</small>
+      <label className="s-member-row"><div><b>Allow guests</b><small>Guests can be invited into one space and never see the rest.</small></div>
+        <input type="checkbox" role="switch" aria-label="Allow guests" checked={data.guests} onChange={(e) => set('guests', e.target.checked)} data-testid="policy-guests" /></label>
+      <label className="s-member-row"><div><b>Members can create teams</b><small>Off means only owners and admins can.</small></div>
+        <input type="checkbox" role="switch" aria-label="Members can create teams" checked={data.membersCreateTeams} onChange={(e) => set('membersCreateTeams', e.target.checked)} data-testid="policy-teams" /></label>
+      <div className="s-member-row"><div><b>Export everything</b><small>Notes, tasks, members and announcements as one file. Recorded in the activity log.</small></div>
+        <button type="button" className="s-soft-btn" onClick={exportAll} data-testid="org-export"><Download size={14} /> Export</button></div>
+    </div>
+  );
+}
+
+/** Team settings and leaving (mockups C11, C12): rename, who new people join as, leave, and close without deleting anything. */
+function TeamSettings({ org, run, admin }) {
+  const [closing, setClosing] = useState(null);
+  return (
+    <div className="s-member-list" data-testid="team-settings">
+      <small className="s-set-sub">Teams</small>
+      {org.spaces.map((s) => <TeamRow key={s.id} s={s} run={run} canManage={admin || s.role === 'lead'} closing={closing === s.id} setClosing={(v) => setClosing(v ? s.id : null)} />)}
+    </div>
+  );
+}
+function TeamRow({ s, run, canManage, closing, setClosing }) {
+  const [name, setName] = useState(s.name);
+  const dirty = name.trim() !== s.name && name.trim().length >= 2;
+  return (
+    <div className="s-member-row" data-testid="team-row" style={{ flexWrap: 'wrap' }}>
+      {canManage ? <input aria-label={`Name of ${s.name}`} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} data-testid="team-name" />
+        : <div><b>{s.name}</b><small>{s.kind === 'office' ? 'Office' : 'Team'}</small></div>}
+      {canManage && dirty && <button type="button" className="s-share-go" onClick={() => run(() => workspacesAPI.updateSpace(s.id, { name }))}>Save</button>}
+      {canManage && (
+        <select aria-label={`New people join ${s.name} as`} value={s.defaultRole || 'member'} onChange={(e) => run(() => workspacesAPI.updateSpace(s.id, { defaultRole: e.target.value }))}>
+          <option value="member">Join as member</option><option value="viewer">Join as viewer</option>
+        </select>
+      )}
+      {s.role && <button type="button" className="s-soft-btn" onClick={() => run(() => workspacesAPI.leaveSpace(s.id))} data-testid="team-leave"><LogOut size={14} /> Leave</button>}
+      {canManage && !closing && <button type="button" className="s-soft-btn" onClick={() => setClosing(true)} data-testid="team-close">Close</button>}
+      {closing && (
+        <p className="s-share-msg" style={{ flexBasis: '100%' }}>Close {s.name}? It leaves everyone's switcher. Nothing is deleted and it stays in the export.{' '}
+          <button type="button" className="s-share-go" onClick={() => run(() => workspacesAPI.closeSpace(s.id))} data-testid="team-close-confirm">Close team</button>{' '}
+          <button type="button" className="s-soft-btn" onClick={() => setClosing(false)}>Keep it</button></p>
+      )}
     </div>
   );
 }
