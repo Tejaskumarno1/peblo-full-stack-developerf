@@ -13,7 +13,7 @@ try {
   check('avatar opens the Settings page', page.url().endsWith('/settings/profile'), page.url());
 
   const navNames = await page.locator('.s-set-link').allInnerTexts();
-  check('seven groups of sections in the menu', navNames.length === 11 && (await page.locator('.s-set-group').count()) === 7, navNames.join('|'));
+  check('seven groups of sections in the menu (Organizations sits under You)', navNames.length === 12 && (await page.locator('.s-set-group').count()) === 7, navNames.join('|'));
 
   // search
   await page.getByLabel('Find a setting').fill('dark');

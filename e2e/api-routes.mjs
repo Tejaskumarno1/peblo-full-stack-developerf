@@ -273,11 +273,13 @@ const gen = await prisma.aiGeneration.create({ data: { noteId: nid, userId: A.id
   }
   check(`PAT: read-only token refused (403) on ${roWrites.length} write endpoints`, ro.length === 0, ro.slice(0, 5).join(' | '));
   const roReads = [];
-  for (const u of ['/api/notes', `/api/notes/${nid}`, '/api/todos', '/api/todos/today', '/api/tags', '/api/backup', '/api/export', '/api/dashboard/insights', '/api/study/mastery', '/api/river/promises', '/api/collab/notifications']) {
+  for (const u of ['/api/notes', `/api/notes/${nid}`, '/api/todos', '/api/todos/today', '/api/tags', '/api/dashboard/insights', '/api/study/mastery', '/api/river/promises', '/api/collab/notifications']) {
     const r = await call('GET', u, { token: PAT_RO });
     if (r.status !== 200) roReads.push(`${u} -> ${r.status}`);
   }
-  check('PAT: read-only token can read notes, tasks, tags, backup, dashboard', roReads.length === 0, roReads.join(' | '));
+  check('PAT: read-only token can read notes, tasks, tags, dashboard', roReads.length === 0, roReads.join(' | '));
+  const roOut = [await call('GET', '/api/backup', { token: PAT_RO }), await call('GET', '/api/export', { token: PAT_RO })];
+  check('PAT: a token cannot take the whole library out (backup and export are 403)', roOut.every((r) => r.status === 403), roOut.map((r) => r.status).join(','));
   const after = await call('GET', `/api/notes/${nid}`, { token: A.token });
   check('PAT: read-only attempts changed nothing', after.json?.note?.title === SECRET || after.json?.title === SECRET, after.text.slice(0, 120));
   const del = await call('DELETE', `/api/tokens/${ptkRO.json?.id}`, { token: A.token });
