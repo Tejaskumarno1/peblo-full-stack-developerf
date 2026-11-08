@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { audit, can, spaceAccess } from '../utils/access.js';
+import { notifyUsers, spaceUserIds, nameOf } from '../services/notify.js';
 
 /* Office announcements (mockups B01 to B03). Tables: 036_office_announcements.sql. */
 const router = Router();
@@ -39,6 +40,9 @@ router.post('/spaces/:spaceId/announcements', async (req, res) => {
   const status = o.publisher ? 'published' : 'suggested';
   await prisma.$executeRaw`INSERT INTO announcements (id, space_id, author_id, title, body, status) VALUES (${id}, ${req.params.spaceId}, ${uid(req)}, ${title}, ${body}, ${status})`;
   await audit(o.orgId, uid(req), status === 'published' ? 'announcement.posted' : 'announcement.suggested', id, { spaceId: req.params.spaceId });
+  const me = await nameOf(uid(req));
+  if (status === 'published') await notifyUsers(req.app, (await spaceUserIds(req.params.spaceId)).filter((u) => u !== uid(req)), { kind: 'office_post', title: title, body: body, from: me, spaceId: req.params.spaceId });
+  else await notifyUsers(req.app, (await spaceUserIds(req.params.spaceId, true)).filter((u) => u !== uid(req)), { kind: 'office_suggestion', title: `Suggested: ${title}`, body, from: me, spaceId: req.params.spaceId });
   res.status(201).json({ id, status });
 });
 
@@ -75,6 +79,7 @@ router.post('/spaces/:spaceId/announcements/:id/approve', async (req, res) => {
   if (l.a.status !== 'suggested') return res.status(409).json({ error: 'That is not a suggestion.' });
   await prisma.$executeRaw`UPDATE announcements SET status = 'published', created_at = now(), updated_at = now() WHERE id = ${l.a.id}`;
   await audit(l.o.orgId, uid(req), 'announcement.approved', l.a.id);
+  await notifyUsers(req.app, (await spaceUserIds(req.params.spaceId)).filter((u) => u !== uid(req)), { kind: 'office_post', title: l.a.title, body: l.a.body, from: await nameOf(uid(req)), spaceId: req.params.spaceId });
   res.json({ ok: true });
 });
 

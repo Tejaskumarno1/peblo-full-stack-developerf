@@ -80,9 +80,9 @@ router.delete('/comments/:noteId/:cid', async (req, res, next) => {
 // ---- notifications ----
 router.get('/notifications', async (req, res, next) => {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>('SELECT id, kind, note_id, title, body, from_name, is_read, created_at FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', req.user!.id);
+    const rows = await prisma.$queryRawUnsafe<any[]>('SELECT id, kind, note_id, title, body, from_name, is_read, created_at, space_id, todo_id FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', req.user!.id);
     res.json({
-      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, title: r.title, body: decField('user_notifications', 'body', r.id, r.body), from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
+      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, spaceId: r.space_id, todoId: r.todo_id, title: r.title, body: decField('user_notifications', 'body', r.id, r.body), from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
       unread: rows.filter((r) => !r.is_read).length,
     });
   } catch (err) { next(err); }

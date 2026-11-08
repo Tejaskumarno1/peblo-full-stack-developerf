@@ -1,3 +1,4 @@
+import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
 import { noteScope } from '../utils/scope.js';
 import { spaceMembers } from '../utils/access.js';
@@ -208,6 +209,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    if (base.assigneeId && base.assigneeId !== userId) await notifyUsers(req.app, [base.assigneeId], { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
 
     res.status(201).json({ todo });
   } catch (error) {
@@ -286,11 +288,14 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       if (a && !(await spaceMembers(own.spaceId)).includes(a)) return res.status(400).json({ error: 'That person is not in this space.' });
       (data as any).assigneeId = a || null;
     }
+    const newAssignee: string | null = 'spaceId' in own && typeof req.body.assigneeId === 'string' && req.body.assigneeId ? req.body.assigneeId : null;
     const updatedTodo = await prisma.todo.update({
       where: { id: id as string, spaceId: todo.spaceId },
       data,
       include: { note: { select: { id: true, title: true } } }
     });
+
+    if (newAssignee && newAssignee !== userId && newAssignee !== (todo as any).assigneeId) await notifyUsers(req.app, [newAssignee], { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
 
     if (startSeries && updatedTodo.deadline) {
       const series = await prisma.todoSeries.create({

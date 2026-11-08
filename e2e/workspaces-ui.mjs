@@ -1,6 +1,8 @@
 // Workspaces in the app: set up an organization from Settings, the space pill appears, switching spaces shows that space's notes only.
-import { boot } from './lib.mjs';
+import { boot, REPO } from './lib.mjs';
 import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 const b = await boot();
 const ok = (c, m, x) => b.check(m, !!c, x);
 const shots = process.env.SHOTS || 'D:\\Peblo\\_shots';
@@ -86,6 +88,23 @@ try {
   await p.getByTestId('home-teams').getByRole('checkbox').first().click();
   await p.waitForTimeout(900);
   ok((await p.getByTestId('home-teams').count()) === 0, 'ticking it completes it and it leaves Home');
+
+  // Notifications for team events (mockup C13)
+  {
+    const { default: dbp } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'db.js')).href);
+    const w = await b.api('GET', '/api/workspaces');
+    const sp = w.orgs[0].spaces[0].id;
+    await dbp.$executeRawUnsafe(`INSERT INTO user_notifications (id, user_id, kind, title, from_name, space_id) VALUES ('nt1', $1, 'office_post', 'Holiday on Monday', 'Meera', $2), ('nt2', $1, 'assigned', 'Review the budget', 'Meera', $2)`, w.me.id, sp);
+    await p.goto(b.base + '/notifications', { waitUntil: 'networkidle' });
+    ok((await p.locator('[data-kind="office_post"]').count()) === 1 && (await p.locator('[data-kind="assigned"]').count()) === 1, 'team notifications are listed');
+    await p.getByText('Teams', { exact: true }).first().click();
+    ok((await p.getByTestId('notif-row').count()) === 2, 'the Teams filter shows only them');
+    await p.screenshot({ path: shots + '\\ws-notifications.png' });
+    await p.locator('[data-kind="office_post"] button.s-notif-btn').click();
+    await p.waitForTimeout(800);
+    ok((await p.evaluate(() => localStorage.getItem('peblo-space'))) === sp && /\/notes/.test(p.url()), 'opening an Office notification goes to that space');
+    await p.evaluate(() => localStorage.removeItem('peblo-space'));
+  }
 
   // Organization settings: policy, export, team settings
   await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });

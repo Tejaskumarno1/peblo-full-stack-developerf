@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, CheckSquare, FileText, AtSign, Bell, Check } from 'lucide-react';
+import { Calendar, CheckSquare, FileText, AtSign, Bell, Check, Megaphone, UserPlus } from 'lucide-react';
 import api from '../api/client';
 import { todosAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Switch, Seg } from './settings/ui';
+import { useSwitchSpace } from './spaces';
 import { buildNotifications, applyFilter, FILTERS, readDerived, saveDerived, whenLabel, groupOf } from './notifUtils';
 import './notifications.css';
 
-const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText };
-const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky' };
+const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, member_joined: UserPlus };
+const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', member_joined: 'mint' };
 
 /** Soft Studio · Notification centre (mockup: NotifCentre). One list: mentions, meetings and tasks that need you. */
 export default function SoftNotifications() {
   const navigate = useNavigate();
+  const switchTo = useSwitchSpace();
   const { settings, updateSettings } = useAuth();
   const [filter, setFilter] = useState('all');
   const [derived, setDerived] = useState(readDerived);
@@ -35,6 +37,8 @@ export default function SoftNotifications() {
   }, [derived, refetch]);
   const open = (n) => {
     void markRead([n]);
+    if (n.kind === 'member_joined') { navigate('/settings/organizations'); return; }
+    if (n.spaceId && n.kind !== 'note') { switchTo(n.spaceId); navigate(n.kind === 'assigned' ? '/tasks?task=' + n.todoId : '/notes'); return; }
     if (n.noteId) navigate('/notes/' + n.noteId);
     else if (n.kind === 'meeting') navigate('/calendar');
     else navigate('/tasks?task=' + n.todoId);

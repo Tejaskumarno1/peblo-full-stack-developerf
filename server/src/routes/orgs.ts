@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
+import { notifyUsers, nameOf } from '../services/notify.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
 
@@ -122,6 +123,7 @@ router.post('/invites/accept', async (req, res) => {
     ...spaceIds.map((s) => prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${s}, ${userId}, ${inv.spaceRole}, ${inv.invitedBy ?? null}) ON CONFLICT DO NOTHING`),
   ]);
   await audit(inv.orgId, userId, 'member.joined', userId, { orgRole: inv.orgRole, spaceIds });
+  if (inv.invitedBy) await notifyUsers(req.app, [inv.invitedBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${inv.orgName}`, from: await nameOf(userId), spaceId: spaceIds[0] ?? null });
   res.json({ ok: true, orgId: inv.orgId, orgName: inv.orgName });
 });
 
