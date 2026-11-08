@@ -3,7 +3,7 @@ import { boot, REPO } from './lib.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-const b = await boot();
+const b = await boot({ freshTip: true });
 const ok = (c, m, x) => b.check(m, !!c, x);
 const shots = process.env.SHOTS || 'D:\\Peblo\\_shots';
 try { fs.mkdirSync(shots, { recursive: true }); } catch {}
@@ -42,6 +42,12 @@ try {
   await p.screenshot({ path: shots + '\\ws-back-personal.png' });
   ok(html.includes('Personal diary') && !html.includes('Sprint retro notes'), 'back in Personal: the diary shows and the team note does not', `diary=${html.includes('Personal diary')} team=${html.includes('Sprint retro notes')} url=${p.url()}`);
   ok(/Personal/.test(await p.getByTestId('space-pill').innerText()), 'the pill reads Personal');
+  await p.getByTestId('spaces-tip').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('spaces-tip').innerText()).includes('Studio Co team'), 'the first-run tip names the new team');
+  await p.screenshot({ path: shots + '\\ws-tip.png' });
+  await p.getByTestId('spaces-tip-ok').click();
+  await p.reload({ waitUntil: 'networkidle' });
+  ok((await p.getByTestId('spaces-tip').count()) === 0, 'Got it dismisses the tip for good');
 
   await p.goto(b.base + '/settings/organizations', { waitUntil: 'networkidle' });
   await p.getByTestId('org-open').first().click();
@@ -54,6 +60,11 @@ try {
   await p.waitForTimeout(800);
   ok((await p.getByTestId('org-detail').innerText()).includes('colleague@example.com'), 'the invite shows as waiting to join');
   await p.screenshot({ path: shots + '\\ws-members.png' });
+  const invLink = await p.locator('.s-invite-link code').innerText();
+  await p.goto(invLink.replace(/^https?:\/\/[^/]+/, b.base), { waitUntil: 'networkidle' });
+  await p.getByTestId('invite-card').getByText('already in this organization').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('invite-card').innerText()).includes('already in your spaces'), 'an invite to an organization you are in says so');
+  await p.screenshot({ path: shots + '\\ws-invite-wrong.png' });
   await p.goto(b.base + '/invite?token=nonsense', { waitUntil: 'networkidle' });
   ok((await p.getByTestId('invite-card').innerText()).includes('not valid'), 'a bad invite link says so');
 

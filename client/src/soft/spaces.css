@@ -74,3 +74,9 @@ html.pb-phone .soft .s-space-menu { position: fixed; left: 12px; right: 12px; to
 .soft .s-post header b { font-size: 17px; flex: 1; }
 .soft .s-post p { margin: 0; font-weight: 500; line-height: 1.5; white-space: pre-wrap; }
 .soft .s-space-form textarea { border-radius: 18px; border: 1px solid var(--s-line, transparent); background: var(--s-bg, #fff); color: var(--s-fg); padding: 10px 14px; font: inherit; resize: vertical; }
+
+.soft .s-space-tip { position: fixed; top: 80px; right: 150px; width: 340px; max-width: calc(100vw - 32px); padding: 18px; border-radius: 26px; background: #241F1A; color: #F1EBDD; box-shadow: var(--s-shadow, 0 18px 40px rgba(0,0,0,.25)); z-index: 90; display: flex; flex-direction: column; gap: 8px; }
+.soft .s-space-tip b { font-size: 17px; }
+.soft .s-space-tip p { margin: 0; font-size: 13.5px; font-weight: 500; line-height: 1.5; }
+.soft .s-space-tip button { align-self: flex-start; border: 0; border-radius: 999px; padding: 0 16px; height: 34px; background: #F1EBDD; color: #241F1A; font: 800 14px var(--s-body); cursor: pointer; }
+.soft .s-space-tip::before { content: ''; position: absolute; right: 60px; top: -8px; width: 16px; height: 16px; background: #241F1A; transform: rotate(45deg); }

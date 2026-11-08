@@ -227,3 +227,23 @@ export function SpaceAccessGuard() {
     </div>
   );
 }
+
+const TIP_KEY = 'peblo-spaces-tip';
+const tipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return true; } };
+
+/** First-run tip (mockup C15): shown once, under the space pill, the first time a person has a shared space. */
+export function SpacesTip() {
+  const { data } = useWorkspaces();
+  const current = useCurrentSpace();
+  const [gone, setGone] = useState(tipSeen);
+  const first = (data?.orgs || []).flatMap((o) => o.spaces)[0];
+  if (gone || !first || current) return null;
+  const close = () => { try { localStorage.setItem(TIP_KEY, '1'); } catch { /* shown again next time */ } setGone(true); };
+  return (
+    <div className="s-space-tip" role="dialog" aria-label="Your spaces" data-testid="spaces-tip">
+      <b>Your spaces live here</b>
+      <p>Personal is yours alone. Switch to {first.name} for shared notes. Nothing moves between them unless you choose.</p>
+      <button type="button" onClick={close} data-testid="spaces-tip-ok">Got it</button>
+    </div>
+  );
+}

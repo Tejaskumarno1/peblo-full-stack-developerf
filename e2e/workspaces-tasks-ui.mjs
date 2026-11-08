@@ -66,6 +66,7 @@ try {
   await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
   await p.getByRole('button', { name: /Trash/ }).first().click();
   await p.getByTestId('team-trash-note').waitFor({ timeout: 8000 });
+  await p.getByText('Binned page').first().waitFor({ timeout: 8000 }).catch(() => {});
   ok((await p.content()).includes('Binned page'), 'the team trash lists the binned note');
   ok((await p.getByRole('button', { name: /Empty/ }).count()) === 1, 'a lead can empty the team trash');
   await p.screenshot({ path: shots + '\\ws-team-trash.png' });
