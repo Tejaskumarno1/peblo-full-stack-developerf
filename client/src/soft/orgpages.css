@@ -98,3 +98,11 @@
 .og-link.expired,.og-link.full{opacity:.6}
 .og-lk-t{display:flex;flex-direction:column;flex:1;min-width:0}
 .og-lk-t small{opacity:.7}
+.soft .og-note,.og-note{margin:0;font-size:13.5px;line-height:1.45;color:var(--s-fg2)}
+/* phone: a person's row gets two lines (name, then the tags) so names are not cut to a few letters */
+html.pb-phone .soft .og-row { flex-wrap: wrap; row-gap: 6px; }
+html.pb-phone .soft .og-row .txt { flex: 1 1 calc(100% - 56px); }
+html.pb-phone .soft .og-row .txt small { white-space: normal; }
+html.pb-phone .soft .og-row > .og-tag, html.pb-phone .soft .og-row > select, html.pb-phone .soft .og-row > .og-menu-btn { margin-left: 0; }
+html.pb-phone .soft .og-link { flex-wrap: wrap; }
+html.pb-phone .og-dlg { padding: 20px 18px; }

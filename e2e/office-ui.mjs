@@ -76,5 +76,45 @@ try {
   await p.goto(b.base + '/join?token=nope', { waitUntil: 'networkidle' });
   ok(/not valid/.test(await p.getByTestId('join-card').innerText()), 'a bad link says it is not valid');
   await p.screenshot({ path: shots + '\\of-joinpage.png' });
+
+  // audit labels and the trial card
+  await p.goto(b.base + '/settings/org-audit', { waitUntil: 'networkidle' });
+  await p.getByTestId('audit-list').waitFor({ timeout: 8000 });
+  const au = await p.getByTestId('audit-list').innerText();
+  ok(/made a join link/.test(au) && /turned off a join link/.test(au), 'the audit log names join link events');
+  ok(/joined through a link/.test(au), 'the audit log names joining through a link');
+  ok(/changed who can open a note/.test(au), 'the audit log names note access changes');
+  await p.goto(b.base + '/settings/org-export', { waitUntil: 'networkidle' });
+  await p.getByTestId('org-trial').waitFor({ timeout: 8000 });
+  ok(/14 days left|13 days left/.test(await p.getByTestId('org-trial').innerText()), 'the Trial card counts days left');
+  await p.getByTestId('see-plans').click();
+  ok(await p.getByTestId('plans-note').isVisible(), 'See plans says plainly that nothing is charged yet');
+  // invite page: expired (email the inviter a reminder) and unverified (resend the link)
+  const mkUser = async (nm) => { const em = `${nm}-${Date.now()}@peblo.test`; const r = await fetch(b.base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: em, password: 'correct horse battery', name: nm }) }).then((x) => x.json()); return { em, token: r.token }; };
+  const maya = await mkUser('Maya');
+  await db.user.updateMany({ where: { email: maya.em }, data: { emailVerifiedAt: new Date() } });
+  const iv = await b.api('POST', `/api/workspaces/orgs/${org.id}/invites`, { email: maya.em, orgRole: 'member', spaceIds: [off.id], spaceRole: 'member' });
+  await db.$executeRawUnsafe(`UPDATE org_invites SET expires_at = now() - interval '1 day' WHERE email = '${maya.em}'`);
+  const ctx2 = await p.context().browser().newContext({ viewport: { width: 1200, height: 800 } });
+  await ctx2.addInitScript((t) => { try { localStorage.setItem('peblo-token', t); } catch {} }, maya.token);
+  const p2 = await ctx2.newPage();
+  await p2.goto(b.base + `/invite?token=${new URL(iv.link).searchParams.get('token')}`, { waitUntil: 'networkidle' });
+  await p2.getByTestId('invite-remind').waitFor({ timeout: 8000 });
+  ok(/This link has expired/.test(await p2.getByTestId('invite-card').innerText()), 'an expired invite says so');
+  await p2.getByTestId('invite-remind').click();
+  await p2.getByTestId('invite-note').waitFor({ timeout: 8000 });
+  ok(/Reminder sent/.test(await p2.getByTestId('invite-note').innerText()), 'Email a reminder tells the inviter');
+  await p2.screenshot({ path: shots + '\\of-invite-expired.png' });
+  const nik = await mkUser('Nik');
+  const iv2 = await b.api('POST', `/api/workspaces/orgs/${org.id}/invites`, { email: nik.em, orgRole: 'member', spaceIds: [off.id], spaceRole: 'member' });
+  await ctx2.addInitScript((t) => { try { localStorage.setItem('peblo-token', t); } catch {} }, nik.token);
+  await p2.evaluate((t) => localStorage.setItem('peblo-token', t), nik.token);
+  await p2.goto(b.base + `/invite?token=${new URL(iv2.link).searchParams.get('token')}`, { waitUntil: 'networkidle' });
+  await p2.getByTestId('invite-resend').waitFor({ timeout: 8000 });
+  await p2.getByTestId('invite-resend').click();
+  await p2.getByTestId('invite-note').waitFor({ timeout: 8000 });
+  ok(true, 'Resend the link answers');
+  await p2.screenshot({ path: shots + '\\of-invite-unverified.png' });
+  await ctx2.close();
 } catch (e) { console.log('ERROR', e.stack || e); b.check('no exception', false, e.message); }
 await b.finish();

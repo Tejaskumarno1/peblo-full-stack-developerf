@@ -204,6 +204,11 @@ export default function SoftNotes() {
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
     }
+    if (isOffice && own === 'all' && filter !== 'archive' && filter !== 'trash') { // an Office: your notes, then the ones shared with you (mockup E01)
+      const byNew = (x, y) => new Date(y.updatedAt || 0) - new Date(x.updatedAt || 0);
+      const out2 = [['ofc-mine', 'Mine', base.filter((n) => n.access === 'owner' || !n.access).sort(byNew)], ['ofc-shared', 'Shared with me', base.filter((n) => n.access && n.access !== 'owner').sort(byNew)]];
+      return out2.filter((g) => g[2].length).map(([key, label, notes]) => ({ key, label, notes }));
+    }
     const isPin = (n) => !!n.meta?.pinned;
     const time = (n, k) => new Date(n[k] || 0).getTime();
     const cmp = (a, b) => {
@@ -236,8 +241,8 @@ export default function SoftNotes() {
     return out;
   }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs, isOffice, own]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownGroups = gSel && !dq ? groups.filter((g) => g.key === gSel) : groups;
-  const dateTagCards = layout === 'cards' && (group === 'date' || group === 'tag') && !dq && filter === 'all' && !selectMode && !fSel && !cards;
-  const gOpen = layout === 'cards' && !!gSel && !dq && !fSel && (group === 'date' || group === 'tag') && filter === 'all' && !selectMode;
+  const dateTagCards = !isOffice && layout === 'cards' && (group === 'date' || group === 'tag') && !dq && filter === 'all' && !selectMode && !fSel && !cards;
+  const gOpen = !isOffice && layout === 'cards' && !!gSel && !dq && !fSel && (group === 'date' || group === 'tag') && filter === 'all' && !selectMode;
   const folderMode = group === 'folder' && !dq && filter === 'all' && !selectMode; // Group by Folder shows the folder cards
   useEffect(() => { setGSel(null); }, [group, filter]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
@@ -736,7 +741,7 @@ export default function SoftNotes() {
             </div>
           );
         })()}
-        {layout === 'sections' && !dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
+        {!isOffice && layout === 'sections' && !dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
           <div className="np-cards mini" role="list" aria-label={group === 'tag' ? 'Jump to a tag' : 'Jump to a date'}>
             {groups.map((g) => (
               <button key={g.key} type="button" role="listitem" className={`np-card mini${gSel === g.key ? ' on' : ''}`} onClick={() => jumpTo(g.key)}><b>{g.label}</b><i>{g.notes.length}</i></button>

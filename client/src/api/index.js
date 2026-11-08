@@ -195,6 +195,7 @@ export const workspacesAPI = {
   exports: (orgId) => api.get(`/workspaces/orgs/${orgId}/exports`),
   lookupInvite: (token) => api.get('/workspaces/invites/lookup', { params: { token } }),
   acceptInvite: (token) => api.post('/workspaces/invites/accept', { token }),
+  remindInviter: (token) => api.post('/workspaces/invites/remind', { token }),
   // Expiring join links for an Office. create({ expiresInDays, maxUses, spaceRole, spaceId }) -> { id, link, expiresAt, ... }
   joinLinks: (orgId) => api.get(`/workspaces/orgs/${orgId}/join-links`),
   createJoinLink: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/join-links`, data || {}),

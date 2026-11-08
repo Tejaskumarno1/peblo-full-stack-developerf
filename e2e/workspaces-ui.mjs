@@ -63,7 +63,7 @@ try {
   ok((await p.getByTestId('member-list').innerText()).includes('colleague@example.com'), 'the invite shows as waiting to join');
   await p.screenshot({ path: shots + '\\ws-members.png' });
   await p.goto(invLink.replace(/^https?:\/\/[^/]+/, b.base), { waitUntil: 'networkidle' });
-  await p.getByTestId('invite-card').getByText('already in this organization').waitFor({ timeout: 8000 });
+  await p.getByTestId('invite-card').getByText('You are already a member').waitFor({ timeout: 8000 });
   ok((await p.getByTestId('invite-card').innerText()).includes('already in your spaces'), 'an invite to an organization you are in says so');
   await p.screenshot({ path: shots + '\\ws-invite-wrong.png' });
   await p.goto(b.base + '/invite?token=nonsense', { waitUntil: 'networkidle' });

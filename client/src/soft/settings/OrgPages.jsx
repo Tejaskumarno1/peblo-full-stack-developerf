@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link2, Building2, Users, User, UserPlus, MoreHorizontal, Shield, KeyRound, AlignLeft, Download, Mail, LogOut, X, Lock, Info, Plus, TriangleAlert } from 'lucide-react';
+import { Megaphone, Link2, Building2, Users, User, UserPlus, MoreHorizontal, Shield, KeyRound, AlignLeft, Download, Mail, LogOut, X, Lock, Info, Plus, TriangleAlert } from 'lucide-react';
 import { workspacesAPI } from '../../api';
 import { useWorkspaces, useCurrentSpace, CreateOrgDialog } from '../spaces';
 import { Card } from './ui';
@@ -203,7 +203,7 @@ function JoinLinkDialog({ org, onClose }) {
   const revoke = async (l) => { try { await workspacesAPI.revokeJoinLink(org.id, l.id); qc.invalidateQueries({ queryKey: ['join-links', org.id] }); } catch (e) { setErr(e.response?.data?.error || 'Could not revoke it.'); } };
   return (
     <Dialog icon={Link2} tone="sky" title="Invite with a link" onClose={onClose}>
-      <p className="og-sub">Anyone with a signed-in, verified account can join {office?.name || org.name} through this link until it expires.</p>
+      <p className="og-note">Anyone with a signed-in, verified account can join {office?.name || org.name} through this link until it expires.</p>
       <div className="og-field"><label>Join as</label>
         <div className="og-seg" role="radiogroup" aria-label="Join as">
           {[['member', 'Member'], ['viewer', 'Viewer']].map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={role === v} className={role === v ? 'on' : ''} onClick={() => setRole(v)}>{l}</button>)}
@@ -556,6 +556,17 @@ const AUDIT = {
   'space.closed': ['People', Users, 'peach', (e) => `${who(e)} closed a team`, () => 'Nothing was deleted'],
   'policy.changed': ['Sharing', Shield, 'lilac', (e) => `${who(e)} changed the organization policy`, (e) => Object.entries(e.detail || {}).map(([k, v]) => `${k}: ${v}`).join(', ')],
   'org.exported': ['Sharing', Download, 'butter', () => 'Organization export requested', () => 'Owners were notified'],
+  'org.created': ['People', Building2, 'mint', (e) => `${who(e)} created the organization`, () => ''],
+  'joinlink.created': ['People', Link2, 'sky', (e) => `${who(e)} made a join link`, (e) => [e.detail?.expiresInDays && `Expires in ${e.detail.expiresInDays} days`, e.detail?.maxUses && `Up to ${e.detail.maxUses} people`].filter(Boolean).join(', ')],
+  'joinlink.revoked': ['People', Link2, 'peach', (e) => `${who(e)} turned off a join link`, () => ''],
+  'member.joined_via_link': ['People', UserPlus, 'mint', (e, n) => `${n(e.target)} joined through a link`, () => ''],
+  'note.access_changed': ['Sharing', Lock, 'lilac', (e) => `${who(e)} changed who can open a note`, () => 'Note text is never logged'],
+  'announcement.posted': ['Sharing', Megaphone, 'butter', (e) => `${who(e)} posted an announcement`, () => ''],
+  'announcement.edited': ['Sharing', Megaphone, 'butter', (e) => `${who(e)} edited an announcement`, () => 'Earlier versions are kept'],
+  'announcement.retracted': ['Sharing', Megaphone, 'peach', (e) => `${who(e)} retracted an announcement`, () => ''],
+  'announcement.suggested': ['Sharing', Megaphone, 'sky', (e) => `${who(e)} suggested an announcement`, () => ''],
+  'announcement.approved': ['Sharing', Megaphone, 'mint', (e) => `${who(e)} published a suggested announcement`, () => ''],
+  'announcement.declined': ['Sharing', Megaphone, 'peach', (e) => `${who(e)} declined a suggested announcement`, () => ''],
   'key.added': ['Keys', KeyRound, 'sky', (e) => `${who(e)} added the ${e.detail?.provider || ''} key`, () => 'Value never shown'],
   'key.replaced': ['Keys', KeyRound, 'sky', (e) => `${who(e)} replaced the ${e.detail?.provider || ''} key`, () => 'Value never shown'],
   'key.removed': ['Keys', KeyRound, 'peach', (e) => `${who(e)} removed the ${e.detail?.provider || ''} key`, () => ''],
@@ -602,6 +613,7 @@ export function ExportPage() {
   const { org, admin, isLoading } = useActiveOrg();
   const { msg, run } = useRun();
   const qc = useQueryClient();
+  const [plans, setPlans] = useState(false);
   const seats = useQuery({ queryKey: ['org-seats', org?.id], enabled: !!org && admin, queryFn: () => workspacesAPI.seats(org.id).then((r) => r.data) });
   const last = useQuery({ queryKey: ['org-exports', org?.id], enabled: !!org && admin, queryFn: () => workspacesAPI.exports(org.id).then((r) => r.data.exports || r.data) });
   if (isLoading) return <Loading title="Export and seats" />;
@@ -615,6 +627,7 @@ export function ExportPage() {
     qc.invalidateQueries({ queryKey: ['org-exports', org.id] });
   });
   const used = seats.data?.used ?? 0;
+  const trialLeft = seats.data?.trialEndsAt ? Math.max(0, Math.ceil((new Date(seats.data.trialEndsAt) - Date.now()) / 86400000)) : 14;
   const limit = seats.data?.limit ?? 10;
   const list = Array.isArray(last.data) ? last.data : [];
   return (
@@ -632,9 +645,12 @@ export function ExportPage() {
         <p>A seat is an active member. People inactive for 28 days are not counted. Guests are free.</p>
         <div className="og-bar" role="progressbar" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used}><i style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} /></div>
       </section>
-      <section className="og-card tone" style={{ background: 'var(--s-lilac)' }} aria-label="Plan">
-        <h2>Plan</h2><b style={{ fontSize: 14.5 }}>Free during early access</b>
-        <p>There is no billing yet. When there is, nothing is ever deleted for non-payment: the organization becomes read only, then export only.</p>
+      <section className="og-card tone" style={{ background: 'var(--s-lilac)' }} aria-label="Trial" data-testid="org-trial">
+        <h2>Trial</h2>
+        <div className="og-big">{trialLeft > 0 ? `${trialLeft} day${trialLeft === 1 ? '' : 's'} left` : 'Trial ended'}</div>
+        <p>If payment lapses, the organization becomes read only, then export only. Nothing is ever deleted for non-payment.</p>
+        <button type="button" className="og-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setPlans((v) => !v)} aria-expanded={plans} data-testid="see-plans">See plans</button>
+        {plans && <p data-testid="plans-note">Paid plans are not on sale yet. No payment is taken, and the organization stays fully usable during early access.</p>}
       </section>
     </div>
   );
