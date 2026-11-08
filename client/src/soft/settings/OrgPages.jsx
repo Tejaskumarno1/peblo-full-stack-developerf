@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Users, User, UserPlus, MoreHorizontal, Shield, KeyRound, AlignLeft, Download, Mail, LogOut, X, Lock, Info, Plus, TriangleAlert } from 'lucide-react';
+import { Link2, Building2, Users, User, UserPlus, MoreHorizontal, Shield, KeyRound, AlignLeft, Download, Mail, LogOut, X, Lock, Info, Plus, TriangleAlert } from 'lucide-react';
 import { workspacesAPI } from '../../api';
 import { useWorkspaces, useCurrentSpace, CreateOrgDialog } from '../spaces';
 import { Card } from './ui';
@@ -172,10 +172,75 @@ function RemoveDialog({ org, m, me, onClose, run }) {
   );
 }
 
+
+const EXPIRY = [[1, '1 day'], [7, '7 days'], [30, '30 days']];
+const USES = [[0, 'Unlimited'], [10, '10 people'], [25, '25 people']];
+const untilText = (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+/** A shareable team link that expires (mockup E03). Admins create, copy and revoke; a joiner becomes a member of the Office. */
+function JoinLinkDialog({ org, onClose }) {
+  const office = org.spaces.find((s) => s.kind === 'office') || org.spaces[0];
+  const qc = useQueryClient();
+  const [days, setDays] = useState(7);
+  const [uses, setUses] = useState(0);
+  const [role, setRole] = useState('member');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState('');
+  const { data } = useQuery({ queryKey: ['join-links', org.id], queryFn: () => workspacesAPI.joinLinks(org.id).then((r) => r.data) });
+  const links = data?.links || [];
+  const make = async () => {
+    setBusy(true); setErr('');
+    try {
+      const body = { expiresInDays: days, spaceRole: role, spaceId: office?.id };
+      if (uses) body.maxUses = uses;
+      await workspacesAPI.createJoinLink(org.id, body);
+      qc.invalidateQueries({ queryKey: ['join-links', org.id] });
+    } catch (e) { setErr(e.response?.data?.error || 'Could not make the link. Nothing was changed.'); }
+    setBusy(false);
+  };
+  const copy = async (l) => { try { await navigator.clipboard.writeText(l.link); setCopied(l.id); window.setTimeout(() => setCopied(''), 1800); } catch { /* blocked */ } };
+  const revoke = async (l) => { try { await workspacesAPI.revokeJoinLink(org.id, l.id); qc.invalidateQueries({ queryKey: ['join-links', org.id] }); } catch (e) { setErr(e.response?.data?.error || 'Could not revoke it.'); } };
+  return (
+    <Dialog icon={Link2} tone="sky" title="Invite with a link" onClose={onClose}>
+      <p className="og-sub">Anyone with a signed-in, verified account can join {office?.name || org.name} through this link until it expires.</p>
+      <div className="og-field"><label>Join as</label>
+        <div className="og-seg" role="radiogroup" aria-label="Join as">
+          {[['member', 'Member'], ['viewer', 'Viewer']].map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={role === v} className={role === v ? 'on' : ''} onClick={() => setRole(v)}>{l}</button>)}
+        </div>
+      </div>
+      <div className="og-field"><label>Expires after</label>
+        <div className="og-seg" role="radiogroup" aria-label="Expires after">
+          {EXPIRY.map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={days === v} className={days === v ? 'on' : ''} onClick={() => setDays(v)}>{l}</button>)}
+        </div>
+      </div>
+      <div className="og-field"><label>Limit</label>
+        <div className="og-seg" role="radiogroup" aria-label="Limit">
+          {USES.map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={uses === v} className={uses === v ? 'on' : ''} onClick={() => setUses(v)}>{l}</button>)}
+        </div>
+      </div>
+      {err && <p className="og-err" role="alert">{err}</p>}
+      <button type="button" className="og-btn pri" data-testid="joinlink-create" disabled={busy} onClick={make}>{busy ? 'Making...' : 'Make a link'}</button>
+      {links.length > 0 && <div className="og-links" data-testid="joinlink-list">
+        <small className="og-sub">Links you made</small>
+        {links.map((l) => (
+          <div key={l.id} className={`og-link ${l.state}`} data-testid="joinlink-row">
+            <span className="og-lk-t"><b>{l.spaceName}</b><small>{l.state === 'active' ? `Expires ${untilText(l.expiresAt)}` : l.state === 'expired' ? 'Expired' : 'Full'} - {l.uses}{l.maxUses ? ` of ${l.maxUses}` : ''} joined - as {l.spaceRole}</small></span>
+            {l.state === 'active' && <button type="button" className="og-btn" data-testid="joinlink-copy" onClick={() => copy(l)}>{copied === l.id ? 'Copied' : 'Copy link'}</button>}
+            <button type="button" className="og-btn" data-testid="joinlink-revoke" onClick={() => revoke(l)}>Revoke</button>
+          </div>
+        ))}
+      </div>}
+      <div className="og-actions"><button type="button" className="og-btn" onClick={onClose}>Done</button></div>
+    </Dialog>
+  );
+}
+
 export function MembersPage() {
   const { org, admin, me, isLoading } = useActiveOrg();
   const { msg, run } = useRun();
   const [inviting, setInviting] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [menu, setMenu] = useState(null);
   const [removing, setRemoving] = useState(null);
   const { data } = useQuery({ queryKey: ['org-members', org?.id], enabled: !!org, queryFn: () => workspacesAPI.members(org.id).then((r) => r.data) });
@@ -192,7 +257,7 @@ export function MembersPage() {
     <div className="og-cols" data-testid="org-members">
       <Msg msg={msg} />
       <section className="og-card" aria-label="People in the organization">
-        <div className="og-head"><h2>People in the organization</h2>{admin && <button type="button" className="og-btn pri" onClick={() => setInviting(true)} data-testid="invite-open"><UserPlus size={15} /> Invite people</button>}</div>
+        <div className="og-head"><h2>People in the organization</h2>{admin && org?.spaces.some((x) => x.kind === 'office') && <button type="button" className="og-btn" onClick={() => setLinking(true)} data-testid="joinlink-open"><Link2 size={15} /> Invite with a link</button>}{admin && <button type="button" className="og-btn pri" onClick={() => setInviting(true)} data-testid="invite-open"><UserPlus size={15} /> Invite people</button>}</div>
         <div className="og-rows" data-testid="member-list">
           {(data?.members || []).map((m, i) => {
             const self = m.userId === me;
@@ -234,6 +299,7 @@ export function MembersPage() {
         <section className="og-card" aria-label="Joining"><h2>Joining</h2><p>People accept with the email address that was invited, and it must be verified.</p></section>
       </div>
       {inviting && <InviteDialog org={org} onClose={() => setInviting(false)} />}
+      {linking && <JoinLinkDialog org={org} onClose={() => setLinking(false)} />}
       {removing && <RemoveDialog org={org} m={removing} me={me} run={run} onClose={() => setRemoving(null)} />}
     </div>
   );

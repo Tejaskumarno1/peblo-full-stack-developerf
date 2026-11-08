@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useState } from 'react';
-import { NavLink, Link } from 'react-router-dom';
-import { Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun, Bell } from 'lucide-react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { workspacesAPI } from '../api';
+import { Megaphone, Home, FileText, CheckSquare, Calendar, Sparkles, SlidersHorizontal, Plus, Search, Moon, MoonStar, Sun, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import MeetingReminders from '../river/MeetingReminders';
@@ -10,7 +12,7 @@ import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
 import { MoveToast } from './MoveNote';
-import { SpacePill, SpaceAccessGuard, SpacesTip, useCurrentSpace, useSpaceName } from './spaces';
+import { SpacePill, SpaceAccessGuard, SpacesTip, useCurrentSpace, useSpaceName, useWorkspaces } from './spaces';
 import './soft.css';
 import './soft2.css';
 import './phone.css';
@@ -23,6 +25,29 @@ const DOCK = [
   { to: '/ai', end: true, label: 'AI Hub', icon: Sparkles },
   { to: '/ai/connections', label: 'Your AI', icon: SlidersHorizontal },
 ];
+
+
+/** Office only: the Announcements button beside the search bar, with a dot when there is a post you have not seen (mockup E01). */
+function AnnouncementsButton() {
+  const { data: ws } = useWorkspaces();
+  const space = useCurrentSpace();
+  const here = (ws?.orgs || []).flatMap((o) => o.spaces).find((x) => x.id === space);
+  const loc = useLocation();
+  const on = here?.kind === 'office';
+  const { data } = useQuery({ queryKey: ['announcements', space], enabled: on, queryFn: () => workspacesAPI.announcements(space).then((r) => r.data) });
+  if (!on) return null;
+  const key = `peblo-ann-seen-${space}`;
+  const latest = (data?.posts || []).filter((p) => p.status === 'published').reduce((m, p) => Math.max(m, new Date(p.createdAt).getTime()), 0);
+  const viewing = loc.pathname === '/notes' && new URLSearchParams(loc.search).get('view') === 'announcements';
+  let seen = 0;
+  try { if (viewing && latest) localStorage.setItem(key, String(latest)); seen = Number(localStorage.getItem(key) || 0); } catch { /* ignore */ }
+  const fresh = latest > seen && !viewing;
+  return (
+    <Link to="/notes?view=announcements" className={`soft-ann${viewing ? ' on' : ''}`} data-testid="announcements-btn" aria-label={fresh ? 'Announcements, new' : 'Announcements'}>
+      <Megaphone size={16} /><span>Announcements</span>{fresh && <i aria-hidden="true" />}
+    </Link>
+  );
+}
 
 /** Soft Studio frame (mockups: SoftHeader + SoftDock). Pages render in between. */
 export default function SoftShell({ children, onOpenSettings }) {
@@ -56,6 +81,7 @@ export default function SoftShell({ children, onOpenSettings }) {
           <span className="grow">{spaceName ? `Search in ${spaceName}` : 'Search notes, tasks, anything'}</span>
           <kbd>Ctrl K</kbd>
         </button>
+        <AnnouncementsButton />
         <span className="grow" />
         <SpacePill />
         <SpaceAccessGuard />

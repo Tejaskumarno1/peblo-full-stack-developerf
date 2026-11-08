@@ -8,7 +8,8 @@ import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import MoveNote from './MoveNote';
-import { useSpaceRole } from './spaces';
+import { useSpaceRole, useCurrentSpace, useWorkspaces } from './spaces';
+import { AccessChip, NoAccess } from './OfficeAccess';
 import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
 import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
@@ -51,7 +52,7 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
         <span className="txt">
           <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
           {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOfNote(n) || 'Empty note'}</span>}
-          <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
+          <span className="m">{n.access && n.access !== 'owner' && <span className="oa-own">{n.owner?.name ? `by ${n.owner.name} · ` : ''}</span>}{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
         </span>
       </Link>
 
@@ -106,7 +107,12 @@ export default function SoftNotes() {
   const [question, setQuestion] = useState('');
   const [toast, setToast] = useState('');
   const spaceRole = useSpaceRole();
-  const viewer = spaceRole === 'viewer';
+  const { data: wsData } = useWorkspaces();
+  const curSpace = useCurrentSpace();
+  const isOffice = (wsData?.orgs || []).flatMap((o) => o.spaces).find((x) => x.id === curSpace)?.kind === 'office';
+  const [own, setOwn] = useState('all'); // Office only: all | mine | shared with me
+  const [denied, setDenied] = useState(null);
+  const viewer = spaceRole === 'viewer' || doc?.access === 'view';
   const canPurge = !spaceRole || spaceRole === 'lead';
   const [q, setQ] = useState(() => params.get('q') || ''); // the search box (the palette's "See all" arrives with ?q=)
   const [dq, setDq] = useState(''); // what was typed, after a short pause
@@ -191,8 +197,9 @@ export default function SoftNotes() {
   };
   const folderCount = (d) => allNotes.filter((n) => (d.smart ? smartMatch(n, d.smart) : inFolder(n, d, allDefs, view.subs))).length;
   const groups = useMemo(() => {
-    if (dq) return [{ key: 'found', label: '', notes: found.filter(passes) }]; // best match first, as the server ranked them
-    let base = (filter === 'all' || filter === 'inbox' ? allNotes : listed).filter(passes);
+    const ownOk = (n) => !isOffice || own === 'all' || (own === 'mine' ? n.access === 'owner' : n.access && n.access !== 'owner');
+    if (dq) return [{ key: 'found', label: '', notes: found.filter((n) => passes(n) && ownOk(n)) }]; // best match first, as the server ranked them
+    let base = (filter === 'all' || filter === 'inbox' ? allNotes : listed).filter((n) => passes(n) && ownOk(n));
     if (filter === 'inbox') base = base.filter((n) => (n.tags || []).includes('inbox'));
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
@@ -227,7 +234,7 @@ export default function SoftNotes() {
       for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
     }
     return out;
-  }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs, isOffice, own]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownGroups = gSel && !dq ? groups.filter((g) => g.key === gSel) : groups;
   const dateTagCards = layout === 'cards' && (group === 'date' || group === 'tag') && !dq && filter === 'all' && !selectMode && !fSel && !cards;
   const gOpen = layout === 'cards' && !!gSel && !dq && !fSel && (group === 'date' || group === 'tag') && filter === 'all' && !selectMode;
@@ -273,10 +280,11 @@ export default function SoftNotes() {
       if (!doc && allNotes[0] && !phone) navigate(`/notes/${allNotes[0].id}`, { replace: true });
       return;
     }
+    setDenied(null);
     if (doc?.id === routeId) return;
     const found = allNotes.find((n) => n.id === routeId) || listed.find((n) => n.id === routeId);
     if (found) open(found);
-    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch(() => navigate('/notes', { replace: true }));
+    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else navigate('/notes', { replace: true }); });
   }, [routeId, allNotes, listed, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- saving ----------
@@ -684,6 +692,11 @@ export default function SoftNotes() {
           </div>
         )}
         {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
+        {isOffice && filter !== 'archive' && filter !== 'trash' && (
+          <div className="np-row" role="tablist" aria-label="Whose notes" data-testid="office-owner-chips">
+            {[['all', 'All'], ['mine', 'Mine'], ['shared', 'Shared with me']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={own === k} className={`np-chip${own === k ? ' on' : ''}`} onClick={() => setOwn(k)}>{l}</button>)}
+          </div>
+        )}
         {filter !== 'archive' && filter !== 'trash' && !(fSel && selDef) && !gOpen && (
           <div className="np-row" role="tablist" aria-label="Folders">
             <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards(false); }}>All <i>{allNotes.length}</i></button>
@@ -792,7 +805,9 @@ export default function SoftNotes() {
 
       {/* ---------- editor ---------- */}
       <main className="s-note-main" aria-label="Note">
-        {!doc && routeId ? (
+        {denied ? (
+          <NoAccess owner={denied.owner} />
+        ) : !doc && routeId ? (
           <EditorSkeleton />
         ) : !doc ? (
           <div className="s-note-empty">
@@ -823,6 +838,7 @@ export default function SoftNotes() {
               {!doc.isDraft && <span className="s-note-stats" title={`${words} words · ${chars} characters · ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</span></span>}
               {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
               {!doc.isDraft && !focus && <ShareChips noteId={doc.id} />}
+              {!doc.isDraft && !focus && doc.access && <AccessChip note={doc} />}
               <span className="grow" />
               {doc.isDeleted ? (
                 <button type="button" className="s-outline" onClick={guarded(restore, 'Could not restore the note')}>Restore</button>

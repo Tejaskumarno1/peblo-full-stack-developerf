@@ -90,3 +90,11 @@
 /* The settings sidebar in the approved boards: the open page is a white pill, not a dark chip (Soft Studio only; River and Orbit keep their own). */
 .soft-page.s-set .s-set-link.on { background: var(--s-surface); color: var(--s-fg); box-shadow: inset 0 0 0 1.5px var(--s-line); }
 .soft-page.s-set .s-set-link.on .ico { box-shadow: none; }
+.og-seg{display:inline-flex;gap:4px;padding:3px;border-radius:999px;background:rgba(0,0,0,.06)}
+.og-seg button{border:0;background:transparent;color:inherit;font:600 13px/1 inherit;padding:7px 14px;border-radius:999px;cursor:pointer}
+.og-seg button.on{background:#fff;color:#1f2937;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.og-links{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.og-link{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(0,0,0,.04)}
+.og-link.expired,.og-link.full{opacity:.6}
+.og-lk-t{display:flex;flex-direction:column;flex:1;min-width:0}
+.og-lk-t small{opacity:.7}

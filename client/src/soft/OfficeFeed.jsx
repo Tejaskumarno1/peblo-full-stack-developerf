@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Clock, Eye, Mail, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Building2, Clock, Eye, Mail, Pencil, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { workspacesAPI } from '../api';
 import { Backdrop } from './spaces';
 import './spaces.css';
@@ -42,6 +43,7 @@ export default function OfficeFeed({ space }) {
     <div className="soft-page s-office" data-testid="office-feed">
       <div className="s-office-card">
         <div className="s-office-head">
+          <Link to="/notes" className="s-soft-btn" data-testid="office-back"><ArrowLeft size={14} /> Back to notes</Link>
           <h1>{space.name}</h1>
           <span className="s-chip-tag"><Building2 size={13} /> Announcements</span>
           <span className="grow" />

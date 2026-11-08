@@ -41,16 +41,16 @@ export async function noteLevel(userId: string, noteId: string, spaceId: string)
 export async function decorateNotes(userId: string, spaceId: string | null | undefined, notes: any[]): Promise<void> {
   if (!spaceId || !notes.length || !(await isOffice(spaceId))) return;
   const ids = notes.map((n) => n.id);
-  const rows = await prisma.$queryRaw<{ id: string; everyone: Level | null; grant: Level | null; shared: number; owner_name: string | null }[]>`
-    SELECT n.id, n.office_everyone AS everyone, (SELECT a.level FROM note_access a WHERE a.note_id = n.id AND a.user_id = ${userId}) AS grant,
+  const rows = await prisma.$queryRaw<{ id: string; uid: string; everyone: Level | null; grant: Level | null; shared: number; owner_name: string | null }[]>`
+    SELECT n.id, n.user_id AS uid, n.office_everyone AS everyone, (SELECT a.level FROM note_access a WHERE a.note_id = n.id AND a.user_id = ${userId}) AS grant,
            (SELECT count(*)::int FROM note_access a WHERE a.note_id = n.id) AS shared, (SELECT u.name FROM users u WHERE u.id = n.user_id) AS owner_name
     FROM notes n WHERE n.id = ANY(${ids}::text[])`;
   const by = new Map(rows.map((r) => [r.id, r]));
   for (const n of notes) {
     const r = by.get(n.id);
     if (!r) continue;
-    const mine = n.userId === userId;
-    n.owner = { id: n.userId, name: r.owner_name ?? 'Someone' };
+    const mine = r.uid === userId;
+    n.owner = { id: r.uid, name: r.owner_name ?? 'Someone' };
     n.everyone = r.everyone ?? null;
     n.sharedCount = r.shared;
     n.access = mine ? 'owner' : (r.everyone === 'edit' || r.grant === 'edit') ? 'edit' : 'view';

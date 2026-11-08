@@ -73,9 +73,9 @@ try {
 
   const off = await b.api('POST', `/api/workspaces/orgs/${org.id}/spaces`, { name: 'Warangal office', kind: 'office' });
   await p.evaluate((sp) => localStorage.setItem('peblo-space', sp), off.id);
-  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  await p.goto(b.base + '/notes?view=announcements', { waitUntil: 'networkidle' });
   await p.getByTestId('office-empty').waitFor({ timeout: 8000 });
-  ok(await p.getByTestId('office-feed').isVisible(), 'an Office opens as an announcement feed, not a notes list');
+  ok(await p.getByTestId('office-feed').isVisible(), 'the Announcements view is the feed');
   await p.screenshot({ path: shots + '\\ws-office-empty.png' });
   await p.getByTestId('office-write').click();
   await p.getByTestId('office-title').fill('Holiday on Monday');
