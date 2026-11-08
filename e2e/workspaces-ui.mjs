@@ -105,11 +105,18 @@ try {
   await p.waitForTimeout(800);
   ok((await b.api('GET', '/api/workspaces')).orgs[0].spaces[0].name === 'Studio Crew', 'renaming the team is saved');
   await p.screenshot({ path: shots + '\\ws-team-settings.png' });
+  const teamId = (await b.api('GET', '/api/workspaces')).orgs[0].spaces[0].id;
+  await p.evaluate((id) => localStorage.setItem('peblo-space', id), teamId);
   await p.getByTestId('team-close').first().click();
   ok((await p.getByTestId('team-settings').innerText()).includes('Nothing is deleted'), 'closing says nothing is deleted');
   await p.getByTestId('team-close-confirm').click();
   await p.waitForTimeout(900);
   ok((await b.api('GET', '/api/workspaces')).orgs[0].spaces.length === 0, 'a closed team leaves the list');
+  await p.goto(b.base + '/notes', { waitUntil: 'networkidle' });
+  await p.getByTestId('space-gone').waitFor({ timeout: 8000 });
+  ok((await p.getByTestId('space-gone').innerText()).includes('no longer available'), 'working in a closed team drops back to Personal with a notice');
+  ok(/Personal/.test(await p.getByTestId('space-pill').innerText()), 'the pill reads Personal again');
+  await p.screenshot({ path: shots + '\\ws-space-gone.png' });
   void sid;
 } catch (e) { ok(false, 'workspaces-ui ran without crashing', e?.stack || e); }
 await b.finish();

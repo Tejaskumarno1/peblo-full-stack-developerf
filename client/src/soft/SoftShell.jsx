@@ -10,7 +10,7 @@ import OfflineBar from './OfflineBar';
 import { firstNameOf } from './softUtils';
 import { useNotificationCount } from './useNotifications';
 import { MoveToast } from './MoveNote';
-import { SpacePill, useCurrentSpace, useSpaceName } from './spaces';
+import { SpacePill, SpaceAccessGuard, useCurrentSpace, useSpaceName } from './spaces';
 import './soft.css';
 import './soft2.css';
 import './phone.css';
@@ -58,6 +58,7 @@ export default function SoftShell({ children, onOpenSettings }) {
         </button>
         <span className="grow" />
         <SpacePill />
+        <SpaceAccessGuard />
         <Link to="/notifications" className="soft-round soft-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} title="Notifications" data-testid="soft-bell"><Bell size={19} />{unread > 0 && <i aria-hidden="true" />}</Link>
         <button type="button" className="soft-round" aria-label={`Switch to ${nextTheme} theme`} title="Theme" onClick={() => setTheme(nextTheme)}>
           <ThemeIcon size={19} />

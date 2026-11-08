@@ -202,3 +202,28 @@ export function CreateOrgDialog({ onClose }) {
     </Backdrop>
   );
 }
+
+/** Access changes (mockup C14): if the space being worked in is closed or the person was removed, drop back to Personal and say so. */
+export function SpaceAccessGuard() {
+  const { data } = useWorkspaces();
+  const current = useCurrentSpace();
+  const switchTo = useSwitchSpace();
+  const names = useRef({});
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!data) return;
+    const all = data.orgs.flatMap((o) => o.spaces);
+    all.forEach((x) => { names.current[x.id] = x.name; });
+    if (current && !all.some((x) => x.id === current)) {
+      setNotice(`${names.current[current] || 'That space'} is no longer available to you. You are back in Personal.`);
+      switchTo(null);
+    }
+  }, [data, current, switchTo]);
+  if (!notice) return null;
+  return (
+    <div className="s-toast s-move-toast" role="status" data-testid="space-gone">
+      <span>{notice}</span>
+      <button type="button" onClick={() => setNotice('')}>Dismiss</button>
+    </div>
+  );
+}
