@@ -195,4 +195,17 @@ export const workspacesAPI = {
   exports: (orgId) => api.get(`/workspaces/orgs/${orgId}/exports`),
   lookupInvite: (token) => api.get('/workspaces/invites/lookup', { params: { token } }),
   acceptInvite: (token) => api.post('/workspaces/invites/accept', { token }),
+  // Expiring join links for an Office. create({ expiresInDays, maxUses, spaceRole, spaceId }) -> { id, link, expiresAt, ... }
+  joinLinks: (orgId) => api.get(`/workspaces/orgs/${orgId}/join-links`),
+  createJoinLink: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/join-links`, data || {}),
+  revokeJoinLink: (orgId, id) => api.delete(`/workspaces/orgs/${orgId}/join-links/${id}`),
+  lookupJoinLink: (token) => api.get('/workspaces/join-links/lookup', { params: { token } }),
+  acceptJoinLink: (token) => api.post('/workspaces/join-links/accept', { token }),
+};
+
+// Who can see a note written in an Office. set({ everyone: null | 'view' | 'edit', people: [{ userId, level: 'view' | 'edit' }] }) -- send either or both.
+export const notesAccessAPI = {
+  get: (id) => api.get(`/notes/${id}/access`),
+  set: (id, data) => api.put(`/notes/${id}/access`, data),
+  remove: (id, userId) => api.delete(`/notes/${id}/access/${userId}`),
 };

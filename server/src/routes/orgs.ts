@@ -5,7 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
 import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
-import { encryptSecret } from '../secrets.js';
+import { decryptSecret, encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
 
 /* Members, invitations and the audit trail of an organization. Tables: 035_workspaces_expand.sql. */
@@ -130,6 +130,99 @@ router.post('/invites/accept', async (req, res) => {
   res.json({ ok: true, orgId: inv.orgId, orgName: inv.orgName });
 });
 
+/* Expiring join links for an Office (mockups WsE04 to WsE06). Table: 041_org_join_links.sql.
+ * An owner or admin makes a link; anyone signed in with a verified email who opens it joins the organization as a member and the Office. */
+const joinUrl = (req: any, token: string) => `${publicBase(req)}/join?token=${token}`;
+
+router.post('/orgs/:orgId/join-links', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const orgId = req.params.orgId;
+  const days = req.body?.expiresInDays === undefined ? 7 : Number(req.body.expiresInDays);
+  if (!Number.isInteger(days) || days < 1 || days > 90) return res.status(400).json({ error: 'Choose an expiry between 1 and 90 days.' });
+  let maxUses: number | null = null;
+  if (req.body?.maxUses !== undefined && req.body.maxUses !== null) {
+    maxUses = Number(req.body.maxUses);
+    if (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 1000) return res.status(400).json({ error: 'Max uses must be between 1 and 1000.' });
+  }
+  const spaceRole: 'member' | 'viewer' = req.body?.spaceRole === 'viewer' ? 'viewer' : 'member';
+  const wanted = typeof req.body?.spaceId === 'string' ? req.body.spaceId : null;
+  const office = (await prisma.$queryRaw<{ id: string; name: string }[]>`
+    SELECT id, name FROM spaces WHERE org_id = ${orgId} AND kind = 'office' AND closed_at IS NULL AND (${wanted}::text IS NULL OR id = ${wanted}) ORDER BY created_at LIMIT 1`)[0];
+  if (!office) return res.status(400).json({ error: 'Join links are for an Office, and this organization has none yet.', code: 'no_office' });
+  const raw = crypto.randomBytes(32).toString('base64url');
+  const id = crypto.randomUUID();
+  const rows = await prisma.$queryRaw<{ expires_at: Date }[]>`
+    INSERT INTO org_join_links (id, org_id, space_id, space_role, token_hash, token_enc, max_uses, created_by, expires_at)
+    VALUES (${id}, ${orgId}, ${office.id}, ${spaceRole}, ${hash(raw)}, ${encryptSecret(raw)}, ${maxUses}, ${uid(req)}, now() + (${days} * interval '1 day')) RETURNING expires_at`;
+  await audit(orgId, uid(req), 'joinlink.created', id, { spaceId: office.id, days, maxUses, spaceRole });
+  res.status(201).json({ id, link: joinUrl(req, raw), spaceId: office.id, spaceName: office.name, spaceRole, expiresAt: rows[0].expires_at, maxUses, uses: 0, state: 'active' });
+});
+
+router.get('/orgs/:orgId/join-links', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT l.id, l.space_id AS "spaceId", s.name AS "spaceName", l.space_role AS "spaceRole", l.token_enc, l.max_uses AS "maxUses", l.uses, l.expires_at AS "expiresAt",
+           l.created_at AS "createdAt", u.name AS "createdBy"
+    FROM org_join_links l JOIN spaces s ON s.id = l.space_id LEFT JOIN users u ON u.id = l.created_by
+    WHERE l.org_id = ${req.params.orgId} AND l.revoked_at IS NULL ORDER BY l.created_at DESC`;
+  const now = Date.now();
+  res.json({ links: rows.map(({ token_enc, ...l }) => {
+    const token = decryptSecret(token_enc);
+    const state = new Date(l.expiresAt).getTime() <= now ? 'expired' : (l.maxUses && l.uses >= l.maxUses) ? 'full' : 'active';
+    return { ...l, link: token ? joinUrl(req, token) : null, state };
+  }) });
+});
+
+router.delete('/orgs/:orgId/join-links/:id', async (req, res) => {
+  if (!(await gate(req, res, true))) return;
+  const n = await prisma.$executeRaw`UPDATE org_join_links SET revoked_at = now() WHERE id = ${req.params.id} AND org_id = ${req.params.orgId} AND revoked_at IS NULL`;
+  if (!n) return res.status(404).json({ error: 'Link not found.' });
+  await audit(req.params.orgId, uid(req), 'joinlink.revoked', req.params.id);
+  res.json({ ok: true });
+});
+
+/** What a join link would do for the signed-in person, without doing it. */
+async function lookupJoin(token: string, userId: string) {
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT l.id, l.org_id AS "orgId", l.space_id AS "spaceId", l.space_role AS "spaceRole", l.created_by AS "createdBy", l.max_uses AS "maxUses", l.uses,
+           l.expires_at AS "expiresAt", l.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", s.name AS "spaceName", s.closed_at AS "spaceClosed"
+    FROM org_join_links l JOIN organizations o ON o.id = l.org_id JOIN spaces s ON s.id = l.space_id WHERE l.token_hash = ${hash(token)}`;
+  const l = rows[0];
+  if (!l) return { state: 'invalid' as const };
+  const base = { orgName: l.orgName, spaceName: l.spaceName, expiresAt: l.expiresAt };
+  if (l.revokedAt || l.orgClosed || l.spaceClosed) return { state: 'revoked' as const, ...base };
+  if (new Date(l.expiresAt) <= new Date()) return { state: 'expired' as const, ...base };
+  if (l.maxUses && l.uses >= l.maxUses) return { state: 'full' as const, ...base };
+  const already = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM space_members sm JOIN org_members m ON m.org_id = ${l.orgId} AND m.user_id = sm.user_id WHERE sm.space_id = ${l.spaceId} AND sm.user_id = ${userId}`;
+  if ((already[0]?.n ?? 0) > 0) return { state: 'member' as const, ...base };
+  const me = await prisma.$queryRaw<{ verified: boolean }[]>`SELECT (email_verified_at IS NOT NULL) AS verified FROM users WHERE id = ${userId}`;
+  if (!me[0]?.verified) return { state: 'unverified' as const, ...base };
+  return { state: 'ready' as const, ...base, link: l };
+}
+
+router.get('/join-links/lookup', async (req, res) => {
+  const r: any = await lookupJoin(String(req.query.token ?? ''), uid(req));
+  const { link: _l, ...out } = r;
+  res.json(out);
+});
+
+router.post('/join-links/accept', async (req, res) => {
+  const userId = uid(req);
+  const r: any = await lookupJoin(String(req.body?.token ?? ''), userId);
+  if (r.state !== 'ready') return res.status(409).json({ error: 'This link cannot be used.', state: r.state });
+  const l = r.link;
+  // count the use first and only if the link is still good, so two people racing for the last place cannot both get it
+  const took = await prisma.$executeRaw`UPDATE org_join_links SET uses = uses + 1 WHERE id = ${l.id} AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)`;
+  if (!took) return res.status(409).json({ error: 'This link cannot be used.', state: 'full' });
+  await prisma.$transaction([
+    prisma.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${l.orgId}, ${userId}, 'member') ON CONFLICT DO NOTHING`,
+    prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${l.spaceId}, ${userId}, ${l.spaceRole}, ${l.createdBy ?? null}) ON CONFLICT DO NOTHING`,
+  ]);
+  await audit(l.orgId, userId, 'member.joined_via_link', userId, { linkId: l.id, spaceId: l.spaceId });
+  if (l.createdBy && l.createdBy !== userId) await notifyUsers(req.app, [l.createdBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${l.orgName} with your link`, from: await nameOf(userId), spaceId: l.spaceId });
+  res.json({ ok: true, orgId: l.orgId, orgName: l.orgName, spaceId: l.spaceId, spaceName: l.spaceName });
+});
+
 async function ownerCount(orgId: string) {
   const r = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM org_members WHERE org_id = ${orgId} AND role = 'owner' AND status = 'active'`;
   return r[0]?.n ?? 0;
@@ -232,10 +325,11 @@ router.get('/orgs/:orgId/export', async (req, res) => {
     prisma.$queryRaw<any[]>`SELECT a.id, a.space_id AS "spaceId", a.title, a.body, a.status, a.version, a.retracted_at AS "retractedAt", a.created_at AS "createdAt" FROM announcements a JOIN spaces s ON s.id = a.space_id WHERE s.org_id = ${orgId}`,
   ]);
   const spaceIds = spaces.map((s) => s.id);
-  const noteRows = spaceIds.length ? await prisma.note.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true, spaceId: true, title: true, content: true, isDeleted: true, isArchived: true, createdAt: true, updatedAt: true } }) : [];
+  const priv = (await prisma.$queryRaw<{ id: string }[]>`SELECT n.id FROM notes n JOIN spaces s ON s.id = n.space_id WHERE s.org_id = ${orgId} AND s.kind = 'office' AND n.office_everyone IS NULL`).map((r) => r.id);
+  const noteRows = spaceIds.length ? await prisma.note.findMany({ where: { spaceId: { in: spaceIds }, id: { notIn: priv } }, select: { id: true, spaceId: true, title: true, content: true, isDeleted: true, isArchived: true, createdAt: true, updatedAt: true } }) : [];
   const taskRows = spaceIds.length ? await prisma.todo.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true, spaceId: true, text: true, completed: true, priority: true, deadline: true, assigneeId: true, createdAt: true } }) : [];
   void notes; void tasks;
-  await audit(orgId, uid(req), 'org.exported', orgId, { notes: noteRows.length, tasks: taskRows.length });
+  await audit(orgId, uid(req), 'org.exported', orgId, { notes: noteRows.length, tasks: taskRows.length, privateNotesWithheld: priv.length });
   res.setHeader('Content-Disposition', `attachment; filename="organization-export.json"`);
   res.json({ exportedAt: new Date().toISOString(), organization: o[0], members, spaces, notes: noteRows, tasks: taskRows, announcements: posts });
 });

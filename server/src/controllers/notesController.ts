@@ -1,3 +1,4 @@
+import { decorateNotes, hiddenNoteIds } from '../utils/noteAccess.js';
 import { Request, Response, NextFunction } from 'express';
 import { noteScope } from '../utils/scope.js';
 import { can, spaceAccess } from '../utils/access.js';
@@ -354,6 +355,7 @@ export async function getNotes(req: any, res: any, next: any) {
         truncated: !!n.content && n.content.length > 400,
       }));
     }
+    await decorateNotes(userId, 'spaceId' in own ? own.spaceId : null, out);
     res.json({ notes: out, ...(limit ? { limit, offset } : {}) });
   } catch (error) {
     next(error);
@@ -373,7 +375,9 @@ export async function getNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
-    res.json({ note: formatNote(note) });
+    const shaped = formatNote(note);
+    await decorateNotes(req.user.id, 'spaceId' in own ? own.spaceId : null, [shaped]);
+    res.json({ note: shaped });
   } catch (error) {
     next(error);
   }
@@ -415,7 +419,9 @@ export async function createNote(req: any, res: any, next: any) {
     const io = req.app.get('io');
     if (io) io.to(req.user.id).emit('notes_changed');
 
-    res.status(201).json({ note: formatNote(updated) });
+    const shaped = formatNote(updated);
+    await decorateNotes(req.user.id, 'spaceId' in own ? own.spaceId : null, [shaped]);
+    res.status(201).json({ note: shaped });
   } catch (error) {
     next(error);
   }
@@ -523,7 +529,7 @@ export async function purgeExpiredTrash(): Promise<number> {
 
 export async function deleteNote(req: any, res: any, next: any) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'manage');
     if (!own) return;
     const noteId = req.params.id;
     const userId = req.user.id;
@@ -712,10 +718,11 @@ export async function getBacklinks(req: any, res: any, next: any) {
     const own = await noteScope(req, res, 'read'); if (!own) return;
     const id = String(req.params.id);
     const inSpace: string | null = 'spaceId' in own ? own.spaceId : null;
+    const hidden = inSpace ? await hiddenNoteIds(req.user.id, inSpace, 'read') : [];
     const rows = await prisma.$queryRaw`
       SELECT n.id, n.title, n.updated_at AS "updatedAt"
       FROM note_links l JOIN notes n ON n.id = l.source_id
-      WHERE l.target_id = ${id} AND n.space_id IS NOT DISTINCT FROM ${inSpace} AND (${inSpace}::text IS NOT NULL OR n.user_id = ${req.user.id}) AND n.is_deleted = false AND n.id <> ${id}
+      WHERE l.target_id = ${id} AND n.space_id IS NOT DISTINCT FROM ${inSpace} AND (${inSpace}::text IS NOT NULL OR n.user_id = ${req.user.id}) AND n.is_deleted = false AND n.id <> ${id} AND NOT (n.id = ANY(${hidden}::text[]))
         AND (${!req.user.viaToken} OR NOT EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = n.id AND t.name = ${PRIVATE_TAG}))
       ORDER BY n.updated_at DESC LIMIT 50`;
     res.json({ backlinks: rows });

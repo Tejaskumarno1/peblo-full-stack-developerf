@@ -1,5 +1,6 @@
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
+import { seeable } from '../utils/noteAccess.js';
 import { noteScope } from '../utils/scope.js';
 import { spaceMembers } from '../utils/access.js';
 import prisma from '../db.js';
@@ -9,7 +10,7 @@ import { cleanTodoMeta } from '../utils/meta.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
-    const own = await noteScope(req, res, 'read');
+    const own = await noteScope(req, res, 'read', { tasks: true });
     if (!own) return;
     const { date, from, to, priority, completed, noteId, limit } = req.query;
     await topUpSeries(req.user!.id); // repeating tasks never run out
@@ -118,7 +119,7 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
 // GET /todos/range?from=...&to=... — Tasks in a date range (for Calendar)
 export async function getTodosRange(req: Request, res: Response, next: NextFunction) {
   try {
-    const own = await noteScope(req, res, 'read');
+    const own = await noteScope(req, res, 'read', { tasks: true });
     if (!own) return;
     const { from, to } = req.query;
     if (!from || !to) {
@@ -150,7 +151,7 @@ const scopeOf = (v: unknown) => (typeof v === 'string' && SCOPES.includes(v) ? v
 
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'write', { tasks: true });
     if (!own) return;
     const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     if (typeof text !== 'string' || text.trim() === '') {
@@ -164,7 +165,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     if (noteId) {
       const note = await prisma.note.findFirst({
-        where: { id: noteId as string, ...own }
+        where: { id: noteId as string, ...own, ...(await seeable(req.user!.id, own)) }
       });
       if (!note) {
         return res.status(400).json({ error: 'Invalid note ID' });
@@ -219,7 +220,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
 export async function updateTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'write', { tasks: true });
     if (!own) return;
     const { id } = req.params;
     const userId = req.user!.id;
@@ -260,7 +261,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     if (noteId !== undefined) {
       if (noteId) {
         const note = await prisma.note.findFirst({
-          where: { id: noteId as string, ...own }
+          where: { id: noteId as string, ...own, ...(await seeable(req.user!.id, own)) }
         });
         if (!note) {
           return res.status(400).json({ error: 'Invalid note ID' });
@@ -343,7 +344,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
 
 export async function deleteTodo(req: Request, res: Response, next: NextFunction) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'write', { tasks: true });
     if (!own) return;
     const { id } = req.params;
     const userId = req.user!.id;

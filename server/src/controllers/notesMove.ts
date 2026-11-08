@@ -21,7 +21,7 @@ async function target(req: any, res: any): Promise<Target> {
 export async function moveNote(req: any, res: any, next: any) {
   try {
     if (req.user.viaToken) return res.status(403).json({ error: 'Not allowed with an access token.' });
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'manage');
     if (!own) return;
     const note = await prisma.note.findFirst({ where: { id: req.params.id, isDeleted: false, ...own }, select: { id: true, userId: true, spaceId: true } });
     if (!note) return res.status(404).json({ error: 'Note not found.' });
@@ -31,8 +31,9 @@ export async function moveNote(req: any, res: any, next: any) {
     if (to.spaceId === null && note.userId !== req.user.id) return res.status(403).json({ error: 'Only the person who wrote a note can move it into their Personal space.' });
     const id = note.id;
     const dest = to.spaceId;
-    const [, , tasks] = await prisma.$transaction([
-      prisma.$executeRaw`UPDATE notes SET space_id = ${dest} WHERE id = ${id}`,
+    const [, , , tasks] = await prisma.$transaction([
+      prisma.$executeRaw`UPDATE notes SET space_id = ${dest}, office_everyone = NULL WHERE id = ${id}`,
+      prisma.$executeRaw`DELETE FROM note_access WHERE note_id = ${id}`,
       prisma.$executeRaw`DELETE FROM note_links l USING notes o WHERE ((l.source_id = ${id} AND o.id = l.target_id) OR (l.target_id = ${id} AND o.id = l.source_id)) AND o.space_id IS DISTINCT FROM ${dest}`,
       prisma.$executeRaw`UPDATE todos SET space_id = ${dest}, assignee_id = CASE WHEN ${dest}::text IS NOT NULL AND assignee_id IN (SELECT user_id FROM space_members WHERE space_id = ${dest}) THEN assignee_id ELSE NULL END
         WHERE linked_note_id = ${id} AND (${dest}::text IS NOT NULL OR user_id = ${req.user.id})`,
