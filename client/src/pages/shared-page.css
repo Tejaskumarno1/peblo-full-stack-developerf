@@ -666,3 +666,9 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .sp-note { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 12px; color: var(--fg3); }
 .pb-shared .sp-off { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 8px 0 0; font: inherit; font-weight: 700; cursor: pointer; }
 @media (max-width: 900px) { .pb-shared .share-btn span { display: none; } }
+
+@media (min-width: 1620px) {
+  .pb-shared .rc-react { display: flex; gap: 6px; }
+  .pb-shared .rc-react button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 99px; padding: 7px 11px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  .pb-shared .rc-react button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+}

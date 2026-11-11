@@ -470,6 +470,38 @@ publicRoutes.post('/:kind/:token/knock', (req, res, next) => guestKnockLimit(req
   } catch (e) { next(e); }
 });
 
+const REACTIONS = ['like', 'love', 'idea', 'done'];
+async function reactionsFor(noteId: string, sid: string | null) {
+  const rows = await prisma.$queryRawUnsafe<{ kind: string; n: number; mine: boolean }[]>('SELECT kind, COUNT(*)::int AS n, BOOL_OR(session_id = $2) AS mine FROM share_reactions WHERE note_id = $1 GROUP BY kind', noteId, sid || '');
+  return REACTIONS.map((kind) => { const r = rows.find((x) => x.kind === kind); return { kind, n: r?.n ?? 0, mine: !!r?.mine }; });
+}
+publicRoutes.get('/note/:token/reactions', async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true } });
+    if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const sid = typeof req.query.sid === 'string' && SESSION_RE.test(req.query.sid) ? req.query.sid : null;
+    res.json({ reactions: await reactionsFor(note.id, sid) });
+  } catch (e) { next(e); }
+});
+publicRoutes.post('/note/:token/reactions', (req, res, next) => guestWriteLimit(req, res, next), async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const sid = req.body?.sessionId;
+    if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return res.status(400).json({ error: 'A valid viewer session is required.' });
+    const kind = String(req.body?.kind || '');
+    if (!REACTIONS.includes(kind)) return res.status(400).json({ error: 'Unknown reaction.' });
+    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (await isBlocked('note', req.params.token, sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
+    const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
+    if (!acc.allowed) return res.status(403).json({ error: 'Waiting for the owner to let you in.', waiting: acc.waiting || 'waiting' });
+    const had = await prisma.$queryRawUnsafe<{ kind: string }[]>('SELECT kind FROM share_reactions WHERE note_id = $1 AND session_id = $2 AND kind = $3', note.id, sid, kind);
+    if (had.length) await prisma.$executeRawUnsafe('DELETE FROM share_reactions WHERE note_id = $1 AND session_id = $2 AND kind = $3', note.id, sid, kind);
+    else await prisma.$executeRawUnsafe('INSERT INTO share_reactions (note_id, session_id, kind) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', note.id, sid, kind);
+    res.json({ ok: true, reactions: await reactionsFor(note.id, sid) });
+  } catch (e) { next(e); }
+});
 publicRoutes.get('/note/:token/polls', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });

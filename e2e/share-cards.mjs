@@ -28,6 +28,9 @@ try {
   check('11 footer Keys opens shortcuts', await g.locator('[data-testid="keys-sheet"]').isVisible());
   await g.screenshot({ path: 'share-cards.png' });
   await g.keyboard.press('Escape');
+  await g.locator('[data-testid="react-love"]').click();
+  await g.waitForTimeout(500);
+  check('17 a reaction counts and stays after reload', await (async () => { await g.reload(); await g.locator('[data-testid="join-anon"]').click({ timeout: 3000 }).catch(() => {}); await g.locator('[data-testid="react-love"].on').waitFor({ timeout: 8000 }); return true; })());
   await g.locator('[data-testid="share-btn"]').click();
   check('15 share panel shows link, role, expiry and invite', await g.locator('[data-testid="share-panel"]').isVisible() && /Can edit/.test(await g.locator('[data-testid="share-panel"]').innerText()) && await g.locator('[data-testid="sp-email"]').isVisible());
   check('16 share panel has a QR toggle', (await g.locator('[data-testid="share-panel"]').innerText()).toLowerCase().includes('qr'));

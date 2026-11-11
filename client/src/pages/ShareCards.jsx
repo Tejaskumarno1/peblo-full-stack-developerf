@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUp, Clock, FileText, History, Link2, MessageSquare, Pencil, Eye, Sparkles, User } from 'lucide-react';
+import { ArrowUp, CircleCheck, Clock, Heart, Lightbulb, ThumbsUp, FileText, History, Link2, MessageSquare, Pencil, Eye, Sparkles, User } from 'lucide-react';
 import { commentsApi, ago } from '../utils/comments';
 
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -31,6 +31,20 @@ export default function ShareCards({ token, sid, name, canComment, pageText, hea
   const [q, setQ] = useState('');
   const [reply, setReply] = useState('');
   const [comments, setComments] = useState([]);
+  const [reactions, setReactions] = useState([]);
+  const rbase = `/api/public/note/${encodeURIComponent(token)}/reactions`;
+  useEffect(() => {
+    if (!token) return undefined;
+    let live = true;
+    const load = () => fetch(`${rbase}?sid=${encodeURIComponent(sid)}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setReactions(j.reactions); }).catch(() => {});
+    load();
+    const t = setInterval(load, 20000);
+    return () => { live = false; clearInterval(t); };
+  }, [token, sid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const react = async (kind) => {
+    setReactions((rs) => rs.map((r) => (r.kind === kind ? { ...r, mine: !r.mine, n: r.n + (r.mine ? -1 : 1) } : r)));
+    try { const r = await fetch(rbase, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sid, kind }) }); if (r.ok) setReactions((await r.json()).reactions); } catch { /* the next refresh corrects it */ }
+  };
 
   useEffect(() => {
     if (!canComment || !token) return undefined;
@@ -69,6 +83,7 @@ export default function ShareCards({ token, sid, name, canComment, pageText, hea
         <h3><History size={16} />Since your last visit<span className="n">{changes.count} change{changes.count > 1 ? 's' : ''}</span></h3>
         <label className="rc-sw"><span>Show marks in the page</span><input type="checkbox" role="switch" checked={showChanges} onChange={onToggleChanges} /></label>
       </section>}
+      {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = { like: ThumbsUp, love: Heart, idea: Lightbulb, done: CircleCheck }[r.kind]; return <button key={r.kind} type="button" data-testid={`react-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
       <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />Version history</button>
     </aside>
   );
