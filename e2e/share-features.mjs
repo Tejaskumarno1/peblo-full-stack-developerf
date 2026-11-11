@@ -35,7 +35,7 @@ try {
   await g.mouse.move(bb.x + 90, bb.y + 10);
   check('5 owner sees her pointer', await until(async () => (await page.locator('[data-testid="peer-pointer"][data-name="Mia"]').count()) >= 1));
   const seen = await page.locator('[data-testid="peer-pointer"][data-name="Mia"] .tag').first().evaluate((el) => getComputedStyle(el).backgroundColor).catch(() => '');
-  const PALETTE = ['#E2501A', '#2350FF', '#2FB67C', '#B05AF0', '#D9A400', '#0E9AA7', '#E0457B'].map((h) => `rgb(${[1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ')})`);
+  const PALETTE = ['#E2501A', '#2350FF', '#1B8A5A', '#B05AF0', '#946E00', '#0A7A85', '#E0457B'].map((h) => `rgb(${[1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ')})`);
   check('6 pointer uses an automatic colour from the palette', PALETTE.includes(seen), seen);
 
   await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
