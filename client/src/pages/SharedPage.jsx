@@ -3,10 +3,10 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2 } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
-import ShareCards from './ShareCards';
+import ShareCards, { TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
@@ -1045,13 +1045,14 @@ export default function SharedPage() {
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
       {wait && !data && !error ? (
-        <main className="stage"><section className="gone wait-room" role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span><Clock size={30} /></span></div>
+        <main className="stage"><section className={`gone wait-room${wait === 'declined' ? ' is-declined' : ''}`} role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span>{wait === 'declined' ? <Ban size={26} /> : <Clock size={26} />}</span></div>
           <h1>{wait === 'declined' ? 'The owner did not let you in' : 'Waiting to be let in'}</h1>
-          <p>{wait === 'declined' ? 'You can ask them to send the link again.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
+          <p>{wait === 'declined' ? 'You can ask them to send the link again, or sign in if you have an account.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
           {wait !== 'declined' && <label className="wait-name">Your name<input aria-label="Your name" data-testid="wait-name" value={waitName} maxLength={40} placeholder="Guest" onChange={(e) => { setWaitName(e.target.value); setGuestName(e.target.value.trim().slice(0, 40)); }} onBlur={(e) => saveGuestName(e.target.value)} /></label>}
+          {wait === 'declined' && <div className="gone-btns"><button type="button" className="btn dark" data-testid="ask-again" onClick={() => window.location.reload()}>Ask again</button><button type="button" className="btn" data-testid="gone-signin" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div>}
         </section></main>
       ) : error ? (
-        <main className="stage"><section className="gone" role="alert"><div className="orb" aria-hidden="true"><span><X size={30} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
+        <main className="stage"><section className="gone is-gone" role="alert" data-testid="link-gone"><div className="orb" aria-hidden="true"><span><Ban size={26} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
       ) : !data ? (
         <main className="stage"><p className="loading">Loading your shared page…</p></main>
       ) : (
@@ -1123,6 +1124,7 @@ export default function SharedPage() {
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
+          {data.kind === 'todo' && !fullscreen && <><TodoAbout data={data} /><TodoCards viewers={viewers} myColor={myColor} peerColor={peerColor} saved={!!savedCopy} busy={saveBusy} onSave={() => (savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy())} /></>}
           {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
       )}

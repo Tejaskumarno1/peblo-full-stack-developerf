@@ -620,3 +620,31 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared[data-theme="dark"] .rc-c { background: rgba(0,0,0,.25); }
   .pb-shared[data-theme="dark"] .rc h3 .n { background: #2a241d; }
 }
+
+.pb-shared .about-card { display: none; }
+.pb-shared .rc-people { display: flex; align-items: center; gap: 0; }
+.pb-shared .rc-names { margin-left: 10px; font-size: 13px; font-weight: 700; }
+.pb-shared .rc-save { margin-top: 10px; width: 100%; display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 0; border-radius: 99px; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; padding: 11px 14px; cursor: pointer; }
+@media (min-width: 1620px) {
+  .pb-shared .about-card { display: block; position: fixed; left: 100px; top: 96px; width: 262px; background: var(--surface); border-radius: 30px; padding: 16px 18px; box-shadow: var(--soft-shadow); z-index: 2; }
+  .pb-shared .about-card h3 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
+  .pb-shared .ab-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 14px; }
+  .pb-shared .ab-i { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; flex: none; }
+  .pb-shared .ab-row em { margin-left: auto; font-style: normal; font-size: 11.5px; font-weight: 700; background: var(--chip, #ece4d8); border-radius: 99px; padding: 3px 9px; }
+}
+
+/* S05-S08 state cards: one soft pastel card with an icon disc */
+.pb-shared .gone { text-align: left; width: min(640px, 100%); margin: 40px auto; padding: 28px; border-radius: 34px; background: #fde9a8; color: #2a2118; display: flex; flex-direction: column; gap: 0; min-height: 300px; }
+.pb-shared .gone.is-declined, .pb-shared .gone.is-gone { background: #ffd8c4; }
+.pb-shared .gone .orb { width: 56px; height: 56px; margin: 0 0 18px; border-radius: 50%; background: #fff; }
+.pb-shared .gone .orb::before, .pb-shared .gone .orb::after { display: none; }
+.pb-shared .gone h1 { font: 800 clamp(24px, 3.4vw, 30px)/1.15 'Bricolage Grotesque', system-ui, sans-serif; margin: 0 0 8px; }
+.pb-shared .gone p { color: #5a4a3a; font-size: 15px; margin: 0 0 18px; }
+.pb-shared .gone .wait-name { margin-top: auto; }
+.pb-shared .gone .wait-name input { background: #fff; border-color: transparent; border-radius: 99px; width: 100%; }
+.pb-shared .gone .btn { margin-top: auto; align-self: flex-start; }
+.pb-shared[data-theme="dark"] .gone { background: #4a3d12; color: #f4ece2; }
+.pb-shared[data-theme="dark"] .gone.is-declined, .pb-shared[data-theme="dark"] .gone.is-gone { background: #4a2e22; }
+.pb-shared[data-theme="dark"] .gone p { color: #d9ccbb; }
+.pb-shared[data-theme="dark"] .gone .orb { background: #2a241d; }
+.pb-shared .gone-btns { margin-top: auto; display: flex; gap: 8px; }

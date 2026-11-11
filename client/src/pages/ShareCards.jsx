@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUp, History, MessageSquare, Sparkles } from 'lucide-react';
+import { ArrowUp, Clock, FileText, History, Link2, MessageSquare, Pencil, Eye, Sparkles, User } from 'lucide-react';
 import { commentsApi, ago } from '../utils/comments';
 
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -70,6 +70,37 @@ export default function ShareCards({ token, sid, name, canComment, pageText, hea
         <label className="rc-sw"><span>Show marks in the page</span><input type="checkbox" role="switch" checked={showChanges} onChange={onToggleChanges} /></label>
       </section>}
       <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />Version history</button>
+    </aside>
+  );
+}
+
+const rel = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); if (m < 1) return 'just now'; if (m < 60) return `${m} min ago`; if (m < 1440) return `${Math.round(m / 60)} h ago`; return `${Math.round(m / 1440)} d ago`; };
+const left = (iso) => { if (!iso) return 'No end'; const d = Math.round((new Date(iso).getTime() - Date.now()) / 86400000); return d <= 0 ? 'Today' : `In ${d} day${d > 1 ? 's' : ''}`; };
+
+/** S32: details about a shared to-do, in the left column. */
+export function TodoAbout({ data }) {
+  const rows = [[User, 'Shared by', data.author || 'Someone'], [Clock, 'Updated', rel(data.updatedAt)], [Link2, 'Link ends', left(data.expiresAt)], [data.canEdit ? Pencil : Eye, 'Your role', data.canEdit ? 'Can edit' : 'Can view']];
+  return (
+    <aside className="about-card" data-testid="todo-about" aria-label="About this to-do">
+      <h3>About this to-do</h3>
+      {rows.map(([Icon, k, v]) => <div className="ab-row" key={k}><span className="ab-i"><Icon size={15} /></span><b>{k}</b><em>{v}</em></div>)}
+    </aside>
+  );
+}
+
+/** S32: people here and the keep-a-copy card, in the right column of a shared to-do. */
+export function TodoCards({ viewers, myColor, peerColor, saved, busy, onSave }) {
+  return (
+    <aside className="rcards todo-cards" data-testid="todo-cards" aria-label="Page cards">
+      <section className="rc rc-ask" data-testid="rc-people">
+        <h3>People here</h3>
+        <div className="rc-people">{viewers.slice(0, 5).map((v) => <span key={v.id} className="hd-av" style={{ background: v.self ? myColor : peerColor(v.id) }} title={v.name}>{(v.name || 'G')[0].toUpperCase()}</span>)}<span className="rc-names">{viewers.map((v) => v.self ? 'You' : v.name).slice(0, 3).join(', ') || 'Just you'}</span></div>
+      </section>
+      <section className="rc rc-chg" data-testid="rc-keep">
+        <h3>Keep this to-do</h3>
+        <p className="rc-none">Save a copy to your own tasks. The original stays shared.</p>
+        <button type="button" className="rc-save" disabled={busy} onClick={onSave}><FileText size={15} />{saved ? 'Open in Peblo' : 'Save to my Peblo'}</button>
+      </section>
     </aside>
   );
 }
