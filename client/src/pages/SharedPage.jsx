@@ -3,8 +3,9 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
+import SharePalette from './SharePalette';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
@@ -246,6 +247,12 @@ export default function SharedPage() {
   const [barShown, setBarShown] = useState(false);
   const [topHidden, setTopHidden] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const on = (event) => { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); setPaletteOpen((open) => !open); } };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
   const rootRef = useRef(null);
   const barTimer = useRef(null);
   const toggleFullscreen = useCallback(() => {
@@ -921,6 +928,7 @@ export default function SharedPage() {
         <div className="top-in">
           <a className="brand" href="/" aria-label="Peblo home"><i />Peblo</a>
           {data && <div className="crumb"><ChevronRight className="sep" size={14} /><span>Shared page</span><ChevronRight className="sep" size={14} /><b title={pageTitle}>{pageTitle}</b></div>}
+          {data && <button type="button" className="sp-bar" data-testid="palette-btn" aria-label="Search or jump to a heading" onClick={() => setPaletteOpen(true)}><SearchIcon size={15} /><span>Search or jump to a heading</span><kbd>Ctrl K</kbd></button>}
           <span className="spacer" />
           {data && <span className={`pill ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={15} /> : <Eye size={15} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>}
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
@@ -1120,6 +1128,23 @@ export default function SharedPage() {
         {reader.place && !reader.changes && <div className="rp" data-testid="place-pill"><History size={16} /><div><b>You stopped at {reader.place.title}</b></div><button type="button" data-testid="place-jump" onClick={reader.jumpPlace}>Jump back</button><button type="button" aria-label="Dismiss" onClick={reader.dismissPlace}><X size={14} /></button></div>}
       </div>}
       {data?.kind === 'note' && !fullscreen && <GuestTour ready={!!data && !error && !showJoin} />}
+      {paletteOpen && data && !error && <SharePalette
+        headings={headings}
+        onJump={(id) => { if (window.location.hash !== `#${id}`) window.history.pushState(null, '', `#${id}`); scrollToHeading(id); }}
+        onClose={() => setPaletteOpen(false)}
+        actions={[
+          { id: 'link', title: 'Copy link to this page', icon: Link2, run: () => copy(window.location.href, 'Share link copied') },
+          savedCopy ? { id: 'open', title: 'Open in Peblo', icon: Check, run: () => navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') } : { id: 'save', title: 'Save to my Peblo', icon: Clipboard, run: () => saveSharedCopy() },
+          { id: 'fs', title: 'Focus mode', icon: Maximize2, hint: 'F', run: toggleFullscreen },
+          isNote ? { id: 'find', title: 'Find in this page', icon: SearchIcon, hint: 'Ctrl F', run: () => setReaderFind(true) } : null,
+          data.canEdit && isNote ? { id: 'comments', title: 'Open comments', icon: MessageSquare, run: () => commentsBtn()?.click() } : null,
+          { id: 'pdf', title: 'Export as PDF', icon: Download, run: () => exportShared('pdf') },
+          { id: 'md', title: 'Export as Markdown', icon: Download, run: () => exportShared('md') },
+          { id: 'print', title: 'Print', icon: Printer, run: () => exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')) },
+          { id: 'keys', title: 'Keyboard shortcuts', icon: Keyboard, hint: '?', run: () => setKeysOpen(true) },
+          { id: 'theme', title: darkMode ? 'Switch to light theme' : 'Switch to dark theme', icon: darkMode ? Sun : Moon, run: () => setDarkMode((dark) => !dark) },
+        ].filter(Boolean)}
+      />}
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>

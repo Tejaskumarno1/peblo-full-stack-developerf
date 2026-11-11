@@ -535,3 +535,23 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .doc .pic-pill a { display: inline-flex; align-items: center; min-height: 32px; }
   .pb-shared .doc .pic-all, .pb-shared .doc .pic-pill { padding-top: 3px; padding-bottom: 3px; }
 }
+
+/* Ctrl K command palette (mockup S21) */
+.pb-shared .sp-back { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: center; align-items: flex-start; padding-top: 110px; background: rgba(36, 31, 26, .42); }
+.pb-shared .sp { width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 160px); display: flex; flex-direction: column; gap: 6px; padding: 26px; border-radius: 32px; background: var(--surface); box-shadow: 0 24px 60px rgba(36, 31, 26, .3); }
+.pb-shared .sp-in { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 18px; border-radius: 999px; background: var(--bg); box-shadow: inset 0 0 0 2px var(--accent); color: var(--fg2); }
+.pb-shared .sp-in input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); font: 700 16px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sp kbd { padding: 3px 9px; border-radius: 8px; background: var(--chip); color: var(--fg2); font: 700 11.5px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding-top: 6px; }
+.pb-shared .sp-cap { margin: 10px 12px 4px; color: var(--fg3); font: 800 11.5px 'Figtree', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.pb-shared .sp-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 9px 12px; border: 0; border-radius: 18px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font-family: inherit; }
+.pb-shared .sp-row.on { background: var(--chip); }
+.pb-shared .sp-ic { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.pb-shared .sp-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.pb-shared .sp-t b { font: 800 14.5px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sp-t small { color: var(--fg3); font: 600 12.5px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sp-empty { margin: 14px 12px; color: var(--fg3); font: 600 14px 'Figtree', system-ui, sans-serif; }
+.pb-shared .sp-bar { display: inline-flex; align-items: center; gap: 10px; flex: 0 1 340px; min-width: 150px; height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--fg3); font: 600 14px 'Figtree', system-ui, sans-serif; cursor: pointer; }
+.pb-shared .sp-bar span { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .pb-shared .sp-bar { display: none; } }
+.pb-shared .crumb { display: none; }
