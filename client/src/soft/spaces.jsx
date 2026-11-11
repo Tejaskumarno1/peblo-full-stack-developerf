@@ -82,6 +82,10 @@ export function SpacePill() {
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('peblo-space-menu', { detail: open }));
+    return () => { if (open) window.dispatchEvent(new CustomEvent('peblo-space-menu', { detail: false })); };
+  }, [open]);
   const orgs = data?.orgs || [];
   if (!orgs.length) return null;
   const spaces = orgs.flatMap((o) => o.spaces.map((s) => ({ ...s, org: o })));
@@ -238,8 +242,15 @@ export function SpacesTip() {
   const current = useCurrentSpace();
   const [gone, setGone] = useState(tipSeen);
   const first = (data?.orgs || []).flatMap((o) => o.spaces)[0];
-  if (gone || !first || current) return null;
-  const close = () => { try { localStorage.setItem(TIP_KEY, '1'); } catch { /* shown again next time */ } setGone(true); };
+  const close = useCallback(() => { try { localStorage.setItem(TIP_KEY, '1'); } catch { /* shown again next time */ } setGone(true); }, []);
+  // the tip must not sit on top of the open space menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    const on = (e) => setMenuOpen(!!e.detail);
+    window.addEventListener('peblo-space-menu', on);
+    return () => window.removeEventListener('peblo-space-menu', on);
+  }, []);
+  if (gone || !first || current || menuOpen) return null;
   return (
     <div className="s-space-tip" role="dialog" aria-label="Your spaces" data-testid="spaces-tip">
       <b>Your spaces live here</b>

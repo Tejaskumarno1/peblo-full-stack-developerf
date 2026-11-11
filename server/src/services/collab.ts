@@ -1,4 +1,4 @@
-import { isOffice, noteLevel } from '../utils/noteAccess.js';
+import { liveLevel } from '../utils/noteAccess.js';
 import { accessFor } from './shareAccess.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage, Server } from 'http';
@@ -312,8 +312,8 @@ class Room {
       for (const c of [...this.conns.values()]) {
         if (c.userId === note.userId) continue; // the owner
         if (c.userId && note.spaceId) { // a person the author shared this Office note with
-          const lv = await noteLevel(c.userId, this.id, note.spaceId);
-          if (!lv.level || (!c.readOnly && lv.level !== 'edit')) c.ws.close(CLOSE_GONE, 'access ended');
+          const lv = await liveLevel(c.userId, this.id, note.spaceId);
+          if (!lv || (!c.readOnly && lv !== 'edit' && lv !== 'owner')) c.ws.close(CLOSE_GONE, 'access ended');
           continue;
         }
         const okShare = !!note.shareToken && c.share === note.shareToken && live && !(c.session && blocked.has(c.session));
@@ -399,11 +399,11 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
   const note = (await prisma.$queryRaw<{ id: string; userId: string; spaceId: string | null }[]>`SELECT id, user_id AS "userId", space_id AS "spaceId" FROM notes WHERE id = ${noteParam} AND NOT is_deleted`)[0];
   if (!note) return null;
   if (note.userId === userId) return { noteId: note.id, readOnly: false, userId, share: null, session: null };
-  // Someone the author shared an Office note with: edit joins the room, view reads it
-  if (note.spaceId && (await isOffice(note.spaceId))) {
-    const lv = await noteLevel(userId, note.id, note.spaceId);
-    if (lv.level === 'edit') return { noteId: note.id, readOnly: false, userId, share: null, session: null };
-    if (lv.level === 'view') return { noteId: note.id, readOnly: true, userId, share: null, session: null };
+  // A teammate (edit unless a viewer) or someone the author shared an Office note with: edit joins the room, view reads it
+  if (note.spaceId) {
+    const lv = await liveLevel(userId, note.id, note.spaceId);
+    if (lv === 'edit') return { noteId: note.id, readOnly: false, userId, share: null, session: null };
+    if (lv === 'view') return { noteId: note.id, readOnly: true, userId, share: null, session: null };
   }
   return null;
 }

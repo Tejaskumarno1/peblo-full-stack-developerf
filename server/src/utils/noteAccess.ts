@@ -1,4 +1,5 @@
 import prisma from '../db.js';
+import { can, spaceAccess } from './access.js';
 
 /*
  * Private notes in an Office (mockups WsE01 to WsE03). A note written in an Office is private to its author until the author
@@ -35,6 +36,20 @@ export async function noteLevel(userId: string, noteId: string, spaceId: string)
   if (!r) return { exists: false, level: null, ownerId: null, ownerName: null };
   const level: Effective = r.user_id === userId ? 'owner' : (r.everyone === 'edit' || r.grant === 'edit') ? 'edit' : (r.everyone === 'view' || r.grant === 'view') ? 'view' : null;
   return { exists: true, level, ownerId: r.user_id, ownerName: r.owner_name };
+}
+
+/**
+ * What one person may do with a note in the live editor (WebSocket room). The author always edits; in an Office it follows the sharing
+ * the author set; in a Team every member who can write edits and a viewer reads. Personal notes are the author's alone.
+ */
+export async function liveLevel(userId: string, noteId: string, spaceId: string): Promise<Effective> {
+  if (await isOffice(spaceId)) return (await noteLevel(userId, noteId, spaceId)).level;
+  const inSpace = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM notes WHERE id = ${noteId} AND space_id = ${spaceId} AND NOT is_deleted`;
+  if (!inSpace[0]) return null;
+  if (inSpace[0].user_id === userId) return 'owner';
+  const sa = await spaceAccess(userId, spaceId);
+  if (!sa) return null;
+  return can('space.write', sa.org, sa.role) ? 'edit' : 'view';
 }
 
 /** Adds owner / access / everyone / sharedCount to notes read from an Office. Notes outside an Office are left as they are. */
