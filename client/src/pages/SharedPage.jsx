@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify';
 import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
+import ShareCards from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
@@ -930,6 +931,7 @@ export default function SharedPage() {
           {data && <div className="crumb"><ChevronRight className="sep" size={14} /><span>Shared page</span><ChevronRight className="sep" size={14} /><b title={pageTitle}>{pageTitle}</b></div>}
           {data && <button type="button" className="sp-bar" data-testid="palette-btn" aria-label="Search or jump to a heading" onClick={() => setPaletteOpen(true)}><SearchIcon size={15} /><span>Search or jump to a heading</span><kbd>Ctrl K</kbd></button>}
           <span className="spacer" />
+          {data && viewers.length > 0 && <div className="hd-stack" data-testid="hd-stack" aria-label={`${viewers.length} on this page`}>{viewers.slice(0, 3).map((v) => <span key={v.id} className="hd-av" title={v.name} style={{ background: v.self ? myColor : peerColor(v.id) }}>{(v.name || 'G')[0].toUpperCase()}</span>)}{viewers.length > 3 && <span className="hd-av more">+{viewers.length - 3}</span>}</div>}
           {data && <span className={`pill ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={15} /> : <Eye size={15} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>}
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
@@ -956,6 +958,8 @@ export default function SharedPage() {
               <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>
             </div>}
           </div>}
+          {data && <button className="btn icon" type="button" data-testid="moon-btn" aria-label={darkMode ? 'Switch to light' : 'Switch to dark'} title={darkMode ? 'Light' : 'Dark'} onClick={() => setDarkMode((d) => !d)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>}
+          {data && <span className="hd-me" data-testid="hd-me" title={guestName || user?.name || 'Guest'} style={{ background: myColor }}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</span>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">
@@ -1091,7 +1095,7 @@ export default function SharedPage() {
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
-
+          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
