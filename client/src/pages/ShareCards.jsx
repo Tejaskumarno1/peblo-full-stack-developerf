@@ -55,7 +55,7 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
   const { reactions, react } = useReactions(token, sid);
   const [askOpen, setAskOpen] = useState(false);
   useEffect(() => {
-    if (!canComment || !token) return undefined;
+    if (!canComment || !token || !window.matchMedia?.('(min-width: 1620px)').matches) return undefined;
     let live = true;
     const load = () => commentsApi.list({ kind: 'guest', share: token, sid, name }).then((list) => { if (live) setComments(list); }).catch(() => {});
     load();
@@ -96,7 +96,7 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
         <h3><History size={16} />Since your last visit<span className="n">{changes.count} change{changes.count > 1 ? 's' : ''}</span></h3>
         <label className="rc-sw"><span>Show marks in the page</span><input type="checkbox" role="switch" checked={showChanges} onChange={onToggleChanges} /></label>
       </section>}
-      {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = ICONS[r.kind]; return <button key={r.kind} type="button" data-testid={`react-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
+      {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = ICONS[r.kind]; return <button key={r.kind} type="button" data-testid={`rx-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
       <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />Version history</button>
     {askOpen && <EditRequest token={token} sid={sid} name={name} owner={owner} onClose={() => setAskOpen(false)} />}
     </aside>

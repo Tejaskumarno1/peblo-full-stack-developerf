@@ -3,10 +3,11 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
+import { ListenBar, TranslateMenu, LANGUAGES } from './ListenTranslate';
 import ShareCards, { EndOfPage, TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
@@ -930,6 +931,7 @@ export default function SharedPage() {
   const [meOpen, setMeOpen] = useState(false);
   useEffect(() => { if (!meOpen) return undefined; const away = (e) => { if (!meRef.current?.contains(e.target)) setMeOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [meOpen]);
   const forgetMe = () => { try { localStorage.removeItem('peblo-guest-name'); localStorage.removeItem('peblo-guest-joined'); } catch { /* none */ } setGuestName(''); setMeOpen(false); showToast('Forgotten on this device'); };
+  const [liveEmpty, setLiveEmpty] = useState(null);
   const [chgIdx, setChgIdx] = useState(-1);
   const chgEls = () => [...(articleRef.current?.querySelectorAll('[data-pb-chg="1"]') || [])];
   const goChange = (dir) => {
@@ -942,17 +944,26 @@ export default function SharedPage() {
   useEffect(() => { if (!reader.changes || !reader.showChanges) setChgIdx(-1); }, [reader.changes, reader.showChanges]);
   const [listening, setListening] = useState(false);
   const toggleListen = () => {
-    const synth = window.speechSynthesis;
-    if (!synth) { showToast('Listening is not supported in this browser'); return; }
-    if (listening) { synth.cancel(); setListening(false); return; }
-    const text = (docRef.current?.innerText || articleRef.current?.querySelector('.bn-editor')?.innerText || '').trim();
-    if (!text) { showToast('Nothing to read yet'); return; }
-    const u = new SpeechSynthesisUtterance(text.slice(0, 20000));
-    u.onend = () => setListening(false);
-    u.onerror = () => setListening(false);
-    synth.cancel(); synth.speak(u); setListening(true);
+    if (!window.speechSynthesis) { showToast('Listening is not supported in this browser'); return; }
+    setListening((on) => !on);
   };
-  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* none */ } }, []);
+  const listenParas = () => [...(articleRef.current?.querySelectorAll('.doc p, .doc h1, .doc h2, .doc h3, .doc li, .bn-block-content') || [])].map((el) => ({ el, text: (el.innerText || '').trim() })).filter((p) => p.text);
+  const hilite = useCallback((el) => { document.querySelectorAll('[data-pb-say]').forEach((n) => n.removeAttribute('data-pb-say')); if (el) { el.setAttribute('data-pb-say', '1'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, []);
+  const [trOpen, setTrOpen] = useState(false);
+  const [trLang, setTrLang] = useState(null);
+  const [trText, setTrText] = useState('');
+  const [trBusy, setTrBusy] = useState(false);
+  const trRef = useRef(null);
+  useEffect(() => { if (!trOpen) return undefined; const away = (e) => { if (!trRef.current?.contains(e.target)) setTrOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [trOpen]);
+  const pickLang = async (code) => {
+    if (!code) { setTrLang(null); setTrText(''); setTrOpen(false); return; }
+    setTrBusy(true);
+    try {
+      const r = await fetch(`/api/public/note/${encodeURIComponent(token)}/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), lang: code }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { showToast(j.error || 'Translation is not available right now.'); } else { setTrLang(code); setTrText(j.text || ''); setTrOpen(false); }
+    } catch { showToast('Translation is not available right now.'); } finally { setTrBusy(false); }
+  };
   return (
     <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
@@ -1085,9 +1096,9 @@ export default function SharedPage() {
           {wait === 'declined' && <div className="gone-btns"><button type="button" className="btn dark" data-testid="ask-again" onClick={() => window.location.reload()}>Ask again</button><button type="button" className="btn" data-testid="gone-signin" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div>}
         </section></main>
       ) : error ? (
-        <main className="stage"><section className="gone is-gone" role="alert" data-testid="link-gone"><div className="orb" aria-hidden="true"><span><Ban size={26} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
+        <main className="stage"><section className="gone is-gone" role="alert" data-testid="link-gone"><div className="orb" aria-hidden="true"><span><Ban size={26} /></span></div><h1>This link isn’t available</h1><p>{error}</p><div className="gone-btns"><button type="button" className="btn dark" data-testid="ask-owner" onClick={() => copy(`Hi, the link you shared with me is not working any more. Could you send me a new one?`, 'Message copied. Send it to the owner.')}>Ask the owner</button><a className="btn" href="/">Go to Peblo</a></div></section></main>
       ) : !data ? (
-        <main className="stage"><p className="loading">Loading your shared page…</p></main>
+        <main className="stage"><section className="skel" data-testid="page-loading" role="status" aria-live="polite"><i className="sk t" /><span className="sk-row"><i className="sk dot" /><i className="sk s" /></span><i className="sk big" /><i className="sk l" /><i className="sk l m" /><i className="sk l" /><i className="sk l s" /><i className="sk pill" /><i className="sk big" /><span className="skel-pill"><LoaderCircle className="spin" size={14} />Opening the page<span className="sr-only"> Loading your shared page…</span></span></section></main>
       ) : (
         <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
           {pinnedToc && <aside className="toc" aria-label="On this page">
@@ -1112,6 +1123,7 @@ export default function SharedPage() {
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
               <div className="title-tools" data-testid="title-tools">
                 <button type="button" data-testid="tt-listen" className={listening ? 'on' : ''} aria-pressed={listening} aria-label={listening ? 'Stop listening' : 'Listen to this page'} title="Listen" onClick={toggleListen}><Volume2 size={17} /></button>
+                <span className="menu-wrap" ref={trRef}><button type="button" data-testid="tt-translate" className={trLang ? 'on' : ''} aria-haspopup="menu" aria-expanded={trOpen} aria-label="Translate this page" title="Translate" onClick={() => setTrOpen((o) => !o)}><Languages size={17} /></button>{trOpen && <TranslateMenu current={trLang} busy={trBusy} onPick={pickLang} onClose={() => setTrOpen(false)} />}</span>
                 {data.canEdit && isOwner && <button type="button" data-testid="tt-preview" aria-pressed={previewMode} aria-label="Preview" title="Preview" onClick={() => setPreviewMode((v) => !v)}><Eye size={17} /></button>}
                 <button type="button" data-testid="tt-full" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}><Maximize2 size={17} /></button>
                 <button type="button" data-testid="tt-text" aria-label="Text and reading style" title="Text" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={17} /></button>
@@ -1131,11 +1143,13 @@ export default function SharedPage() {
                   <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
               </div>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
-              {data.canEdit && !previewMode
+              {trLang && <div className="tr-bar" data-testid="tr-bar" role="status"><Languages size={15} /><span>Translated to {LANGUAGES.find(([c]) => c === trLang)?.[1]} by Peblo AI. The original is kept.</span><button type="button" onClick={() => pickLang(null)}>Show original</button></div>}
+              {trLang ? <DocHtml innerRef={docRef} html={toHtml(trText)} /> : data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
                     collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
-                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
+                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; setLiveEmpty(!String(markdown).replace(/[#>*\-\s]/g, ''));  if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <DocHtml innerRef={docRef} html={body} />}
+              {(liveEmpty === null ? !wordCount : liveEmpty) && !trLang && <div className="empty-page" data-testid="empty-page"><span className="ep-i"><Pencil size={18} /></span><b>This page is empty</b><p>{data.canEdit ? 'Start typing here. Everyone with the link sees it as you write.' : 'Nothing here yet. The owner has not written anything.'}</p></div>}
               {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
               {viewPic && <Suspense fallback={null}><PictureView src={viewPic.src} name={viewPic.name} onClose={() => setViewPic(null)} /></Suspense>}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
@@ -1145,7 +1159,10 @@ export default function SharedPage() {
               <section className="taskcard">
                 <div className="chips">
                   <span className={`chip${data.priority === 'high' ? ' p' : ''}`}>{data.priority} priority</span>
+                  {data.deadline && <span className="chip due" data-testid="todo-due"><Clock size={13} />Due {when(data.deadline)}</span>}
+                  {data.completed && <span className="chip ok" data-testid="todo-done-chip"><Check size={13} />Done{data.completedAt ? ` ${when(data.completedAt)}` : ''}</span>}
                   {data.tags.map((tag) => <span key={tag} className="chip l">#{tag}</span>)}
+                  {!data.canEdit && <span className="chip lock" data-testid="todo-lock"><Lock size={13} />Only editors can tick this</span>}
                 </div>
                 {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
                 <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span>{data.canEdit && <span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span>}</div>
@@ -1160,10 +1177,11 @@ export default function SharedPage() {
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
           {data.kind === 'todo' && !fullscreen && <><TodoAbout data={data} /><TodoCards viewers={viewers} myColor={myColor} peerColor={peerColor} saved={!!savedCopy} busy={saveBusy} onSave={() => (savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy())} /></>}
-          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
+          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
+      {data && listening && <ListenBar getParagraphs={listenParas} onHighlight={hilite} onClose={() => setListening(false)} />}
       {data && !look.quiet && typingText && <div className="typing-pill" role="status" aria-live="polite" data-testid="typing-pill">
         <span className="typing-av" aria-hidden="true">{initials(typers[0].name)}</span>
         <span className="typing-text">{typingText}</span>
@@ -1244,10 +1262,12 @@ export default function SharedPage() {
             {authMode === 'signup' && <label>Your name<input value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" maxLength={80} required /></label>}
             <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
             <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={authMode === 'signup' ? 8 : undefined} required /></label>
-            {authError && <div className="auth-error" role="alert">{authError}</div>}
+            {authMode === 'signup' && !authError && <small className="auth-hint">At least 8 characters.</small>}
+            {authError && <div className="auth-error" role="alert"><AlertTriangle size={15} />{authError}</div>}
             <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</button>
           </form>
           <button className="auth-switch" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'signup' : 'login'); setAuthError(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Peblo? Create an account'}</button>
+          {authMode === 'login' && authError && <a className="auth-switch" data-testid="auth-reset" href="/forgot-password">Forgot it? Reset password</a>}
         </section>
       </div>}
       {revokeConfirm && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRevokeConfirm(false); }}>
