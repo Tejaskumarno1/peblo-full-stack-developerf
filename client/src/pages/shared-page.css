@@ -615,7 +615,9 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .title-tools button:hover, .pb-shared .title-tools button.on { background: var(--chip, #f3ece1); color: var(--accent-ink); }
 @media (max-width: 700px) { .pb-shared .title-tools { display: none; } }
 @media (min-width: 1620px) {
-  .pb-shared .stage:not(.task-stage), .pb-shared .stage.task-stage { margin: 0 340px 0 auto; width: min(1180px, calc(100% - 340px)); }
+  .pb-shared .stage:not(.task-stage) { margin: 0 340px 0 auto; width: min(1180px, calc(100% - 340px)); }
+  /* the fixed "About this to-do" card sits at x 100-362, so the to-do stage keeps clear of it */
+  .pb-shared .stage.task-stage { margin: 0 340px 0 auto; width: min(1180px, calc(100% - 720px)); }
   .pb-shared[data-theme="dark"] .rc-reply { background: rgba(0,0,0,.28); color: #f4ece2; }
   .pb-shared[data-theme="dark"] .rc-c { background: rgba(0,0,0,.25); }
   .pb-shared[data-theme="dark"] .rc h3 .n { background: #2a241d; }
@@ -770,3 +772,7 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pb-shared #page-main:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) { .pb-shared *, .pb-shared *::before, .pb-shared *::after { animation-duration: .001ms !important; scroll-behavior: auto !important; transition-duration: .001ms !important; } }
+
+/* Header never overflows at tablet widths: drop the duplicate Copy link (the Share panel has it) and collapse labels to icons step by step. */
+@media (max-width: 1100px) { .pb-shared .top-in .copy-btn { display: none; } .pb-shared .top-in .preview-btn span { display: none; } .pb-shared .top-in { gap: 6px; padding-inline: 16px; } }
+@media (max-width: 900px) { .pb-shared .top-in .save-btn span, .pb-shared .top-in .pill { display: none; } .pb-shared .top-in .pill { display: none; } }
