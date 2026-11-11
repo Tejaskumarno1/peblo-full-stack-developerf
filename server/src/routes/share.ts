@@ -78,8 +78,9 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     const style = String(req.query.style || '');
     if (style === 'soft' || style === 'river' || style === 'orbit') await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, style) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET style = EXCLUDED.style', kind, row.shareToken, style).catch(() => {});
     const ext = (await prisma.$queryRawUnsafe<{ extend_at: Date | null; extend_by: string | null }[]>('SELECT extend_at, extend_by FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken))[0];
+    const eask = (await prisma.$queryRawUnsafe<{ edit_ask_at: Date | null; edit_ask_by: string | null; edit_ask_msg: string | null }[]>('SELECT edit_ask_at, edit_ask_by, edit_ask_msg FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken).catch(() => []))[0];
     const viewers = await listViewers(kind, row.shareToken, session, !!row.shareEdit);
-    res.json({ extendRequest: ext?.extend_at ? { at: ext.extend_at, by: ext.extend_by || 'A guest' } : null, shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers, approval: await approvalOn(kind, row.shareToken), waiting: await listWaiting(kind, row.shareToken) });
+    res.json({ editRequest: eask?.edit_ask_at ? { at: eask.edit_ask_at, by: eask.edit_ask_by || 'A guest', message: eask.edit_ask_msg || '' } : null, extendRequest: ext?.extend_at ? { at: ext.extend_at, by: ext.extend_by || 'A guest' } : null, shared: true, token: row.shareToken, canEdit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, viewers, approval: await approvalOn(kind, row.shareToken), waiting: await listWaiting(kind, row.shareToken) });
   } catch (e) { next(e); }
 });
 
@@ -280,7 +281,7 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     // Tasks only: whether the linked note is shown on the link. Off unless the owner turns it on.
     const shareNote = typeof req.body?.shareNote === 'boolean' ? req.body.shareNote : ('shareNote' in row ? !!row.shareNote : false);
     await setToken(kind, row.id, token, edit, expiresAt, shareNote);
-    await prisma.$executeRawUnsafe('UPDATE share_settings SET extend_at = NULL, extend_by = NULL WHERE kind = $1 AND share_token = $2', kind, token).catch(() => {});
+    await prisma.$executeRawUnsafe('UPDATE share_settings SET extend_at = NULL, extend_by = NULL, edit_ask_at = NULL, edit_ask_by = NULL, edit_ask_msg = NULL WHERE kind = $1 AND share_token = $2', kind, token).catch(() => {});
     res.status(201).json({ token, edit, expiresAt, shareNote: kind === 'todo' ? shareNote : false });
   } catch (e) { next(e); }
 });
@@ -543,6 +544,21 @@ publicRoutes.post('/:kind/:token/extend-request', (req, res, next) => guestWrite
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, extend_at, extend_by) VALUES ($1, $2, NOW(), $3) ON CONFLICT (kind, share_token) DO UPDATE SET extend_at = NOW(), extend_by = EXCLUDED.extend_by', kind, token, cleanName(req.body?.name));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// POST /api/public/:kind/:token/edit-request { sessionId, name, message } -> a viewer asks the owner for edit access
+publicRoutes.post('/:kind/:token/edit-request', (req, res, next) => guestWriteLimit(req, res, next), async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    const { token } = req.params;
+    if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const live = kind === 'note' ? await prisma.note.count({ where: { shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
+    const message = String(req.body?.message || '').trim().slice(0, 400);
+    await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, edit_ask_at, edit_ask_by, edit_ask_msg) VALUES ($1, $2, NOW(), $3, $4) ON CONFLICT (kind, share_token) DO UPDATE SET edit_ask_at = NOW(), edit_ask_by = EXCLUDED.edit_ask_by, edit_ask_msg = EXCLUDED.edit_ask_msg', kind, token, cleanName(req.body?.name), message);
     res.json({ ok: true });
   } catch (e) { next(e); }
 });

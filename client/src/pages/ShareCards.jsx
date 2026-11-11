@@ -1,6 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUp, CircleCheck, Clock, Heart, Lightbulb, ThumbsUp, FileText, History, Link2, MessageSquare, Pencil, Eye, Sparkles, User } from 'lucide-react';
+import { ArrowUp, CircleCheck, Clock, Send, X, Heart, Lightbulb, ThumbsUp, FileText, History, Link2, MessageSquare, Pencil, Eye, Sparkles, User } from 'lucide-react';
 import { commentsApi, ago } from '../utils/comments';
+
+
+const ICONS = { like: ThumbsUp, love: Heart, idea: Lightbulb, done: CircleCheck };
+export function useReactions(token, sid) {
+  const [reactions, setReactions] = useState([]);
+  const rbase = `/api/public/note/${encodeURIComponent(token)}/reactions`;
+  useEffect(() => {
+    if (!token) return undefined;
+    let live = true;
+    const load = () => fetch(`${rbase}?sid=${encodeURIComponent(sid)}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setReactions(j.reactions); }).catch(() => {});
+    load();
+    const t = setInterval(load, 20000);
+    return () => { live = false; clearInterval(t); };
+  }, [token, sid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const react = async (kind) => {
+    setReactions((rs) => rs.map((r) => (r.kind === kind ? { ...r, mine: !r.mine, n: r.n + (r.mine ? -1 : 1) } : r)));
+    try { const r = await fetch(rbase, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sid, kind }) }); if (r.ok) setReactions((await r.json()).reactions); } catch { /* the next refresh corrects it */ }
+  };
+
+  return { reactions, react };
+}
 
 const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
@@ -27,25 +48,12 @@ function answer(kind, text, headings) {
   return h ? `See the section "${h.title}".` : 'I could not find that on this page.';
 }
 
-export default function ShareCards({ token, sid, name, canComment, pageText, headings, changes, showChanges, onToggleChanges, onHistory, onJump }) {
+export default function ShareCards({ token, sid, name, canEdit, owner, canComment, pageText, headings, changes, showChanges, onToggleChanges, onHistory, onJump }) {
   const [q, setQ] = useState('');
   const [reply, setReply] = useState('');
   const [comments, setComments] = useState([]);
-  const [reactions, setReactions] = useState([]);
-  const rbase = `/api/public/note/${encodeURIComponent(token)}/reactions`;
-  useEffect(() => {
-    if (!token) return undefined;
-    let live = true;
-    const load = () => fetch(`${rbase}?sid=${encodeURIComponent(sid)}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setReactions(j.reactions); }).catch(() => {});
-    load();
-    const t = setInterval(load, 20000);
-    return () => { live = false; clearInterval(t); };
-  }, [token, sid]); // eslint-disable-line react-hooks/exhaustive-deps
-  const react = async (kind) => {
-    setReactions((rs) => rs.map((r) => (r.kind === kind ? { ...r, mine: !r.mine, n: r.n + (r.mine ? -1 : 1) } : r)));
-    try { const r = await fetch(rbase, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sid, kind }) }); if (r.ok) setReactions((await r.json()).reactions); } catch { /* the next refresh corrects it */ }
-  };
-
+  const { reactions, react } = useReactions(token, sid);
+  const [askOpen, setAskOpen] = useState(false);
   useEffect(() => {
     if (!canComment || !token) return undefined;
     let live = true;
@@ -74,6 +82,11 @@ export default function ShareCards({ token, sid, name, canComment, pageText, hea
         </div>
         {reply && <p className="rc-reply" data-testid="rc-reply">{reply}</p>}
       </section>
+      {!canComment && !canEdit && <section className="rc rc-com" data-testid="rc-comments-locked">
+        <h3><MessageSquare size={16} />Comments</h3>
+        <p className="rc-none">Comments are for people who can edit. Ask the owner for access and your note joins the thread.</p>
+        <button type="button" className="rc-ask-btn" data-testid="request-edit" onClick={() => setAskOpen(true)}><Send size={14} />Request edit access</button>
+      </section>}
       {canComment && <section className="rc rc-com" data-testid="rc-comments">
         <h3><MessageSquare size={16} />Comments<span className="n">{open.length}</span></h3>
         {open.length === 0 && <p className="rc-none">No open comments. Select words in the page to start one.</p>}
@@ -83,8 +96,9 @@ export default function ShareCards({ token, sid, name, canComment, pageText, hea
         <h3><History size={16} />Since your last visit<span className="n">{changes.count} change{changes.count > 1 ? 's' : ''}</span></h3>
         <label className="rc-sw"><span>Show marks in the page</span><input type="checkbox" role="switch" checked={showChanges} onChange={onToggleChanges} /></label>
       </section>}
-      {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = { like: ThumbsUp, love: Heart, idea: Lightbulb, done: CircleCheck }[r.kind]; return <button key={r.kind} type="button" data-testid={`react-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
+      {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = ICONS[r.kind]; return <button key={r.kind} type="button" data-testid={`react-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
       <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />Version history</button>
+    {askOpen && <EditRequest token={token} sid={sid} name={name} owner={owner} onClose={() => setAskOpen(false)} />}
     </aside>
   );
 }
@@ -117,5 +131,48 @@ export function TodoCards({ viewers, myColor, peerColor, saved, busy, onSave }) 
         <button type="button" className="rc-save" disabled={busy} onClick={onSave}><FileText size={15} />{saved ? 'Open in Peblo' : 'Save to my Peblo'}</button>
       </section>
     </aside>
+  );
+}
+
+/** S28: ask the owner for edit access. */
+export function EditRequest({ token, sid, name, owner, onClose, kind = 'note' }) {
+  const [who, setWho] = useState(name && name !== 'Guest' ? name : '');
+  const [msg, setMsg] = useState('');
+  const [state, setState] = useState('idle');
+  const send = async () => {
+    setState('busy');
+    try {
+      const r = await fetch(`/api/public/${kind}/${encodeURIComponent(token)}/edit-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sid, name: who || 'Guest', message: msg }) });
+      setState(r.ok ? 'sent' : 'error');
+    } catch { setState('error'); }
+  };
+  return (
+    <div className="er-back" data-testid="edit-request" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="er-card" role="dialog" aria-modal="true" aria-label="Ask for edit access">
+        <button type="button" className="er-x" aria-label="Close" onClick={onClose}><X size={16} /></button>
+        <h3>{owner ? `Ask ${owner} for edit access` : 'Ask for edit access'}</h3>
+        {state === 'sent' ? <p className="er-done" data-testid="edit-request-sent">Request sent. The owner gets a notification. This page keeps working while you wait.</p> : <>
+          <label>Your name<input aria-label="Your name" data-testid="er-name" value={who} maxLength={40} onChange={(e) => setWho(e.target.value)} /></label>
+          <label>Message<textarea aria-label="Message" data-testid="er-msg" rows={3} maxLength={400} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="What would you like to change?" /></label>
+          <div className="er-btns"><button type="button" className="btn primary" data-testid="er-send" disabled={state === 'busy'} onClick={send}><Send size={15} />Send request</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
+          {state === 'error' && <p className="er-err" role="alert">That did not go through. Try again.</p>}
+          <small>{owner || 'The owner'} gets a notification. This page keeps working while you wait.</small>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+/** Under the page when the side cards have no room: reactions and, for viewers, the edit request. */
+export function EndOfPage({ token, sid, name, canEdit, owner }) {
+  const { reactions, react } = useReactions(token, sid);
+  const [askOpen, setAskOpen] = useState(false);
+  return (
+    <section className="endcap" data-testid="endcap" aria-label="React to this page">
+      <b>Was this useful?</b>
+      <div className="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = ICONS[r.kind]; return <button key={r.kind} type="button" data-testid={`end-react-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>
+      {!canEdit && <button type="button" className="rc-ask-btn" data-testid="end-request-edit" onClick={() => setAskOpen(true)}><Send size={14} />Request edit access</button>}
+      {askOpen && <EditRequest token={token} sid={sid} name={name} owner={owner} onClose={() => setAskOpen(false)} />}
+    </section>
   );
 }

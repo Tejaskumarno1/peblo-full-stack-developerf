@@ -672,3 +672,28 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .rc-react button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 99px; padding: 7px 11px; cursor: pointer; font: inherit; font-size: 12.5px; }
   .pb-shared .rc-react button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 }
+
+.pb-shared .endcap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 22px 0 6px; padding: 14px 16px; border-radius: 22px; background: var(--chip, #f3ece1); font-size: 14px; }
+.pb-shared .endcap .rc-react { display: flex; gap: 6px; }
+.pb-shared .endcap .rc-react button, .pb-shared .rc-ask-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 99px; padding: 7px 12px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.pb-shared .endcap .rc-react button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pb-shared .endcap .rc-ask-btn { margin-left: auto; }
+@media (min-width: 1620px) { .pb-shared .endcap .rc-react { display: none; } .pb-shared .endcap > b { display: none; } .pb-shared .endcap { display: none; } }
+.pb-shared .er-back { position: fixed; inset: 0; z-index: 60; background: rgba(40,30,20,.35); display: grid; place-items: center; padding: 16px; }
+.pb-shared .er-card { position: relative; width: min(480px, 100%); background: var(--surface); color: var(--fg); border-radius: 28px; padding: 22px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 24px 60px rgba(40,30,20,.3); }
+.pb-shared .er-card h3 { margin: 0; font-size: 22px; }
+.pb-shared .er-card label { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--fg3); }
+.pb-shared .er-card input, .pb-shared .er-card textarea { border: 1px solid var(--line); border-radius: 18px; padding: 11px 14px; font: inherit; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--fg); background: var(--bg, transparent); resize: vertical; }
+.pb-shared .er-btns { display: flex; gap: 8px; }
+.pb-shared .er-btns .primary { flex: 1; justify-content: center; }
+.pb-shared .er-x { position: absolute; top: 14px; right: 14px; border: 0; background: transparent; color: var(--fg3); cursor: pointer; }
+.pb-shared .er-card small { color: var(--fg3); font-size: 12.5px; }
+.pb-shared .er-err { color: #b3261e; margin: 0; font-size: 13px; }
+.pb-shared .er-done { margin: 0; font-size: 15px; line-height: 1.5; }
+@media print { .pb-shared .endcap { display: none; } }
+
+.pb-shared .cmp-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 8px 10px 8px 16px; border-radius: 99px; background: #d7e8fb; color: #1f2d3d; font-size: 13.5px; font-weight: 600; }
+.pb-shared .cmp-bar b { margin-left: auto; }
+.pb-shared .cmp-bar button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: #fff; display: grid; place-items: center; cursor: pointer; color: inherit; }
+.pb-shared[data-theme="dark"] .cmp-bar { background: #1d3552; color: #e6f0fb; }
+.pb-shared[data-theme="dark"] .cmp-bar button { background: #26405f; }

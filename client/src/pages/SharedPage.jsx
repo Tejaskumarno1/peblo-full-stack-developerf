@@ -3,11 +3,11 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2 } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
-import ShareCards, { TodoAbout, TodoCards } from './ShareCards';
+import ShareCards, { EndOfPage, TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
@@ -930,6 +930,16 @@ export default function SharedPage() {
   const [meOpen, setMeOpen] = useState(false);
   useEffect(() => { if (!meOpen) return undefined; const away = (e) => { if (!meRef.current?.contains(e.target)) setMeOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [meOpen]);
   const forgetMe = () => { try { localStorage.removeItem('peblo-guest-name'); localStorage.removeItem('peblo-guest-joined'); } catch { /* none */ } setGuestName(''); setMeOpen(false); showToast('Forgotten on this device'); };
+  const [chgIdx, setChgIdx] = useState(-1);
+  const chgEls = () => [...(articleRef.current?.querySelectorAll('[data-pb-chg="1"]') || [])];
+  const goChange = (dir) => {
+    const els = chgEls();
+    if (!els.length) return;
+    const next = chgIdx < 0 ? (dir > 0 ? 0 : els.length - 1) : (chgIdx + dir + els.length) % els.length;
+    setChgIdx(next);
+    els[next].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  useEffect(() => { if (!reader.changes || !reader.showChanges) setChgIdx(-1); }, [reader.changes, reader.showChanges]);
   const [listening, setListening] = useState(false);
   const toggleListen = () => {
     const synth = window.speechSynthesis;
@@ -1046,6 +1056,7 @@ export default function SharedPage() {
       {data && !error && shownFly === 'history' && isNote && <aside className="srail-fly" data-testid="fly-history" aria-label="History">
         <div className="fly-head"><b>History</b></div>
         {reader.changes && <div className="fly-row"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div></div>}
+        {reader.changes && reader.showChanges && <button type="button" className="fly-btn" data-testid="fly-next-change" onClick={() => goChange(1)}><ArrowDown size={15} />Next change</button>}
         {reader.changes && <button type="button" className="fly-btn" data-testid="fly-marks" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button>}
         {reader.place && <div className="fly-row"><Clock size={16} /><div><b>You stopped at {reader.place.title}</b></div></div>}
         {reader.place && <button type="button" className="fly-btn" data-testid="fly-jump" onClick={() => { reader.jumpPlace(); setFly(null); }}>Jump back</button>}
@@ -1094,6 +1105,7 @@ export default function SharedPage() {
           </aside>}
 
           <article ref={articleRef}>
+            {data.kind === 'note' && reader.changes && reader.showChanges && chgIdx >= 0 && <div className="cmp-bar" data-testid="cmp-bar" role="status"><History size={15} /><span>Comparing now with {new Date(reader.changes.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><b>Change {chgIdx + 1} of {chgEls().length}</b><button type="button" aria-label="Previous change" onClick={() => goChange(-1)}><ArrowUp size={15} /></button><button type="button" aria-label="Next change" onClick={() => goChange(1)}><ArrowDown size={15} /></button><button type="button" aria-label="Close comparison" onClick={() => setChgIdx(-1)}><X size={14} /></button></div>}
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
                 ? <textarea className="title-in" rows={1} aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} ref={fitTitle} onInput={(event) => fitTitle(event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} onChange={(event) => { draft.current.title = event.target.value.replace(/\n/g, ' '); typedAt.current = Date.now(); queueSave(); }} />
@@ -1143,11 +1155,12 @@ export default function SharedPage() {
               {data.note && <><h2 className="linked">Linked note · {data.note.title || 'Untitled'}</h2><div className="doc" dangerouslySetInnerHTML={{ __html: body }} /></>}
             </>}
 
+            {data.kind === 'note' && <EndOfPage token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} />}
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
           {data.kind === 'todo' && !fullscreen && <><TodoAbout data={data} /><TodoCards viewers={viewers} myColor={myColor} peerColor={peerColor} saved={!!savedCopy} busy={saveBusy} onSave={() => (savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy())} /></>}
-          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
+          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}

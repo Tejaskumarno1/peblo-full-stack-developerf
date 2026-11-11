@@ -111,7 +111,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 
 export function CollabPanel({
   viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
+  onRemove, onExtend, editRequest, onAllowEdit, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -143,7 +143,7 @@ export function CollabPanel({
     ...activity.map((a, i) => ({ key: `${a.at}-${i}`, who: a.actor, text: WORDS[a.action] || a.action, at: new Date(a.at).getTime() })),
   ].sort((a, b) => b.at - a.at).slice(0, 40);
 
-  const unread = waiting.length + (extendRequest ? 1 : 0) + events.filter((e) => e.kind === 'joined' && e.at > seenAt).length;
+  const unread = waiting.length + (extendRequest ? 1 : 0) + (editRequest ? 1 : 0) + events.filter((e) => e.kind === 'joined' && e.at > seenAt).length;
   return (
     <aside className="cp" role="dialog" aria-label="Live collaboration" data-testid="live-panel" ref={ref}>
       <div className="cp-head">
@@ -151,6 +151,7 @@ export function CollabPanel({
         {mode === 'owner' && <span className="cp-bell-wrap"><button type="button" className="cp-bell" data-testid="notif-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={bell} onClick={() => { setBell((v) => !v); setSeenAt(Date.now()); }}><Bell size={15} />{unread > 0 && <i data-testid="notif-count">{unread}</i>}</button>
           {bell && <div className="cp-notifs" data-testid="notif-list" role="menu">
             {waiting.map((w) => <div className="cp-n" key={w.id}><b>{w.name}</b> is asking to join<span><button type="button" onClick={() => onAdmit?.(w.id)}>Let in</button></span></div>)}
+            {editRequest && <div className="cp-n" data-testid="edit-ask"><b>{editRequest.by}</b> asked for edit access{editRequest.message ? `: ${editRequest.message}` : ''}<span><button type="button" onClick={() => onAllowEdit?.()}>Allow editing</button></span></div>}
             {extendRequest && <div className="cp-n"><b>{extendRequest.by}</b> asked to keep the link going<span><button type="button" onClick={() => onExtend?.(1)}>+1 day</button></span></div>}
             {log.filter((a) => !(extendRequest && a.text === EVENT_WORDS.extend) && !(waiting.length && a.text === EVENT_WORDS.knock)).slice(0, 5).map((a) => <div className="cp-n" key={a.key}><b>{a.who}</b> {a.text}<small>{ago(a.at)}</small></div>)}
             {log.length === 0 && waiting.length === 0 && !extendRequest && <p className="cp-empty">Nothing yet.</p>}
