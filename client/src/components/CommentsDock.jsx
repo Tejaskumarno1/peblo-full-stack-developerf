@@ -5,6 +5,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { commentsApi, findQuote, ago } from '../utils/comments';
 import { usePeers } from './Presence';
+import { Check, MessageSquare, Send, X as XIcon } from 'lucide-react';
 
 /*
  * The top-right corner of an open note: the comments button (and the presence avatars, passed in as children), the
@@ -14,7 +15,7 @@ import { usePeers } from './Presence';
 
 const MENTION_AT = /@([^@\n]{0,24})$/;
 
-function Composer({ mode, quote, people, onSubmit, onCancel, busy, autoFocus }) {
+function Composer({ mode, quote, people, onSubmit, onCancel, busy, autoFocus, soft, reply }) {
   const [body, setBody] = useState('');
   const [replacement, setReplacement] = useState(mode === 'suggest' ? quote || '' : '');
   const [mentions, setMentions] = useState([]);
@@ -37,8 +38,8 @@ function Composer({ mode, quote, people, onSubmit, onCancel, busy, autoFocus }) 
         ref={ta}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); send(); } }}
-        placeholder={mode === 'suggest' ? 'Why? (optional)' : 'Write a comment. Type @ to mention someone'}
+        onKeyDown={(e) => { if (e.key === 'Enter' && ((e.ctrlKey || e.metaKey) || (soft && !e.shiftKey && !e.nativeEvent?.isComposing))) { e.preventDefault(); send(); } }}
+        placeholder={mode === 'suggest' ? 'Why? (optional)' : reply ? 'Reply. Type @ to mention someone' : 'Write a comment. Type @ to mention someone'}
         rows={3}
         maxLength={2000}
         data-testid="comment-text"
@@ -47,9 +48,10 @@ function Composer({ mode, quote, people, onSubmit, onCancel, busy, autoFocus }) 
       {options.length > 0 && (
         <div className="pb-cmen" role="listbox">{options.map((n) => <button key={n} type="button" role="option" onMouseDown={(e) => { e.preventDefault(); pick(n); }}>@{n}</button>)}</div>
       )}
+      {soft && <span className="hintline">Enter sends, Shift Enter adds a line</span>}
       <div className="row">
         {onCancel && <button type="button" className="ghost" onClick={onCancel}>Cancel</button>}
-        <button type="button" className="go" disabled={!ok || busy} onClick={send} data-testid="comment-send">{mode === 'suggest' ? 'Suggest' : 'Comment'}</button>
+        <button type="button" className="go" disabled={!ok || busy} onClick={send} data-testid="comment-send">{soft && <Send size={14} aria-hidden="true" />}{mode === 'suggest' ? 'Suggest' : reply && soft ? 'Send' : 'Comment'}</button>
       </div>
     </div>
   );
@@ -72,6 +74,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
   const known = useRef(null);
   const peers = usePeers(rt);
   const me = rt?.user;
+  const soft = target?.kind === 'guest'; // people on a share link get the Soft Studio panel (S22, S23)
   const tkey = target ? `${target.kind}:${target.noteId || target.share}:${target.sid || ''}` : '';
 
   const load = useCallback(async () => {
@@ -207,7 +210,9 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
 
   const nOpen = roots.filter((c) => c.status === 'open').length;
   const nDone = roots.length - nOpen;
-  const picked = roots.filter((c) => (tab === 'open' ? c.status === 'open' : c.status !== 'open')).slice();
+  const mineIds = new Set(comments.filter((c) => c.author.self).map((c) => c.parentId || c.id));
+  const nMine = roots.filter((c) => mineIds.has(c.id)).length;
+  const picked = roots.filter((c) => (tab === 'mine' ? mineIds.has(c.id) : tab === 'open' ? c.status === 'open' : c.status !== 'open')).slice();
   const shown = order === 'new' ? picked.reverse() : picked;
   const col = dark ? { bg: '#1f2430', fg: '#e7e9ee', line: '#333a49', soft: '#2a3040' } : { bg: '#ffffff', fg: '#1b1f2a', line: '#dfe3ea', soft: '#f3f5f9' };
 
@@ -228,16 +233,16 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         ))}
         {!done && (
           replyTo === c.id
-            ? <Composer mode="comment" people={people} busy={busy} autoFocus onCancel={() => setReplyTo(null)} onSubmit={submit(c.id)} />
+            ? <Composer mode="comment" people={people} busy={busy} autoFocus soft={soft} reply onCancel={() => setReplyTo(null)} onSubmit={submit(c.id)} />
             : (
               <div className="acts">
-                <button type="button" onClick={() => setReplyTo(c.id)}>Reply</button>
+                <button type="button" onClick={() => setReplyTo(c.id)}>{soft && <MessageSquare size={13} aria-hidden="true" />}Reply</button>
                 {c.kind === 'suggestion' ? (
                   <>
                     <button type="button" className="go" disabled={busy} onClick={() => accept(c)} data-testid="accept-suggestion">Accept</button>
                     <button type="button" disabled={busy} onClick={() => setStatus(c, 'rejected')}>Reject</button>
                   </>
-                ) : <button type="button" disabled={busy} onClick={() => setStatus(c, 'resolved')} data-testid="resolve">Resolve</button>}
+                ) : <button type="button" disabled={busy} onClick={() => setStatus(c, 'resolved')} data-testid="resolve">{soft && <Check size={13} aria-hidden="true" />}Resolve</button>}
               </div>
             )
         )}
@@ -255,20 +260,29 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         {children}
       </div>
       {open && createPortal(
-        <aside className="pb-cpanel" role="complementary" aria-label="Comments" data-testid="comments-panel" style={{ background: col.bg, color: col.fg, borderColor: col.line }}>
+        <aside className={`pb-cpanel${soft ? ' soft' : ''}`} role="complementary" aria-label="Comments" data-testid="comments-panel" style={soft ? undefined : { background: col.bg, color: col.fg, borderColor: col.line }}>
           <header>
             <h3>Comments</h3>
-            <div className="tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open{nOpen > 0 ? ` ${nOpen}` : ''}</button>
-              <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Done{nDone > 0 ? ` ${nDone}` : ''}</button>
-            </div>
-            <button type="button" className="x" aria-label="Close comments" onClick={() => setOpen(false)}><Ic name="x" size={15} /></button>
+            {!soft && (
+              <div className="tabs" role="tablist">
+                <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open{nOpen > 0 ? ` ${nOpen}` : ''}</button>
+                <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Done{nDone > 0 ? ` ${nDone}` : ''}</button>
+              </div>
+            )}
+            <button type="button" className="x" aria-label="Close comments" onClick={() => setOpen(false)}>{soft ? <XIcon size={14} aria-hidden="true" /> : <Ic name="x" size={15} />}</button>
           </header>
+          {soft && (
+            <div className="tabs soft-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open{nOpen > 0 ? ` ${nOpen}` : ''}</button>
+              <button type="button" role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>Resolved{nDone > 0 ? ` ${nDone}` : ''}</button>
+              <button type="button" role="tab" aria-selected={tab === 'mine'} onClick={() => setTab('mine')} data-testid="comments-tab-mine">Mine{nMine > 0 ? ` ${nMine}` : ''}</button>
+            </div>
+          )}
           <div className="scroll">
             {draft ? (
               <div className="pb-cnew" data-testid="comment-draft">
                 {draft.quote ? <blockquote>{draft.quote}</blockquote> : <p className="hint">No words are selected. Select some words in the note, then press Comment, to attach this to them.</p>}
-                <Composer mode={draft.mode} quote={draft.quote} people={people} busy={busy} autoFocus onCancel={() => setDraft(null)} onSubmit={submit(null)} />
+                <Composer mode={draft.mode} quote={draft.quote} people={people} busy={busy} autoFocus soft={soft} onCancel={() => setDraft(null)} onSubmit={submit(null)} />
               </div>
             ) : (
               <div className="pb-cstart">
@@ -280,11 +294,11 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
             {shown.length > 1 && <div className="pb-csort"><button type="button" data-testid="comment-sort" onClick={() => setOrder((o) => (o === 'new' ? 'old' : 'new'))}>{order === 'new' ? 'Newest first' : 'Oldest first'}</button></div>}
             <ul>
               {shown.map((c) => renderCard(c))}
-              {shown.length === 0 && <li className="hint">{tab === 'open' ? 'No open comments. Select some words and press Comment.' : 'Nothing finished yet.'}</li>}
+              {shown.length === 0 && <li className="hint">{tab === 'open' ? 'No open comments. Select some words and press Comment.' : tab === 'mine' ? 'You have not commented yet.' : 'Nothing finished yet.'}</li>}
             </ul>
           </div>
         </aside>,
-        document.body,
+        (soft && document.querySelector('.pb-shared')) || document.body, // inside the share page so the Soft Studio colours apply
       )}
       <style>{`
         .bn-editor .bn-block { position: relative; }
@@ -336,6 +350,44 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         .pb-cmen { display: flex; gap: 4px; flex-wrap: wrap; } .pb-cmen button { border: 1px solid #2563eb55; background: #2563eb18; color: inherit; border-radius: 999px; padding: 2px 9px; cursor: pointer; font: inherit; }
         .pb-cerr { color: #dc2626; margin: 8px 0 0; }
         @media (max-width: 640px) { .pb-cpanel { top: auto; height: 62vh; left: 8px; right: 8px; width: auto; } }
+        /* Soft Studio comments panel on share pages (S22, S23) */
+        .pb-cpanel.soft { top: 96px; right: 48px; bottom: auto; height: calc(100vh - 120px); max-height: calc(100dvh - 120px); width: min(284px, calc(100vw - 28px)); border: 0; border-radius: 30px; padding: 16px; gap: 10px; background: var(--surface, #fff); color: var(--fg, #241F1A); box-shadow: 0 30px 70px rgba(60,40,20,.28), inset 0 0 0 1px var(--line, #EADFD0); overflow: hidden; box-sizing: border-box; font-family: 'Figtree', system-ui, sans-serif; }
+        .pb-cpanel.soft header { padding: 0; border: 0; }
+        .pb-cpanel.soft h3 { font: 800 21px 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.01em; }
+        .pb-cpanel.soft .x { width: 30px; height: 30px; margin: 0; border-radius: 50%; display: grid; place-items: center; background: var(--chip, #F4EEE5); opacity: 1; flex: none; }
+        .pb-cpanel.soft .soft-tabs { display: flex; gap: 0; padding: 3px; border-radius: 999px; background: var(--chip, #F4EEE5); }
+        .pb-cpanel.soft .soft-tabs button { flex: 1; height: 34px; padding: 0; border-radius: 999px; font-weight: 800; font-size: 13px; color: var(--fg2, #564D43); }
+        .pb-cpanel.soft .soft-tabs button[aria-selected="true"] { background: var(--surface, #fff); color: var(--fg, #241F1A); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        .pb-cpanel.soft .scroll { padding: 0; margin: 0 -4px; padding: 0 4px; }
+        .pb-cpanel.soft ul { margin: 8px 0 0; gap: 10px; }
+        .pb-cpanel.soft .pb-cthread { border: 0; border-radius: 22px; padding: 12px 14px; background: var(--chip, #F4EEE5); display: flex; flex-direction: column; gap: 6px; }
+        .pb-cpanel.soft .pb-cthread.on { outline: 0; background: var(--butter, #FFF3CC); box-shadow: inset 0 0 0 2px #E8B84A; }
+        .pb-cpanel.soft .pb-cthread.done { opacity: .8; }
+        .pb-cpanel.soft .pb-cthread blockquote { margin: 0; padding: 0 0 0 8px; border: 0; border-left: 3px solid var(--butter, #FFE9A6) !important; font: 600 12px/1.4 'Figtree', system-ui, sans-serif; font-style: normal; color: var(--fg2, #564D43); opacity: 1; }
+        .pb-cpanel.soft .pb-citem .who { margin-top: 0; gap: 8px; }
+        .pb-cpanel.soft .pb-citem .who i { width: 26px; height: 26px; font-size: 12px; font-weight: 800; color: var(--fg, #241F1A); box-shadow: 0 0 0 2px var(--surface, #fff); }
+        .pb-cpanel.soft .pb-citem .who b { font-size: 13.5px; }
+        .pb-cpanel.soft .pb-citem .who span { font-size: 12.5px; font-weight: 600; opacity: 1; color: var(--fg2, #564D43); }
+        .pb-cpanel.soft .pb-citem p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.4; }
+        .pb-cpanel.soft .pb-citem + .pb-citem { margin-top: 2px; padding: 8px 10px; border-radius: 16px; background: var(--surface, #fff); }
+        .pb-cpanel.soft .pb-citem + .pb-citem p { margin-left: 0; font-size: 13px; }
+        .pb-cpanel.soft .pb-citem + .pb-citem .who i { width: 24px; height: 24px; font-size: 11px; }
+        .pb-cpanel.soft .pb-cthread .acts { gap: 6px; margin: 2px 0 0; }
+        .pb-cpanel.soft .pb-cstart button, .pb-cpanel.soft .pb-cthread .acts button, .pb-cpanel.soft .pb-cform .ghost { height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--surface, #fff); color: var(--fg, #241F1A); box-shadow: inset 0 0 0 1px var(--line, #EADFD0); font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+        .pb-cpanel.soft .pb-cthread .acts button.go { background: var(--accent, #C4441C); color: var(--on-accent, #fff); box-shadow: none; }
+        .pb-cpanel.soft .pb-cform { margin-top: 2px; }
+        .pb-cpanel.soft .pb-cform textarea { min-height: 64px; padding: 10px 14px; border: 0; border-radius: 20px; background: var(--bg, #FBF6EE); box-shadow: inset 0 0 0 2px var(--accent, #C4441C); font-size: 13px; font-weight: 600; outline: 0; resize: none; }
+        .pb-cpanel.soft .pb-cform .hintline { font-size: 12.5px; font-weight: 600; color: var(--fg2, #564D43); }
+        .pb-cpanel.soft .pb-cform .row { align-items: center; }
+        .pb-cpanel.soft .pb-cform .go { height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--accent, #C4441C); color: var(--on-accent, #fff); font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; }
+        .pb-cpanel.soft .pb-cmen { flex-direction: column; gap: 2px; padding: 6px; border-radius: 18px; background: var(--surface, #fff); box-shadow: 0 10px 30px rgba(60,40,20,.2), inset 0 0 0 1px var(--line, #EADFD0); }
+        .pb-cpanel.soft .pb-cmen button { border: 0; border-radius: 12px; background: transparent; padding: 8px 10px; text-align: left; font-weight: 700; font-size: 13px; }
+        .pb-cpanel.soft .pb-cmen button:hover, .pb-cpanel.soft .pb-cmen button:focus-visible { background: var(--chip, #F4EEE5); }
+        .pb-cpanel.soft .pb-cmention { color: var(--accent-ink, #A8380F); }
+        .pb-cpanel.soft .pb-cnew { padding: 12px 14px; border-radius: 22px; background: var(--chip, #F4EEE5); }
+        .pb-cpanel.soft .pb-cnew blockquote { border-left: 3px solid var(--butter, #FFE9A6); font-style: normal; font-size: 12px; font-weight: 600; opacity: 1; }
+        @media (max-width: 1100px) { .pb-cpanel.soft { right: 14px; } }
+        @media (max-width: 640px) { .pb-cpanel.soft { top: auto; height: 62vh; left: 8px; right: 8px; width: auto; border-radius: 26px; } }
         @media (prefers-reduced-motion: reduce) { .pb-cbtn.fresh { animation: none; } }
       `}</style>
     </>

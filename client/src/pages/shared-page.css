@@ -133,7 +133,27 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .doc h3 { margin: 1.6em 0 .4em; color: var(--fg); font: 700 20px/1.3 'Bricolage Grotesque', system-ui, sans-serif; scroll-margin-top: 96px; }
 .pb-shared .doc p { margin: 0 0 1.1em; }
 .pb-shared .doc a { color: var(--accent); text-underline-offset: 3px; }
-.pb-shared .doc blockquote { margin: 1.6em 0; border: 0; border-radius: 22px; padding: 18px 22px; background: var(--butter); color: var(--fg); font: 600 20px/1.5 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.01em; }
+.pb-shared .doc blockquote { margin: 1.4em 0; border: 0; border-left: 4px solid var(--accent); border-radius: 0; padding: 4px 16px; background: transparent; color: var(--fg2); font: italic 600 16px/1.5 'Figtree', system-ui, sans-serif; }
+.pb-shared .doc blockquote p { margin: .3em 0; }
+/* content blocks (S37): code Copy button, callouts, link cards */
+.pb-shared .doc pre { padding-right: 76px; }
+.pb-shared .doc .code-copy { position: absolute; right: 12px; top: 10px; height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: #3A332B; color: #F1EBDD; font: 800 11px 'Figtree', system-ui, sans-serif; cursor: pointer; }
+.pb-shared .doc .code-copy:hover { background: #4A4036; }
+.pb-shared .doc .code-copy:focus-visible { outline: 2px solid #FFE9A6; outline-offset: 2px; }
+.pb-shared .doc .callout { display: flex; gap: 12px; align-items: flex-start; margin: 1.4em 0; padding: 12px 16px; border-radius: 20px; background: var(--butter); color: var(--fg); font-size: 14.5px; font-weight: 600; line-height: 1.45; }
+.pb-shared .doc .callout[data-callout='ok'] { background: var(--mint); }
+.pb-shared .doc .callout[data-callout='info'] { background: var(--sky); }
+.pb-shared .doc .callout[data-callout='warn'] { background: var(--peach); }
+.pb-shared .doc .callout .callout-ic { flex: none; margin-top: 1px; }
+.pb-shared .doc .callout .callout-tx { min-width: 0; }
+.pb-shared .doc .callout .callout-tx p { margin: 0; }
+.pb-shared .doc .link-card { display: flex; align-items: center; gap: 12px; margin: 1.2em 0; padding: 10px 14px; border-radius: 18px; box-shadow: inset 0 0 0 1px var(--line); color: var(--fg); text-decoration: none; }
+.pb-shared .doc .link-card:hover { background: var(--chip); }
+.pb-shared .doc .link-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pb-shared .doc .link-card .lc-ic { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--sky); }
+.pb-shared .doc .link-card .lc-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pb-shared .doc .link-card b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-shared .doc .link-card small { color: var(--fg2); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pb-shared .doc ul, .pb-shared .doc ol { padding-left: 1.5em; }
 .pb-shared .doc li { padding-left: 4px; margin: .3em 0; }
 .pb-shared .doc figure { margin: 1.8em 0; }
@@ -224,7 +244,7 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .stage { padding: 24px 16px 30px; }
   .pb-shared .title, .pb-shared .title-in { font-size: clamp(34px, 10vw, 46px); }
   .pb-shared .doc { font-size: 17px; }
-  .pb-shared .doc blockquote { font-size: 18px; }
+  .pb-shared .doc blockquote { font-size: 15.5px; }
   .pb-shared .taskcard { border-radius: 24px; padding: 22px; }
   .pb-shared .cta { border-radius: 24px; padding: 22px; }
   .pb-shared .share-modal { padding: 26px 22px; }

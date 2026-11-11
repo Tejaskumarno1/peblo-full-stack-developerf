@@ -30,6 +30,51 @@ const PictureView = lazy(() => import('../components/PictureView'));
 // The note's HTML is written once per change (a fresh object each render would write it again and undo the file frames drawn into it).
 const DocHtml = memo(function DocHtml({ innerRef, html }) { return <div className="doc" ref={innerRef} dangerouslySetInnerHTML={{ __html: html }} />; });
 
+// Content blocks as drawn on S37: code with a Copy button, callouts (a quote that starts with a symbol, as the editor writes them)
+// and a link on its own line shown as a card. Plain markup only, the Copy button is wired by the document's click listener.
+const CALLOUT_MARKS = [['\u{1F4A1}', 'tip'], ['⚠️', 'warn'], ['⚠', 'warn'], ['✅', 'ok'], ['ℹ️', 'info'], ['ℹ', 'info']];
+const svgIcon = (d, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const CALLOUT_ICON_SVG = {
+  info: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+  tip: svgIcon('<path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>'),
+  warn: svgIcon('<path d="M12 3l10 18H2zM12 10v5M12 18h.01"/>'),
+  ok: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),
+};
+const LINK_ICON_SVG = svgIcon('<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/>', 17);
+const ARROW_SVG = svgIcon('<path d="M5 12h14M13 6l6 6-6 6"/>', 16);
+function decorateBlocks(parsed) {
+  const doc = parsed;
+  doc.body.querySelectorAll('pre').forEach((pre) => {
+    if (pre.querySelector('.code-copy')) return;
+    const b = doc.createElement('button'); b.type = 'button'; b.className = 'code-copy'; b.setAttribute('data-code-copy', '1'); b.setAttribute('aria-label', 'Copy code'); b.setAttribute('data-testid', 'code-copy'); b.textContent = 'Copy';
+    pre.appendChild(b);
+  });
+  doc.body.querySelectorAll('blockquote').forEach((q) => {
+    const first = q.querySelector('p') || q;
+    const text = (first.textContent || '').trimStart();
+    const hit = CALLOUT_MARKS.find(([mark]) => text.startsWith(mark));
+    if (!hit) return;
+    const first1 = first.firstChild;
+    if (first1 && first1.nodeType === 3) first1.textContent = first1.textContent.replace(/^\s*(\u{1F4A1}|⚠️?|✅|ℹ️?)\s*/u, '');
+    const box = doc.createElement('aside'); box.className = 'callout'; box.setAttribute('data-callout', hit[1]); box.setAttribute('role', 'note'); box.setAttribute('data-testid', 'callout');
+    box.innerHTML = `<span class="callout-ic">${CALLOUT_ICON_SVG[hit[1]]}</span><div class="callout-tx">${q.innerHTML}</div>`;
+    q.replaceWith(box);
+  });
+  doc.body.querySelectorAll('p').forEach((p) => {
+    const kids = [...p.childNodes].filter((n) => !(n.nodeType === 3 && !n.textContent.trim()));
+    if (kids.length !== 1 || kids[0].nodeName !== 'A') return;
+    const a = kids[0]; const href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href) || p.closest('li, blockquote, aside, table')) return;
+    let host = href; try { const u = new URL(href); host = u.host + (u.pathname === '/' ? '' : u.pathname); } catch { /* keep the raw address */ }
+    const bare = a.textContent.trim() === href;
+    const card = doc.createElement('a'); card.className = 'link-card'; card.href = href; card.target = '_blank'; card.rel = 'noopener noreferrer'; card.setAttribute('data-testid', 'link-card');
+    const title = bare ? host.replace(/^www\./, '') : a.textContent.trim();
+    card.innerHTML = `<span class="lc-ic">${LINK_ICON_SVG}</span><span class="lc-tx"><b></b><small></small></span>${ARROW_SVG}`;
+    card.querySelector('b').textContent = title; card.querySelector('small').textContent = host;
+    p.replaceWith(card);
+  });
+}
+
 const toHtml = (md0) => {
   const { text: md, marks } = splitMarkers(md0); // the table settings Markdown cannot hold (widths, colours, merged cells) ride in hidden comment lines
   let html = marked.parse(md || '');
@@ -46,6 +91,7 @@ const toHtml = (md0) => {
   });
   groupPictures(parsed);
   addPicturePills(parsed);
+  decorateBlocks(parsed);
   applyMarksToHtml(parsed.body, marks);
   return parsed.body.innerHTML;
 };
@@ -521,6 +567,8 @@ export default function SharedPage() {
   useEffect(() => {
     const root = docRef.current; if (!root) return undefined;
     const click = (e) => {
+      const cc = e.target?.closest?.('[data-code-copy]');
+      if (cc) { const code = cc.closest('pre'); const text = (code?.querySelector('code') || code)?.textContent || ''; const done = () => { cc.textContent = 'Copied'; setTimeout(() => { cc.textContent = 'Copy'; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
       const pb = e.target?.closest?.('[data-pill-copy]');
       if (pb) { const text = pb.getAttribute('data-pill-copy'); const done = () => { const old = pb.textContent; pb.textContent = 'Copied'; setTimeout(() => { pb.textContent = old; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
       const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; const all = [...root.querySelectorAll('img')].filter((n) => !n.closest('a, button')); setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '', list: all.map((n) => ({ src: n.currentSrc || n.src, name: n.getAttribute('alt') || '' })), index: Math.max(0, all.indexOf(img)) }); };
