@@ -3,7 +3,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2 } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import ShareCards from './ShareCards';
@@ -922,6 +922,19 @@ export default function SharedPage() {
     scrollToHeading(id);
   };
 
+  const [listening, setListening] = useState(false);
+  const toggleListen = () => {
+    const synth = window.speechSynthesis;
+    if (!synth) { showToast('Listening is not supported in this browser'); return; }
+    if (listening) { synth.cancel(); setListening(false); return; }
+    const text = (docRef.current?.innerText || articleRef.current?.querySelector('.bn-editor')?.innerText || '').trim();
+    if (!text) { showToast('Nothing to read yet'); return; }
+    const u = new SpeechSynthesisUtterance(text.slice(0, 20000));
+    u.onend = () => setListening(false);
+    u.onerror = () => setListening(false);
+    synth.cancel(); synth.speak(u); setListening(true);
+  };
+  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* none */ } }, []);
   return (
     <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
@@ -1045,7 +1058,15 @@ export default function SharedPage() {
         <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
           {pinnedToc && <aside className="toc" aria-label="On this page">
             <div className="toc-head"><h2>On this page</h2><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-pressed="true" aria-label="Unpin outline" title="Unpin outline" onClick={toggleToc}><Pin size={17} /></button></div>
+            <div className="toc-card-top" data-testid="toc-time"><span className="toc-left"><Clock size={13} />{Math.max(1, Math.ceil(wordCount * (1 - scrollProgress / 100) / 200))} min left</span><div className="toc-bar" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div></div>
             {tocLinks}
+            {data.kind === 'note' && reader.bookmarks.length > 0 && <div className="toc-bm" data-testid="toc-bookmarks"><h3>Bookmarks</h3>{reader.bookmarks.slice(0, 4).map((b) => <button type="button" key={b.sig} onClick={() => reader.goBookmark(b.sig)}><Bookmark size={13} /><span>{b.title || b.text || 'Bookmark'}</span></button>)}</div>}
+            <div className="toc-foot" data-testid="toc-foot">
+              <button type="button" onClick={() => exportShared('pdf')}><Download size={17} />Export</button>
+              <button type="button" onClick={() => setLookOpen(true)}><Type size={17} />Look</button>
+              <button type="button" onClick={() => setKeysOpen(true)}><Keyboard size={17} />Keys</button>
+              <button type="button" onClick={() => window.print()}><Printer size={17} />Print</button>
+            </div>
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
@@ -1054,6 +1075,13 @@ export default function SharedPage() {
               {data.canEdit && !previewMode
                 ? <textarea className="title-in" rows={1} aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} ref={fitTitle} onInput={(event) => fitTitle(event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} onChange={(event) => { draft.current.title = event.target.value.replace(/\n/g, ' '); typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
+              <div className="title-tools" data-testid="title-tools">
+                <button type="button" data-testid="tt-listen" className={listening ? 'on' : ''} aria-pressed={listening} aria-label={listening ? 'Stop listening' : 'Listen to this page'} title="Listen" onClick={toggleListen}><Volume2 size={17} /></button>
+                {data.canEdit && isOwner && <button type="button" data-testid="tt-preview" aria-pressed={previewMode} aria-label="Preview" title="Preview" onClick={() => setPreviewMode((v) => !v)}><Eye size={17} /></button>}
+                <button type="button" data-testid="tt-full" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}><Maximize2 size={17} /></button>
+                <button type="button" data-testid="tt-text" aria-label="Text and reading style" title="Text" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={17} /></button>
+                <button type="button" data-testid="tt-more" aria-label="More options" title="More" onClick={() => setMenuOpen(true)}><MoreHorizontal size={17} /></button>
+              </div>
               <div className="by">
                 <span className="av" aria-hidden="true">{initials(data.author)}</span>
                 <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>

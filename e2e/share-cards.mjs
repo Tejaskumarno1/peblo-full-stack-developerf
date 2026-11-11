@@ -22,6 +22,12 @@ try {
   check('4 comments card shows for editors', await g.locator('[data-testid="rc-comments"]').isVisible());
   check('5 moon toggle flips the theme', await (async () => { await g.locator('[data-testid="moon-btn"]').click(); return (await g.locator('.pb-shared').getAttribute('data-theme')) === 'dark'; })());
   check('6 header avatar present', await g.locator('[data-testid="hd-me"]').isVisible());
+  check('9 left card shows time left and footer', (await g.locator('[data-testid="toc-time"]').innerText()).includes('min left') && (await g.locator('[data-testid="toc-foot"] button').count()) === 4);
+  check('10 title row has its tools', (await g.locator('[data-testid="title-tools"] button').count()) >= 4);
+  await g.locator('[data-testid="toc-foot"] button', { hasText: 'Keys' }).click();
+  check('11 footer Keys opens shortcuts', await g.locator('[data-testid="keys-sheet"]').isVisible());
+  await g.screenshot({ path: 'share-cards.png' });
+  await g.keyboard.press('Escape');
   const small = await gc.newPage();
   await small.setViewportSize({ width: 1280, height: 800 });
   await small.goto(`${base}/s/note/${tok}`);
