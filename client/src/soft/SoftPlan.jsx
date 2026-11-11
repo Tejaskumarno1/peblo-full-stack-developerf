@@ -15,6 +15,7 @@ const DAY_END = 20 * 60;
 const HOUR = 56; // px per hour in the day column
 const SNAP = 15;
 const DEFAULT_EST = 30;
+const BREAK = 10; // minutes left free between tasks that Auto-fit places
 const hm = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
 const hm24 = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 const nice = (min) => (min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}` : `${min} min`);
@@ -110,7 +111,7 @@ export default function SoftPlan() {
       taken.push([s, s + dur]);
       // eslint-disable-next-line no-await-in-loop
       await place(t, s);
-      at = s + dur;
+      at = s + dur + BREAK; // a short breather between fitted tasks
       n += 1;
     }
     setMsg(n ? '' : 'No free gaps left today.');
@@ -161,6 +162,24 @@ export default function SoftPlan() {
     } catch { setMsg('Could not write the briefing note.'); }
   };
 
+  // end of day: whatever was planned today and is not done goes to tomorrow morning, and counts as a move
+  const carryToTomorrow = async () => {
+    const d = startOfDay();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    const ids = new Set(planned.map((t) => t.id));
+    queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (ids.has(x.id) ? { ...x, deadline: d.toISOString(), startTime: null, endTime: null, meta: { ...(x.meta || {}), planned: undefined } } : x)));
+    try {
+      for (const t of planned) {
+        // eslint-disable-next-line no-await-in-loop
+        await todosAPI.update(t.id, { scope: 'this', deadline: d.toISOString(), startTime: '', endTime: '', meta: { planned: null } });
+      }
+      say(`${planned.length} unfinished task${planned.length === 1 ? '' : 's'} moved to tomorrow`);
+    } catch { setMsg('Could not move them to tomorrow.'); }
+    refresh();
+  };
+  const over = needs - free;
+
   const dateLine = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const hours = Array.from({ length: DAY_END / 60 - DAY_START / 60 }, (_, i) => DAY_START / 60 + i);
   const top = (m) => ((m - DAY_START) / 60) * HOUR;
@@ -180,6 +199,8 @@ export default function SoftPlan() {
           <span className="s-sub">{dateLine} · you have {nice(free)} free, your tasks need {nice(needs)}</span>
         </div>
         <span className="grow" />
+        {over > 0 && <span className="pl-over" role="status" data-testid="plan-over">Over by {nice(over)}</span>}
+        {planned.length > 0 && <button type="button" className="pl-light" data-testid="plan-carry" onClick={carryToTomorrow}>Move {planned.length} unfinished to tomorrow</button>}
         <button type="button" className="pl-dark" onClick={autoFit} disabled={pick.length === 0}>Auto-fit my gaps</button>
         <button type="button" className="pl-light" onClick={briefing}>Write today's briefing note</button>
       </div>
