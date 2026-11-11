@@ -19,7 +19,7 @@ const router = Router();
 export const collabPublic = Router();
 router.use(authenticate);
 
-const ownNote = (userId: string, id: string) => prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, title: true } });
+const ownNote = (userId: string, id: string) => prisma.note.findFirst({ where: { id, userId, isDeleted: false, spaceId: undefined }, select: { id: true, title: true } }); // spaceId named on purpose: Office and Team notes are live-edited too (see personalGuard.ts)
 
 // POST /api/collab/ticket { noteId } -> { ticket }: a 30-second, single-use pass for opening the live-editing WebSocket for ONE of my notes.
 // (The WebSocket address used to carry the sign-in token itself, which ends up in logs and browser history.)
@@ -47,7 +47,7 @@ router.get('/presence', async (req, res, next) => {
   try {
     const ids = liveRoomIds();
     if (!ids.length) return res.json({ presence: {} });
-    const mine = await prisma.note.findMany({ where: { id: { in: ids }, userId: req.user!.id, isDeleted: false }, select: { id: true } });
+    const mine = await prisma.note.findMany({ where: { id: { in: ids }, userId: req.user!.id, isDeleted: false, spaceId: undefined }, select: { id: true } });
     res.json({ presence: presenceOf(mine.map((n) => n.id)) });
   } catch (err) { next(err); }
 });

@@ -109,7 +109,7 @@ class Room {
   }
 
   private async load() {
-    const note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true } });
+    const note = await prisma.note.findUnique({ where: { id: this.id, spaceId: undefined }, select: { content: true } });
     this.mdHash = fingerprint(note?.content ?? '');
     this.known.add(this.mdHash);
     const rows = await prisma.$queryRawUnsafe<{ state: Uint8Array; md_hash: string | null }[]>('SELECT state, md_hash FROM note_ydocs WHERE note_id = $1', this.id);
@@ -181,7 +181,7 @@ class Room {
     this.seedHolder = next.ws;
     let note: { content: string } | null;
     try {
-      note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true } });
+      note = await prisma.note.findUnique({ where: { id: this.id, spaceId: undefined }, select: { content: true } });
     } catch (e) {
       this.seedHolder = null; // a database hiccup must not crash the server or block seeding for good
       console.error('[collab] could not offer the saved text:', (e as Error).message);
@@ -305,7 +305,7 @@ class Room {
       try { c.ws.ping(); } catch { /* gone */ }
     }
     try {
-      const note = await prisma.note.findUnique({ where: { id: this.id }, select: { content: true, isDeleted: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
+      const note = await prisma.note.findUnique({ where: { id: this.id, spaceId: undefined }, select: { content: true, isDeleted: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
       if (!note || note.isDeleted) { this.closeAll(CLOSE_GONE, 'gone'); await this.forget(); this.dispose(); return; }
       const live = !note.shareExpiresAt || note.shareExpiresAt.getTime() > Date.now();
       const blocked = new Set((await prisma.$queryRawUnsafe<{ session_id: string }[]>('SELECT session_id FROM share_blocked WHERE kind = \'note\' AND share_token = $1', note.shareToken ?? '')).map((r) => r.session_id));

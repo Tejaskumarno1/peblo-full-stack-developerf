@@ -228,7 +228,7 @@ html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 330p
 @media (max-width: 1160px) { .fsx-items { display: none; } }
 
 /* the find box sits beside the drawer, not under it */
-html[data-fs-drawer="1"] .pb-find { right: 322px !important; }
+html[data-fs-drawer="1"] .pb-find:not([data-moved]) { right: 322px !important; }
 
 /* The writing column never starts under the outline rail: room for the rail on the left, mirrored on the right, and the drawer takes its own width */
 @media (min-width: 1181px) {
@@ -241,3 +241,16 @@ html[data-fs-drawer="1"] .pb-find { right: 322px !important; }
 html[data-fs] .cb-back { z-index: 9400; }
 html[data-fs] .pb-cpanel { z-index: 9300; top: 74px; right: 16px; }
 html[data-fs][data-fs-drawer="1"] .pb-cpanel { right: 322px; }
+
+/* ---- zoom, like a word processor: scales the writing page only, never the bar ---- */
+html[data-fs] { --fs-zoom: 1; }
+.soft .s-notes.focus .s-note-head, .soft .s-notes.focus .s-note-body { zoom: var(--fs-zoom, 1); }
+
+/* ---- layers in full screen: menus opened from the formatting bar, the edited-by card and its dialogs sit above the page, bar and side panel ---- */
+html[data-fs] .mantine-Popover-dropdown, html[data-fs] .mantine-Menu-dropdown, html[data-fs] .mantine-Select-dropdown, html[data-fs] .mantine-HoverCard-dropdown, html[data-fs] .bn-popover-content, html[data-fs] .bn-menu-dropdown, html[data-fs] .bn-color-picker-dropdown, html[data-fs] .bn-panel, html[data-fs] .bn-grid-suggestion-menu { z-index: 9320 !important; }
+html[data-fs] .eb-toast { z-index: 9400; }
+html[data-fs][data-fs-drawer="1"] .eb-toast { right: 322px; }
+html[data-fs] .eb-flash { z-index: 9420; }
+html[data-fs] .eb-back { z-index: 9450; }
+/* the find bar is a floating tool: above everything in full screen */
+html[data-fs] .pb-find { z-index: 9500 !important; }

@@ -41,8 +41,10 @@
 .pb-lightbox img { max-width: 94vw; max-height: 92vh; border-radius: 10px; background: #fff; }
 .pb-lightbox button { position: absolute; top: 16px; right: 18px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; color: #2a1f17; font-size: 16px; cursor: pointer; }
 /* find and replace card (B3): find row, then replace row (editors only) */
-.pb-find { position: fixed; top: 84px; right: 28px; z-index: 9100; width: 330px; max-width: calc(100vw - 24px); box-sizing: border-box; display: grid; gap: 6px; padding: 10px; border-radius: 22px; background: #fffdf8; color: #2a1f17; border: 1px solid #EADFD0; box-shadow: 0 18px 40px rgba(36, 31, 26, .22); }
-.pb-find .row { display: flex; align-items: center; gap: 6px; }
+.pb-find { position: fixed; top: 84px; right: 28px; z-index: 9100; width: 360px; max-width: calc(100vw - 16px); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px; border-radius: 22px; background: #fffdf8; color: #2a1f17; border: 1px solid #EADFD0; box-shadow: 0 18px 40px rgba(36, 31, 26, .22); }
+.pb-find .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pb-find button.grip { cursor: grab; touch-action: none; min-width: 26px; padding: 0 4px; background: transparent !important; opacity: .7; } .pb-find button.grip:active { cursor: grabbing; }
+.pb-find button.txt { white-space: nowrap; }
 .pb-find input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 10px; border: 1.5px solid #EADFD0; background: #fff; outline: none; font: 700 13.5px inherit; color: inherit; }
 .pb-find input.q { border-color: #C4441C; }
 .pb-find input.r { font-weight: 600; }
