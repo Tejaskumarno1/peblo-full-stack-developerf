@@ -635,7 +635,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
     if (!acc.allowed) return res.json({ kind: 'todo', waiting: acc.waiting || 'waiting' });
     if (await isBlocked('todo', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     res.json({
-      kind: 'todo', text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline,
+      kind: 'todo', text: t.text, completed: t.completed, completedAt: t.completed ? t.updatedAt : null, priority: t.priority, deadline: t.deadline,
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
       note: t.shareNote && t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
     });
