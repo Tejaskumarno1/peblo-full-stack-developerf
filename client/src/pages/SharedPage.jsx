@@ -7,6 +7,7 @@ import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, 
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
+import { ShareTrack, FollowBanner } from './ShareTrack';
 import { ListenBar, TranslateMenu, LANGUAGES } from './ListenTranslate';
 import ShareCards, { EndOfPage, TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
@@ -288,6 +289,20 @@ export default function SharedPage() {
   const showBar = () => { clearTimeout(barTimer.current); setBarShown(true); };
   const hideBarSoon = () => { clearTimeout(barTimer.current); barTimer.current = setTimeout(() => setBarShown(false), 1400); };
   useEffect(() => () => clearTimeout(barTimer.current), []);
+  const kbRef = useRef({});
+  const gPending = useRef(0);
+  useEffect(() => {
+    const onCtrl = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      const k = event.key.toLowerCase();
+      const kb = kbRef.current;
+      if (k === 'b' && kb.jumpPlace) { event.preventDefault(); kb.jumpPlace(); }
+      else if (k === 'j' && kb.toggleTheme) { event.preventDefault(); kb.toggleTheme(); }
+      else if (k === 'l' && kb.copyLink) { event.preventDefault(); kb.copyLink(); }
+    };
+    document.addEventListener('keydown', onCtrl);
+    return () => document.removeEventListener('keydown', onCtrl);
+  }, []);
   useEffect(() => {
     const onKey = (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -300,6 +315,11 @@ export default function SharedPage() {
       else if (event.key === '?') { event.preventDefault(); setKeysOpen((o) => !o); }
       else if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleFullscreen(); }
       else if (event.key === '\\') { event.preventDefault(); toggleToc(); setPanelOpen((o) => !o); }
+      else if (event.key === 'j' || event.key === 'J' || event.key === 'k' || event.key === 'K') { event.preventDefault(); kbRef.current.stepHeading?.(event.key.toLowerCase() === 'j' ? 1 : -1); }
+      else if (event.key === 'l' || event.key === 'L') { event.preventDefault(); kbRef.current.toggleListen?.(); }
+      else if (event.key === 't' || event.key === 'T') { event.preventDefault(); kbRef.current.toggleTranslate?.(); }
+      else if (event.key === 'c' || event.key === 'C') { event.preventDefault(); kbRef.current.openComments?.(); }
+      else if (event.key === 'g' || event.key === 'G') { event.preventDefault(); if (Date.now() - gPending.current < 800) { gPending.current = 0; kbRef.current.toTop?.(); } else gPending.current = Date.now(); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -503,7 +523,7 @@ export default function SharedPage() {
     const click = (e) => {
       const pb = e.target?.closest?.('[data-pill-copy]');
       if (pb) { const text = pb.getAttribute('data-pill-copy'); const done = () => { const old = pb.textContent; pb.textContent = 'Copied'; setTimeout(() => { pb.textContent = old; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
-      const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '' }); };
+      const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; const all = [...root.querySelectorAll('img')].filter((n) => !n.closest('a, button')); setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '', list: all.map((n) => ({ src: n.currentSrc || n.src, name: n.getAttribute('alt') || '' })), index: Math.max(0, all.indexOf(img)) }); };
     root.addEventListener('click', click);
     return () => root.removeEventListener('click', click);
   }, [body]);
@@ -932,6 +952,16 @@ export default function SharedPage() {
   useEffect(() => { if (!meOpen) return undefined; const away = (e) => { if (!meRef.current?.contains(e.target)) setMeOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [meOpen]);
   const forgetMe = () => { try { localStorage.removeItem('peblo-guest-name'); localStorage.removeItem('peblo-guest-joined'); } catch { /* none */ } setGuestName(''); setMeOpen(false); showToast('Forgotten on this device'); };
   const [liveEmpty, setLiveEmpty] = useState(null);
+  kbRef.current = {
+    stepHeading: (dir) => { const hs = headings; if (!hs.length) return; const i = hs.findIndex((h) => h.id === activeHeading); const n = Math.min(hs.length - 1, Math.max(0, (i < 0 ? (dir > 0 ? 0 : 0) : i + dir))); scrollToHeading(hs[n].id); },
+    toggleListen: () => toggleListen(),
+    toggleTranslate: () => setTrOpen((o) => !o),
+    openComments: () => { const b = document.querySelector('.pb-shared .pb-cbtn'); if (b) b.click(); else showToast('Comments are for people who can edit'); },
+    toTop: () => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) || window.scrollTo({ top: 0, behavior: 'smooth' }),
+    jumpPlace: () => { if (reader.place) reader.jumpPlace(); else showToast('No place saved yet'); },
+    toggleTheme: () => setDarkMode((d) => !d),
+    copyLink: () => copy(window.location.href, 'Share link copied'),
+  };
   const [chgIdx, setChgIdx] = useState(-1);
   const chgEls = () => [...(articleRef.current?.querySelectorAll('[data-pb-chg="1"]') || [])];
   const goChange = (dir) => {
@@ -967,6 +997,7 @@ export default function SharedPage() {
   return (
     <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
+      <a className="skip-link" href="#page-main" onClick={(e) => { e.preventDefault(); document.getElementById('page-main')?.focus(); }}>Skip to content</a>
       <header className="top">
         <div className="top-in">
           <a className="brand" href="/" aria-label="Peblo home"><i />Peblo</a>
@@ -1115,7 +1146,8 @@ export default function SharedPage() {
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
-          <article ref={articleRef}>
+          <article ref={articleRef} id="page-main" tabIndex={-1}>
+            {followId && <FollowBanner who={viewers.find((v) => v.id === followId)} color={peerColor(followId)} onStop={() => setFollowId(null)} />}
             {data.kind === 'note' && reader.changes && reader.showChanges && chgIdx >= 0 && <div className="cmp-bar" data-testid="cmp-bar" role="status"><History size={15} /><span>Comparing now with {new Date(reader.changes.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><b>Change {chgIdx + 1} of {chgEls().length}</b><button type="button" aria-label="Previous change" onClick={() => goChange(-1)}><ArrowUp size={15} /></button><button type="button" aria-label="Next change" onClick={() => goChange(1)}><ArrowDown size={15} /></button><button type="button" aria-label="Close comparison" onClick={() => setChgIdx(-1)}><X size={14} /></button></div>}
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
@@ -1151,7 +1183,7 @@ export default function SharedPage() {
                 : <DocHtml innerRef={docRef} html={body} />}
               {(liveEmpty === null ? !wordCount : liveEmpty) && !trLang && <div className="empty-page" data-testid="empty-page"><span className="ep-i"><Pencil size={18} /></span><b>This page is empty</b><p>{data.canEdit ? 'Start typing here. Everyone with the link sees it as you write.' : 'Nothing here yet. The owner has not written anything.'}</p></div>}
               {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
-              {viewPic && <Suspense fallback={null}><PictureView src={viewPic.src} name={viewPic.name} onClose={() => setViewPic(null)} /></Suspense>}
+              {viewPic && <Suspense fallback={null}><PictureView src={viewPic.src} name={viewPic.name} list={viewPic.list} index={viewPic.index} onClose={() => setViewPic(null)} /></Suspense>}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}
 
@@ -1176,6 +1208,7 @@ export default function SharedPage() {
             <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
+          {data.kind === 'note' && !fullscreen && !look.quiet && <ShareTrack articleRef={articleRef} viewers={viewers} colorOf={peerColor} />}
           {data.kind === 'todo' && !fullscreen && <><TodoAbout data={data} /><TodoCards viewers={viewers} myColor={myColor} peerColor={peerColor} saved={!!savedCopy} busy={saveBusy} onSave={() => (savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy())} /></>}
           {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
@@ -1206,9 +1239,11 @@ export default function SharedPage() {
       </>}
       {data?.kind === 'note' && bmOpen && <aside className="bm-pop" data-testid="bookmarks" aria-label="My bookmarks">
         <h3><Bookmark size={16} />My bookmarks<span className="n">{reader.bookmarks.length}</span><button type="button" aria-label="Close" onClick={() => setBmOpen(false)}><X size={15} /></button></h3>
-        {reader.bookmarks.length === 0 && <p className="bm-empty">Nothing yet. Point at a line and press B.</p>}
-        {reader.bookmarks.map((b) => <div className="bm-row" key={b.sig}><button type="button" className="bm-go" data-testid="bookmark-item" onClick={() => { reader.goBookmark(b.sig); setBmOpen(false); }}><Bookmark size={14} /><span>{b.title}</span></button><button type="button" aria-label="Remove bookmark" onClick={() => reader.removeBookmark(b.sig)}><X size={13} /></button></div>)}
+        <p className="bm-sub">{reader.bookmarks.length} on this page</p>
+        {reader.bookmarks.length === 0 && <div className="bm-empty-card" data-testid="bookmarks-empty"><span><Bookmark size={16} /></span><b>Empty state</b><p className="bm-empty">No bookmarks yet. Point at a line and press B, or use the flag at the line start.</p></div>}
+        {reader.bookmarks.map((b) => <div className="bm-row" key={b.sig}><button type="button" className="bm-go" data-testid="bookmark-item" onClick={() => { reader.goBookmark(b.sig); setBmOpen(false); }}><Bookmark size={14} /><span>{b.title}<small>{when(b.at)}</small></span></button><button type="button" aria-label="Remove bookmark" onClick={() => { reader.removeBookmark(b.sig); showToast('Bookmark removed'); }}><X size={13} /></button></div>)}
         <button type="button" className="bm-add" data-testid="bookmark-add" onClick={() => { if (!reader.toggleBookmark()) showToast('Scroll to a line first'); }}>Bookmark the line at the top</button>
+        <p className="bm-foot"><Lock size={13} />Kept in this browser only. The owner cannot see them.</p>
       </aside>}
       {data?.kind === 'note' && !fullscreen && (reader.changes || reader.place) && <div className="reader-pills">
         {reader.changes && <div className="rp" data-testid="changes-pill"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div><button type="button" data-testid="changes-toggle" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button><button type="button" aria-label="Dismiss" onClick={reader.dismissChanges}><X size={14} /></button></div>}
@@ -1235,7 +1270,11 @@ export default function SharedPage() {
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>
-          <ul>{[['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['B', 'Bookmark the line under the pointer'], ['F', 'Full screen'], ['Esc', 'Leave full screen or close'], ['?', 'This list']].map(([k, l]) => <li key={k}><kbd>{k}</kbd><span>{l}</span></li>)}</ul>
+          <div className="keys-cols">{[
+            ['Move', [['Ctrl K', 'Command palette'], ['Ctrl F', 'Find in page'], ['J', 'Next heading'], ['K', 'Previous heading'], ['G G', 'Back to top'], ['Ctrl B', 'Jump to place you stopped']]],
+            ['Read', [['F', 'Focus mode'], ['L', 'Listen'], ['T', 'Translate'], ['B', 'Bookmark this line'], ['Ctrl J', 'Switch theme'], ['Ctrl L', 'Copy link']]],
+            ['Panels and help', [['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['C', 'Open comments'], ['?', 'This list']]],
+          ].map(([h, rows]) => <div key={h} className="keys-col"><h3>{h}</h3><ul>{rows.map(([k, l]) => <li key={k}><span>{l}</span><kbd>{k}</kbd></li>)}</ul></div>)}</div>
         </section>
       </div>}
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
@@ -1275,8 +1314,8 @@ export default function SharedPage() {
           <button className="share-modal-close" type="button" aria-label="Close" onClick={() => setRevokeConfirm(false)}><X size={18} /></button>
           <span className="modal-kicker">You own this link</span>
           <h2 id="revoke-title">Turn sharing off?</h2>
-          <p>Anyone using this link will lose access. You can create a new link later from Peblo.</p>
-          <div className="modal-actions"><button className="btn" type="button" onClick={() => setRevokeConfirm(false)}>Keep link on</button><button className="btn danger-btn" type="button" onClick={turnSharingOff}>Turn sharing off</button></div>
+          <p>Anyone using this link loses access straight away{others.length ? `, including the ${others.length} ${others.length === 1 ? 'person' : 'people'} here now` : ''}. You can create a new link later from Peblo.</p>
+          <div className="modal-actions rv"><button className="btn danger-btn" type="button" data-testid="revoke-confirm" onClick={turnSharingOff}><Ban size={15} />Turn sharing off</button><button className="btn" type="button" onClick={() => setRevokeConfirm(false)}>Keep sharing</button></div>
         </section>
       </div>}
     </div>

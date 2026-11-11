@@ -6,3 +6,17 @@
 .pv-bar button:hover { background: #f4ede2; }
 .pv-bar button:focus-visible, .pv-x:focus-visible { outline: 2px solid #ffb48c; outline-offset: 2px; }
 .pb-shared .doc img { cursor: zoom-in; }
+
+.pv-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; background: #231d16; color: #fff; border-radius: 22px; padding: 10px 14px; cursor: default; }
+.pv-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.pv-name em { font-style: normal; opacity: .6; }
+.pv-top button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.pv-top .pv-xx { background: #c8431c; }
+.pv-pct { min-width: 46px; text-align: center; font-weight: 700; font-size: 14px; }
+.pv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 56px; height: 56px; border-radius: 50%; border: 0; background: rgba(35,29,22,.85); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.pv-nav.l { left: 16px; } .pv-nav.r { right: 16px; }
+.pv-back img { transition: transform .12s; }
+.pv-hint { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; background: #231d16; color: #fff; font-size: 13px; font-weight: 600; }
+.pv-hint kbd { background: rgba(255,255,255,.18); border-radius: 6px; padding: 1px 7px; font: inherit; font-size: 12px; }
+.pv-x { display: none; }
+@media (max-width: 640px) { .pv-hint { display: none; } .pv-nav { width: 44px; height: 44px; } }

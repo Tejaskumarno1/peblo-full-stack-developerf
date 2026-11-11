@@ -187,6 +187,7 @@ export function CollabPanel({
                 <small className={`st s-${v.status || 'viewing'}`}>{STATUS[v.status] || 'Viewing'} · {seen(v.idleSeconds || 0)}{v.cursor != null && v.status !== 'idle' ? ` · paragraph ${v.cursor + 1}` : ''}</small>
               </span>
               {v.self && <span className="cp-badge you">You</span>}
+              {!v.self && !v.owner && <span className={`cp-badge st-${v.status === 'idle' ? 'idle' : 'active'}`} data-testid="presence-state">{v.status === 'idle' ? 'Idle' : 'Active'}</span>}
               {v.owner && !v.self && <span className="cp-badge">Owner</span>}
               {mode === 'owner' && v.custom && !v.self && <span className="cp-badge" data-testid="role-badge">{v.canEdit ? 'Can edit' : 'Can view'}</span>}
               {onFollow && !v.self && v.cursor != null && <button type="button" className={`cp-follow`} aria-pressed={followId === v.id} onClick={() => onFollow(followId === v.id ? null : v.id)}>{followId === v.id ? 'Following' : 'Follow'}</button>}
