@@ -1,6 +1,6 @@
 # Peblo: missing features and functionality
 
-Updated 11 November 2026. Compared against Notion, Todoist, Sunsama, Akiflow, Motion, Google Calendar, Obsidian and Microsoft Loop/Teams.
+Updated 12 November 2026. Compared against Notion, Todoist, Sunsama, Akiflow, Motion, Google Calendar, Obsidian and Microsoft Loop/Teams.
 
 How to read it: **Status** is Missing (nothing in the app) or Partial (exists but narrower than the comparison product). **Priority** is P1 (users notice within a week), P2 (clear value), P3 (nice to have). **Effort** is S (under a day), M (days), L (a week or more). Status is based on a keyword scan of the client and server code, not on exhaustive manual testing; confirm before building.
 
@@ -110,22 +110,22 @@ Pick list from the backlog (overdue first, then priority), drag or tap to place 
 | Capacity warning when tasks exceed free time | **Built** (Over by X chip) | P1 | S |
 | Breaks between auto-fitted tasks | **Built** (10 minutes) | P1 | S |
 | End-of-day carry-over of unfinished work | **Built** (Move N unfinished to tomorrow; counts as a move) | P1 | S |
-| Working hours instead of fixed 8:00 to 20:00 | Missing | P1 | S |
+| Working hours instead of fixed 8:00 to 20:00 | **Built** (Day pickers in the Today panel, remembered per browser) | P1 | S |
 | Auto-schedule by deadline and priority across several days | Partial (today only) | P1 | M |
 | AI or learned estimates | Missing | P1 | M |
 | Calendar events overlay (feeds, Google), not only tasks with times | Partial | P1 | M |
-| Focus timer link from a planned block | Missing | P2 | S |
+| Focus timer link from a planned block | **Built** (timer icon on each planned block) | P2 | S |
 | Full end-of-day review (done, carried, recap note) | Missing (carry-over only) | P2 | M |
 | Plan tomorrow / week view | Missing | P2 | M |
 | Routines and day templates | Missing | P2 | M |
-| Resize a block by dragging its edge | Missing | P2 | S |
+| Resize a block by dragging its edge | **Built** (grip on the bottom edge, snaps to 15 min, stops at the next meeting, estimate follows) | P2 | S |
 | AI plan suggestions | Missing | P2 | M |
 | Auto-reschedule when a meeting moves | Missing | P3 | L |
 
 ### Phases
 
 1. Done: capacity warning, breaks, carry-over (tests in `e2e/plan-extras.mjs`).
-2. Next, small: working-hours setting, block resize, focus-timer link, estimate prompt.
+2. Done: working-hours setting, block resize, focus-timer link (tests in `e2e/plan-hours-resize.mjs`). Still small: estimate prompt.
 3. Then, medium: calendar-events overlay, multi-day auto-schedule, end-of-day review with recap note, plan-tomorrow view.
 4. Later: routines and templates, AI estimates and suggestions, auto-reschedule.
 

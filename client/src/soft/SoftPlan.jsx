@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Timer } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useUndoToast, useDeferredDelete } from '../utils/useUndoToast';
@@ -10,8 +10,9 @@ import TaskSheet from './TaskSheet';
 import { daysFromToday, startOfDay, tagsOf, weekdayLong } from './softUtils';
 import './plan.css';
 
-const DAY_START = 8 * 60;
-const DAY_END = 20 * 60;
+const DEF_HOURS = [8, 20]; // working hours the day column covers; changed with the pickers in the Today panel and kept per browser
+const HOURS_KEY = 'peblo-plan-hours';
+const readHours = () => { try { const v = JSON.parse(localStorage.getItem(HOURS_KEY) || 'null'); if (Array.isArray(v) && v[0] >= 0 && v[1] <= 24 && v[1] - v[0] >= 4) return v; } catch { /* storage unavailable */ } return DEF_HOURS; };
 const HOUR = 56; // px per hour in the day column
 const SNAP = 15;
 const DEFAULT_EST = 30;
@@ -42,6 +43,11 @@ export default function SoftPlan() {
   const colRef = useRef(null);
   useEffect(() => { const i = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(i); }, []);
   const calm = settings?.calmMode === true;
+  const [hrs, setHrsState] = useState(readHours);
+  const DAY_START = hrs[0] * 60;
+  const DAY_END = hrs[1] * 60;
+  const setHrs = (next) => { if (next[1] - next[0] < 4) return; setHrsState(next); try { localStorage.setItem(HOURS_KEY, JSON.stringify(next)); } catch { /* ignore */ } };
+  const [rs, setRs] = useState(null); // block being resized: { id, end }
 
   const live = useMemo(() => todos.filter((t) => !gone.includes(t.id)), [todos, gone]);
   const todayAll = live.filter((t) => !t.completed && t.deadline && daysFromToday(t.deadline) === 0);
@@ -178,6 +184,25 @@ export default function SoftPlan() {
     } catch { setMsg('Could not move them to tomorrow.'); }
     refresh();
   };
+  // drag the bottom edge of a planned block to change how long it takes; the estimate follows
+  const startResize = (e, t, a) => {
+    e.preventDefault(); e.stopPropagation();
+    const y0 = e.clientY;
+    const b0 = toMin(t.endTime) ?? a + estOf(t);
+    const limit = Math.min(DAY_END, ...[...meetings, ...planned].filter((x) => x.id !== t.id).map((x) => toMin(x.startTime)).filter((s) => s !== null && s >= b0));
+    let last = b0;
+    setRs({ id: t.id, end: b0 });
+    const move = (ev) => { last = Math.max(a + SNAP, Math.min(limit, Math.round((b0 + ((ev.clientY - y0) / HOUR) * 60) / SNAP) * SNAP)); setRs({ id: t.id, end: last }); };
+    const up = async () => {
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+      setRs(null);
+      if (last === b0) return;
+      queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, endTime: hm24(last), meta: { ...(x.meta || {}), estimateMin: last - a } } : x)));
+      try { await todosAPI.update(t.id, { scope: 'this', endTime: hm24(last), meta: { planned: true, estimateMin: last - a, moves: t.meta?.moves ?? 0 } }); } catch { setMsg('Could not resize that block.'); }
+      refresh();
+    };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  };
   const over = needs - free;
 
   const dateLine = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -185,7 +210,7 @@ export default function SoftPlan() {
   const top = (m) => ((m - DAY_START) / 60) * HOUR;
   const blockOf = (t, kind) => {
     const a = toMin(t.startTime);
-    const b = toMin(t.endTime) ?? a + estOf(t);
+    const b = rs && rs.id === t.id ? rs.end : (toMin(t.endTime) ?? a + estOf(t));
     return { t, kind, a, b };
   };
   const blocks = [...meetings.map((t) => blockOf(t, 'meet')), ...planned.map((t) => blockOf(t, 'plan'))].filter((b) => b.a !== null && b.b > DAY_START && b.a < DAY_END);
@@ -227,7 +252,7 @@ export default function SoftPlan() {
         </section>
 
         <section className="pl-panel day" aria-label="Today">
-          <div className="pl-ph"><h2>Today</h2><span className="pl-chip">Meetings from your calendar</span></div>
+          <div className="pl-ph"><h2>Today</h2><span className="pl-chip">Meetings from your calendar</span><span className="grow" /><label className="pl-hrs">Day <select aria-label="Day starts" data-testid="plan-from" value={hrs[0]} onChange={(e) => setHrs([Number(e.target.value), hrs[1]])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 3} disabled={hrs[1] - (i + 3) < 4}>{hourLabel(i + 3)}</option>)}</select> to <select aria-label="Day ends" data-testid="plan-to" value={hrs[1]} onChange={(e) => setHrs([hrs[0], Number(e.target.value)])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 12} disabled={i + 12 - hrs[0] < 4}>{i + 12 === 24 ? '12 am' : hourLabel(i + 12)}</option>)}</select></label></div>
           <div className="pl-scroll">
             <div className="pl-day" ref={colRef} data-testid="plan-day" style={{ height: hours.length * HOUR }} onDragOver={overDay} onDrop={onDropDay} onDragLeave={() => setGhost(null)}>
               {hours.map((h) => <div key={h} className="pl-hr" style={{ top: top(h * 60) }}><span>{hourLabel(h)}</span></div>)}
@@ -235,6 +260,8 @@ export default function SoftPlan() {
                 <div key={t.id} className={`pl-blk ${kind}${b - a <= 45 ? ' short' : ''}`} data-testid={kind === 'plan' ? 'plan-block' : 'plan-meeting'} style={{ top: top(Math.max(a, DAY_START)) + 2, height: Math.max(26, ((Math.min(b, DAY_END) - Math.max(a, DAY_START)) / 60) * HOUR - 4) }} draggable={kind === 'plan'} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); setDrag({ id: t.id }); }} onDragEnd={() => { setDrag(null); setGhost(null); }}>
                   <button type="button" className="pl-btitle" onClick={() => setSheet({ task: t })}>{t.text} · {nice(b - a)}</button>
                   <span className="pl-time">{hm(a)} to {hm(b)}{kind === 'meet' ? ' (calendar)' : ''}</span>
+                  {kind === 'plan' && <Link className="pl-focus" to={`/tasks/focus/${t.id}`} aria-label={`Start a focus timer for "${t.text}"`} title="Focus timer" data-testid="plan-focus"><Timer size={12} strokeWidth={2.4} /></Link>}
+                  {kind === 'plan' && <span className="pl-grip" role="separator" aria-label="Drag to change the length" data-testid="plan-resize" onMouseDown={(e) => startResize(e, t, a)} />}
                   {kind === 'plan' && <button type="button" className="pl-x" aria-label={`Take "${t.text}" out of my day`} onClick={() => unplan(t)}><X size={12} strokeWidth={2.6} /></button>}
                 </div>
               ))}
