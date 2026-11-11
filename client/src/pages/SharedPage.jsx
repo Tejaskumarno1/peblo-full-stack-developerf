@@ -3,9 +3,10 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2 } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
+import SharePanel from './SharePanel';
 import ShareCards, { TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
@@ -922,6 +923,13 @@ export default function SharedPage() {
     scrollToHeading(id);
   };
 
+  const shareRef = useRef(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  useEffect(() => { if (!shareOpen) return undefined; const away = (e) => { if (!shareRef.current?.contains(e.target)) setShareOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [shareOpen]);
+  const meRef = useRef(null);
+  const [meOpen, setMeOpen] = useState(false);
+  useEffect(() => { if (!meOpen) return undefined; const away = (e) => { if (!meRef.current?.contains(e.target)) setMeOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [meOpen]);
+  const forgetMe = () => { try { localStorage.removeItem('peblo-guest-name'); localStorage.removeItem('peblo-guest-joined'); } catch { /* none */ } setGuestName(''); setMeOpen(false); showToast('Forgotten on this device'); };
   const [listening, setListening] = useState(false);
   const toggleListen = () => {
     const synth = window.speechSynthesis;
@@ -972,7 +980,21 @@ export default function SharedPage() {
             </div>}
           </div>}
           {data && <button className="btn icon" type="button" data-testid="moon-btn" aria-label={darkMode ? 'Switch to light' : 'Switch to dark'} title={darkMode ? 'Light' : 'Dark'} onClick={() => setDarkMode((d) => !d)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>}
-          {data && <span className="hd-me" data-testid="hd-me" title={guestName || user?.name || 'Guest'} style={{ background: myColor }}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</span>}
+          {data && <div className="menu-wrap" ref={meRef}>
+            <button type="button" className="hd-me" data-testid="hd-me" aria-haspopup="dialog" aria-expanded={meOpen} aria-label="Your identity" title={guestName || user?.name || 'Guest'} style={{ background: myColor }} onClick={() => setMeOpen((o) => !o)}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</button>
+            {meOpen && <div className="menu id-menu" role="dialog" aria-label="Your identity" data-testid="id-menu">
+              <div className="id-head"><span className="hd-me" style={{ background: myColor }}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</span><div><b>{guestName || user?.name || 'Guest'}</b><small>{user ? 'Signed in' : 'Guest on this page'}</small></div></div>
+              {!user && <><h4>Your name</h4><input className="id-name" data-testid="id-name" aria-label="Your name" maxLength={40} placeholder="Guest" defaultValue={guestName} onBlur={(e) => saveGuestName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} /></>}
+              <div className="id-colour"><i style={{ background: myColor }} /><span>Your colour is chosen for you and stays the same on this browser.</span></div>
+              {!user && <button type="button" role="menuitem" data-testid="id-signin" onClick={() => { setMeOpen(false); setAuthMode('login'); setAuthOpen(true); }}><User size={17} /><span>Sign in<small>To keep your name everywhere</small></span></button>}
+              {!user && <button type="button" role="menuitem" data-testid="id-forget" onClick={forgetMe}><RotateCcw size={17} /><span>Forget me on this device<small>Clears name and colour</small></span></button>}
+              <button type="button" role="menuitem" data-testid="id-leave" onClick={() => { setMeOpen(false); navigate('/'); }}><LogOut size={17} /><span>Leave this page</span></button>
+            </div>}
+          </div>}
+          {data && <div className="menu-wrap" ref={shareRef}>
+            <button className="btn share-btn" type="button" data-testid="share-btn" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen((o) => !o)}><Share2 size={16} /><span>Share</span></button>
+            {shareOpen && <SharePanel link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
+          </div>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">

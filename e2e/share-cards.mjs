@@ -28,6 +28,17 @@ try {
   check('11 footer Keys opens shortcuts', await g.locator('[data-testid="keys-sheet"]').isVisible());
   await g.screenshot({ path: 'share-cards.png' });
   await g.keyboard.press('Escape');
+  await g.locator('[data-testid="share-btn"]').click();
+  check('15 share panel shows link, role, expiry and invite', await g.locator('[data-testid="share-panel"]').isVisible() && /Can edit/.test(await g.locator('[data-testid="share-panel"]').innerText()) && await g.locator('[data-testid="sp-email"]').isVisible());
+  check('16 share panel has a QR toggle', (await g.locator('[data-testid="share-panel"]').innerText()).toLowerCase().includes('qr'));
+  await g.keyboard.press('Escape'); await g.mouse.click(5, 450);
+  await g.locator('[data-testid="hd-me"]').click();
+  check('12 identity menu opens with name, sign in, forget, leave', await g.locator('[data-testid="id-menu"]').isVisible() && await g.locator('[data-testid="id-signin"]').isVisible() && await g.locator('[data-testid="id-forget"]').isVisible() && await g.locator('[data-testid="id-leave"]').isVisible());
+  await g.locator('[data-testid="id-name"]').fill('Tejas');
+  await g.locator('[data-testid="id-name"]').blur();
+  check('13 renaming shows the new initial on the avatar', (await g.locator('button[data-testid="hd-me"]').innerText()).trim() === 'T');
+  await g.locator('[data-testid="id-forget"]').click();
+  check('14 forget clears the saved name', await g.evaluate(() => !localStorage.getItem('peblo-guest-name')));
   const small = await gc.newPage();
   await small.setViewportSize({ width: 1280, height: 800 });
   await small.goto(`${base}/s/note/${tok}`);
