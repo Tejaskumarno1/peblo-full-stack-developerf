@@ -23,14 +23,11 @@ try {
   await g.goto(`${base}/s/note/${tok}`);
   await ready(g);
   check('1 the page shows its read time and word count, with no banner', /min read/.test(await g.getByTestId('by-stats').innerText()) && (await g.locator('[data-testid="cover"]').count()) === 0);
-  check('2 join card for a new guest', await g.locator('[data-testid="join-card"]').isVisible());
+  check('2 join card for a new guest, with an automatic colour note and no swatches', await g.locator('[data-testid="join-card"]').isVisible() && await g.locator('[data-testid="join-auto-colour"]').isVisible());
   await g.locator('[data-testid="join-card"]').getByLabel('Your name').fill('Mia');
   await g.locator('[data-testid="join-submit"]').click();
   check('3 the card goes once joined', await until(async () => (await g.locator('[data-testid="join-card"]').count()) === 0) && (await g.getByLabel('Your name').inputValue()) === 'Mia');
-  const swatches = g.locator('[data-testid="guest-color"]');
-  check('4 colour swatches offered', (await swatches.count()) >= 5);
-  await swatches.nth(3).click();
-  const picked = await swatches.nth(3).evaluate((el) => getComputedStyle(el).backgroundColor);
+  check('4 no colour picker anywhere, the colour is automatic', (await g.locator('[data-testid="guest-color"]').count()) === 0 && (await g.getByLabel('Your colour').count()) === 0);
   await blockOf(g, 'Paragraph number 3 ').scrollIntoViewIfNeeded();
   const bb = await blockOf(g, 'Paragraph number 3 ').boundingBox();
   await wait(800);
@@ -38,7 +35,8 @@ try {
   await g.mouse.move(bb.x + 90, bb.y + 10);
   check('5 owner sees her pointer', await until(async () => (await page.locator('[data-testid="peer-pointer"][data-name="Mia"]').count()) >= 1));
   const seen = await page.locator('[data-testid="peer-pointer"][data-name="Mia"] .tag').first().evaluate((el) => getComputedStyle(el).backgroundColor).catch(() => '');
-  check('6 pointer uses the chosen colour', seen === picked, `${seen} vs ${picked}`);
+  const PALETTE = ['#E2501A', '#2350FF', '#2FB67C', '#B05AF0', '#D9A400', '#0E9AA7', '#E0457B'].map((h) => `rgb(${[1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(', ')})`);
+  check('6 pointer uses an automatic colour from the palette', PALETTE.includes(seen), seen);
 
   await g.locator('[data-testid="present-btn"]').click(); await g.getByTestId('present-options').click(); await g.locator('[data-testid="present-go"]').click();
   check('7 laser and spotlight tools shown', (await g.locator('[data-testid="tool-laser"]').count()) === 1 && (await g.locator('[data-testid="tool-spot"]').count()) === 1);

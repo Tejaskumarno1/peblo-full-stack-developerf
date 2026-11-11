@@ -203,17 +203,10 @@ export default function SharedPage() {
     if (clean) { markJoined(); window.dispatchEvent(new CustomEvent('pb-identity', { detail: { name: clean } })); }
   };
   // how I show up for the others: a colour next to the name (kept in this browser, applied live)
-  const GUEST_COLORS = ['#e11d48', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777'];
-  const [guestColor, setGuestColor] = useState(() => { try { return localStorage.getItem('peblo-guest-color') || ''; } catch { return ''; } });
-  const colorRef = useRef(guestColor);
-  colorRef.current = guestColor;
+  // Colours are never chosen: every person gets their own from the viewer id (same one on cursor, outline dot and comments).
+  const colorRef = useRef('');
   const [joined, setJoined] = useState(() => { try { return localStorage.getItem('peblo-guest-joined') === '1' || !!localStorage.getItem('peblo-guest-name'); } catch { return false; } });
   const markJoined = () => { setJoined(true); try { localStorage.setItem('peblo-guest-joined', '1'); } catch { /* not remembered */ } };
-  const pickColor = (color) => {
-    setGuestColor(color); markJoined();
-    try { localStorage.setItem('peblo-guest-color', color); } catch { /* not remembered */ }
-    window.dispatchEvent(new CustomEvent('pb-identity', { detail: { color } }));
-  };
   const [tocSheet, setTocSheet] = useState(false);
   const taskSavedText = useRef(null);
   const timer = useRef(null);
@@ -704,6 +697,10 @@ export default function SharedPage() {
     return () => window.clearInterval(t);
   }, [recentEvents.length]);
   const others = viewers.filter((viewer) => !viewer.self);
+  const selfViewerId = viewers.find((viewer) => viewer.self)?.id || '';
+  const myColor = peerColor(selfViewerId || sessionIdRef.current || guestName || 'guest');
+  colorRef.current = myColor;
+  useEffect(() => { if (selfViewerId) window.dispatchEvent(new CustomEvent('pb-identity', { detail: { color: myColor } })); }, [selfViewerId, myColor]);
   // The outline stands alone until someone else is here; then the live panel slides in (wide screens), and leaves with them.
   const wasOthers = useRef(0);
   useEffect(() => {
@@ -888,8 +885,7 @@ export default function SharedPage() {
   const [bmOpen, setBmOpen] = useState(false);
   const showJoin = !!(data?.canEdit && !user && !previewMode && !joined && !error);
   const [cardName, setCardName] = useState('');
-  const [cardColor, setCardColor] = useState(GUEST_COLORS[5]);
-  const joinNow = (anon) => { if (!anon) { saveGuestName(cardName); pickColor(cardColor); } markJoined(); };
+  const joinNow = (anon) => { if (!anon) saveGuestName(cardName); markJoined(); };
   const [fly, setFly] = useState(null); // 'outline' | 'history' | 'file' (people uses panelOpen)
   const [wideScreen, setWideScreen] = useState(() => window.innerWidth > 1280);
   useEffect(() => { const on = () => setWideScreen(window.innerWidth > 1280); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
@@ -975,9 +971,9 @@ export default function SharedPage() {
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
       {showJoin && <div className="join-back" data-testid="join-back"><div className="join-card" role="dialog" aria-modal="true" aria-label="Join this page" data-testid="join-card" onKeyDown={(event) => { if (event.key === 'Escape') joinNow(true); }}>
-        <div className="join-prev"><span className="join-big" style={{ background: cardColor, boxShadow: `0 0 0 5px ${cardColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
+        <div className="join-prev"><span className="join-big" style={{ background: myColor, boxShadow: `0 0 0 5px ${myColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
         <label className="join-lbl">Your name<input aria-label="Your name" autoFocus maxLength={40} placeholder="Guest" value={cardName} onChange={(event) => setCardName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') joinNow(false); }} /></label>
-        <div><div className="join-lbl">Your colour</div><div className="join-sws" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={cardColor === c} aria-label={`Colour ${c}`} className={cardColor === c ? 'on' : ''} style={{ background: c }} onClick={() => setCardColor(c)} />)}</div></div>
+        <div className="join-auto" data-testid="join-auto-colour"><i style={{ background: myColor }} /><span>Your colour is picked for you, so everyone can tell who is who.</span></div>
         <div className="join-mem"><Lock size={14} />Remembered in this browser only. Others see your name and colour on your cursor.</div>
         <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}>{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Just read, stay anonymous</button></div>
       </div></div>}
@@ -1058,7 +1054,6 @@ export default function SharedPage() {
                 <label className="guest-name"><span>You are editing as</span>
                   <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
                   <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
-                <span className="swatches" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={guestColor === c} aria-label={`Colour ${c}`} data-testid="guest-color" className={guestColor === c ? 'on' : ''} style={{ background: c }} onClick={() => pickColor(c)}>{guestColor === c && <Check size={12} />}</button>)}</span>
               </div>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {data.canEdit && !previewMode
