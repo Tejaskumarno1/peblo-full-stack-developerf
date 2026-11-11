@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Mic, Minimize2, Timer, Volume2 } from 'lucide-react';
+import { GripVertical, Mic, Minimize2, Timer, Volume2, ZoomIn, ZoomOut } from 'lucide-react';
 import './focusMode.css';
 
 /* Owner full-screen writing mode, shared by the Soft, River and Orbit note pages.
@@ -10,6 +10,8 @@ import './focusMode.css';
 const rd = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
 const wr = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* private window: the choice lasts until the page closes */ } };
 export const FS_SIZES = [17, 19, 21, 24, 28];
+export const FS_ZOOM = { min: 60, max: 200, step: 10 };
+const clampZoom = (z) => Math.min(FS_ZOOM.max, Math.max(FS_ZOOM.min, Math.round(z / FS_ZOOM.step) * FS_ZOOM.step));
 const GOALS = [250, 500, 750, 1000, 1500, 2000];
 const dayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const readDay = () => { try { const j = JSON.parse(rd('peblo-fs-day', 'null')); if (j && j.d === dayKey() && Number.isFinite(j.n)) return j; } catch { /* start the day at zero */ } return { d: dayKey(), n: 0 }; };
@@ -26,11 +28,12 @@ export function useFocusPrefs() {
       type: rd('peblo-fs-typewriter', '0') === '1',
       para: rd('peblo-fs-paragraph', '0') === '1',
       goal: g > 0 ? g : 500,
+      zoom: clampZoom(Number(rd('peblo-fs-zoom', '100')) || 100),
     };
   });
   const set = useCallback((k, v) => {
     setP((o) => ({ ...o, [k]: v }));
-    const key = { width: 'peblo-fs-width', size: 'peblo-fs-size', theme: 'peblo-fs-theme', outline: 'peblo-fs-outline', type: 'peblo-fs-typewriter', para: 'peblo-fs-paragraph', goal: 'peblo-fs-goal' }[k];
+    const key = { width: 'peblo-fs-width', size: 'peblo-fs-size', theme: 'peblo-fs-theme', outline: 'peblo-fs-outline', type: 'peblo-fs-typewriter', para: 'peblo-fs-paragraph', goal: 'peblo-fs-goal', zoom: 'peblo-fs-zoom' }[k];
     wr(key, typeof v === 'boolean' ? (v ? '1' : '0') : v);
   }, []);
   return [p, set];
@@ -105,6 +108,7 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
   const [qcMsg, setQcMsg] = useState('');
   const [hintOn, setHintOn] = useState(false);
   const timer = useRef(0);
+  const showT = useRef(0);
   const last = useRef({ x: -99, y: -99 });
   const prev = useRef(null);
   const wordsRef = useRef(words);
@@ -134,13 +138,31 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
     h.setAttribute('data-fs-outline', prefs.outline ? '1' : '0');
     h.setAttribute('data-fs-drawer', drawerOn ? '1' : '0');
     h.style.setProperty('--fs-size', `${FS_SIZES[prefs.size]}px`);
-  }, [active, prefs.width, prefs.theme, prefs.outline, prefs.size, prefs.type, drawerOn]);
+    h.style.setProperty('--fs-zoom', String(prefs.zoom / 100));
+  }, [active, prefs.width, prefs.theme, prefs.outline, prefs.size, prefs.type, prefs.zoom, drawerOn]);
+
+  // zoom the writing page like Word: Ctrl and the mouse wheel, Ctrl plus / minus, Ctrl 0 for 100%
+  const zoomRef = useRef(prefs.zoom); zoomRef.current = prefs.zoom;
+  useEffect(() => {
+    if (!active) return undefined;
+    const bump = (d) => set('zoom', clampZoom(zoomRef.current + d * FS_ZOOM.step));
+    const wheel = (e) => { if (!e.ctrlKey || e.target?.closest?.('.fsx-drawer, .fsx-bar')) return; e.preventDefault(); bump(e.deltaY < 0 ? 1 : -1); };
+    const key = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); bump(1); } else if (e.key === '-' || e.key === '_') { e.preventDefault(); bump(-1); } else if (e.key === '0') { e.preventDefault(); set('zoom', 100); }
+    };
+    window.addEventListener('wheel', wheel, { passive: false, capture: true });
+    window.addEventListener('keydown', key, true);
+    return () => { window.removeEventListener('wheel', wheel, true); window.removeEventListener('keydown', key, true); };
+  }, [active, set]);
 
   // the keyboard hint is shown the first three times only
   useEffect(() => {
     if (!active) { setHintOn(false); return; }
     const n = Number(rd('peblo-fs-hint', '0')) || 0;
     setHintOn(n < 3); wr('peblo-fs-hint', n + 1);
+    const t = setTimeout(() => setHintOn(false), 3000);
+    return () => clearTimeout(t);
   }, [active]);
 
   // the bar fades two seconds after typing begins and comes back when the mouse moves
@@ -151,6 +173,7 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
       if (e.ctrlKey || e.metaKey || e.altKey || ['Shift', 'Control', 'Alt', 'Meta', 'Escape', 'Tab'].includes(e.key)) return;
       if (e.target?.closest?.('.fsx-bar, .fsx-drawer')) return;
       if (!e.target?.closest?.('[contenteditable="true"], input, textarea')) return;
+      if (showT.current) { clearTimeout(showT.current); showT.current = 0; }
       if (timer.current) return;
       timer.current = setTimeout(() => { timer.current = 0; setShown(false); }, 2000);
     };
@@ -158,11 +181,12 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
       if (Math.abs(e.clientX - last.current.x) + Math.abs(e.clientY - last.current.y) < 4) return;
       last.current = { x: e.clientX, y: e.clientY };
       if (timer.current) { clearTimeout(timer.current); timer.current = 0; }
-      setShown(true);
+      if (showT.current) return;
+      showT.current = setTimeout(() => { showT.current = 0; setShown(true); }, 350);
     };
     window.addEventListener('keydown', key, true);
     window.addEventListener('mousemove', move, true);
-    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('mousemove', move, true); if (timer.current) { clearTimeout(timer.current); timer.current = 0; } };
+    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('mousemove', move, true); if (timer.current) { clearTimeout(timer.current); timer.current = 0; } if (showT.current) { clearTimeout(showT.current); showT.current = 0; } };
   }, [active]);
 
   // reading progress, the heading being read, and the minutes in each section
@@ -212,22 +236,13 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
     return () => document.removeEventListener('selectionchange', sel);
   }, [active]);
   const stopDictation = useCallback(() => { try { rec.current?.stop(); } catch { /* not running */ } rec.current = null; setListening(false); }, []);
-  const toggleDictation = () => {
-    if (!SR) return;
-    if (listening) { stopDictation(); return; }
-    const r = new SR(); r.continuous = true; r.interimResults = false; r.lang = navigator.language || 'en-US';
-    r.onresult = (e) => {
-      const text = [...e.results].slice(e.resultIndex).filter((x) => x.isFinal).map((x) => x[0].transcript).join(' ').trim();
-      if (!text) return;
-      const ed = document.querySelector('.bn-editor[contenteditable="true"], .bn-editor [contenteditable="true"]'); if (!ed) return;
-      ed.focus();
-      if (range.current) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range.current); }
-      document.execCommand('insertText', false, `${text} `);
-    };
-    r.onend = () => { if (rec.current === r) { rec.current = null; setListening(false); } };
-    r.onerror = () => { if (rec.current === r) { rec.current = null; setListening(false); } };
-    rec.current = r; try { r.start(); setListening(true); } catch { rec.current = null; }
-  };
+  // the same voice pill as in the editor (Whisper in the browser), so this switch only starts and stops it
+  const toggleDictation = () => { window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'dictate' } })); };
+  useEffect(() => {
+    const on = (e) => setListening(!!e.detail?.on);
+    window.addEventListener('pb-dictation-state', on);
+    return () => window.removeEventListener('pb-dictation-state', on);
+  }, []);
 
   // soft background sound (brown noise), made in the browser, no file needed
   const stopAmbient = useCallback(() => { try { audio.current?.src.stop(); audio.current?.ctx.close(); } catch { /* already stopped */ } audio.current = null; setAmbient(false); }, []);
@@ -312,6 +327,11 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
           <button {...btn('Smaller text', { id: 'fs-smaller', onClick: () => set('size', Math.max(0, prefs.size - 1)) })} style={{ fontWeight: 700, fontSize: 13 }} disabled={prefs.size === 0}>A-</button>
           <button {...btn('Larger text', { id: 'fs-larger', onClick: () => set('size', Math.min(FS_SIZES.length - 1, prefs.size + 1)) })} style={{ fontWeight: 700, fontSize: 17 }} disabled={prefs.size === FS_SIZES.length - 1}>A+</button>
         </div>
+        <div className="fsx-sizes" role="group" aria-label="Zoom">
+          <button {...btn('Zoom out (Ctrl -)', { id: 'fs-zoom-out', onClick: () => set('zoom', clampZoom(prefs.zoom - FS_ZOOM.step)) })} disabled={prefs.zoom <= FS_ZOOM.min}><ZoomOut size={16} /></button>
+          <button {...btn('Reset zoom (Ctrl 0)', { id: 'fs-zoom-reset', onClick: () => set('zoom', 100) })} style={{ fontWeight: 700, fontSize: 12, minWidth: 44 }}>{prefs.zoom}%</button>
+          <button {...btn('Zoom in (Ctrl +)', { id: 'fs-zoom-in', onClick: () => set('zoom', clampZoom(prefs.zoom + FS_ZOOM.step)) })} disabled={prefs.zoom >= FS_ZOOM.max}><ZoomIn size={16} /></button>
+        </div>
         <button {...btn(prefs.theme === 'dark' ? 'Light theme' : 'Dark theme', { id: 'fs-theme', onClick: () => set('theme', prefs.theme === 'dark' ? 'light' : 'dark') })}>
           {prefs.theme === 'dark' ? <Svg><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" /></Svg> : <Svg><path d="M20 14A8 8 0 019.5 4 8 8 0 1020 14z" /></Svg>}
         </button>
@@ -356,7 +376,7 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
                   </div>
                   <div className="fsx-tool">
                     <Mic size={15} /><span className="lb">Dictation</span>
-                    <button type="button" className={`fsx-pill${listening ? ' on' : ''}`} data-testid="fs-dictate" disabled={!SR} title={SR ? 'Type what you say where the cursor is' : 'This browser cannot do speech to text'} onClick={toggleDictation}>{listening ? 'Listening' : SR ? 'Start' : 'Unavailable'}</button>
+                    <button type="button" className={`fsx-pill${listening ? ' on' : ''}`} data-testid="fs-dictate" title="Type what you say where the cursor is" onClick={toggleDictation}>{listening ? 'Listening' : 'Start'}</button>
                   </div>
                   <div className="fsx-tool">
                     <Volume2 size={15} /><span className="lb">Soft sound</span>

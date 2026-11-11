@@ -5,6 +5,7 @@ import { usePresence } from '../utils/presencePref';
 import ShareQr, { QR_CSS } from './ShareQr';
 import PollManager from './PollManager';
 import './collab.css';
+import Toast from './Toast';
 
 /** The people-on-the-link UI shared by the notes editor and the public share page. All data comes from the server's presence list. */
 
@@ -76,10 +77,10 @@ export function CollabBar({ viewers, open, onToggle, offline, toasts = [], onDis
   return (
     <div className="cp-wrap">
       {toasts.map((t) => (
-        <div key={t.id} className="cp-toast" role="status">
+        <Toast key={t.id}><div className="cp-toast" role="status">
           <b>{t.name}</b> {EVENT_WORDS[t.kind]}
           <button type="button" aria-label="Dismiss" onClick={() => onDismissToast?.(t.id)}><X size={13} /></button>
-        </div>
+        </div></Toast>
       ))}
       <button type="button" className={`cp-bar${typers.length ? ' is-typing' : ''}${soon ? ' is-soon' : ''}${offline ? ' is-off' : ''}`} aria-expanded={open} onClick={onToggle} data-testid="live-editors" title="Who is here, and what happened">
         <span className="cp-bar-eye" aria-hidden="true">{offline ? <WifiOff size={15} /> : <Eye size={15} />}</span>

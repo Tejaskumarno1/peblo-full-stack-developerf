@@ -45,6 +45,8 @@ import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
 import './editorChrome.css';
+import Toast from './Toast';
+import VoicePill from './VoicePill';
 
 // A picture, video, audio clip or file picked from the computer becomes a data address inside the note
 // (pictures are shrunk first). Bigger than 4 MB is refused with a message instead of silently bloating the note.
@@ -378,6 +380,13 @@ const boundedToolbar = (editor) => ({
     y = Math.min(Math.max(y, vb.top + 6), vb.bottom - fh - 6);
     let x = img ? r.left + r.width / 2 - fw / 2 : r.left;
     x = Math.min(Math.max(x, vb.left + 8), vb.right - fw - 8);
+    // words under a picture: put the bar below the words rather than over the picture above them
+    if (!img) {
+      const pics = Array.from(dom.querySelectorAll('.bn-visual-media-wrapper, img.bn-visual-media')).map((n) => n.getBoundingClientRect());
+      const hits = (yy) => pics.some((q) => q.width > 0 && q.left < x + fw && q.right > x && q.top < yy + fh && q.bottom > yy);
+      const below = r.bottom + gap;
+      if (hits(y) && !hits(below) && below + fh < vb.bottom - 6) y = below;
+    }
     fl.style.visibility = r.bottom < vb.top + 4 || r.top > vb.bottom - 4 ? 'hidden' : '';
     return { x, y };
   },
@@ -425,6 +434,15 @@ const remember = (title) => { try { localStorage.setItem(RECENT_KEY, JSON.string
 const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/, '').trim();
 
 const CHANGE_DEBOUNCE_MS = 200; // quiet time before the typed text is turned into Markdown (see handleChange)
+
+/** Every slash item once, and each group in one run: a group split in two prints its heading twice. */
+export function uniqueSlashItems(items) {
+  const seen = new Set();
+  const once = items.filter((i) => { const k = `${i.group}|${String(i.title).toLowerCase()}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  const order = [];
+  for (const i of once) if (!order.includes(i.group)) order.push(i.group);
+  return order.flatMap((g) => once.filter((i) => i.group === g));
+}
 
 function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, typewriter = null, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
   const navigate = useNavigate();
@@ -1007,9 +1025,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <Link2 size={16} />, subtext: 'Pick one of your notes (or type [[).' }]),
       ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <LayoutTemplate size={16} />, subtext: 'A ready layout to fill in.' })),
     ];
-    const all = [...mediaItems, ...fileItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
+    const all = uniqueSlashItems([...mediaItems, ...defaultItems.filter((i) => i.group === 'Media'), ...fileItems, ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)]).map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
-    const found = filterSuggestionItems([...recent, ...all], query);
+    const recentTitles = new Set(recent.map((i) => i.title)); // a recent item moves up, it is not listed a second time below
+    const found = filterSuggestionItems([...recent, ...all.filter((i) => !recentTitles.has(i.title))], query);
     const q = String(query || '').trim().toLowerCase();
     if (!q) return found;
     const rank = (i) => (i.group !== 'Media' && i.group !== 'Files' && String(i.title).toLowerCase() === q ? 0 : 1); // "/table" finds Table before anything that merely mentions it
@@ -1159,9 +1178,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
-      {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
-      {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
+      {rt && (!live.ready || !live.connected) && <Toast><div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div></Toast>}
+      {notice && <Toast><div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div></Toast>}
       <MediaTools editor={editor} rootRef={rootRef} uploadFile={uploadFile} editable={editable !== false} />
+      {!guest && editable !== false && <VoicePill editor={editor} />}
       <FileTools editor={editor} rootRef={rootRef} editable={editable !== false && !guest} />
       {findOpen && <FindBar key={findReplace ? 'r' : 'f'} root={rootRef} editor={editor} editable={editable !== false} withReplace={findReplace} onClose={() => { setFindOpen(false); try { editor.focus(); } catch { /* none */ } }} />}
       {lightbox && (

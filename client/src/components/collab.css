@@ -1,6 +1,6 @@
 /* Live collaboration: panel, bottom bar, header chips. Takes its colours from whichever look is on screen
    (the app's --pb-* tokens, or the share page's own), so it fits all of them, light and dark. */
-.cp, .cp-wrap, .cp-chips, .cp-drawer {
+.cp, .cp-wrap, .cp-chips, .cp-drawer, .cp-toast {
   --cp-surface: var(--pb-surface, var(--surface, #fff));
   --cp-fg: var(--pb-fg, var(--fg, #241f1a));
   --cp-fg2: var(--pb-fg-2, var(--fg3, #6e6559));

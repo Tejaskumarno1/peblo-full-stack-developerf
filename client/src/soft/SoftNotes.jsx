@@ -32,6 +32,7 @@ import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/
 import { useLive } from '../utils/liveStore';
 import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
+import Toast from '../components/Toast';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -894,7 +895,7 @@ export default function SoftNotes() {
                 formattingToolbar
               />
             </div>
-            {toast && <div className="s-toast" role="status">{toast}</div>}
+            {toast && <Toast><div className="s-toast" role="status">{toast}</div></Toast>}
           </>
         )}
       </main>

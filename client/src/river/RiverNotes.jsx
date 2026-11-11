@@ -23,6 +23,7 @@ import FolderDialog from '../soft/FolderDialog';
 import TagManager from '../soft/TagManager';
 import Gallery from '../soft/Gallery';
 import { exportMarkdown, exportManyMarkdown, exportWord, exportPdf } from '../utils/exportNote';
+import Toast from '../components/Toast';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -435,7 +436,7 @@ function RiverNote({ note }) {
           </section>
         </aside>
       </div>
-      {toast && <div className="r-toast" role="status">{toast}</div>}
+      {toast && <Toast><div className="r-toast" role="status">{toast}</div></Toast>}
       <UndoToast toast={note.actionToast} dismiss={note.dismissActionToast} />
     </>
   );

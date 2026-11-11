@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRightLeft, Check, Copy, X } from 'lucide-react';
 import { notesAPI } from '../api';
 import { Backdrop, iconOf, toneOf, useCurrentSpace, useWorkspaces } from './spaces';
+import Toast from '../components/Toast';
 
 /** Move a note to another space, or share a copy (mockups A05, A06, A07, A07b). Shown only to people who belong to an organization. */
 export default function MoveNote({ noteId, title }) {
@@ -90,9 +91,9 @@ export function MoveToast() {
     try { await notesAPI.move(u.id, u.from, u.to); await qc.invalidateQueries(); } catch { /* it stays where it is */ }
   };
   return (
-    <div className="s-toast s-move-toast" role="status" data-testid="move-toast">
+    <Toast><div className="s-toast s-move-toast" role="status" data-testid="move-toast">
       {undo.copy ? <><Copy size={14} /> Copy added to {undo.name}</> : <><Check size={14} /> Moved to {undo.name}</>}
       {!undo.copy && <button type="button" onClick={back}>Undo</button>}
-    </div>
+    </div></Toast>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Layers, LayoutGrid, Rows3, Crop, Pencil, Trash2, RotateCw, FlipHorizontal, Check, Pause, Play, Mic, Upload, X } from 'lucide-react';
+import { Layers, LayoutGrid, Rows3, Crop, Pencil, Trash2, RotateCw, FlipHorizontal, Check, Mic, Upload, X } from 'lucide-react';
 
 // Pictures, GIFs, video, voice notes and dictation for the note editor (mockups M1 A, M1 C, M2 a, C A, D A).
 
@@ -287,7 +287,7 @@ function CropOverlay({ editor, rootRef, id, uploadFile, onClose }) {
   );
 }
 
-/* ------------------------------------------------------------------ dictation and voice notes (D A) */
+/* ------------------------------------------------------------------ voice notes (D A); dictation is in VoicePill */
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 function caretSpot() {
   try {
@@ -301,67 +301,6 @@ function caretSpot() {
   return { top: window.innerHeight - 110, left: window.innerWidth / 2 - 140 };
 }
 const Wave = () => <span className="pb-wave" aria-hidden="true">{[8, 16, 22, 12, 20, 9, 15].map((h, i) => <i key={i} style={{ height: h, animationDelay: `${i * 0.11}s` }} />)}</span>;
-
-function Dictation({ editor, onClose }) {
-  const [state, setState] = useState('listening'); // listening | paused | error
-  const [live, setLive] = useState('');
-  const [msg, setMsg] = useState('');
-  const [spot] = useState(caretSpot);
-  const rec = useRef(null);
-  const want = useRef(true);
-  const add = useCallback((t) => {
-    const text = String(t || '').trim();
-    if (!text) return;
-    try { editor.focus(); editor.insertInlineContent([{ type: 'text', text: `${text} `, styles: {} }]); } catch { /* no cursor */ }
-  }, [editor]);
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setState('error'); setMsg('Voice typing needs Chrome or Edge. This window cannot listen.'); return undefined; }
-    const r = new SR();
-    r.continuous = true; r.interimResults = true; r.lang = navigator.language || 'en-US';
-    r.onresult = (ev) => {
-      let interim = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i += 1) {
-        const res = ev.results[i];
-        if (res.isFinal) add(res[0].transcript); else interim += res[0].transcript;
-      }
-      setLive(interim);
-    };
-    r.onerror = (ev) => {
-      if (ev.error === 'no-speech' || ev.error === 'aborted') return;
-      want.current = false; setState('error');
-      setMsg(ev.error === 'not-allowed' || ev.error === 'service-not-allowed' ? 'The microphone is blocked. Allow it for this site and try again.' : ev.error === 'network' ? 'Voice typing is not available in this window. Open Peblo in Chrome or Edge.' : `Voice typing stopped (${ev.error}).`);
-    };
-    r.onend = () => { if (want.current) { try { r.start(); } catch { /* already running */ } } };
-    rec.current = r;
-    try { r.start(); } catch { /* already running */ }
-    return () => { want.current = false; try { r.abort(); } catch { /* gone */ } };
-  }, [add]);
-  const pause = () => {
-    if (state === 'listening') { want.current = false; setState('paused'); setLive(''); try { rec.current?.stop(); } catch { /* x */ } }
-    else if (state === 'paused') { want.current = true; setState('listening'); try { rec.current?.start(); } catch { /* x */ } }
-  };
-  useEffect(() => {
-    const key = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', key, true);
-    return () => window.removeEventListener('keydown', key, true);
-  }, [onClose]);
-  return createPortal(
-    <div className={`pb-pill${state === 'error' ? ' err' : ''}`} role="status" aria-label={state === 'listening' ? 'Listening' : 'Voice typing'} data-testid="dictation" data-state={state} style={{ top: Math.min(spot.top, window.innerHeight - 70), left: Math.max(8, Math.min(spot.left, window.innerWidth - 330)) }}>
-      {live && state === 'listening' && <span className="pb-live" data-testid="dictation-live">{live}</span>}
-      <span className={`m${state === 'paused' ? ' off' : ''}`}><Mic size={17} /></span>
-      {state === 'error' ? <b className="msg">{msg}</b> : (
-        <>
-          {state === 'listening' ? <Wave /> : null}
-          <b>{state === 'listening' ? 'Listening' : 'Paused'}</b>
-          <button type="button" className="x" aria-label={state === 'listening' ? 'Pause' : 'Resume'} data-testid="dictation-pause" onClick={pause}>{state === 'listening' ? <Pause size={14} /> : <Play size={14} />}</button>
-        </>
-      )}
-      <button type="button" className="x" aria-label={state === 'error' ? 'Close' : 'Finish'} data-testid="dictation-done" onClick={onClose}>{state === 'error' ? <X size={14} /> : <Check size={14} />}</button>
-    </div>,
-    document.body,
-  );
-}
 
 function Recorder({ onDone, onClose }) {
   const [secs, setSecs] = useState(0);
@@ -502,7 +441,6 @@ export default function MediaTools({ editor, rootRef, uploadFile, editable }) {
       if (act === 'pictures') pickFiles('image/*', true).then((f) => addFiles(f, refId));
       else if (act === 'gif' || act === 'video') setAsk({ kind: act, refId });
       else if (act === 'voice') setMode({ kind: 'record', refId });
-      else if (act === 'dictate') setMode({ kind: 'dictate', refId });
       else if (act === 'crop') setCropId(e.detail.id);
       else if (act === 'caption') setCapId(e.detail.id);
     };
@@ -518,7 +456,6 @@ export default function MediaTools({ editor, rootRef, uploadFile, editable }) {
       {capId && <CaptionPop editor={editor} rootRef={rootRef} id={capId} onClose={() => setCapId(null)} />}
       {cropId && <CropOverlay editor={editor} rootRef={rootRef} id={cropId} uploadFile={uploadFile} onClose={() => setCropId(null)} />}
       {ask && <LinkAsk kind={ask.kind} onClose={() => setAsk(null)} onFiles={(f) => { const r = ask.refId; setAsk(null); addFiles(f, r); }} onLink={(u) => addLink(ask.kind, u, ask.refId)} />}
-      {mode?.kind === 'dictate' && <Dictation editor={editor} onClose={() => setMode(null)} />}
       {mode?.kind === 'record' && <Recorder onClose={() => setMode(null)} onDone={(file) => { const r = mode.refId; setMode(null); addFiles([file], r); }} />}
     </>
   );

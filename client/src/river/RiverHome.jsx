@@ -10,6 +10,7 @@ import { freeGaps, clashes, dur } from './planner';
 import { AlertTriangle } from 'lucide-react';
 import { useUndoToast } from '../utils/useUndoToast';
 import UndoToast from '../components/UndoToast';
+import Toast from '../components/Toast';
 import {
   ZOOMS, DAY_START, DAY_END, dayWidth, rangeStart, rangeWidth, xOf,
   startOfDay, addDays, sameDay, momentOf, endOf, dueMomentOf, isMeeting, isAllDay,
@@ -806,7 +807,7 @@ export default function RiverHome({ initialZoom = 'day' }) {
           ))}
         </div>
       )}
-      {toast && <div className="r-toast" role="status">{toast}</div>}
+      {toast && <Toast><div className="r-toast" role="status">{toast}</div></Toast>}
       <UndoToast toast={undoToast} dismiss={dismiss} />
     </>
   );

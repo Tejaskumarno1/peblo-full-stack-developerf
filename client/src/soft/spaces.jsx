@@ -5,6 +5,7 @@ import { Check, ChevronDown, Plus, User, Users, Building2, X } from 'lucide-reac
 import { workspacesAPI } from '../api';
 import { getSpace, setSpace, SPACE_EVENT } from '../api/space';
 import './spaces.css';
+import Toast from '../components/Toast';
 
 /** The person's spaces: Personal always, plus the teams and Office of every organization they belong to. */
 export function useWorkspaces() {
@@ -221,10 +222,10 @@ export function SpaceAccessGuard() {
   }, [data, current, switchTo]);
   if (!notice) return null;
   return (
-    <div className="s-toast s-move-toast" role="status" data-testid="space-gone">
+    <Toast><div className="s-toast s-move-toast" role="status" data-testid="space-gone">
       <span>{notice}</span>
       <button type="button" onClick={() => setNotice('')}>Dismiss</button>
-    </div>
+    </div></Toast>
   );
 }
 

@@ -185,24 +185,7 @@ try {
   await page.waitForFunction((n) => document.querySelectorAll('.bn-editor img.bn-visual-media').length === n + 1, picsBefore, { timeout: 15000 });
   check('GIF: a GIF file is added as a picture', true);
 
-  // ---- dictation
-  await newLine();
-  await slash('dict'); await page.keyboard.press('Enter');
-  await page.locator('[data-testid="dictation"]').waitFor({ timeout: 3000 });
-  check('Dictation: pill says Listening', /Listening/.test(await page.locator('[data-testid="dictation"]').innerText()));
-  await page.evaluate(() => { const r = window.__srs[window.__srs.length - 1]; r.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: 'then the team reviews' }], { isFinal: false })] }); });
-  check('Dictation: live words show while speaking', /then the team reviews/.test(await page.locator('[data-testid="dictation-live"]').innerText()));
-  await page.evaluate(() => { const r = window.__srs[window.__srs.length - 1]; r.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: 'then the team reviews every share link' }], { isFinal: true })] }); });
-  await wait(500);
-  check('Dictation: spoken words are typed into the note', /then the team reviews every share link/.test(await page.locator('.bn-editor').innerText()));
-  await page.locator('[data-testid="dictation-pause"]').click();
-  check('Dictation: pause works', (await page.locator('[data-testid="dictation"]').getAttribute('data-state')) === 'paused');
-  await page.locator('[data-testid="dictation-pause"]').click();
-  check('Dictation: resume works', (await page.locator('[data-testid="dictation"]').getAttribute('data-state')) === 'listening');
-  await page.screenshot({ path: 'e2e/media-dictation.png' });
-  await page.locator('[data-testid="dictation-done"]').click();
-  await page.locator('[data-testid="dictation"]').waitFor({ state: 'detached', timeout: 3000 });
-  check('Dictation: Done closes the pill', true);
+  // ---- dictation lives in the voice pill now: see e2e/voice-pill.mjs
 
   // ---- voice note
   await newLine();

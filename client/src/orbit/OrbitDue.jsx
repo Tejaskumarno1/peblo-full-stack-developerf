@@ -16,6 +16,7 @@ import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, block
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf, spanOf } from '../river/riverUtils';
 import TimeGrid from '../components/TimeGrid';
+import Toast from '../components/Toast';
 
 const UNDO_MS = 6000;
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -606,10 +607,10 @@ export default function OrbitDue({ view: initialView = 'list' }) {
           </div>
         )}
         {toast && (
-          <div className="o-toast" role="status">
+          <Toast><div className="o-toast" role="status">
             <span>{toast.msg}</span>
             <button type="button" onClick={() => { const u = toast.undo; clearTimeout(toastTimer.current); setToast(null); u(); }}>Undo</button>
-          </div>
+          </div></Toast>
         )}
       </article>
     </>

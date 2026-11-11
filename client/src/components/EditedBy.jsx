@@ -8,6 +8,7 @@ import { notesAPI } from '../api/index';
 import { getToken } from '../api/token';
 import CompareBox from './CompareBox';
 import './editedby.css';
+import Toast from './Toast';
 
 // "Priya updated this note": when someone else's edit lands while I am on the page, say who, show before and now,
 // and let me take it, keep my version as a note, or compare in detail (mockups E1a, E1b).
@@ -99,7 +100,7 @@ export default function EditedBy({ rt, editor, ready }) {
   if (!edit && !msg) return null;
   return (
     <>
-      {edit && !dlg && !cmp && <div className="eb-toast" role="status" aria-label="Note updated" data-testid="edited-toast">
+      {edit && !dlg && !cmp && <Toast><div className="eb-toast" role="status" aria-label="Note updated" data-testid="edited-toast">
         <div className="eb-h"><span className="eb-av" style={{ background: edit.color }}>{(edit.who[0] || '?').toUpperCase()}</span>
           <span className="eb-t"><b>{edit.who} updated this note</b><small>Just now · {edit.added} added, {edit.removed} removed</small></span>
           <button type="button" className="eb-x" aria-label="Dismiss" data-testid="eb-dismiss" onClick={ack}><X size={16} /></button></div>
@@ -109,8 +110,8 @@ export default function EditedBy({ rt, editor, ready }) {
           <button type="button" data-testid="eb-keep" onClick={async () => { if (await keepMine()) ack(); }}><Copy size={14} />Keep my version as a note</button>
           <button type="button" className="dk full" data-testid="eb-got" onClick={ack}><Check size={14} />Got it, keep the page open for everyone</button>
         </div>
-      </div>}
-      {msg && <div className="eb-flash" role="status">{msg}</div>}
+      </div></Toast>}
+      {msg && <Toast><div className="eb-flash" role="status">{msg}</div></Toast>}
       {edit && dlg && <div className="eb-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setDlg(false); }}>
         <div className="eb-dlg" role="dialog" aria-modal="true" tabIndex={-1} ref={dlgRef} aria-label={`${edit.who} updated this note`} data-testid="edited-dialog" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setDlg(false); } }}>
           <div className="eb-dh"><span className="eb-av lg" style={{ background: edit.color }}>{(edit.who[0] || '?').toUpperCase()}</span><div><h3>{edit.who} updated this note</h3><small>Just now · the public page stays open for everyone</small></div>

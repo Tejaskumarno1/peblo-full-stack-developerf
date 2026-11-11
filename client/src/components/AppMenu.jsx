@@ -6,6 +6,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { exportMarkdown, exportWord, exportPdf } from '../utils/exportNote';
 import './appMenu.css';
+import Toast from './Toast';
 
 // Peblo's own right-click menu (mockup "Peblo right-click menu"): different contents for a note in a list, a link, and empty space.
 // Shift plus right-click still gives the normal browser menu. Menus that already exist (tabs, tables, the editor) are left alone.
@@ -195,7 +196,7 @@ export default function AppMenu() {
           </section>
         </div>
       )}
-      {toast && <div className="am-toast" role="status" data-testid="am-toast">{toast}</div>}
+      {toast && <Toast><div className="am-toast" role="status" data-testid="am-toast">{toast}</div></Toast>}
     </>
   );
 }
