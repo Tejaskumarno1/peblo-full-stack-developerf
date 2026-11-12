@@ -95,7 +95,7 @@ function ticketSocketFor(noteId) {
 export function createCollab(opts) {
   const doc = new Y.Doc();
   const params = opts.share
-    ? { share: opts.share, ...(opts.sid ? { sid: opts.sid } : {}) }
+    ? { share: opts.share, ...(opts.sid ? { sid: opts.sid } : {}), ...(opts.unlock ? { unlock: opts.unlock } : {}) }
     : { note: opts.noteId };
   const provider = new WebsocketProvider(serverUrl(), 'collab', doc, { connect: false, params, disableBc: true, maxBackoffTime: 8000, ...(opts.share ? {} : { WebSocketPolyfill: ticketSocketFor(opts.noteId) }) });
   // the server's offer: "this document is empty, fill it from the saved text"

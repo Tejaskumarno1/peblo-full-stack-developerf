@@ -796,3 +796,13 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 /* Header never overflows at tablet widths: drop the duplicate Copy link (the Share panel has it) and collapse labels to icons step by step. */
 @media (max-width: 1100px) { .pb-shared .top-in .copy-btn { display: none; } .pb-shared .top-in .preview-btn span { display: none; } .pb-shared .top-in { gap: 6px; padding-inline: 16px; } }
 @media (max-width: 900px) { .pb-shared .top-in .save-btn span, .pb-shared .top-in .pill { display: none; } .pb-shared .top-in .pill { display: none; } }
+
+/* S27: password-protected link */
+.pb-shared .lock-room { max-width: 440px; }
+.pb-shared .lock-form { display: flex; gap: 8px; width: 100%; margin-top: 14px; }
+.pb-shared .lock-form input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line, #e3dfd6); background: var(--card, #fff); color: inherit; font: inherit; }
+.pb-shared .lock-err { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: #b3402f; }
+.pb-shared[data-theme="dark"] .lock-err { color: #f0907f; }
+.pb-shared .sp-link { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: inherit; text-decoration: underline; cursor: pointer; }
+.pb-shared .sp-pw { display: flex; gap: 6px; margin: 8px 0 2px; }
+.pb-shared .sp-pw input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line, #e3dfd6); background: var(--card, #fff); color: inherit; font: inherit; }

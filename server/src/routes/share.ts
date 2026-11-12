@@ -6,6 +6,7 @@ import { authenticate, verifyToken } from '../middleware/auth.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { processTextCommand } from '../services/aiService.js';
+import { pwHashOf, hashPassword, verifyPassword, unlockFor, unlockOk } from '../services/sharePassword.js';
 import { accessFor, approvalOn, listWaiting, guestHash, SESSION_RE } from '../services/shareAccess.js';
 
 /*
@@ -59,7 +60,22 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, shareNote: 'shareNote' in row ? !!row.shareNote : false });
+    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, shareNote: 'shareNote' in row ? !!row.shareNote : false, hasPassword: !!row.shareToken && !!(await pwHashOf(kind, row.shareToken)) });
+  } catch (e) { next(e); }
+});
+
+// POST /api/share/:kind/:id/password { password } -> put a password on the link, or take it off with an empty one.
+shareRoutes.post('/:kind/:id/password', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    if (!row.shareToken) return res.status(400).json({ error: 'Turn the link on first.' });
+    const pw = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (pw && (pw.length < 4 || pw.length > 100)) return res.status(400).json({ error: 'Use 4 to 100 characters.' });
+    await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, pw_hash) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET pw_hash = EXCLUDED.pw_hash', kind, row.shareToken, pw ? hashPassword(pw) : null);
+    res.json({ hasPassword: !!pw });
   } catch (e) { next(e); }
 });
 
@@ -382,6 +398,18 @@ async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) 
 }
 
 // The share link remains public, but only its owner can see management controls or revoke it.
+// POST /api/public/:kind/:token/password { password } -> the owner sets or clears the password from the Share panel on the page.
+publicRoutes.post('/:kind/:token/password', authenticate, async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind || !validToken(req.params.token) || !(await shareOwner(kind, req.params.token, req.user!.id))) return res.status(404).json({ error: 'Not found.' });
+    const pw = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (pw && (pw.length < 4 || pw.length > 100)) return res.status(400).json({ error: 'Use 4 to 100 characters.' });
+    await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, pw_hash) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET pw_hash = EXCLUDED.pw_hash', kind, req.params.token, pw ? hashPassword(pw) : null);
+    res.json({ hasPassword: !!pw });
+  } catch (e) { next(e); }
+});
+
 publicRoutes.get('/:kind/:token/owner', authenticate, async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
@@ -557,6 +585,7 @@ publicRoutes.post('/note/:token/translate', (req, res, next) => translateLimit(r
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const sid = req.body?.sessionId;
     if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return res.status(400).json({ error: 'A valid viewer session is required.' });
+    if (!(await unlockOk('note', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const lang = LANGS[String(req.body?.lang || '')];
     if (!lang) return res.status(400).json({ error: 'Pick one of the languages in the list.' });
     const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, title: true, shareEdit: true } });
@@ -603,6 +632,22 @@ async function ownerReq(req: any, kind: 'note' | 'todo', token: string) {
   return !!u && !!(await shareOwner(kind, token, u.id));
 }
 
+const unlockLimit = rateLimit({ windowMs: 60_000, max: 12, message: 'Too many tries. Wait a minute and try again.' });
+// POST /api/public/:kind/:token/unlock { password } -> { unlock } to send as X-Share-Unlock with later requests.
+publicRoutes.post('/:kind/:token/unlock', (req, res, next) => unlockLimit(req, res, next), async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind || !validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
+    const stored = await pwHashOf(kind, req.params.token);
+    if (!stored) return res.json({ unlock: '' });
+    const pw = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (!pw || !verifyPassword(pw, stored)) return res.status(401).json({ error: 'That password is not right.' });
+    res.json({ unlock: unlockFor(kind, req.params.token, stored) });
+  } catch (e) { next(e); }
+});
+/** The unlock value a request carries (header, or body or query). */
+const unlockOf = (req: any) => String(req.headers['x-share-unlock'] || req.body?.unlock || req.query?.unlock || '');
+
 publicRoutes.get('/note/:token', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
@@ -611,11 +656,14 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
       select: { title: true, content: true, updatedAt: true, shareEdit: true, shareExpiresAt: true, user: { select: { name: true } } },
     });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
+    const isOwner = await ownerReq(req, 'note', req.params.token);
+    const stored = await pwHashOf('note', req.params.token);
+    if (stored && !isOwner && !(await unlockOk('note', req.params.token, unlockOf(req)))) return res.json({ kind: 'note', locked: true, author: note.user?.name || null });
+    const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, isOwner);
     if (!acc.allowed) return res.json({ kind: 'note', waiting: acc.waiting || 'waiting' });
     if (await isBlocked('note', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const st = (await prisma.$queryRawUnsafe<{ style: string | null }[]>('SELECT style FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0]?.style || null;
-    res.json({ ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
+    res.json({ unlock: stored ? unlockFor('note', req.params.token, stored) : undefined, hasPassword: !!stored, ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
   } catch (e) { next(e); }
 });
 
@@ -631,10 +679,14 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
       },
     });
     if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const acc = await accessFor('todo', req.params.token, req.query.sid, !!t.shareEdit, await ownerReq(req, 'todo', req.params.token));
+    const isOwner = await ownerReq(req, 'todo', req.params.token);
+    const stored = await pwHashOf('todo', req.params.token);
+    if (stored && !isOwner && !(await unlockOk('todo', req.params.token, unlockOf(req)))) return res.json({ kind: 'todo', locked: true, author: t.user?.name || null });
+    const acc = await accessFor('todo', req.params.token, req.query.sid, !!t.shareEdit, isOwner);
     if (!acc.allowed) return res.json({ kind: 'todo', waiting: acc.waiting || 'waiting' });
     if (await isBlocked('todo', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     res.json({
+      unlock: stored ? unlockFor('todo', req.params.token, stored) : undefined, hasPassword: !!stored,
       kind: 'todo', text: t.text, completed: t.completed, completedAt: t.completed ? t.updatedAt : null, priority: t.priority, deadline: t.deadline,
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
       note: t.shareNote && t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
@@ -657,6 +709,7 @@ publicRoutes.put('/note/:token', (req, res, next) => guestSaveLimit(req, res, ne
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (!(await unlockOk('note', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const acc = await accessFor('note', req.params.token, req.body?.sessionId, !!note.shareEdit);
     if (!acc.allowed) return res.status(403).json({ error: 'Waiting for the owner to let you in.', waiting: acc.waiting || 'waiting' });
     if (!acc.canEdit) return res.status(403).json({ error: 'This link is view only.' });
@@ -684,6 +737,7 @@ publicRoutes.put('/todo/:token', (req, res, next) => guestSaveLimit(req, res, ne
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const t = await prisma.todo.findFirst({ where: { shareToken: req.params.token, ...LIVE() }, select: { id: true, shareEdit: true } });
     if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
+    if (!(await unlockOk('todo', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const acc = await accessFor('todo', req.params.token, req.body?.sessionId, !!t.shareEdit);
     if (!acc.allowed) return res.status(403).json({ error: 'Waiting for the owner to let you in.', waiting: acc.waiting || 'waiting' });
     if (!acc.canEdit) return res.status(403).json({ error: 'This link is view only.' });

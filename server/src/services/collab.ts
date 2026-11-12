@@ -1,3 +1,4 @@
+import { unlockOk } from './sharePassword.js';
 import { liveLevel } from '../utils/noteAccess.js';
 import { accessFor } from './shareAccess.js';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -380,6 +381,7 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
     if (!validShare.test(share)) return null;
     const note = await prisma.note.findFirst({ where: { shareToken: share, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] }, select: { id: true, shareEdit: true } });
     if (!note) return null;
+    if (!(await unlockOk('note', share, url.searchParams.get('unlock')))) return null;
     let canEdit = !!note.shareEdit;
     if (session) {
       if (!validSession.test(session)) return null;

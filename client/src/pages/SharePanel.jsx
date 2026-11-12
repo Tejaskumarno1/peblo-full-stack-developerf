@@ -1,9 +1,23 @@
 import { useState } from 'react';
-import { Check, Clock, Link2, Mail, Pencil, Eye, Power } from 'lucide-react';
+import { Check, Clock, Link2, Lock, Mail, Pencil, Eye, Power } from 'lucide-react';
 import ShareQr from '../components/ShareQr';
+import { authHeaders } from '../api/token';
 
 /** S27: the Share panel in the header of a shared page: copy the link, who can do what, QR, invite by email. */
-export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, onCopy, onTurnOff }) {
+export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, onCopy, onTurnOff, kindPath, token, hasPassword }) {
+  const [pwOn, setPwOn] = useState(!!hasPassword);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState('');
+  const [pwErr, setPwErr] = useState('');
+  const savePw = async (clear) => {
+    setPwErr('');
+    try {
+      const r = await fetch(`/api/public/${kindPath}/${encodeURIComponent(token)}/password`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ password: clear ? '' : pw }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save the password.');
+      setPwOn(!!j.hasPassword); setPw(''); setPwOpen(false);
+    } catch (cause) { setPwErr(cause.message); }
+  };
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const days = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)) : null;
@@ -21,7 +35,14 @@ export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, o
       <div className="sp-rows">
         <div className="sp-row">{canEdit ? <Pencil size={16} /> : <Eye size={16} />}<span>Anyone with the link</span><em>{canEdit ? 'Can edit' : 'Can view'}</em></div>
         <div className="sp-row"><Clock size={16} /><span>Link ends</span><em>{days === null ? 'Never' : days === 0 ? 'Today' : `In ${days} day${days > 1 ? 's' : ''}`}</em></div>
+        <div className="sp-row" data-testid="sp-password-row"><Lock size={16} /><span>Password</span>{isOwner ? <button type="button" className="sp-link" data-testid="sp-password-toggle" onClick={() => setPwOpen((o) => !o)}>{pwOn ? 'On - change' : 'Off - add'}</button> : <em>{pwOn ? 'On' : 'Off'}</em>}</div>
       </div>
+      {isOwner && pwOpen && <form className="sp-pw" onSubmit={(e) => { e.preventDefault(); if (pw.length >= 4) savePw(false); }}>
+        <input type="password" aria-label="Link password" data-testid="sp-password" placeholder="At least 4 characters" autoComplete="new-password" maxLength={100} value={pw} onChange={(e) => { setPw(e.target.value); setPwErr(''); }} />
+        <button className="btn dark" type="submit" data-testid="sp-password-save" disabled={pw.length < 4}>Save</button>
+        {pwOn && <button className="btn" type="button" data-testid="sp-password-clear" onClick={() => savePw(true)}>Remove</button>}
+      </form>}
+      {pwErr && <p className="sp-note" role="alert">{pwErr}</p>}
       <form className="sp-invite" onSubmit={invite}>
         <input type="email" aria-label="Invite by email" data-testid="sp-email" placeholder="Invite by email" value={email} onChange={(e) => { setEmail(e.target.value); setSent(false); }} />
         <button className="btn" type="submit" data-testid="sp-invite"><Mail size={15} />{sent ? 'Opened' : 'Invite'}</button>

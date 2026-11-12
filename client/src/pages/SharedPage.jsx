@@ -375,6 +375,25 @@ export default function SharedPage() {
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
   const readUrl = `${url}?sid=${encodeURIComponent(viewerSid(kindPath, token))}`;
+  // S27: a link with a password. The unlock value is kept for this tab only and goes with every request.
+  const unlockKey = `peblo-unlock:${kindPath}:${token}`;
+  const getUnlock = () => { try { return sessionStorage.getItem(unlockKey) || ''; } catch { return ''; } };
+  const [locked, setLocked] = useState(null);
+  const [lockPw, setLockPw] = useState('');
+  const [lockErr, setLockErr] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  const submitLock = async (event) => {
+    event.preventDefault();
+    if (!lockPw || lockBusy) return;
+    setLockBusy(true); setLockErr('');
+    try {
+      const r = await fetch(`${url}/unlock`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: lockPw }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'That password is not right.');
+      try { sessionStorage.setItem(unlockKey, j.unlock || ''); } catch { /* kept in memory only */ }
+      setLockPw(''); setLocked(null); setRev((n) => n + 1);
+    } catch (cause) { setLockErr(cause.message); } finally { setLockBusy(false); }
+  };
 
   useLayoutEffect(() => {
     document.documentElement.classList.add('pb-public-share');
@@ -420,10 +439,13 @@ export default function SharedPage() {
 
   useEffect(() => {
     let live = true;
-    fetch(readUrl, { headers: authHeaders() })
+    fetch(readUrl, { headers: { ...authHeaders(), ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) } })
       .then(async (response) => { const json = await response.json().catch(() => ({})); if (!response.ok) throw new Error(json.error || 'This link is not shared any more.'); return json; })
       .then((json) => {
         if (!live) return;
+        if (json.locked) { setLocked(json); setWait(null); setData(null); return; }
+        setLocked(null);
+        if (json.unlock) { try { sessionStorage.setItem(unlockKey, json.unlock); } catch { /* none */ } }
         if (json.waiting) { setWait(json.waiting); setData(null); return; }
         setWait(null);
         draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt, baseContent: json.content || '' };
@@ -484,7 +506,7 @@ export default function SharedPage() {
   }, [data?.kind, shareOff, readUrl]);
 
   const put = useCallback(async (payload) => {
-    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), ...payload }) });
+    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), ...payload }) });
     return { status: response.status, body: await response.json().catch(() => ({})) };
   }, [url]);
 
@@ -1037,7 +1059,7 @@ export default function SharedPage() {
     if (!code) { setTrLang(null); setTrText(''); setTrOpen(false); return; }
     setTrBusy(true);
     try {
-      const r = await fetch(`/api/public/note/${encodeURIComponent(token)}/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), lang: code }) });
+      const r = await fetch(`/api/public/note/${encodeURIComponent(token)}/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), lang: code }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { showToast(j.error || 'Translation is not available right now.'); } else { setTrLang(code); setTrText(j.text || ''); setTrOpen(false); }
     } catch { showToast('Translation is not available right now.'); } finally { setTrBusy(false); }
@@ -1093,7 +1115,7 @@ export default function SharedPage() {
           </div>}
           {data && <div className="menu-wrap" ref={shareRef}>
             <button className="btn share-btn" type="button" data-testid="share-btn" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen((o) => !o)}><Share2 size={16} /><span>Share</span></button>
-            {shareOpen && <SharePanel link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
+            {shareOpen && <SharePanel kindPath={kindPath} token={token} hasPassword={!!data.hasPassword} link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
           </div>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
@@ -1167,7 +1189,17 @@ export default function SharedPage() {
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
-      {wait && !data && !error ? (
+      {locked && !data && !error ? (
+        <main className="stage"><section className="gone lock-room" role="dialog" aria-label="Password needed" data-testid="lock-room"><div className="orb" aria-hidden="true"><span><Lock size={26} /></span></div>
+          <h1>This page has a password</h1>
+          <p>{locked.author ? `${locked.author} protected this page.` : 'The owner protected this page.'} Type the password they gave you.</p>
+          <form className="lock-form" onSubmit={submitLock}>
+            <input type="password" autoFocus aria-label="Password" data-testid="lock-input" placeholder="Password" value={lockPw} maxLength={100} autoComplete="off" onChange={(e) => { setLockPw(e.target.value); setLockErr(''); }} />
+            <button type="submit" className="btn dark" data-testid="lock-open" disabled={!lockPw || lockBusy}>{lockBusy ? 'Checking' : 'Open page'}</button>
+          </form>
+          {lockErr && <p className="lock-err" role="alert" data-testid="lock-error"><AlertTriangle size={14} />{lockErr}</p>}
+        </section></main>
+      ) : wait && !data && !error ? (
         <main className="stage"><section className={`gone wait-room${wait === 'declined' ? ' is-declined' : ''}`} role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span>{wait === 'declined' ? <Ban size={26} /> : <Clock size={26} />}</span></div>
           <h1>{wait === 'declined' ? 'The owner did not let you in' : 'Waiting to be let in'}</h1>
           <p>{wait === 'declined' ? 'You can ask them to send the link again, or sign in if you have an account.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
@@ -1226,7 +1258,7 @@ export default function SharedPage() {
               {trLang && <div className="tr-bar" data-testid="tr-bar" role="status"><Languages size={15} /><span>Translated to {LANGUAGES.find(([c]) => c === trLang)?.[1]} by Peblo AI. The original is kept.</span><button type="button" onClick={() => pickLang(null)}>Show original</button></div>}
               {trLang ? <DocHtml innerRef={docRef} html={toHtml(trText)} /> : data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
-                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
+                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, unlock: getUnlock() || undefined, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
                     onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; setLiveEmpty(!String(markdown).replace(/[#>*\-\s]/g, ''));  if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <DocHtml innerRef={docRef} html={body} />}
               {(liveEmpty === null ? !wordCount : liveEmpty) && !trLang && <div className="empty-page" data-testid="empty-page"><span className="ep-i"><Pencil size={18} /></span><b>This page is empty</b><p>{data.canEdit ? 'Start typing here. Everyone with the link sees it as you write.' : 'Nothing here yet. The owner has not written anything.'}</p></div>}
