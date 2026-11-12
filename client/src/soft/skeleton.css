@@ -22,3 +22,13 @@
 .s-sk-preview .gap { height: 10px; }
 .s-sk-preview .li { display: flex; gap: 10px; }
 .s-sk-preview .li span { width: 16px; flex: none; }
+
+/* pictures in the first-paint preview: the picture itself, with a soft block until it arrives (never the Markdown text) */
+.s-sk-preview .pic { position: relative; margin: 8px 0; border-radius: 12px; overflow: hidden; min-height: 96px; background: var(--s-chip, rgba(128,128,128,.14)); }
+.s-sk-preview .pic.ok { min-height: 0; background: none; }
+.s-sk-preview .pic img { display: block; width: 100%; height: auto; opacity: 0; transition: opacity .18s ease; }
+.s-sk-preview .pic.ok img { opacity: 1; }
+.s-sk-preview .pic.wait::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.35) 50%, transparent 80%); animation: s-sk-sweep 1.2s linear infinite; }
+.s-sk-preview .pic.bad { display: flex; align-items: center; padding: 0 14px; font-size: 13px; font-weight: 700; color: var(--s-fg-2, inherit); min-height: 44px; }
+@keyframes s-sk-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .s-sk-preview .pic.wait::after { animation: none; } }
