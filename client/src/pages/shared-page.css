@@ -1215,3 +1215,15 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
 @media (max-width: 640px) {
   .pb-shared .look-menu { position: fixed; left: 12px; right: 12px; top: 128px; width: auto; max-width: none; max-height: calc(100vh - 220px); overflow-y: auto; border-radius: 28px; z-index: 65; }
 }
+
+/* S43: offline banner above the page, Activity as soft cards */
+.pb-shared .off-banner { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 0 12px; padding: 10px 16px; border-radius: 22px; background: #fbe9a8; color: #241f1a; font: 800 14px 'Figtree', system-ui, sans-serif; flex-wrap: wrap; text-align: center; }
+.pb-shared .off-banner button { border: 0; border-radius: 99px; padding: 6px 16px; background: #fff; color: #241f1a; font: 800 13px 'Figtree', system-ui, sans-serif; cursor: pointer; }
+.pb-shared .srail-fly.people .cp-log { list-style: none; margin: 0; padding: 0 14px; display: grid; gap: 8px; }
+.pb-shared .srail-fly.people .cp-log li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 18px; background: #f6efe4; border: 0; }
+.pb-shared .srail-fly.people .cp-log li > span:last-child { display: grid; gap: 1px; min-width: 0; }
+.pb-shared .srail-fly.people .cp-log b { font: 800 14px 'Figtree', system-ui, sans-serif; }
+.pb-shared .srail-fly.people .cp-log small { display: block; font: 600 12.5px 'Figtree', system-ui, sans-serif; color: var(--fg2); }
+.pb-shared .srail-fly.people .cp-quiet-tip { display: block; margin: 12px 18px 0; font: 600 12.5px 'Figtree', system-ui, sans-serif; color: var(--fg2); }
+.pb-shared .srail-fly.people .cp-mute { margin: 12px 18px 0; }
+.pb-shared article > .off-banner { position: sticky; top: 0; z-index: 3; margin: -6px 0 14px; }

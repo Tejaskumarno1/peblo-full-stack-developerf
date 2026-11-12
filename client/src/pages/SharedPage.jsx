@@ -4,7 +4,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { Sparkles, ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
+import { Sparkles, ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, WifiOff, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
@@ -1254,6 +1254,7 @@ export default function SharedPage() {
           </aside>}
 
           <article ref={articleRef} id="page-main" tabIndex={-1} style={look.zoom && look.zoom !== 100 ? { zoom: look.zoom / 100 } : undefined}>
+          {offline && <div className="off-banner" role="status" data-testid="page-offline-banner"><WifiOff size={16} /><span>Offline. Your edits are kept on this device and will sync.</span><button type="button" onClick={() => { missed.current = 0; setRev((n) => n + 1); }}>Retry</button></div>}
             {followId && <FollowBanner who={viewers.find((v) => v.id === followId)} color={peerColor(followId)} onStop={() => setFollowId(null)} />}
             {data.kind === 'note' && reader.changes && reader.showChanges && chgIdx >= 0 && <div className="cmp-bar" data-testid="cmp-bar" role="status"><History size={15} /><span>Comparing now with {new Date(reader.changes.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><b>Change {chgIdx + 1} of {chgEls().length}</b><button type="button" aria-label="Previous change" onClick={() => goChange(-1)}><ArrowUp size={15} /></button><button type="button" aria-label="Next change" onClick={() => goChange(1)}><ArrowDown size={15} /></button><button type="button" aria-label="Close comparison" onClick={() => setChgIdx(-1)}><X size={14} /></button></div>}
             {data.kind === 'note' && <>
