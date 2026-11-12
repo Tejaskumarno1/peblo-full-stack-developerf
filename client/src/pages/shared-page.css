@@ -1199,3 +1199,19 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
   .pb-shared .listen-bar .lb-bar { flex: 1; width: auto; }
   .pb-shared .listen-bar [data-testid="lb-voice"] { display: none; }
 }
+
+/* S42: Look panel switches and the dark Show tool bar pill */
+.pb-shared .look-menu h4 { font: 800 22px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; text-transform: none; color: var(--fg); margin: 4px 0 10px; }
+.pb-shared .look-check.look-switch { justify-content: space-between; gap: 14px; padding: 10px 12px; color: var(--fg); }
+.pb-shared .look-switch .ls-t { display: grid; gap: 2px; min-width: 0; }
+.pb-shared .look-switch .ls-t b { font: 800 14.5px 'Figtree', system-ui, sans-serif; }
+.pb-shared .look-switch .ls-t small { font: 600 12.5px 'Figtree', system-ui, sans-serif; color: var(--fg2); }
+.pb-shared .look-switch input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 44px; height: 26px; margin: 0; border: 0; border-radius: 99px; background: #eadfd0; cursor: pointer; display: block; }
+.pb-shared .look-switch input::after { content: ''; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s; transform: none; border: 0; }
+.pb-shared .look-switch input:checked { background: #1f7a4d; }
+.pb-shared .look-switch input:checked::after { transform: translateX(18px); border: 0; }
+.pb-shared .dh { background: #241f1a; color: #fff; border-color: #241f1a; font-weight: 800; font-size: 13px; padding: 9px 16px; opacity: 1; }
+.pb-shared .dh kbd { color: rgba(255, 255, 255, .6); }
+@media (max-width: 640px) {
+  .pb-shared .look-menu { position: fixed; left: 12px; right: 12px; top: 128px; width: auto; max-width: none; max-height: calc(100vh - 220px); overflow-y: auto; border-radius: 28px; z-index: 65; }
+}
