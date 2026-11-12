@@ -1103,3 +1103,12 @@ html.pb-public-share .pb-find input.r { background: #fbf6ee; }
 html.pb-public-share .pb-find button { background: transparent; }
 html.pb-public-share .pb-find button.txt { background: #fff; border: 1px solid #EADFD0; font-weight: 800; }
 html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
+
+/* S03: the read-only page (no editor) is set like the editable one */
+@media (min-width: 1281px) {
+  .pb-shared article .doc > p { margin: 0 0 8px; padding: 4px 0 8px; font-size: 15.5px; line-height: 25.5px; }
+  .pb-shared article .doc > h2 { margin: 22px 0 4px; font: 800 26px/1.2 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.02em; }
+  .pb-shared article .doc th { font-size: 15px; text-transform: none; letter-spacing: 0; font-weight: 800; padding: 8px 12px; }
+  .pb-shared article .doc td { font-size: 15px; padding: 8px 12px; }
+  .pb-shared article .doc table { font-size: 15px; }
+}

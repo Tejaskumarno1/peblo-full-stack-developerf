@@ -1,0 +1,14 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const md = 'Three themes came up across the six client interviews: speed of delivery, clarity of briefs, and how corrections are handled.\n\n## 1. What we heard\n\nClients praise the team but ask for fewer rounds. Most delays start with an unclear first brief, not with the writing itself.\n\n| Theme | Evidence | Action |\n| --- | --- | --- |\n| Speed of delivery | Four of six interviews | Move reviews to Tuesday |\n\n## 2. Next steps\n\nWho signs off the final numbers, and by when?';
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: md, tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: false })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); } catch {} });
+const g = await c.newPage();
+await g.goto(`${base}/s/note/${tok}`);
+await g.locator('article').waitFor({ timeout: 20000 });
+await g.locator('[data-testid="join-anon"]').click({ timeout: 4000 }).catch(() => {});
+await g.waitForTimeout(2000);
+await g.screenshot({ path: 'D:/Peblo/_shots/real-S03.png' });
+await finish();
