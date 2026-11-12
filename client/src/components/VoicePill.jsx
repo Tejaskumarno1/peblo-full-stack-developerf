@@ -8,6 +8,8 @@ const announce = (on) => window.dispatchEvent(new CustomEvent('pb-dictation-stat
 const POS_KEY = 'peblo-voice-pos';
 const readPos = () => { try { const p = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null; } catch { return null; } };
 const savePos = (p) => { try { localStorage.setItem(POS_KEY, JSON.stringify(p)); } catch { /* private window */ } };
+// CSS zoom on html or body (the text-size setting) multiplies left and top of a fixed element, so the position is divided by it
+const zoomOf = () => { const z = (n) => { const v = parseFloat(getComputedStyle(n).zoom); return v > 0 ? v : 1; }; return z(document.documentElement) * z(document.body); };
 const clamp = (p, w, h) => ({ x: Math.max(8, Math.min(window.innerWidth - w - 8, p.x)), y: Math.max(8, Math.min(window.innerHeight - h - 8, p.y)) });
 const homeOf = (w, h) => ({ x: window.innerWidth - w - 20, y: window.innerHeight - h - (window.innerWidth < 1280 ? 104 : 24) });
 
@@ -120,7 +122,8 @@ export default function VoicePill({ editor, openSignal, onActive }) {
     setPos((p) => { const n = place({ x: (p?.x ?? place(null).x) + d[0], y: (p?.y ?? place(null).y) + d[1] }); savePos(n); return n; });
   };
 
-  const style = { left: (pos || place(null)).x, top: (pos || place(null)).y };
+  const zf = zoomOf();
+  const style = { left: (pos || place(null)).x / zf, top: (pos || place(null)).y / zf };
   const loading = stt.status === 'loading';
   const label = state === 'error' ? msg : state === 'paused' ? 'Paused' : browserSR ? 'Listening' : loading && stt.pct < 100 ? `Getting ready ${stt.pct}%` : busy ? 'Typing it out' : 'Listening';
 
