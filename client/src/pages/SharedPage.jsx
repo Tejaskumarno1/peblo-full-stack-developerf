@@ -1277,6 +1277,12 @@ export default function SharedPage() {
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
+              <div className="mchips" data-testid="mchips">
+                <button type="button" className="c-people" onClick={() => setPanelOpen((open) => !open)}><Users size={15} />People{others.length ? ` ${others.length}` : ''}</button>
+                <button type="button" className="c-comm" onClick={() => setCardsSheet(true)}>Comments</button>
+                <button type="button" className="c-hist" onClick={() => openFly('history')}>History</button>
+                {headings.length > 0 && <button type="button" className="c-out" onClick={() => setTocSheet(true)}>Outline</button>}
+              </div>
               {data.summary && <div className="sum-card" data-testid="page-summary"><span className="sum-ic" aria-hidden="true"><Sparkles size={16} /></span><div><div className="sum-cap">Summary by {data.author || 'the owner'}</div><p>{data.summary}</p></div></div>}
               {data.canEdit && !user && !previewMode && <div className={`welcome${guestName ? " named" : ""}`} data-testid="welcome">
                 <label className="guest-name"><span>You are editing as</span>
