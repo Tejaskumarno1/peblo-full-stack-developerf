@@ -1378,11 +1378,11 @@ export default function SharedPage() {
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>
-          <div className="keys-cols">{[
-            ['Move', [['Ctrl K', 'Command palette'], ['Ctrl F', 'Find in page'], ['J', 'Next heading'], ['K', 'Previous heading'], ['G G', 'Back to top'], ['Ctrl B', 'Jump to place you stopped']]],
-            ['Read', [['F', 'Focus mode'], ['L', 'Listen'], ['T', 'Translate'], ['B', 'Bookmark this line'], ['Ctrl J', 'Switch theme'], ['Ctrl L', 'Copy link']]],
-            ['Panels and help', [['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['C', 'Open comments'], ['?', 'This list']]],
-          ].map(([h, rows]) => <div key={h} className="keys-col"><h3>{h}</h3><ul>{rows.map(([k, l]) => <li key={k}><span>{l}</span><kbd>{k}</kbd></li>)}</ul></div>)}</div>
+          <ul className="keys-list">{[
+            ['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['B', 'Bookmark the line under the pointer'],
+            ['Ctrl F', 'Find in page'], ['F', 'Full screen'], ['Esc', 'Close what is open'], ['Ctrl K', 'Command palette'], ['J', 'Next heading'], ['K', 'Previous heading'], ['G G', 'Back to top'],
+            ['Ctrl B', 'Jump to place you stopped'], ['L', 'Listen'], ['T', 'Translate'], ['Ctrl J', 'Switch theme'], ['Ctrl L', 'Copy link'], ['C', 'Open comments'], ['?', 'This list'],
+          ].map(([k, l]) => <li key={k + l}><span>{l}</span><kbd>{k}</kbd></li>)}</ul>
         </section>
       </div>}
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
@@ -1415,11 +1415,11 @@ export default function SharedPage() {
           <p>Save your own copy so you can find and edit it later.</p>
           <form onSubmit={submitAuthAndSave}>
             {authMode === 'signup' && <label>Your name<input value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" maxLength={80} required /></label>}
-            <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
+            <label>Email<input type="email" placeholder="you@example.com" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
             <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={authMode === 'signup' ? 8 : undefined} required /></label>
             {authMode === 'signup' && !authError && <small className="auth-hint">At least 8 characters.</small>}
             {authError && <div className="auth-error" role="alert"><AlertTriangle size={15} />{authError}</div>}
-            <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</button>
+            <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : <><FileIcon size={15} />{authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</>}</button>
           </form>
           <button className="auth-switch" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'signup' : 'login'); setAuthError(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Peblo? Create an account'}</button>
           {authMode === 'login' && authError && <a className="auth-switch" data-testid="auth-reset" href="/forgot-password">Forgot it? Reset password</a>}
@@ -1431,7 +1431,7 @@ export default function SharedPage() {
           <span className="modal-kicker">You own this link</span>
           <h2 id="revoke-title">Turn sharing off?</h2>
           <p>Anyone using this link loses access straight away{others.length ? `, including the ${others.length} ${others.length === 1 ? 'person' : 'people'} here now` : ''}. You can create a new link later from Peblo.</p>
-          <div className="modal-actions rv"><button className="btn danger-btn" type="button" data-testid="revoke-confirm" onClick={turnSharingOff}><Ban size={15} />Turn sharing off</button><button className="btn" type="button" onClick={() => setRevokeConfirm(false)}>Keep sharing</button></div>
+          <div className="modal-actions rv"><button className="btn keep" type="button" onClick={() => setRevokeConfirm(false)}>Keep link on</button><button className="btn danger-btn" type="button" data-testid="revoke-confirm" onClick={turnSharingOff}>Turn sharing off</button></div>
         </section>
       </div>}
     </div>

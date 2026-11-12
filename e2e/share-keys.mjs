@@ -28,7 +28,7 @@ try {
   await g.keyboard.press('Control+j');
   check('5 Ctrl J switches the theme', (await g.locator('.pb-shared').getAttribute('data-theme')) !== before);
   await g.keyboard.press('?');
-  check('6 the shortcut list has three groups', (await g.locator('.keys-col').count()) === 3 && /Command palette/.test(await g.locator('[data-testid="keys-sheet"]').innerText()));
+  check('6 the shortcut list is one list', (await g.locator('.keys-list li').count()) >= 11 && /Command palette/.test(await g.locator('[data-testid="keys-sheet"]').innerText()));
   await g.keyboard.press('Escape');
   await g.reload(); await g.locator('[data-testid="join-anon"]').click({ timeout: 3000 }).catch(() => {});
   await g.locator('.skip-link').waitFor({ state: 'attached', timeout: 15000 });

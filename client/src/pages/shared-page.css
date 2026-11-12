@@ -1033,3 +1033,33 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 html.pb-public-share[data-fs] body { overflow: visible; }
 .fsx .fsx-exit, .fsx .fsx-exit kbd { color: var(--fs-inkfg) !important; }
 .fsx .fsx-exit { font-family: var(--fs-sans); }
+
+/* S17: the three dialogs as the board (kicker caps, 36px cards, tinted fields, single shortcut list) */
+.pb-shared .share-modal-backdrop { background: rgba(250, 245, 236, .72); backdrop-filter: blur(6px); }
+.pb-shared .share-modal, .pb-shared .keys-sheet { border: 0; border-radius: 36px; padding: 26px 25px 24px; background: #fff; box-shadow: 0 30px 80px rgba(80, 55, 30, .22); }
+.pb-shared .share-modal { width: min(430px, 100%); }
+.pb-shared .share-modal.revoke-modal { width: min(420px, 100%); }
+.pb-shared .modal-kicker { display: block; margin: 0 0 14px; padding: 0; background: none; border-radius: 0; font-size: 11.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--fg2); }
+.pb-shared .share-modal-close { top: 24px; right: 22px; width: 24px; height: 24px; background: transparent; }
+.pb-shared .share-modal h2 { margin: 0 0 12px; font: 800 28px/1.1 'Figtree', system-ui, sans-serif; letter-spacing: -.02em; }
+.pb-shared .share-modal > p { margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--fg2); }
+.pb-shared .share-modal.revoke-modal > p { font-size: 15px; font-weight: 500; line-height: 1.5; margin-bottom: 14px; }
+.pb-shared .share-modal form { gap: 6px; }
+.pb-shared .share-modal label { gap: 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--fg2); }
+.pb-shared .share-modal label input { min-height: 46px; border: 0; border-radius: 99px; padding: 0 16px; background: #fbf6ee; font: 600 16px 'Figtree', system-ui, sans-serif; text-transform: none; letter-spacing: 0; }
+.pb-shared .share-modal .modal-submit { display: inline-flex; justify-content: center; align-items: center; gap: 8px; width: 100%; min-height: 46px; margin-top: 6px; border: 0; border-radius: 99px; background: #c4441c; color: #fff; font: 800 14px 'Figtree', system-ui, sans-serif; }
+.pb-shared .share-modal .modal-submit:disabled { opacity: .55; }
+.pb-shared .auth-switch { display: block; width: 100%; margin-top: 12px; text-align: center; font: 600 13px 'Figtree', system-ui, sans-serif; color: var(--fg2); background: none; border: 0; }
+.pb-shared .modal-actions.rv { gap: 8px; margin-top: 0; }
+.pb-shared .modal-actions.rv .btn { flex: 1; justify-content: center; min-height: 46px; border-radius: 99px; font: 800 14px 'Figtree', system-ui, sans-serif; }
+.pb-shared .modal-actions.rv .keep { background: #fff; border: 1px solid var(--line); color: var(--fg); }
+.pb-shared .modal-actions.rv .danger-btn { background: #fbe1dc !important; color: #b3261e !important; border: 0; }
+.pb-shared .keys-sheet { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 24px 26px 18px; }
+.pb-shared .keys-sheet h2 { font: 800 24px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; }
+.pb-shared .keys-sheet header { margin-bottom: 12px; }
+.pb-shared .keys-list { list-style: none; margin: 0; padding: 0; display: block; }
+.pb-shared .keys-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0; min-height: 40px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--fg); }
+.pb-shared .keys-list kbd { min-width: 0; padding: 3px 9px; border-radius: 8px; background: #f4ede2; color: var(--fg); font: 800 11.5px 'Figtree', system-ui, sans-serif; white-space: nowrap; }
+.pb-shared .keys-back { background: rgba(250, 245, 236, .72); backdrop-filter: blur(6px); }
+.pb-shared .keys-list li { min-height: 34px; font-size: 13.5px; }
+.pb-shared .keys-sheet { padding: 20px 26px 14px; }
