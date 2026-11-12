@@ -1286,9 +1286,11 @@ export default function SharedPage() {
               </div>
               {data.summary && <div className="sum-card" data-testid="page-summary"><span className="sum-ic" aria-hidden="true"><Sparkles size={16} /></span><div><div className="sum-cap">Summary by {data.author || 'the owner'}</div><p>{data.summary}</p></div></div>}
               {data.canEdit && !user && !previewMode && <div className={`welcome${guestName ? " named" : ""}`} data-testid="welcome">
-                <label className="guest-name"><span>You are editing as</span>
-                  <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
-                  <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
+                <label className="guest-name"><i className="gn-av" aria-hidden="true" style={{ background: myColor }}>{((guestName || 'G')[0] || 'G').toUpperCase()}</i>
+                  <span className="gn-in"><span className="gn-l">You are editing as</span>
+                  <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></span>
+                  <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small>
+                  <em className="gn-pill">{guestName ? 'Name saved' : 'No name yet'}</em></label>
               </div>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
               {trLang && <div className="tr-bar" data-testid="tr-bar" role="status"><Languages size={15} /><span>Translated to {LANGUAGES.find(([c]) => c === trLang)?.[1]} by Peblo AI. The original is kept.</span><button type="button" onClick={() => pickLang(null)}>Show original</button></div>}
