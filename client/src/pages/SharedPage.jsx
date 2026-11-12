@@ -1005,7 +1005,7 @@ export default function SharedPage() {
   useEffect(() => {
     if (!shownFly) return undefined;
     const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
-    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
+    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
     document.addEventListener('keydown', esc); document.addEventListener('click', away);
     return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);
@@ -1189,7 +1189,7 @@ export default function SharedPage() {
             />
       </div>}
       {data && !error && shownFly === 'history' && isNote && <aside className="srail-fly" data-testid="fly-history" aria-label="History">
-        <div className="fly-head"><b>History</b></div>
+        <div className="fly-head"><b>History</b><button type="button" className="fly-x" aria-label="Close history" onClick={() => setFly(null)}><X size={14} /></button></div>
         {reader.changes && <div className="fly-row"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div></div>}
         {reader.changes && reader.showChanges && <button type="button" className="fly-btn" data-testid="fly-next-change" onClick={() => goChange(1)}><ArrowDown size={15} />Next change</button>}
         {reader.changes && <button type="button" className="fly-btn" data-testid="fly-marks" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button>}
@@ -1200,6 +1200,7 @@ export default function SharedPage() {
           onCompare={(text, at) => { const n = reader.compareWith(text, at); showToast(n ? `${n} line${n > 1 ? 's' : ''} differ from that version` : 'Same as that version'); setTimeout(() => goChange(1), 1300); setFly(null); }}
           onRestored={() => { showToast('Version restored. Today was kept as a version.'); setRev((n) => n + 1); setFly(null); }} onError={(m) => showToast(m)} />
         <button type="button" className="fly-btn" data-testid="fly-bookmarks" onClick={() => { setBmOpen(true); setFly(null); }}><Bookmark size={15} />My bookmarks{reader.bookmarks.length > 0 ? ` (${reader.bookmarks.length})` : ''}</button>
+      <p className="fly-foot">Restoring a version asks first and keeps the current text as a version.</p>
       </aside>}
       {data && !error && shownFly === 'file' && <aside className="srail-fly" data-testid="fly-file" aria-label="File">
         <div className="fly-head"><b>{data.title || data.text || 'Shared page'}</b></div>
