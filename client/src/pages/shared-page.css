@@ -981,3 +981,4 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .brand { text-transform: lowercase; }
 .pb-shared .brand i::after { display: none; }
 .pb-shared .brand i { width: 30px; height: 27px; }
+@media (min-width: 1281px) { .pb-shared .stage.note-stage .pb-dock { margin-right: -42px; } }
