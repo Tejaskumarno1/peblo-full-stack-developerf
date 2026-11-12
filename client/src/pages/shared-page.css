@@ -1254,3 +1254,20 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
 [data-share-style="river"] .pb-shared .doc table, [data-share-style="orbit"] .pb-shared .doc table, [data-share-style="river"] .pb-shared .doc .tbl, [data-share-style="orbit"] .pb-shared .doc .tbl, [data-share-style="river"] .pb-shared .page-polls .pp, [data-share-style="orbit"] .pb-shared .page-polls .pp, [data-share-style="river"] .pb-shared .sum-card, [data-share-style="orbit"] .pb-shared .sum-card { border-radius: 0; box-shadow: none; }
 [data-share-style="river"] .pb-shared .doc thead th, [data-share-style="orbit"] .pb-shared .doc thead th { border-radius: 0; }
 [data-share-style="orbit"] .pb-shared .by, [data-share-style="orbit"] .pb-shared .by * { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* S41: tablet flyouts as soft white cards */
+@media (min-width: 701px) and (max-width: 1280px) {
+  .pb-shared .srail-fly { background: #fff; border: 0; border-radius: 26px; box-shadow: 0 18px 50px rgba(80, 55, 30, .2); padding: 16px; width: 290px; }
+  .pb-shared .srail-fly .fly-head b, .pb-shared .srail-fly h4, .pb-shared .srail-fly .toc-h { font: 800 20px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; color: var(--fg); }
+  .pb-shared .srail-fly .toc-list a { border-left: 0; border-radius: 14px; padding: 9px 12px; color: var(--fg); font-weight: 700; }
+  .pb-shared .srail-fly .toc-list a.sub { padding-left: 22px; }
+  .pb-shared .srail-fly .toc-list a:hover, .pb-shared .srail-fly .toc-list a.on { background: #f6efe4; color: var(--fg); border-radius: 14px; }
+  .pb-shared .srail-fly .fly-row, .pb-shared .srail-fly .ver-row { background: #f6efe4; border-radius: 18px; }
+  .pb-shared .srail-fly[data-testid="fly-history"] .fly-row { background: #cfeedd; }
+  .pb-shared .srail-fly.people { width: 330px; }
+  .pb-shared .srail-fly.people .cp-row { margin: 0 12px 8px; padding: 10px 12px; border-radius: 22px; background: #f6efe4; }
+  .pb-shared .srail-fly.people .cp-title i { display: none; }
+  .pb-shared .srail-fly.people .cp-title-t { display: flex; flex-direction: column; font: 800 22px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; }
+  .pb-shared .srail-fly.people .cp-title-t small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2); }
+  .pb-shared .srail-fly .fly-foot, .pb-shared .srail-fly .toc-foot { font: 600 12.5px 'Figtree', system-ui, sans-serif; color: var(--fg2); }
+}

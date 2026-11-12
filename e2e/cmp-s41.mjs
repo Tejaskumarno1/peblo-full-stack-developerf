@@ -1,0 +1,15 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const md = 'Three themes came up across the six client interviews: speed of delivery, clarity of briefs, and how corrections are handled.\n\n## 1. What we heard\n\nClients praise the team but ask for fewer rounds.\n\n## Evidence table\n\nx\n\n## 2. Next steps\n\nWho signs off?';
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: md, tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
+const mk = async () => { const c = await ctx.browser().newContext({ viewport: { width: 1024, height: 768 }, deviceScaleFactor: 1 }); await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); localStorage.setItem('peblo-guest-joined', '1'); } catch {} }); return c.newPage(); };
+const o = await mk(); await o.goto(`${base}/s/note/${tok}`); await o.locator('article').waitFor({ timeout: 20000 });
+const g = await mk(); await g.goto(`${base}/s/note/${tok}`); await g.locator('article').waitFor({ timeout: 20000 }); await g.waitForTimeout(2500);
+const S = (n) => g.screenshot({ path: `D:/Peblo/_shots/real-S41-${n}.png` });
+await S('base');
+const rail = g.locator('.srail button, [data-testid^="rail-"]');
+console.log('rail buttons', await rail.count(), 'toc visible', await g.locator('.toc').isVisible().catch(() => false), 'hamburger', await g.locator('.mnav, .menu-btn, [data-testid="nav-btn"]').count());
+await g.locator('.srail button').first().click().catch((e) => console.log('rail click fail'));
+await g.waitForTimeout(600); await S('outline');
+await finish();
