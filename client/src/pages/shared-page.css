@@ -1274,3 +1274,12 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
 
 /* S61: the full-screen page takes the width the outline column held; the side panel (Bar, Note, Share) holds the outline */
 html[data-fs-drawer="1"] .pb-shared.is-fs .stage.note-stage > article { padding-right: 300px; }
+
+/* S61 card on the share page */
+.pb-shared.is-fs .stage.note-stage { background: transparent; }
+.pb-shared.is-fs .stage.note-stage > article { inset: auto; top: 66px; left: 14px; right: 14px; bottom: 14px; padding: 34px 48px 120px; border-radius: 26px; background: var(--fs-bg); box-shadow: 0 8px 28px var(--fs-sh), inset 0 0 0 1px var(--fs-line); }
+html[data-fs-drawer="1"] .pb-shared.is-fs .stage.note-stage > article { right: 278px; padding-right: 48px; }
+@media (max-width: 1280px) { .pb-shared.is-fs .stage.note-stage > article, html[data-fs-drawer="1"] .pb-shared.is-fs .stage.note-stage > article { padding-left: 24px; padding-right: 24px; } }
+/* the share page is its own stacking layer: it paints the soft canvas itself */
+html[data-fs]:has(.pb-shared.is-fs)::before { display: none; }
+.pb-shared.is-fs { background: var(--fs-canvas); }

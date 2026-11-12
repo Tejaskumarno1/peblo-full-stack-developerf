@@ -45,7 +45,7 @@ try {
     const col = async () => page.evaluate(() => { const e = document.querySelector('.bn-editor'); const r = e.getBoundingClientRect(); const p = e.querySelector('[data-content-type="paragraph"] .bn-inline-content, [data-content-type="paragraph"]'); const cs = getComputedStyle(p); return { x: r.x, w: r.width, font: cs.fontFamily, size: parseFloat(cs.fontSize), lh: parseFloat(cs.lineHeight) }; });
     let c = await col();
     // centred in the free space between the outline rail (left) and the drawer (right, when open)
-    const mid = await page.evaluate(() => { const d = document.querySelector('[data-testid="fs-drawer"]'); return d ? (48 + window.innerWidth - 300) / 2 : window.innerWidth / 2; }); // the page sits between its side padding and the panel
+    const mid = await page.evaluate(() => { const d = document.querySelector('[data-testid="fs-drawer"]'); return d ? (14 + window.innerWidth - 278) / 2 : window.innerWidth / 2; }); // the page sits between its side padding and the panel
     check(`${T} wide column is about 900px (or what fits beside the drawer) and centred`, Math.abs(c.w - Math.min(900, 1280 - 348)) < 40 && Math.abs(c.x + c.w / 2 - mid) < 40, JSON.stringify({ ...c, mid }));
     check(`${T} writing column is the Newsreader serif at 21px`, /Newsreader|Georgia|serif/i.test(c.font) && Math.abs(c.size - 21) < 0.6, JSON.stringify(c));
     const title = await page.evaluate(() => { const t = document.querySelector('#s-note-title, #r-note-title, #o-note-title'); const cs = t && getComputedStyle(t); const r = t && t.getBoundingClientRect(); return t ? { size: parseFloat(cs.fontSize), weight: cs.fontWeight, w: r.width, x: r.x } : null; });
@@ -63,9 +63,9 @@ try {
     await page.locator('[data-testid="fs-smaller"]').click(); await page.locator('[data-testid="fs-smaller"]').click(); await wait(200);
     c = await col(); check(`${T} A- makes the text smaller`, c.size < 20, JSON.stringify(c));
     // theme
-    const bg0 = await page.evaluate(() => getComputedStyle(document.querySelector('.s-notes.focus, .o-sheet.zen, .r-sheet.fs')).backgroundColor);
+    const bg0 = await page.evaluate(() => getComputedStyle(document.querySelector('.s-notes.focus .s-note-main, .o-sheet.zen, .r-sheet.fs')).backgroundColor);
     await page.locator('[data-testid="fs-theme"]').click(); await wait(250);
-    const bg1 = await page.evaluate(() => getComputedStyle(document.querySelector('.s-notes.focus, .o-sheet.zen, .r-sheet.fs')).backgroundColor);
+    const bg1 = await page.evaluate(() => getComputedStyle(document.querySelector('.s-notes.focus .s-note-main, .o-sheet.zen, .r-sheet.fs')).backgroundColor);
     check(`${T} the theme button switches to a dark page`, bg0 !== bg1 && (await page.evaluate(() => document.documentElement.getAttribute('data-fs-theme'))) === 'dark', `${bg0} -> ${bg1}`);
     if (SHOT) await page.screenshot({ path: `${SHOT}/focus-${style}-dark.png` });
     await page.locator('[data-testid="fs-theme"]').click(); await wait(200);

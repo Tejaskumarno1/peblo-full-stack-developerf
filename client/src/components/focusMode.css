@@ -289,3 +289,19 @@ html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1500px, calc(100v
   .soft .s-notes.focus .s-note-main { padding-left: 48px; padding-right: 48px; }
   html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 300px; }
 }
+
+/* S61: the page is a rounded card on a soft canvas, with the side panel beside it */
+:root { --fs-canvas: #f4ecdf; }
+html[data-fs-theme="dark"] { --fs-canvas: #0f0c09; }
+html[data-fs]::before { content: ""; position: fixed; inset: 0; z-index: 8980; background: var(--fs-canvas); pointer-events: none; }
+.soft .s-notes.focus { background: transparent; }
+.soft .s-notes.focus .s-note-main, .o-sheet.zen, .r-sheet.fs {
+  inset: auto; top: 66px !important; left: 14px; right: 14px; bottom: 14px; border-radius: 26px; background: var(--fs-bg);
+  box-shadow: 0 8px 28px var(--fs-sh), inset 0 0 0 1px var(--fs-line);
+}
+html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main, html[data-fs-drawer="1"] .o-sheet.zen, html[data-fs-drawer="1"] .r-sheet.fs { right: 278px; }
+.soft .s-notes.focus .s-note-main, .o-sheet.zen, .r-sheet.fs { padding-top: 34px; }
+html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 24px; }
+@media (min-width: 1181px) { html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 48px; } }
+html[data-fs-width="full"] { --fs-col: min(1500px, calc(100vw - 124px)); }
+html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1500px, calc(100vw - 388px)); }
