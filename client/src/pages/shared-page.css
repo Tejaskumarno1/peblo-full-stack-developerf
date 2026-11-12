@@ -830,3 +830,16 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared textarea.task-title-in { display: block; resize: none; overflow: hidden; outline: 0; overflow-wrap: anywhere; }
 /* S15/S16: the comments sheet on a phone */
 .pb-shared .cards-sheet { max-height: 82vh; overflow: auto; }
+
+/* S24: versions list */
+.pb-shared .ver-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pb-shared .ver-list h5 { margin: 4px 0 2px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.pb-shared .ver-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; background: var(--chip, #f4eee5); }
+.pb-shared .ver-main { flex: 1; min-width: 90px; display: flex; flex-direction: column; }
+.pb-shared .ver-main b { font-size: 13px; }
+.pb-shared .ver-main small { font-size: 11.5px; opacity: .65; }
+.pb-shared .ver-btn { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 99px; padding: 6px 10px; background: var(--surface, #fff); color: inherit; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.pb-shared .ver-btn.dark { background: var(--fg); color: var(--surface, #fff); }
+.pb-shared .ver-ask { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.pb-shared .ver-ask span { flex-basis: 100%; }
+.pb-shared .ver-note { margin: 2px 0 0; font-size: 12px; opacity: .65; }

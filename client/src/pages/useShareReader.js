@@ -152,10 +152,23 @@ export default function useShareReader({ enabled, scope, articleRef, deps }) {
     return () => clearInterval(iv);
   }, [enabled, articleRef, bookmarks, changes, deps]);
 
+  // S24: compare the page with an earlier saved version: the lines that are not in that version get marked
+  const compareWith = useCallback((text, at) => {
+    const plain = (l) => l.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*|- \[[ x]\]\s*)/, '').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`~]/g, '').replace(/\s+/g, ' ').trim();
+    const old = new Set(String(text || '').split('\n').map(plain).filter(Boolean).map(hash));
+    baseline.current = old;
+    const art = articleRef.current;
+    const now = blocksOf(art).map(textOf).filter(Boolean);
+    const count = now.filter((t) => !old.has(hash(t))).length;
+    setChanges({ count, at: at || Date.now() });
+    setShowChanges(true);
+    return count;
+  }, [articleRef]);
+
   const removeBookmark = useCallback((sig) => { setBookmarks((list) => { const next = list.filter((b) => b.sig !== sig); save(bmKey, next); return next; }); }, [bmKey]);
 
   return {
     bookmarks, toggleBookmark, removeBookmark, goBookmark: go, place, dismissPlace: () => setPlace(null), jumpPlace: () => { if (place) go(place.sig); setPlace(null); },
-    changes, showChanges, setShowChanges, dismissChanges: () => setChanges(null),
+    changes, showChanges, setShowChanges, compareWith, dismissChanges: () => setChanges(null),
   };
 }

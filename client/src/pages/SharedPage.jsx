@@ -9,6 +9,7 @@ import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
 import { ShareTrack, FollowBanner } from './ShareTrack';
 import { ListenBar, TranslateMenu, LANGUAGES } from './ListenTranslate';
+import ShareVersions from './ShareVersions';
 import ShareCards, { EndOfPage, TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
@@ -1174,6 +1175,9 @@ export default function SharedPage() {
         {reader.place && <div className="fly-row"><Clock size={16} /><div><b>You stopped at {reader.place.title}</b></div></div>}
         {reader.place && <button type="button" className="fly-btn" data-testid="fly-jump" onClick={() => { reader.jumpPlace(); setFly(null); }}>Jump back</button>}
         {!reader.changes && !reader.place && <p className="fly-empty">Nothing new since you were last here.</p>}
+        <ShareVersions token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} unlock={getUnlock()} name={nameRef.current || user?.name || 'Guest'}
+          onCompare={(text, at) => { const n = reader.compareWith(text, at); showToast(n ? `${n} line${n > 1 ? 's' : ''} differ from that version` : 'Same as that version'); setTimeout(() => goChange(1), 1300); setFly(null); }}
+          onRestored={() => { showToast('Version restored. Today was kept as a version.'); setRev((n) => n + 1); setFly(null); }} onError={(m) => showToast(m)} />
         <button type="button" className="fly-btn" data-testid="fly-bookmarks" onClick={() => { setBmOpen(true); setFly(null); }}><Bookmark size={15} />My bookmarks{reader.bookmarks.length > 0 ? ` (${reader.bookmarks.length})` : ''}</button>
       </aside>}
       {data && !error && shownFly === 'file' && <aside className="srail-fly" data-testid="fly-file" aria-label="File">

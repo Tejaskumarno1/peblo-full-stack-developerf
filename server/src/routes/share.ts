@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate, verifyToken } from '../middleware/auth.js';
 import { saveNoteMerged } from '../services/noteSave.js';
+import { saveVersion } from '../services/noteVersions.js';
+import { invalidateNote } from '../services/collab.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { processTextCommand } from '../services/aiService.js';
 import { pwHashOf, hashPassword, verifyPassword, unlockFor, unlockOk } from '../services/sharePassword.js';
@@ -702,6 +704,51 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
       note: t.shareNote && t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
     });
+  } catch (e) { next(e); }
+});
+
+/** A note found by its link, with the access checks every versions call needs. Sends the refusal itself and returns null. */
+async function versionGate(req: any, res: any) {
+  if (!validToken(req.params.token)) { res.status(404).json({ error: 'This link is not shared any more.' }); return null; }
+  const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, shareEdit: true } });
+  if (!note) { res.status(404).json({ error: 'This link is not shared any more.' }); return null; }
+  if (!(await unlockOk('note', req.params.token, unlockOf(req)))) { res.status(401).json({ error: 'This page needs its password.', locked: true }); return null; }
+  const sid = req.query.sid || req.body?.sessionId;
+  const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
+  if (!acc.allowed) { res.status(403).json({ error: 'Waiting for the owner to let you in.' }); return null; }
+  if (await isBlocked('note', req.params.token, sid)) { res.status(403).json({ error: 'The owner removed you from this page.', removed: true }); return null; }
+  return { note, acc };
+}
+// GET /api/public/note/:token/versions -> the saved earlier versions (newest first), and whether this person may restore one.
+publicRoutes.get('/note/:token/versions', async (req, res, next) => {
+  try {
+    const g = await versionGate(req, res); if (!g) return;
+    const rows = await prisma.$queryRawUnsafe<{ id: string; created_at: Date; saved_by: string | null; label: string | null }[]>('SELECT id, created_at, saved_by, label FROM note_backups WHERE note_id = $1 ORDER BY created_at DESC LIMIT 30', g.note.id);
+    res.json({ canRestore: !!g.acc.canEdit, versions: rows.map((r) => ({ id: r.id, createdAt: r.created_at, by: r.saved_by || null, label: r.label || null })) });
+  } catch (e) { next(e); }
+});
+// GET /api/public/note/:token/versions/:vid -> the text of one version, to compare the page against.
+publicRoutes.get('/note/:token/versions/:vid', async (req, res, next) => {
+  try {
+    const g = await versionGate(req, res); if (!g) return;
+    const b = await prisma.noteBackup.findFirst({ where: { id: req.params.vid, noteId: g.note.id }, select: { content: true, createdAt: true } });
+    if (!b) return res.status(404).json({ error: 'That version is gone.' });
+    res.json({ content: b.content || '', createdAt: b.createdAt });
+  } catch (e) { next(e); }
+});
+// POST /api/public/note/:token/versions/:vid/restore { sessionId, name } -> editors only; today's text is kept as a version first.
+publicRoutes.post('/note/:token/versions/:vid/restore', (req, res, next) => guestWriteLimit(req, res, next), async (req, res, next) => {
+  try {
+    const g = await versionGate(req, res); if (!g) return;
+    if (!g.acc.canEdit) return res.status(403).json({ error: 'Only editors can restore a version.' });
+    const b = await prisma.noteBackup.findFirst({ where: { id: req.params.vid, noteId: g.note.id }, select: { content: true } });
+    if (!b) return res.status(404).json({ error: 'That version is gone.' });
+    await saveVersion(g.note.id, g.note.content || '', { force: true, by: cleanName(req.body?.name) });
+    const saved = await prisma.note.update({ where: { id: g.note.id }, data: { content: b.content }, select: { updatedAt: true } });
+    invalidateNote(g.note.id);
+    void logActivity(g.note.id, cleanName(req.body?.name), 'edited');
+    try { (req.app as any)?.get?.('io')?.to(g.note.userId).emit('notes_changed'); } catch { /* live refresh is best-effort */ }
+    res.json({ ok: true, updatedAt: saved.updatedAt });
   } catch (e) { next(e); }
 });
 
