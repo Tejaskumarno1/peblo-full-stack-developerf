@@ -1,6 +1,6 @@
 # Drawing / whiteboard in Peblo (Excalidraw)
 
-Status: research report, run 1 (2026-11-11). No code changed yet. Phase 1 starts on a later run once the open questions in section 11 are settled.
+Status: research report, run 2 (2026-11-12). No code changed yet. Phase 1 starts on a later run once the open questions in section 11 are settled.
 
 ## 1. Summary and recommendation
 
@@ -32,7 +32,7 @@ Collaboration: excalidraw.com runs end-to-end-encrypted live rooms over a socket
 
 Props worth using (all optional): `initialData`, `excalidrawAPI`, `onChange`, `onPointerUpdate`, `viewModeEnabled`, `zenModeEnabled`, `gridModeEnabled`, `theme` ("light" | "dark"), `langCode`, `UIOptions` (hide canvas actions, tools), `renderTopRightUI`, `onLibraryChange`, `libraryReturnUrl`, `generateIdForFile`, `validateEmbeddable`, `renderEmbeddable`, `handleKeyboardGlobally`, `detectScroll`, `autoFocus`. Slots: `<MainMenu>`, `<Footer>`, `<WelcomeScreen>`, `<Sidebar>`. Elements can carry `customData`.
 
-Other facts: licence MIT; npm latest stable line is 0.18.x (package page shows 0.18.0; a 0.18.1 tag also exists on the CDN; confirm the exact version at install time); peers are react and react-dom (README says React 17/18/19 supported on the 0.18 line; verify against Peblo's React 19.2 in the spike); unpacked package is large (about 47 MB on disk, mostly fonts and locale chunks; the JS actually downloaded in a browser is far smaller and code-split, but the editor chunk is still on the order of 1 MB or more gzipped, to be measured in the spike). Fonts are fetched from a CDN by default; self-host by copying `dist/prod/fonts` and setting `window.EXCALIDRAW_ASSET_PATH`. The container must have non-zero width and height. Mobile: works with touch, pinch zoom, pen; the UI collapses to a compact mobile layout, though precision editing on a phone is limited.
+Other facts: licence MIT; npm latest is 0.18.1 (verified with `npm view` on 2026-11-12; pin it exactly); peers are react and react-dom (README says React 17/18/19 supported on the 0.18 line; verify against Peblo's React 19.2 in the spike); unpacked package is large (about 47 MB on disk, mostly fonts and locale chunks; the JS actually downloaded in a browser is far smaller and code-split, but the editor chunk is still on the order of 1 MB or more gzipped, to be measured in the spike). Fonts are fetched from a CDN by default; self-host by copying `dist/prod/fonts` and setting `window.EXCALIDRAW_ASSET_PATH`. The container must have non-zero width and height. Mobile: works with touch, pinch zoom, pen; the UI collapses to a compact mobile layout, though precision editing on a phone is limited.
 
 ## 3. What Peblo needs (and what to skip)
 
@@ -80,7 +80,7 @@ B. Scene JSON as a Yjs sub-structure of the note doc. Good for real-time but tie
 
 C. (Chosen) A `drawings` table holding the scene, referenced by id from the block; snapshot in `media`.
 
-### 6.2 Schema (new migration, next number after 035 in server SQL migrations)
+### 6.2 Schema (new migration `server/prisma/sql/044_drawings.sql`, plus a `Drawing` model in `server/prisma/schema.prisma`; the latest existing file is 043_share_edit_requests.sql, run 1 wrongly said 035)
 
 ```
 drawings(
@@ -124,6 +124,22 @@ The package gives no server, so build on what Peblo has:
 - Presence reuse: the "presence badges" and peer cursor code on the share page can be shared.
 - Fallback: if the socket is down, fall back to optimistic `PUT` with version check and a "keep mine / take theirs" prompt, same as the note save path.
 
+
+## 8b. Exact server changes for drawing collaboration (read from `services/collab.ts`, `routes/collab.ts`)
+
+What exists: `class Room` in `services/collab.ts` holds one `Y.Doc` plus awareness, a `Map<WebSocket, Conn>` (flags `readOnly`, `userId`, `share`), a `dirty` flag and `schedulePersist()` which saves after `PERSIST_DELAY_MS = 1500`. `persist()` writes `encryptBytes(Y.encodeStateAsUpdate(doc), aadOf('note_ydocs','state',id))` into table `note_ydocs (note_id, state, md_hash, updated_at)` with an upsert; on load it only trusts the saved state if the stored markdown hash equals the current text. Tickets: `POST /api/collab/ticket { noteId }` returns a 30 s single-use ticket (`issueTicket(userId, noteId)`, rate limit 120/min) plus `readOnly`; the socket handler validates `ticket` and a `note` query param against `^[A-Za-z0-9-]{8,64}$` via `consumeTicket`.
+
+Changes needed:
+1. Make the Room generic over a "kind": `note` (today) and `drawing`. A drawing room id is the drawing uuid and its access check is "can the user open the note that contains this drawing (owner, space member, or share token with edit)" instead of the note check. Keep the Conn/readOnly logic untouched.
+2. New table `drawing_ydocs (drawing_id, state bytea, updated_at)` in the same migration, stored with `encryptBytes` and `aadOf('drawing_ydocs','state',id)` exactly like `note_ydocs`. No md_hash is needed because the Y.Map is the source of truth for the scene.
+3. A `persist()` variant for drawings additionally writes the decoded scene (elements array from the Y.Map, deleted tombstones older than 24 h dropped) into `drawings.scene` (encrypted bytes, `encryptBytes(gzip(json), aadOf('drawings','scene',id))`) and bumps `version`, so REST readers, the share page and exports always see the latest scene without a socket.
+4. `POST /api/collab/ticket` accepts `{ drawingId }` as an alternative to `{ noteId }`, resolves the owning note, and returns `readOnly` the same way.
+5. `liveRoomIds()` and `presenceOf()` stay note-only; add a drawing presence list later for the "who is drawing" badge.
+6. Reuse `invalidateNote`'s pattern (`CLOSE_RESET 4002`) as `invalidateDrawing` when a restore from a drawing version or a REST `PUT` changes the scene behind the room.
+Client: `utils/collab.js` gets `openDrawingRoom(drawingId)` returning `{ ymap, awareness, destroy }`; the DrawingBlock uses it only while the editor is open, so idle blocks cost no sockets.
+
+Security: the viewer role (`readOnly` Conn) must be enforced on the server for drawing updates (drop incoming sync-update messages from read-only connections), and the room must reject element payloads over the per-scene cap.
+
 ## 9. Export
 
 - In-editor menu: PNG (1x/2x/3x, background on/off, dark/light, with optional embedded scene), SVG (same, text kept as text), copy to clipboard (PNG/SVG), `.excalidraw` JSON download, and import of `.excalidraw`, `.excalidrawlib` and images.
@@ -140,7 +156,7 @@ The package gives no server, so build on what Peblo has:
 
 ## 11. Risks and open questions
 
-1. **React 19.2 compatibility** of the current 0.18.x package: verify in the spike (peer range, `react-dom` warnings, `useSyncExternalStore` use). Fallback: `@excalidraw/excalidraw@next` or pin React types. Highest-priority check.
+1. **React 19.2 compatibility.** Resolved on paper in run 2: `npm view` shows latest 0.18.1 with peerDependencies `react ^17.0.2 || ^18.2.0 || ^19.0.0` (same for react-dom), unpacked size 46.8 MB. Still confirm at runtime in the spike (console warnings, Strict Mode double effects). Fallback: the `next` dist-tag.
 2. **Bundle weight and cold start.** Mitigated by lazy loading and a separate chunk; measure with `vite build` + rollup visualizer, and target under ~1.2 MB gzip for the on-demand chunk. The Express server does not serve static assets in production (Render/Vercel deploy from branch `supabase`), so the fonts folder must be in the Vite `public/` output.
 3. **BlockNote focus and keyboard capture.** Excalidraw handles keys itself; leave `handleKeyboardGlobally=false`, stop propagation of key and clipboard events at the block wrapper, and set `contentEditable=false` on the block. Test paste, undo (Ctrl+Z must not hit BlockNote's undo), arrow keys and Delete.
 4. **Yjs doc growth and note history.** Drawings stay outside the note doc, so note history, backups and diff (`VersionDiff.jsx`) are unaffected; the block only stores an id and a snapshot URL.
@@ -183,5 +199,6 @@ Definition of done for every phase: unit tests, Playwright e2e with screenshots,
 
 ## 14. Run log and next steps
 
+- Run 2 (2026-11-12): git is unusable from the sandbox shell (worktree gitdir path points at D:\\), so this edit is NOT committed or pushed; commit it from the Windows side. Added: verified package version/peers/size, corrected the migration number (044), section 8b with exact collab server changes. Still not done: hands-on browser exploration, bundle measurement, runtime React 19 check (phase 0 spike, needs a dev environment with npm install and a browser).
 - Run 1 (2026-11-11): created this report from web research plus a read of the Peblo codebase. Not yet done: hands-on exploration of excalidraw.com in the browser, bundle measurement, React 19 check (all scheduled for the phase 0 spike).
-- Next run: check `git log` for edits; deepen sections 6 (migration numbering and encryption helper usage), 8 (read `services/collab.ts` and `routes/collab.ts` and write the exact server changes), and 11.1/11.2 with measurements; then start Phase 0/1.
+- Next run: run the phase 0 spike (install the package in `client`, scratch route, vite build chunk size, paste/undo isolation inside a BlockNote block), answer open question 11.10 if the owner replied, then start Phase 1 if the spike is clean.
