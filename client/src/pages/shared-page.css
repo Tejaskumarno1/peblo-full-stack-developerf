@@ -1015,3 +1015,21 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .mw-more .menu > button { min-height: 33px; }
   .pb-shared .look-menu { right: calc(max(48px, (100vw - 2000px) / 2) + 296px); }
 }
+
+/* S09: full screen is the owner's writing mode (FocusChrome), the page keeps its own editor */
+.pb-shared.is-fs { background: var(--fs-bg); color: var(--fs-fg); }
+.pb-shared.is-fs .top, .pb-shared.is-fs .srail, .pb-shared.is-fs .srail-fly, .pb-shared.is-fs .blobs, .pb-shared.is-fs .toc, .pb-shared.is-fs .rcards, .pb-shared.is-fs .title-tools, .pb-shared.is-fs .by, .pb-shared.is-fs .sum-card, .pb-shared.is-fs .welcome, .pb-shared.is-fs article .cta, .pb-shared.is-fs article .foot, .pb-shared.is-fs .endcap, .pb-shared.is-fs .totop { display: none !important; }
+.pb-shared.is-fs .stage.note-stage { position: fixed; inset: 0; z-index: 8990; display: block; width: 100%; margin: 0; padding: 0; background: var(--fs-bg); }
+.pb-shared.is-fs .stage.note-stage > article { position: absolute; inset: 0; width: auto; padding: 92px 224px 120px; border-radius: 0; box-shadow: none; background: transparent; overflow-y: auto; }
+.pb-shared.is-fs article > * { max-width: var(--fs-col); margin-left: auto; margin-right: auto; }
+.pb-shared.is-fs .title-in, .pb-shared.is-fs .title { width: 100%; height: auto; font: 800 36px/1.2 var(--fs-sans); letter-spacing: -.02em; color: var(--fs-fg); margin-bottom: 14px; }
+.pb-shared.is-fs .stage.note-stage .block-editor-container { margin-top: 0; }
+.fsx .fsx-chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 8px; border-radius: 999px; border: 1px dashed var(--fs-line); font: 700 13px var(--fs-sans); color: var(--fs-fg); white-space: nowrap; }
+.fsx .fsx-chip .av { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--peach, #FFD9C4); font: 800 10px var(--fs-sans); }
+.fsx .fsx-save { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 999px; border: 1px dashed var(--fs-line); background: transparent; color: var(--fs-fg); font: 700 13px var(--fs-sans); white-space: nowrap; }
+@media (max-width: 1280px) { .pb-shared.is-fs .stage.note-stage > article { padding-left: 24px; padding-right: 24px; } }
+
+/* S09: the owner chrome is a child of body; body must not clip it (the share root is absolutely placed so body has no height) */
+html.pb-public-share[data-fs] body { overflow: visible; }
+.fsx .fsx-exit, .fsx .fsx-exit kbd { color: var(--fs-inkfg) !important; }
+.fsx .fsx-exit { font-family: var(--fs-sans); }

@@ -1,0 +1,17 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const OUT = 'D:/Peblo/_shots';
+const md = 'Three themes came up across the six client interviews: speed of delivery, clarity of briefs, and how corrections are handled.\n\n## 1. What we heard\n\nClients praise the team but ask for fewer rounds. Most delays start with an unclear first brief.\n\n| Theme | Evidence | Action |\n| --- | --- | --- |\n| Speed of delivery | Four of six interviews | Move reviews to Tuesday |\n\n## 2. Next steps\n\nWho signs off the final numbers?';
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: md, tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true, expiresInDays: 5 })).token;
+const open = async () => { const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } }); await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); } catch {} }); const p = await c.newPage(); await p.goto(`${base}/s/note/${tok}`); await p.locator('[data-testid="join-anon"]').click({ timeout: 5000 }).catch(() => {}); await p.waitForTimeout(2500); return p; };
+let p = await open();
+await p.locator('[data-testid="tt-full"]').click(); await p.waitForTimeout(1500); await p.mouse.move(700,300); await p.waitForTimeout(800);
+await p.screenshot({ path: `${OUT}/real-S09.png` });
+await p.keyboard.press('Escape'); await p.waitForTimeout(500);
+await p.keyboard.press('?'); await p.waitForTimeout(600);
+await p.screenshot({ path: `${OUT}/real-S17-keys.png` });
+await p.keyboard.press('Escape');
+await p.locator('.save-btn').click(); await p.waitForTimeout(700);
+await p.screenshot({ path: `${OUT}/real-S17-save.png` });
+await finish();

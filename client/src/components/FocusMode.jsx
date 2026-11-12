@@ -90,7 +90,7 @@ function sectionMinutes() {
   return out.map((w) => (w > 0 ? Math.max(1, Math.round(w / 200)) : 0));
 }
 
-export default function FocusChrome({ active, prefs, set, title, saveStatus = 'saved', words = 0, docKey, outline = [], onJump, onExit, getScroller, hasOptions = false, optsOpen = false, onOptions, barItems = [], noteNode = null, shareNode = null, onQuickTask = null }) {
+export default function FocusChrome({ active, prefs, set, title, saveStatus = 'saved', words = 0, docKey, outline = [], onJump, onExit, getScroller, hasOptions = false, optsOpen = false, onOptions, barItems = [], noteNode = null, shareNode = null, onQuickTask = null, container = null }) {
   const [shown, setShown] = useState(true);
   const [pct, setPct] = useState(0);
   const [cur, setCur] = useState(0);
@@ -433,6 +433,6 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
         </div>
       )}
     </div>,
-    document.body,
+    container || document.body,
   );
 }

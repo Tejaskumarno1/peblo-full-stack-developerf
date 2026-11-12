@@ -1,3 +1,4 @@
+import FocusChrome, { useFocusPrefs } from '../components/FocusMode';
 import PagePolls from '../components/PagePolls';
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -296,6 +297,7 @@ export default function SharedPage() {
   const articleRef = useRef(null);
   // full screen, hidden tool bar, tucked-away top bar, shortcuts
   const [fullscreen, setFullscreen] = useState(false);
+  const [fsp, setFsp] = useFocusPrefs();
   const [barShown, setBarShown] = useState(false);
   const [topHidden, setTopHidden] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -1154,6 +1156,12 @@ export default function SharedPage() {
         </div>
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
+      {data?.kind === 'note' && !error && <FocusChrome container={rootRef.current} active={fullscreen} prefs={fsp} set={setFsp} title={data.title || 'Untitled'} saveStatus={status === 'saved' ? 'saved' : status === 'error' || status === 'conflict' ? 'error' : 'saving'} words={wordCount} docKey={token} getScroller={() => articleRef.current}
+        outline={headings.map((h) => ({ level: h.level, text: h.title }))} onJump={(text, index) => { const h = headings[index]; if (h) scrollToHeading(h.id); }} onExit={toggleFullscreen}
+        barItems={[
+          { id: 'who', label: 'Shared by', node: <span className="fsx-chip"><span className="av" aria-hidden="true">{initials(data.author)}</span>{data.author || 'Shared note'}</span> },
+          { id: 'save', label: 'Save to my Peblo', node: <button type="button" className="fsx-save" data-testid="fs-save" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={14} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button> },
+        ]} />}
       {showJoin && <div className="join-back" data-testid="join-back"><div className="join-card" role="dialog" aria-modal="true" aria-label="Join this page" data-testid="join-card" onKeyDown={(event) => { if (event.key === 'Escape') joinNow(true); }}>
         <div className="join-prev"><span className="join-big" style={{ background: myColor, boxShadow: `0 0 0 5px ${myColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
         <label className="join-lbl">Your name<input aria-label="Your name" autoFocus maxLength={40} placeholder="Guest" value={cardName} onChange={(event) => setCardName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') joinNow(false); }} /></label>
