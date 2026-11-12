@@ -54,8 +54,15 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
   const [comments, setComments] = useState([]);
   const { reactions, react } = useReactions(token, sid);
   const [askOpen, setAskOpen] = useState(false);
+  const [vcount, setVcount] = useState(null);
   useEffect(() => {
-    if (!canComment || !token || !window.matchMedia?.('(min-width: 1620px)').matches) return undefined;
+    if (!token) return undefined;
+    let live = true;
+    fetch(`/api/public/note/${encodeURIComponent(token)}/versions?sid=${encodeURIComponent(sid)}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j && Array.isArray(j.versions)) setVcount(j.versions.length); }).catch(() => {});
+    return () => { live = false; };
+  }, [token, sid]);
+  useEffect(() => {
+    if (!canComment || !token || !window.matchMedia?.('(min-width: 1281px)').matches) return undefined;
     let live = true;
     const load = () => commentsApi.list({ kind: 'guest', share: token, sid, name }).then((list) => { if (live) setComments(list); }).catch(() => {});
     load();
@@ -72,7 +79,7 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
       <section className="rc rc-ask" data-testid="rc-ask">
         <h3><Sparkles size={16} />Ask about this page</h3>
         <form className="rc-q" onSubmit={submit}>
-          <input aria-label="Ask about this page" placeholder="What should I remember from this?" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input aria-label="Ask about this page" placeholder="Ask anything here" value={q} onChange={(e) => setQ(e.target.value)} />
           <button type="submit" aria-label="Ask"><ArrowUp size={16} /></button>
         </form>
         <div className="rc-chips">
@@ -97,7 +104,7 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
         <label className="rc-sw"><span>Show marks in the page</span><input type="checkbox" role="switch" checked={showChanges} onChange={onToggleChanges} /></label>
       </section>}
       {reactions.length > 0 && <div className="rc-react" data-testid="rc-react" role="group" aria-label="Reactions">{reactions.map((r) => { const Icon = ICONS[r.kind]; return <button key={r.kind} type="button" data-testid={`rx-${r.kind}`} className={r.mine ? 'on' : ''} aria-pressed={r.mine} aria-label={`${r.kind} ${r.n}`} onClick={() => react(r.kind)}><Icon size={15} />{r.n > 0 && <b>{r.n}</b>}</button>; })}</div>}
-      <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />Version history</button>
+      <button type="button" className="rc-ver" data-testid="rc-versions" onClick={onHistory}><History size={15} />{vcount ? `${vcount} version${vcount > 1 ? 's' : ''} kept` : 'Version history'}</button>
     {askOpen && <EditRequest token={token} sid={sid} name={name} owner={owner} onClose={() => setAskOpen(false)} />}
     </aside>
   );

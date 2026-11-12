@@ -1007,7 +1007,19 @@ export default function SharedPage() {
     document.addEventListener('keydown', esc); document.addEventListener('click', away);
     return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);
-  const tocLinks = headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>);
+  const secMins = (() => {
+    const out = []; let cur = 0; let intro = 0; let started = false;
+    String(data?.content || '').split('\n').forEach((line) => {
+      if (/^#{1,3}\s+\S/.test(line)) { if (started) out.push(cur); started = true; cur = 0; } else if (started) cur += (line.match(/\S+/g) || []).length; else intro += (line.match(/\S+/g) || []).length;
+    });
+    if (started) out.push(cur);
+    return { intro: Math.max(1, Math.ceil(intro / 200)), hasIntro: intro > 0, list: out.map((n) => Math.max(1, Math.ceil(n / 200))) };
+  })();
+  const activeIdx = headings.findIndex((h) => h.id === activeHeading);
+  const tocLinks = <>
+    {secMins.hasIntro && headings.length > 0 && <a key="__overview" href="#page-main" className={`toc-ov${activeIdx < 0 ? ' on' : ''}`} onClick={(event) => { event.preventDefault(); document.getElementById('page-main')?.scrollTo?.({ top: 0, behavior: 'smooth' }); if (!pinnedToc) setFly(null); }}><span className={`toc-dot ${activeIdx < 0 ? 'cur' : 'done'}`}>{activeIdx < 0 ? <i /> : <Check size={11} />}</span><span className="toc-t">Overview</span><span className="toc-min">{secMins.intro} min</span></a>}
+    {headings.map(({ id, title, level }, index) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className={`toc-dot ${index < activeIdx ? 'done' : index === activeIdx ? 'cur' : ''}`}>{index < activeIdx ? <Check size={11} /> : index === activeIdx ? <i /> : null}</span><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}<span className="toc-min">{secMins.list[index] || 1} min</span></a>)}
+  </>;
   const commentsBtn = () => document.querySelector('.pb-shared .pb-cbtn');
   const handleHeadingClick = (event, id) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -1088,7 +1100,7 @@ export default function SharedPage() {
           </button>}
           {data && <button className="btn copy-btn" type="button" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={17} /><span>Copy link</span></button>}
           {data && <button className="btn icon" type="button" data-testid="fs-btn" aria-label="Full screen" title="Full screen (F)" onClick={toggleFullscreen}><Maximize2 size={18} /></button>}
-          {data && <div className="menu-wrap" ref={lookRef}>
+          {data && <div className="menu-wrap mw-look" ref={lookRef}>
             <button className="btn icon" type="button" data-testid="look-btn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded={lookOpen} title="Appearance" onClick={() => { setLookOpen((o) => !o); setMenuOpen(false); }}><Type size={18} /></button>
             {lookOpen && <div className="menu look-menu" role="dialog" aria-label="Appearance" data-testid="look-menu">
               <h4>Appearance</h4>
@@ -1104,7 +1116,7 @@ export default function SharedPage() {
             </div>}
           </div>}
           {data && <button className="btn icon" type="button" data-testid="moon-btn" aria-label={darkMode ? 'Switch to light' : 'Switch to dark'} title={darkMode ? 'Light' : 'Dark'} onClick={() => setDarkMode((d) => !d)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>}
-          {data && <div className="menu-wrap" ref={meRef}>
+          {data && <div className="menu-wrap mw-me" ref={meRef}>
             <button type="button" className="hd-me" data-testid="hd-me" aria-haspopup="dialog" aria-expanded={meOpen} aria-label="Your identity" title={guestName || user?.name || 'Guest'} style={{ background: myColor }} onClick={() => setMeOpen((o) => !o)}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</button>
             {meOpen && <div className="menu id-menu" role="dialog" aria-label="Your identity" data-testid="id-menu">
               <div className="id-head"><span className="hd-me" style={{ background: myColor }}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</span><div><b>{guestName || user?.name || 'Guest'}</b><small>{user ? 'Signed in' : 'Guest on this page'}</small></div></div>
@@ -1115,11 +1127,11 @@ export default function SharedPage() {
               <button type="button" role="menuitem" data-testid="id-leave" onClick={() => { setMeOpen(false); navigate('/'); }}><LogOut size={17} /><span>Leave this page</span></button>
             </div>}
           </div>}
-          {data && <div className="menu-wrap" ref={shareRef}>
+          {data && <div className="menu-wrap mw-share" ref={shareRef}>
             <button className="btn share-btn" type="button" data-testid="share-btn" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen((o) => !o)}><Share2 size={16} /><span>Share</span></button>
             {shareOpen && <SharePanel kindPath={kindPath} token={token} hasPassword={!!data.hasPassword} summary={data.summary || ''} onSummary={(text) => setData((d) => ({ ...d, summary: text || null }))} link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
           </div>}
-          {data && <div className="menu-wrap" ref={menuRef}>
+          {data && <div className="menu-wrap mw-more" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">
               <h4>Share</h4>
@@ -1216,7 +1228,7 @@ export default function SharedPage() {
       ) : !data ? (
         <main className="stage"><section className="skel" data-testid="page-loading" role="status" aria-live="polite"><i className="sk t" /><span className="sk-row"><i className="sk dot" /><i className="sk s" /></span><i className="sk big" /><i className="sk l" /><i className="sk l m" /><i className="sk l" /><i className="sk l s" /><i className="sk pill" /><i className="sk big" /><span className="skel-pill"><LoaderCircle className="spin" size={14} />Opening the page<span className="sr-only"> Loading your shared page…</span></span></section></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
+        <main className={`stage${data.kind === 'note' ? ' note-stage' : ''}${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
           {pinnedToc && <aside className="toc" aria-label="On this page">
             <div className="toc-head"><h2>On this page</h2><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-pressed="true" aria-label="Unpin outline" title="Unpin outline" onClick={toggleToc}><Pin size={17} /></button></div>
             <div className="toc-card-top" data-testid="toc-time"><span className="toc-left"><Clock size={13} />{Math.max(1, Math.ceil(wordCount * (1 - scrollProgress / 100) / 200))} min left</span><div className="toc-bar" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div></div>
@@ -1247,10 +1259,11 @@ export default function SharedPage() {
                 <button type="button" data-testid="tt-more" aria-label="More options" title="More" onClick={() => setMenuOpen(true)}><MoreHorizontal size={17} /></button>
               </div>
               <div className="by">
-                <span className="av" aria-hidden="true">{initials(data.author)}</span>
-                <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
-                <span>Updated {when(data.updatedAt)}</span>
-                <span className="dotsep">·</span><span data-testid="by-stats">{Math.max(1, Math.ceil(wordCount / 200))} min read · {wordCount} words</span>
+                <span className="by-who"><span className="av" aria-hidden="true">{initials(data.author)}</span>
+                <span>{data.author ? <><span className="by-pre">Shared by </span><b>{data.author}</b></> : 'Shared note'}</span></span><span className="dotsep">·</span>
+                <span className="by-upd">Updated {when(data.updatedAt)}</span>
+                <span className="dotsep">·</span><span data-testid="by-stats" className="by-stats" title={`Updated ${when(data.updatedAt)}`}><i className="by-dot" aria-hidden="true" /><span className="by-rt">{Math.max(1, Math.ceil(wordCount / 200))} min read · </span>{wordCount} words</span>
+                <span className={`by-role ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={13} /> : <Eye size={13} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
