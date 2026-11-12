@@ -1005,7 +1005,7 @@ export default function SharedPage() {
   useEffect(() => {
     if (!shownFly) return undefined;
     const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
-    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver, .hd-stack')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
+    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver, .hd-stack, .mbar, .mchips')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
     document.addEventListener('keydown', esc); document.addEventListener('click', away);
     return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);

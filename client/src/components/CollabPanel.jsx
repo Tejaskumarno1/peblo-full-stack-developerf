@@ -206,6 +206,7 @@ export function CollabPanel({
             </li>
           ))}
         </ul>
+        {mode === 'guest' && onMute && <label className="cp-mute2" data-testid="mute-row"><span>Mute join and leave notices</span><input type="checkbox" role="switch" checked={!!muted} onChange={(e) => onMute(e.target.checked)} /></label>}
         <label className="cp-mute cp-presence"><input type="checkbox" data-testid="presence-toggle" checked={showPresence} onChange={(e) => setShowPresence(e.target.checked)} /><span><b>Show live cursors</b><small>Other people's pointers, text cursors and who edited a line. Off keeps the page calm.</small></span></label>
         {mine && mode === 'guest' && !canEdit && <p className="cp-note">This link is view only. You can read, but not change it.</p>}
 

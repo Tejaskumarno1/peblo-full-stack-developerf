@@ -37,7 +37,7 @@ export default function SharePalette({ headings = [], actions = [], onJump, onCl
   return (
     <div className="sp-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="sp" role="dialog" aria-modal="true" aria-label="Command palette" data-testid="palette" onKeyDown={onKey}>
-        <label className="sp-in"><Search size={17} /><input ref={input} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Type a command or a heading" aria-label="Type a command or a heading" data-testid="palette-input" /><kbd>Esc</kbd></label>
+        <label className="sp-in"><Search size={17} /><input ref={input} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search or jump" aria-label="Type a command or a heading" data-testid="palette-input" /><kbd>Esc</kbd></label>
         <div className="sp-list" role="listbox" ref={list}>
           {jumps.length > 0 && <div className="sp-cap">Jump to</div>}
           {jumps.map((item, i) => row(item, i))}

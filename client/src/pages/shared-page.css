@@ -1170,3 +1170,32 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
   .pb-shared .mchips .c-comm { background: #ffd8c4; }
   .pb-shared .mchips .c-hist { background: #cfeedd; }
 }
+
+/* S29: People as a bottom sheet with Follow switches, Listen player above the bar */
+.pb-shared .cp-mute2 { display: none; }
+@media (max-width: 640px) {
+  .pb-shared .srail-fly.cp-drawer.docked.people { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; height: auto; max-height: 72vh; border: 0; border-radius: 30px 30px 0 0; background: #fff; box-shadow: 0 -18px 50px rgba(36, 31, 26, .28); z-index: 70; display: block; padding: 18px 0 max(18px, env(safe-area-inset-bottom, 0px)); }
+  .pb-shared .srail-fly.people .cp { height: auto; border: 0; box-shadow: none; background: transparent; }
+  .pb-shared .srail-fly.people .cp-head { padding: 4px 18px 8px; }
+  .pb-shared .srail-fly.people .cp-title i, .pb-shared .srail-fly.people .cp-tabs, .pb-shared .srail-fly.people .cp-tip { display: none; }
+  .pb-shared .srail-fly.people .cp-title-t { display: flex; flex-direction: column; font: 800 24px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; }
+  .pb-shared .srail-fly.people .cp-title-t small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2); }
+  .pb-shared .srail-fly.people .cp-h { display: block; margin: 6px 18px 8px; font: 800 11.5px 'Figtree', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--fg2); }
+  .pb-shared .srail-fly.people .cp-list { display: grid; gap: 8px; padding: 0 16px; margin: 0; list-style: none; }
+  .pb-shared .srail-fly.people .cp-row { margin: 0; padding: 10px 12px; border-radius: 18px; background: #f6efe4; align-items: center; }
+  .pb-shared .srail-fly.people .cp-row:has(.cp-follow[aria-pressed="true"]) { background: #cfeedd; }
+  .pb-shared .srail-fly.people .cp-badge { display: none; }
+  .pb-shared .srail-fly.people .cp-follow { flex: none; position: relative; width: 46px; height: 28px; padding: 0; border: 0; border-radius: 99px; background: #e4dccf; font-size: 0; margin-left: auto; }
+  .pb-shared .srail-fly.people .cp-follow::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s; }
+  .pb-shared .srail-fly.people .cp-follow[aria-pressed="true"] { background: #1f7a4d; }
+  .pb-shared .srail-fly.people .cp-follow[aria-pressed="true"]::after { transform: translateX(18px); }
+  .pb-shared .cp-mute2 { display: flex; align-items: center; justify-content: space-between; margin: 14px 18px 0; font: 800 14.5px 'Figtree', system-ui, sans-serif; color: var(--fg); }
+  .pb-shared .cp-mute2 input { appearance: none; position: relative; width: 46px; height: 28px; margin: 0; border-radius: 99px; background: #e4dccf; cursor: pointer; }
+  .pb-shared .cp-mute2 input::after { content: ''; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s; }
+  .pb-shared .cp-mute2 input:checked { background: #1f7a4d; }
+  .pb-shared .cp-mute2 input:checked::after { transform: translateX(18px); }
+  .pb-shared .listen-bar { left: 12px; right: 12px; bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 70px); transform: none; max-width: none; width: auto; border-radius: 30px; padding: 7px 14px 7px 7px; z-index: 55; gap: 10px; }
+  .pb-shared .listen-bar .lb-play { background: #C4441C; width: 44px; height: 44px; }
+  .pb-shared .listen-bar .lb-bar { flex: 1; width: auto; }
+  .pb-shared .listen-bar [data-testid="lb-voice"] { display: none; }
+}
