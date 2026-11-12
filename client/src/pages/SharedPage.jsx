@@ -309,20 +309,32 @@ export default function SharedPage() {
   }, []);
   const rootRef = useRef(null);
   const barTimer = useRef(null);
+  const fsRef = useRef(false);
+  useEffect(() => { fsRef.current = fullscreen; }, [fullscreen]);
+  // Full screen asks the browser for real full screen (the same as F11) straight from the click, so the browser allows it.
   const toggleFullscreen = useCallback(() => {
-    setFullscreen((on) => {
-      const next = !on;
-      try {
-        if (next && rootRef.current?.requestFullscreen && !document.fullscreenElement) rootRef.current.requestFullscreen().catch(() => {});
-        if (!next && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      } catch { /* the page still goes full screen without the browser API */ }
-      return next;
-    });
-  }, []);
+    const next = !fsRef.current;
+    fsRef.current = next;
+    setFullscreen(next);
+    try {
+      const el = document.documentElement;
+      if (next && !document.fullscreenElement) {
+        const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (ask) { const p = ask.call(el, { navigationUI: 'hide' }); p?.catch?.(() => showToast('Your browser blocked full screen. Press F11 instead.')); }
+        else showToast('This browser has no full screen. Press F11 instead.');
+      } else if (!next && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch { /* the page still goes full screen without the browser API */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const onFs = () => { if (!document.fullscreenElement) setFullscreen(false); };
+    const onFs = () => { if (!document.fullscreenElement && fsRef.current && !browserFullscreen()) setFullscreen(false); };
+    // F11 is handled by the browser itself, so the page follows it: the window fills the whole screen
+    const browserFullscreen = () => !navigator.webdriver && window.matchMedia?.('(hover: hover)').matches && window.innerHeight >= screen.height - 1 && window.innerWidth >= screen.width - 1;
+    const onSize = () => { const f = !!document.fullscreenElement || browserFullscreen(); if (f !== fsRef.current) { fsRef.current = f; setFullscreen(f); } };
     document.addEventListener('fullscreenchange', onFs);
-    return () => document.removeEventListener('fullscreenchange', onFs);
+    window.addEventListener('resize', onSize);
+    return () => { document.removeEventListener('fullscreenchange', onFs); window.removeEventListener('resize', onSize); };
   }, []);
   // Ctrl F on a page that is only read: the same find card the editor has (Find only, no Replace)
   useEffect(() => {
@@ -1323,7 +1335,6 @@ export default function SharedPage() {
             </>}
 
             {data.kind === 'note' && <EndOfPage token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} />}
-            <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
           {data.kind === 'note' && !fullscreen && !look.quiet && <ShareTrack articleRef={articleRef} viewers={viewers} colorOf={peerColor} />}
