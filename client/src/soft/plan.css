@@ -74,3 +74,10 @@
 .s-plan .pl-hrs { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .s-plan .pl-hrs select { border: 1px solid rgba(0, 0, 0, .12); border-radius: 8px; background: transparent; font: inherit; padding: 2px 4px; }
 .s-plan .pl-blk.short .pl-time { padding-right: 46px; }
+
+.s-plan .pl-panel.mint { background: #cfeedd; }
+.s-plan .mint .pl-ph .pl-chip { background: #fff; }
+.s-plan .mint .pl-prop .pl-acts button, .s-plan .mint > .pl-acts button { background: #e7f7ee; }
+.s-plan .mint .pl-acts button.ok { background: #2d9d6a; color: #fff; }
+.s-plan .mint > .pl-acts { margin-top: 10px; }
+.s-plan .pl-x2 { border: 0; background: rgba(255,255,255,.7); width: 24px; height: 24px; border-radius: 999px; display: inline-grid; place-items: center; cursor: pointer; color: inherit; }

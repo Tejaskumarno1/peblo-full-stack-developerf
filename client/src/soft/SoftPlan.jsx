@@ -205,6 +205,40 @@ export default function SoftPlan() {
   };
   const over = needs - free;
 
+  // end-of-day review: what got done, what is left, and where each leftover goes
+  const [review, setReview] = useState(false);
+  const startToday = startOfDay();
+  const doneToday = live.filter((t) => t.completed && t.updatedAt && new Date(t.updatedAt) >= startToday && !(t.startTime && t.endTime && !t.meta?.planned));
+  const leftToday = todayAll.filter((t) => !(t.startTime && t.endTime && !t.meta?.planned));
+  const doneMin = doneToday.reduce((n, t) => n + estOf(t), 0);
+  const tomorrow9 = () => { const d = startOfDay(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; };
+  const moveTo = async (list, dest) => {
+    const d = tomorrow9();
+    const ids = new Set(list.map((t) => t.id));
+    queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (ids.has(x.id) ? { ...x, deadline: dest === 'tomorrow' ? d.toISOString() : null, startTime: null, endTime: null, meta: { ...(x.meta || {}), planned: undefined } } : x)));
+    try {
+      for (const t of list) {
+        const body = dest === 'tomorrow'
+          ? { scope: 'this', deadline: d.toISOString(), startTime: '', endTime: '', meta: { planned: null, moves: (t.meta?.moves || 0) + 1 } }
+          : { scope: 'this', deadline: null, startTime: '', endTime: '', tags: [...new Set([...tagsOf(t).map(String), 'someday'])], meta: { planned: null, moves: null } };
+        // eslint-disable-next-line no-await-in-loop
+        await todosAPI.update(t.id, body);
+      }
+      say(dest === 'tomorrow' ? `${list.length} moved to tomorrow` : `${list.length} moved to Someday`);
+    } catch { setMsg('Could not move that.'); }
+    refresh();
+  };
+  const recap = async () => {
+    const title = `Recap for ${new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
+    const lines = [`# ${title}`, '', `Done: ${doneToday.length} task${doneToday.length === 1 ? '' : 's'} (about ${nice(doneMin)}).`, '', '## Done', ...(doneToday.length ? doneToday.map((t) => `- [x] ${t.text}`) : ['- Nothing finished']), '', '## Left open', ...(leftToday.length ? leftToday.map((t) => `- [ ] ${t.text}`) : ['- Nothing left'])];
+    try {
+      let id = null;
+      try { const found = await notesAPI.getAll({ search: title, limit: 10, snippet: '1' }); const hit = (found.data?.notes || []).find((n) => n.title === title && !n.isDeleted); if (hit) { await notesAPI.update(hit.id, { content: lines.join('\n') }); id = hit.id; } } catch { /* fall through to a new note */ }
+      if (!id) { const r = await notesAPI.create({ title, content: lines.join('\n') }); id = r.data?.note?.id || r.data?.id; }
+      if (id) navigate(`/notes/${id}`);
+    } catch { setMsg('Could not write the recap note.'); }
+  };
+
   const dateLine = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const hours = Array.from({ length: DAY_END / 60 - DAY_START / 60 }, (_, i) => DAY_START / 60 + i);
   const top = (m) => ((m - DAY_START) / 60) * HOUR;
@@ -226,6 +260,7 @@ export default function SoftPlan() {
         <span className="grow" />
         {over > 0 && <span className="pl-over" role="status" data-testid="plan-over">Over by {nice(over)}</span>}
         {planned.length > 0 && <button type="button" className="pl-light" data-testid="plan-carry" onClick={carryToTomorrow}>Move {planned.length} unfinished to tomorrow</button>}
+        <button type="button" className="pl-light" data-testid="plan-review-open" aria-expanded={review} onClick={() => setReview((v) => !v)}>End of day review</button>
         <button type="button" className="pl-dark" onClick={autoFit} disabled={pick.length === 0}>Auto-fit my gaps</button>
         <button type="button" className="pl-light" onClick={briefing}>Write today's briefing note</button>
       </div>
@@ -272,6 +307,28 @@ export default function SoftPlan() {
         </section>
 
         <div className="pl-right">
+          {review && (
+            <section className="pl-panel mint" aria-label="End of day review" data-testid="plan-review">
+              <div className="pl-ph"><h2>End of day</h2><span className="pl-chip" data-testid="review-done">{doneToday.length} done · {nice(doneMin)}</span><span className="grow" /><button type="button" className="pl-x2" aria-label="Close the review" onClick={() => setReview(false)}><X size={14} strokeWidth={2.4} /></button></div>
+              {leftToday.length === 0 ? <p className="pl-note">Nothing left open for today.</p> : (
+                <div className="pl-props">
+                  {leftToday.map((t) => (
+                    <div key={t.id} className="pl-prop" data-testid="review-left">
+                      <b>{t.text}</b>
+                      <div className="pl-acts">
+                        <button type="button" onClick={() => moveTo([t], 'tomorrow')}>Tomorrow</button>
+                        <button type="button" onClick={() => moveTo([t], 'someday')}>Someday</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="pl-acts wrap">
+                {leftToday.length > 1 && <button type="button" className="ok" data-testid="review-all" onClick={() => moveTo(leftToday, 'tomorrow')}>Move all to tomorrow</button>}
+                <button type="button" data-testid="review-recap" onClick={recap}>Save recap note</button>
+              </div>
+            </section>
+          )}
           <section className="pl-panel lilac" aria-label="Approval inbox" data-testid="approval-inbox">
             <div className="pl-ph"><h2>Approval inbox</h2><span className="pl-chip">{proposalsShown.length} waiting</span></div>
             <p className="pl-note viol">Tasks that Claude or a guest proposed. Nothing lands in your lists until you say yes.</p>
