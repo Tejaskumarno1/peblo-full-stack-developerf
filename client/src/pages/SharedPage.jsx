@@ -1105,14 +1105,15 @@ export default function SharedPage() {
             {lookOpen && <div className="menu look-menu" role="dialog" aria-label="Appearance" data-testid="look-menu">
               <h4>Appearance</h4>
               <div className="look-row"><span>Text size</span><div className="seg" role="group" aria-label="Text size">{[['s', 'A−'], ['m', 'A'], ['l', 'A+'], ['xl', 'A++']].map(([v, l]) => <button key={v} type="button" className={look.size === v ? 'on' : ''} aria-pressed={look.size === v} data-testid={`look-size-${v}`} onClick={() => setLookPref({ size: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Zoom</span><div className="seg" role="group" aria-label="Zoom">{[90, 100, 125, 150].map((v) => <button key={v} type="button" data-testid={`look-zoom-${v}`} className={(look.zoom || 100) === v ? 'on' : ''} aria-pressed={(look.zoom || 100) === v} onClick={() => setLookPref({ zoom: v })}>{v}%</button>)}</div></div>
               <div className="look-row"><span>Page width</span><div className="seg" role="group" aria-label="Page width">{[['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']].map(([v, l]) => <button key={v} type="button" className={look.width === v ? 'on' : ''} aria-pressed={look.width === v} data-testid={`look-width-${v}`} onClick={() => setLookPref({ width: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Style</span><div className="seg" role="group" aria-label="Style">{[['follow', 'Owner'], ['soft', 'Soft'], ['river', 'River'], ['orbit', 'Orbit']].map(([v, l]) => <button key={v} type="button" className={(look.style || 'follow') === v ? 'on' : ''} aria-pressed={(look.style || 'follow') === v} data-testid={`look-style-${v}`} onClick={() => setLookPref({ style: v })}>{l}</button>)}</div></div>
-              <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
-              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's pointers, cursors and who is editing</span></label>
-              <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no join or typing notices)</span></label>
+              <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => <button key={v} type="button" className={(look.theme || 'system') === v ? 'on' : ''} aria-pressed={(look.theme || 'system') === v} onClick={() => { setLookPref({ theme: v }); setDarkMode(v === 'system' ? !!window.matchMedia?.('(prefers-color-scheme: dark)').matches : v === 'dark'); }}>{l}</button>)}</div></div>
+              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's pointers</span></label>
+              <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no pills, no join notices)</span></label>
               <label className="look-check"><input type="checkbox" data-testid="look-pin" checked={look.pin} onChange={(event) => setLookPref({ pin: event.target.checked })} /><span>Keep the tool bar showing</span></label>
-              <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>
+              <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans', zoom: 100 })}><RotateCcw size={15} />Reset reading style</button>
             </div>}
           </div>}
           {data && <button className="btn icon" type="button" data-testid="moon-btn" aria-label={darkMode ? 'Switch to light' : 'Switch to dark'} title={darkMode ? 'Light' : 'Dark'} onClick={() => setDarkMode((d) => !d)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>}
@@ -1134,7 +1135,7 @@ export default function SharedPage() {
           {data && <div className="menu-wrap mw-more" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">
-              <h4>Share</h4>
+              <h4>Share and export</h4>
               <div className="linkbox"><input readOnly value={window.location.href} aria-label="Share link" /><button className="btn dark" type="button" onClick={() => copy(window.location.href)}>Copy</button></div>
               <hr />
               <button type="button" role="menuitem" onClick={() => exportShared('md')}><Download size={17} /><span>Download as Markdown<small>Keep your note formatting</small></span></button>
@@ -1142,10 +1143,10 @@ export default function SharedPage() {
               <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={17} /><span>Download as Word<small>Editable .doc document</small></span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={17} /><span>Download as HTML</span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={17} /><span>Download as plain text</span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print</span></button>
-              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy note text</span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print<small>Opens the print dialog</small></span></button>
+              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy as Markdown</span></button>
               <button type="button" role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setMenuOpen(false); }}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? 'Light mode' : 'Dark mode'}</span></button>
-              {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Disable this link for everyone</small></span></button></>}
+              {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Only the owner sees this</small></span></button></>}
               <hr />
               <div className="menu-note">Anyone with this link can {data?.canEdit ? 'edit' : 'read'} this {data?.kind === 'todo' ? 'task' : 'note'}.</div>
             </div>}
@@ -1243,7 +1244,7 @@ export default function SharedPage() {
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
-          <article ref={articleRef} id="page-main" tabIndex={-1}>
+          <article ref={articleRef} id="page-main" tabIndex={-1} style={look.zoom && look.zoom !== 100 ? { zoom: look.zoom / 100 } : undefined}>
             {followId && <FollowBanner who={viewers.find((v) => v.id === followId)} color={peerColor(followId)} onStop={() => setFollowId(null)} />}
             {data.kind === 'note' && reader.changes && reader.showChanges && chgIdx >= 0 && <div className="cmp-bar" data-testid="cmp-bar" role="status"><History size={15} /><span>Comparing now with {new Date(reader.changes.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><b>Change {chgIdx + 1} of {chgEls().length}</b><button type="button" aria-label="Previous change" onClick={() => goChange(-1)}><ArrowUp size={15} /></button><button type="button" aria-label="Next change" onClick={() => goChange(1)}><ArrowDown size={15} /></button><button type="button" aria-label="Close comparison" onClick={() => setChgIdx(-1)}><X size={14} /></button></div>}
             {data.kind === 'note' && <>

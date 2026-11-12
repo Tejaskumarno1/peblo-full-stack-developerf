@@ -984,3 +984,34 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared .brand i::after { display: none; }
 .pb-shared .brand i { width: 30px; height: 27px; }
 @media (min-width: 1281px) { .pb-shared .stage.note-stage .pb-dock { margin-right: -42px; } }
+
+/* S13: Export and Appearance panels, exactly as drawn */
+@media (min-width: 1281px) {
+  .pb-shared .look-menu { position: fixed; top: 170px; right: calc(max(48px, (100vw - 2000px) / 2) + 300px); left: auto; width: 456px; max-height: calc(100dvh - 190px); padding: 18px 18px 16px; border: 0; border-radius: 26px; background: var(--surface); box-shadow: var(--shadow); }
+  .pb-shared .look-menu h4 { margin: 0 0 8px; color: var(--fg); font: 700 17px/20px 'Figtree', system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+  .pb-shared .look-row { grid-template-columns: 96px 1fr; align-items: center; gap: 0; padding: 5px 0; }
+  .pb-shared .look-row > span { color: var(--fg); font: 700 13.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+  .pb-shared .look-menu .seg { gap: 4px; padding: 0; background: transparent; flex-wrap: wrap; }
+  .pb-shared .look-menu .seg button { flex: none; height: 32px; padding: 0 14px; border-radius: 999px; background: var(--chip); color: var(--fg); font: 800 13px 'Figtree', system-ui, sans-serif; box-shadow: none; }
+  .pb-shared .look-menu .seg button.on { background: var(--fg); color: var(--surface); box-shadow: none; }
+  .pb-shared .look-check { gap: 10px; padding: 5px 0; color: var(--fg); font: 700 13.5px 'Figtree', system-ui, sans-serif; }
+  .pb-shared .look-menu .look-row:last-of-type { margin-bottom: 12px; }
+  .pb-shared .look-check input { appearance: none; -webkit-appearance: none; flex: none; width: 20px; height: 20px; margin: 0; border-radius: 7px; border: 2px solid var(--fg); background: transparent; display: grid; place-items: center; cursor: pointer; }
+  .pb-shared .look-check input:checked { background: var(--fg); }
+  .pb-shared .look-check input:checked::after { content: ''; width: 9px; height: 5px; border: solid var(--surface); border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px); }
+  .pb-shared .look-reset { display: inline-flex; align-items: center; gap: 8px; height: 34px; margin: 10px 0 0; padding: 0 16px; border-radius: 999px; background: var(--surface); box-shadow: var(--soft-shadow); color: var(--fg); font: 800 14px 'Figtree', system-ui, sans-serif; }
+
+  .pb-shared .mw-more .menu { position: fixed; top: 96px; right: max(46px, calc((100vw - 2000px) / 2 + 46px)); left: auto; width: 316px; max-height: calc(100dvh - 120px); padding: 8px; border: 0; border-radius: 26px; background: var(--surface); box-shadow: var(--shadow); }
+  .pb-shared .mw-more .menu h4 { margin: 0; padding: 0 8px; color: var(--fg3); font: 800 12px/23px 'Figtree', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+  .pb-shared .mw-more .menu .linkbox, .pb-shared .mw-more .menu .menu-note { display: none; }
+  .pb-shared .mw-more .menu > hr { margin: 6px 6px; border-top: 1px solid var(--line); }
+  .pb-shared .mw-more .menu > button { gap: 12px; min-height: 33px; padding: 7px 10px 7px 12px; border-radius: 16px; font: 800 14px 'Figtree', system-ui, sans-serif; }
+  .pb-shared .mw-more .menu > button small { margin-top: 0; color: var(--fg2); font: 600 12px/15px 'Figtree', system-ui, sans-serif; }
+  .pb-shared .mw-more .menu > button.danger { color: var(--danger); }
+}
+@media (min-width: 1281px) {
+  .pb-shared .look-reset { width: fit-content; }
+  .pb-shared .mw-more .menu > hr:nth-of-type(1) { display: none; }
+  .pb-shared .mw-more .menu > button { min-height: 33px; }
+  .pb-shared .look-menu { right: calc(max(48px, (100vw - 2000px) / 2) + 296px); }
+}
