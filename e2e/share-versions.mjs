@@ -14,7 +14,7 @@ try {
   const denied = await fetch(`${base}/api/public/note/${viewTok}/versions/${lst.versions[0].id}/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'abcdefgh12345678', name: 'Reader' }) });
   check('2 a view-only link cannot restore', denied.status === 403);
 
-  const g = await (await ctx.browser().newContext({ viewport: { width: 1366, height: 800 } })).newPage();
+  const g = await (await ctx.browser().newContext({ viewport: { width: 1200, height: 800 } })).newPage();
   const errors = []; g.on('pageerror', (e) => errors.push(e.message));
   await g.goto(`${base}/s/note/${viewTok}`);
   await g.locator('[data-testid="join-anon"]').click({ timeout: 5000 }).catch(() => {});
@@ -31,7 +31,7 @@ try {
 
   // an editor link can restore
   const editTok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
-  const e = await (await ctx.browser().newContext({ viewport: { width: 1366, height: 800 } })).newPage();
+  const e = await (await ctx.browser().newContext({ viewport: { width: 1200, height: 800 } })).newPage();
   await e.goto(`${base}/s/note/${editTok}`);
   await e.locator('[data-testid="join-anon"]').click({ timeout: 5000 }).catch(() => {});
   await e.locator('.bn-editor').first().waitFor({ timeout: 20000 });

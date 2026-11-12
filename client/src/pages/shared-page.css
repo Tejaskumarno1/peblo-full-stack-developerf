@@ -880,8 +880,9 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .stage.note-stage > .toc { grid-column: 1; grid-row: 1; position: relative; top: auto; align-self: stretch; height: 100%; max-height: none; padding: 20px 18px 12px; border-radius: 30px; overflow: hidden; }
   .pb-shared .stage.note-stage > article { grid-column: 2; grid-row: 1; background: var(--surface); border-radius: 30px; box-shadow: var(--soft-shadow); padding: 26px 40px 0; position: relative; scrollbar-width: none; scrollbar-gutter: auto; overflow-x: hidden; }
   .pb-shared .stage.note-stage > article::-webkit-scrollbar { display: none; }
-  .pb-shared .stage.note-stage > .rcards { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; gap: 12px; position: static; width: auto; max-height: none; overflow: auto; z-index: 2; scrollbar-width: none; }
+  .pb-shared .stage.note-stage > .rcards { grid-column: 3; grid-row: 1; align-self: start; max-height: 100%; pointer-events: none; display: flex; flex-direction: column; gap: 12px; position: static; width: auto; max-height: none; overflow: auto; z-index: 2; scrollbar-width: none; }
   .pb-shared .stage.note-stage > .rcards::-webkit-scrollbar { display: none; }
+  .pb-shared .stage.note-stage > .rcards > * { pointer-events: auto; }
   .pb-shared .endcap { display: none; }
   .pb-shared .stage.note-stage.people-pinned { padding-left: 0; }
 
@@ -911,14 +912,14 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .toc .meta { display: none; }
 
   .pb-shared .srail { display: none; }
-  .pb-shared .stage.note-stage .welcome { display: none; }
+  .pb-shared .stage.note-stage .welcome.named { display: none; }
 
   /* page card */
   .pb-shared .title-in { width: calc(100% - 232px); height: 39px; margin: 0; font: 800 36px/39px 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -.03em; color: var(--fg); }
   .pb-shared .title { margin: 0; font-size: 36px; line-height: 39px; }
   .pb-shared .title-tools { position: absolute; top: 27px; right: 40px; margin: 0; gap: 2px; z-index: 2; }
   .pb-shared .title-tools button { width: 36px; height: 36px; color: var(--fg); }
-  .pb-shared .by { gap: 9px; margin: 19px 0 0; padding: 0; border: 0; color: var(--fg2); font: 700 13px 'Figtree', system-ui, sans-serif; }
+  .pb-shared .by { gap: 9px; margin: 19px 0 18px; padding: 0; border: 0; color: var(--fg2); font: 700 13px 'Figtree', system-ui, sans-serif; }
   .pb-shared .by .dotsep, .pb-shared .by .by-pre, .pb-shared .by .by-upd, .pb-shared .by .by-rt, .pb-shared .by .expiry, .pb-shared .by .ext-ask, .pb-shared .by .ext-asked { display: none; }
   .pb-shared .by-who { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 13px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); border: 0; }
   .pb-shared .by-who b { color: var(--fg2); font-weight: 700; }
@@ -971,3 +972,12 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
   .pb-shared .stage.note-stage .tableWrapper { padding: 0 !important; }
   .pb-shared .stage.note-stage .tableWrapper-inner { margin: 0 !important; padding: 0 !important; }
 }
+
+/* QA sweep: no dangling separator dots when the byline wraps on a phone */
+@media (max-width: 640px) { .pb-shared .by .dotsep { display: none; } .pb-shared .by { gap: 6px 10px; } }
+
+/* mockup: flat cream ground, plain blob logo, lowercase wordmark, at every width */
+.pb-shared .blobs { display: none; }
+.pb-shared .brand { text-transform: lowercase; }
+.pb-shared .brand i::after { display: none; }
+.pb-shared .brand i { width: 30px; height: 27px; }

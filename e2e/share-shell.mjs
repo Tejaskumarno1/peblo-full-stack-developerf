@@ -9,7 +9,7 @@ try {
   const note = (await api('POST', '/api/notes', { title: 'Shell note', content: body, tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: false, expiresInDays: 1 })).token;
 
-  const gctx = await ctx.browser().newContext({ viewport: { width: 1360, height: 820 } });
+  const gctx = await ctx.browser().newContext({ viewport: { width: 1200, height: 820 } });
   const g = await gctx.newPage();
   await g.goto(`${base}/s/note/${tok}`);
   await g.locator('article .doc').waitFor({ timeout: 15000 });

@@ -1268,7 +1268,7 @@ export default function SharedPage() {
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
               {data.summary && <div className="sum-card" data-testid="page-summary"><span className="sum-ic" aria-hidden="true"><Sparkles size={16} /></span><div><div className="sum-cap">Summary by {data.author || 'the owner'}</div><p>{data.summary}</p></div></div>}
-              {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
+              {data.canEdit && !user && !previewMode && <div className={`welcome${guestName ? " named" : ""}`} data-testid="welcome">
                 <label className="guest-name"><span>You are editing as</span>
                   <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
                   <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>

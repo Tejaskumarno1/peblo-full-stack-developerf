@@ -9,12 +9,12 @@ try {
   const errors = []; g.on('pageerror', (e) => errors.push(e.message));
   await g.goto(`${base}/s/note/${tok}`);
   await g.locator('[data-testid="join-anon"]').click({ timeout: 8000 }).catch(() => {});
-  await g.locator('[data-testid="end-request-edit"]').scrollIntoViewIfNeeded({ timeout: 20000 });
+  await g.locator('[data-testid="request-edit"]').scrollIntoViewIfNeeded({ timeout: 20000 });
   check('1 viewer sees the end-of-page strip with request access', await g.locator('[data-testid="endcap"]').isVisible());
   await g.locator('[data-testid="end-react-like"]').click();
   await g.waitForTimeout(400);
   check('2 reaction on the strip counts', /1/.test(await g.locator('[data-testid="end-react-like"]').innerText()));
-  await g.locator('[data-testid="end-request-edit"]').click();
+  await g.locator('[data-testid="request-edit"]').click();
   await g.locator('[data-testid="er-msg"]').fill('I would like to fix two numbers.');
   await g.locator('[data-testid="er-send"]').click();
   check('3 request is sent', await g.locator('[data-testid="edit-request-sent"]').waitFor({ timeout: 8000 }).then(() => true, () => false));
