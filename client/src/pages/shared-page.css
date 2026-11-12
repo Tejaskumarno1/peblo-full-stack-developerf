@@ -1094,3 +1094,12 @@ html.pb-public-share[data-fs] body { overflow: visible; }
   .pb-shared .srail-fly.people .cp-title-t small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2); }
   .pb-shared .srail-fly.people .cp-h, .pb-shared .srail-fly.people .cp-tip { display: none; }
 }
+
+/* S14: Find popover as the board (320px, 28px corners, pill fields) */
+html.pb-public-share .pb-find { width: 320px; right: max(48px, calc((100vw - 2000px) / 2)); border: 0; border-radius: 28px; padding: 12px 14px; box-shadow: 0 22px 60px rgba(80, 55, 30, .22); background: #fff; }
+html.pb-public-share .pb-find input { height: 40px; border-radius: 99px; padding: 0 14px; background: #fbf6ee; border: 1.5px solid transparent; font: 700 15px 'Figtree', system-ui, sans-serif; }
+html.pb-public-share .pb-find input.q { border-color: #C4441C; background: #fff; }
+html.pb-public-share .pb-find input.r { background: #fbf6ee; }
+html.pb-public-share .pb-find button { background: transparent; }
+html.pb-public-share .pb-find button.txt { background: #fff; border: 1px solid #EADFD0; font-weight: 800; }
+html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
