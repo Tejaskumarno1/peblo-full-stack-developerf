@@ -305,3 +305,5 @@ html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 24px
 @media (min-width: 1181px) { html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 48px; } }
 html[data-fs-width="full"] { --fs-col: min(1500px, calc(100vw - 124px)); }
 html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1500px, calc(100vw - 388px)); }
+.fsx-outline .lab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.fsx-outline .lab .ct { font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--fs-faint); }
