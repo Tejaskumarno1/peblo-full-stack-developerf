@@ -7,7 +7,7 @@ try {
   const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: md, tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true, expiresInDays: 5 })).token;
   await api('POST', `/api/public/note/${tok}/summary`, { summary: 'Clients want fewer review rounds and a clear first brief. Three actions are owned and dated in the table below.' });
-  for (const [w, h, name] of [[1440, 900, '1440']]) {
+  for (const [w, h, name] of [[1440, 900, '1440'], [1920, 1080, '1920']]) {
     for (const dark of [false]) {
       const c = await ctx.browser().newContext({ viewport: { width: w, height: h } });
       await c.addInitScript((d) => { try { localStorage.setItem('peblo-share-dark', d ? '1' : '0'); } catch {} }, dark);
