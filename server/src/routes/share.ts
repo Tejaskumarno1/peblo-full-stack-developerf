@@ -477,6 +477,8 @@ publicRoutes.post('/:kind/:token/presence', (req, res, next) => guestPresenceLim
 
     if (req.body?.active === false) {
       await prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE kind = $1 AND share_token = $2 AND session_id = $3', kind, token, sessionId);
+    } else if (req.body?.peek === true) {
+      // a guest still choosing a name only looks at who is here; they are counted (and named) once they join
     } else {
       const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor), cleanCursor(req.body?.selStart), cleanCursor(req.body?.selEnd));
       if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');

@@ -259,6 +259,7 @@ export default function SharedPage() {
   // Colours are never chosen: every person gets their own from the viewer id (same one on cursor, outline dot and comments).
   const colorRef = useRef('');
   const [joined, setJoined] = useState(() => { try { return localStorage.getItem('peblo-guest-joined') === '1' || !!localStorage.getItem('peblo-guest-name'); } catch { return false; } });
+  const holdRef = useRef(false); // while the join card is open the person is not counted as being on the page yet (the page only looks at who is here: nobody sees "Guest joined" and then a rename)
   const markJoined = () => { setJoined(true); try { localStorage.setItem('peblo-guest-joined', '1'); } catch { /* not remembered */ } };
   const [tocSheet, setTocSheet] = useState(false);
   const [cardsSheet, setCardsSheet] = useState(false);
@@ -707,7 +708,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end, progress: Math.round(progressRef.current) }),
+      body: JSON.stringify({ sessionId, active, peek: active && holdRef.current ? true : undefined, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end, progress: Math.round(progressRef.current) }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -1000,6 +1001,7 @@ export default function SharedPage() {
   const reader = useShareReader({ enabled: data?.kind === 'note' && !shareOff, scope: `${kindPath}:${token}`, articleRef, deps: rev });
   const [bmOpen, setBmOpen] = useState(false);
   const showJoin = !!(data?.canEdit && !user && !previewMode && !joined && !error);
+  holdRef.current = showJoin;
   const [cardName, setCardName] = useState('');
   const joinNow = (anon) => { if (!anon) saveGuestName(cardName); markJoined(); };
   const [fly, setFly] = useState(null); // 'outline' | 'history' | 'file' (people uses panelOpen)
