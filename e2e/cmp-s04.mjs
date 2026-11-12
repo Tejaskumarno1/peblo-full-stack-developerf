@@ -1,0 +1,13 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: 'Three themes came up across the six client interviews.\n\n## 1. What we heard\n\nClients praise the team but ask for fewer rounds.', tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); } catch {} });
+const g = await c.newPage();
+await g.goto(`${base}/s/note/${tok}`);
+await g.locator('[data-testid="join-card"]').waitFor({ timeout: 20000 });
+await g.locator('[data-testid="join-card"]').getByLabel('Your name').fill('Tejas');
+await g.waitForTimeout(800);
+await g.screenshot({ path: 'D:/Peblo/_shots/real-S04.png' });
+await finish();

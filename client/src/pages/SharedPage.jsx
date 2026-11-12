@@ -1167,7 +1167,7 @@ export default function SharedPage() {
         <label className="join-lbl">Your name<input aria-label="Your name" autoFocus maxLength={40} placeholder="Guest" value={cardName} onChange={(event) => setCardName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') joinNow(false); }} /></label>
         <div className="join-auto" data-testid="join-auto-colour"><i style={{ background: myColor }} /><span>Your colour is picked for you, so everyone can tell who is who.</span></div>
         <div className="join-mem"><Lock size={14} />Remembered in this browser only. Others see your name and colour on your cursor.</div>
-        <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}>{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Just read, stay anonymous</button></div>
+        <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}><Pencil size={14} />{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Join without a name</button></div>
       </div></div>}
       {data && !error && <nav className="srail" aria-label="Page panels" data-testid="srail">
         {hasToc && <button type="button" className={pinnedToc || shownFly === 'outline' ? 'on' : ''} data-testid="rail-outline" aria-label="Outline" aria-pressed={pinnedToc || shownFly === 'outline'} title="Outline [" onClick={() => openFly('outline')}><List size={19} /></button>}

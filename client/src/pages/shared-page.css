@@ -1112,3 +1112,15 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
   .pb-shared article .doc td { font-size: 15px; padding: 8px 12px; }
   .pb-shared article .doc table { font-size: 15px; }
 }
+
+/* S04: guest join card as the board (wide card, pill name field, buttons side by side) */
+.pb-shared .join-back { background: rgba(58, 42, 26, .42); backdrop-filter: none; }
+.pb-shared .join-card { width: min(520px, 100%); padding: 26px; gap: 14px; border-radius: 36px; }
+.pb-shared .join-card h3 { font: 800 28px/1.1 'Figtree', system-ui, sans-serif; letter-spacing: -.02em; }
+.pb-shared .join-lbl input { height: 46px; border: 2px solid #C4441C; border-radius: 99px; background: #fbf6ee; font: 800 16px 'Figtree', system-ui, sans-serif; }
+.pb-shared .join-lbl input:focus { outline: 0; }
+.pb-shared .join-auto { border-radius: 20px; background: #f6efe4; }
+.pb-shared .join-btns { display: flex; gap: 10px; }
+.pb-shared .join-btns .btn { flex: 1; display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 46px; border-radius: 99px; font: 800 14px 'Figtree', system-ui, sans-serif; }
+.pb-shared .join-btns .btn.primary { background: #C4441C; color: #fff; border: 0; }
+.pb-shared .join-btns .btn:not(.primary) { background: #fff; border: 1px solid var(--line); color: var(--fg); }
