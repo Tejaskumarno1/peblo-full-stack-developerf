@@ -81,3 +81,10 @@
 .s-plan .mint .pl-acts button.ok { background: #2d9d6a; color: #fff; }
 .s-plan .mint > .pl-acts { margin-top: 10px; }
 .s-plan .pl-x2 { border: 0; background: rgba(255,255,255,.7); width: 24px; height: 24px; border-radius: 999px; display: inline-grid; place-items: center; cursor: pointer; color: inherit; }
+
+/* day switcher: plan today, tomorrow or any day in the next two weeks */
+.s-plan .pl-days { display: inline-flex; align-items: center; gap: 2px; height: 40px; padding: 0 4px; border-radius: 999px; background: #fff; }
+.s-plan .pl-dayb { height: 32px; min-width: 32px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: #2a1f17; font: inherit; font-weight: 800; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.s-plan .pl-dayb.txt { padding: 0 12px; }
+.s-plan .pl-dayb.on { background: #2a1f17; color: #fff; }
+.s-plan .pl-dayb:disabled { opacity: .35; cursor: default; }

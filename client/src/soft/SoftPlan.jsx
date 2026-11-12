@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Plus, Timer } from 'lucide-react';
+import { X, Plus, Timer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useUndoToast, useDeferredDelete } from '../utils/useUndoToast';
@@ -48,13 +48,16 @@ export default function SoftPlan() {
   const DAY_END = hrs[1] * 60;
   const setHrs = (next) => { if (next[1] - next[0] < 4) return; setHrsState(next); try { localStorage.setItem(HOURS_KEY, JSON.stringify(next)); } catch { /* ignore */ } };
   const [rs, setRs] = useState(null); // block being resized: { id, end }
+  const [off, setOff] = useState(0); // 0 = today, 1 = tomorrow, ...: which day the column plans
+  const dayDate = () => { const d = startOfDay(); d.setDate(d.getDate() + off); return d; };
+  const dayWord = off === 0 ? 'today' : off === 1 ? 'tomorrow' : weekdayLong(dayDate());
 
   const live = useMemo(() => todos.filter((t) => !gone.includes(t.id)), [todos, gone]);
-  const todayAll = live.filter((t) => !t.completed && t.deadline && daysFromToday(t.deadline) === 0);
+  const todayAll = live.filter((t) => !t.completed && t.deadline && daysFromToday(t.deadline) === off);
   const meetings = todayAll.filter((t) => t.startTime && t.endTime && !t.meta?.planned);
   const planned = todayAll.filter((t) => t.meta?.planned && t.startTime);
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const from0 = nowMin >= DAY_END - 150 ? DAY_START : Math.max(DAY_START, nowMin); // late in the evening the whole window stays open to plan
+  const from0 = off > 0 || nowMin >= DAY_END - 150 ? DAY_START : Math.max(DAY_START, nowMin); // late in the evening the whole window stays open to plan
   const busy = useMemo(() => [...meetings, ...planned].map((t) => [toMin(t.startTime), toMin(t.endTime) ?? toMin(t.startTime) + estOf(t)]).filter((x) => x[0] !== null).sort((a, b) => a[0] - b[0]), [meetings, planned]);
 
   const pick = useMemo(() => {
@@ -62,14 +65,14 @@ export default function SoftPlan() {
     const out = live.filter((t) => {
       if (t.completed || tagsOf(t).map(String).includes('someday')) return false;
       if (t.startTime && t.endTime && !t.meta?.planned) return false;
-      if (t.meta?.planned && t.deadline && daysFromToday(t.deadline) === 0) return false;
-      if (t.deadline && daysFromToday(t.deadline) > 0) return false;
+      if (t.meta?.planned && t.deadline && daysFromToday(t.deadline) === off) return false;
+      if (t.deadline && daysFromToday(t.deadline) > off) return false;
       if (t.seriesId) { if (seen.has(t.seriesId)) return false; seen.add(t.seriesId); }
       return true;
     });
     const day = (t) => (t.deadline ? daysFromToday(t.deadline) : 1);
     return out.sort((a, b) => day(a) - day(b) || (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1)).slice(0, 14);
-  }, [live]);
+  }, [live, off]);
 
   const free = Math.max(0, DAY_END - from0 - busy.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, DAY_END) - Math.max(a, from0)), 0));
   const needs = [...pick, ...planned].reduce((n, t) => n + estOf(t), 0);
@@ -87,7 +90,7 @@ export default function SoftPlan() {
   };
   const place = async (t, start) => {
     const dur = estOf(t);
-    const d = startOfDay();
+    const d = dayDate();
     d.setHours(Math.floor(start / 60), start % 60, 0, 0);
     queryClient.setQueryData(['todos', 'all'], (old) => (old || []).map((x) => (x.id === t.id ? { ...x, deadline: d.toISOString(), startTime: hm24(start), endTime: hm24(start + dur), meta: { ...(x.meta || {}), planned: true, estimateMin: x.meta?.estimateMin || dur } } : x)));
     try { await todosAPI.update(t.id, { scope: 'this', deadline: d.toISOString(), startTime: hm24(start), endTime: hm24(start + dur), meta: { planned: true, estimateMin: t.meta?.estimateMin || dur, moves: t.meta?.moves ?? 0 } }); } catch { setMsg('Could not plan that task.'); }
@@ -95,7 +98,7 @@ export default function SoftPlan() {
   };
   const planOne = (t, from = from0, skip) => {
     const s = slotFor(estOf(t), from, skip);
-    if (s === null) { setMsg(`No gap left for ${t.text} today.`); return false; }
+    if (s === null) { setMsg(`No gap left for ${t.text} ${dayWord}.`); return false; }
     setMsg('');
     place(t, s);
     return s;
@@ -120,7 +123,7 @@ export default function SoftPlan() {
       at = s + dur + BREAK; // a short breather between fitted tasks
       n += 1;
     }
-    setMsg(n ? '' : 'No free gaps left today.');
+    setMsg(n ? '' : `No free gaps left ${dayWord}.`);
     if (n) say(`${n} task${n === 1 ? '' : 's'} fitted into your gaps`);
   };
 
@@ -239,7 +242,7 @@ export default function SoftPlan() {
     } catch { setMsg('Could not write the recap note.'); }
   };
 
-  const dateLine = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dateLine = dayDate().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const hours = Array.from({ length: DAY_END / 60 - DAY_START / 60 }, (_, i) => DAY_START / 60 + i);
   const top = (m) => ((m - DAY_START) / 60) * HOUR;
   const blockOf = (t, kind) => {
@@ -258,9 +261,15 @@ export default function SoftPlan() {
           <span className="s-sub">{dateLine} · you have {nice(free)} free, your tasks need {nice(needs)}</span>
         </div>
         <span className="grow" />
+        <div className="pl-days" role="group" aria-label="Day to plan">
+          <button type="button" className="pl-dayb" aria-label="Previous day" data-testid="plan-prev" disabled={off === 0} onClick={() => setOff((v) => Math.max(0, v - 1))}><ChevronLeft size={14} strokeWidth={2.4} /></button>
+          <button type="button" className={`pl-dayb txt${off === 0 ? ' on' : ''}`} data-testid="plan-today" onClick={() => setOff(0)}>Today</button>
+          <button type="button" className={`pl-dayb txt${off === 1 ? ' on' : ''}`} data-testid="plan-tomorrow" onClick={() => setOff(1)}>Tomorrow</button>
+          <button type="button" className="pl-dayb" aria-label="Next day" data-testid="plan-next" disabled={off >= 13} onClick={() => setOff((v) => Math.min(13, v + 1))}><ChevronRight size={14} strokeWidth={2.4} /></button>
+        </div>
         {over > 0 && <span className="pl-over" role="status" data-testid="plan-over">Over by {nice(over)}</span>}
-        {planned.length > 0 && <button type="button" className="pl-light" data-testid="plan-carry" onClick={carryToTomorrow}>Move {planned.length} unfinished to tomorrow</button>}
-        <button type="button" className="pl-light" data-testid="plan-review-open" aria-expanded={review} onClick={() => setReview((v) => !v)}>End of day review</button>
+        {off === 0 && planned.length > 0 && <button type="button" className="pl-light" data-testid="plan-carry" onClick={carryToTomorrow}>Move {planned.length} unfinished to tomorrow</button>}
+        {off === 0 && <button type="button" className="pl-light" data-testid="plan-review-open" aria-expanded={review} onClick={() => setReview((v) => !v)}>End of day review</button>}
         <button type="button" className="pl-dark" onClick={autoFit} disabled={pick.length === 0}>Auto-fit my gaps</button>
         <button type="button" className="pl-light" onClick={briefing}>Write today's briefing note</button>
       </div>
@@ -268,7 +277,7 @@ export default function SoftPlan() {
 
       <div className="pl-grid">
         <section className="pl-panel peach" aria-label="Pick for today">
-          <div className="pl-ph"><h2>Pick for today</h2><span className="pl-chip">{pick.length} waiting</span></div>
+          <div className="pl-ph"><h2>{off === 0 ? 'Pick for today' : `Pick for ${dayWord}`}</h2><span className="pl-chip">{pick.length} waiting</span></div>
           <p className="pl-note">From yesterday and your backlog. Drag onto the day, or tap the plus.</p>
           <div className="pl-picks">
             {pick.length === 0 && <p className="pl-empty">Nothing waiting. Your day is already picked.</p>}
@@ -287,7 +296,7 @@ export default function SoftPlan() {
         </section>
 
         <section className="pl-panel day" aria-label="Today">
-          <div className="pl-ph"><h2>Today</h2><span className="pl-chip">Meetings from your calendar</span><span className="grow" /><label className="pl-hrs">Day <select aria-label="Day starts" data-testid="plan-from" value={hrs[0]} onChange={(e) => setHrs([Number(e.target.value), hrs[1]])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 3} disabled={hrs[1] - (i + 3) < 4}>{hourLabel(i + 3)}</option>)}</select> to <select aria-label="Day ends" data-testid="plan-to" value={hrs[1]} onChange={(e) => setHrs([hrs[0], Number(e.target.value)])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 12} disabled={i + 12 - hrs[0] < 4}>{i + 12 === 24 ? '12 am' : hourLabel(i + 12)}</option>)}</select></label></div>
+          <div className="pl-ph"><h2>{off === 0 ? 'Today' : weekdayLong(dayDate())}</h2><span className="pl-chip">Meetings from your calendar</span><span className="grow" /><label className="pl-hrs">Day <select aria-label="Day starts" data-testid="plan-from" value={hrs[0]} onChange={(e) => setHrs([Number(e.target.value), hrs[1]])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 3} disabled={hrs[1] - (i + 3) < 4}>{hourLabel(i + 3)}</option>)}</select> to <select aria-label="Day ends" data-testid="plan-to" value={hrs[1]} onChange={(e) => setHrs([hrs[0], Number(e.target.value)])}>{Array.from({ length: 13 }, (_, i) => <option key={i} value={i + 12} disabled={i + 12 - hrs[0] < 4}>{i + 12 === 24 ? '12 am' : hourLabel(i + 12)}</option>)}</select></label></div>
           <div className="pl-scroll">
             <div className="pl-day" ref={colRef} data-testid="plan-day" style={{ height: hours.length * HOUR }} onDragOver={overDay} onDrop={onDropDay} onDragLeave={() => setGhost(null)}>
               {hours.map((h) => <div key={h} className="pl-hr" style={{ top: top(h * 60) }}><span>{hourLabel(h)}</span></div>)}
@@ -301,13 +310,13 @@ export default function SoftPlan() {
                 </div>
               ))}
               {drag && ghost !== null && <div className="pl-blk ghost" style={{ top: top(Math.max(DAY_START, Math.min(ghost, DAY_END - SNAP))), height: Math.max(26, (estOf(live.find((x) => x.id === drag.id) || {}) / 60) * HOUR - 4) }}>Drop here</div>}
-              {nowMin >= DAY_START && nowMin <= DAY_END && <div className="pl-now" style={{ top: top(nowMin) }}><b>{hm24(nowMin)}</b></div>}
+              {off === 0 && nowMin >= DAY_START && nowMin <= DAY_END && <div className="pl-now" style={{ top: top(nowMin) }}><b>{hm24(nowMin)}</b></div>}
             </div>
           </div>
         </section>
 
         <div className="pl-right">
-          {review && (
+          {off === 0 && review && (
             <section className="pl-panel mint" aria-label="End of day review" data-testid="plan-review">
               <div className="pl-ph"><h2>End of day</h2><span className="pl-chip" data-testid="review-done">{doneToday.length} done · {nice(doneMin)}</span><span className="grow" /><button type="button" className="pl-x2" aria-label="Close the review" onClick={() => setReview(false)}><X size={14} strokeWidth={2.4} /></button></div>
               {leftToday.length === 0 ? <p className="pl-note">Nothing left open for today.</p> : (

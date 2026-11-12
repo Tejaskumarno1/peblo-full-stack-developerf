@@ -116,7 +116,7 @@ Pick list from the backlog (overdue first, then priority), drag or tap to place 
 | Calendar events overlay (feeds, Google), not only tasks with times | Partial | P1 | M |
 | Focus timer link from a planned block | **Built** (timer icon on each planned block) | P2 | S |
 | Full end-of-day review (done, carried, recap note) | **Built** (End of day review panel: done count, per-task Tomorrow or Someday, move all, recap note) | P2 | M |
-| Plan tomorrow / week view | Missing | P2 | M |
+| Plan tomorrow / week view | **Built** for tomorrow and the next two weeks, one day at a time (Today / Tomorrow switcher and arrows); no week overview yet | P2 | M |
 | Routines and day templates | Missing | P2 | M |
 | Resize a block by dragging its edge | **Built** (grip on the bottom edge, snaps to 15 min, stops at the next meeting, estimate follows) | P2 | S |
 | AI plan suggestions | Missing | P2 | M |
@@ -127,10 +127,11 @@ Pick list from the backlog (overdue first, then priority), drag or tap to place 
 1. Done: capacity warning, breaks, carry-over (tests in `e2e/plan-extras.mjs`).
 2. Done: working-hours setting, block resize, focus-timer link (tests in `e2e/plan-hours-resize.mjs`). Still small: estimate prompt.
 3. Done: end-of-day review (tests in `e2e/plan-review.mjs`).
-4. Next, medium: calendar-events overlay, multi-day auto-schedule, plan-tomorrow view.
+4. Done: plan-tomorrow day switcher (tests in `e2e/plan-tomorrow.mjs`). Next, medium: calendar-events overlay, multi-day auto-schedule.
 5. Later: routines and templates, AI estimates and suggestions, auto-reschedule.
 
 ## Still open
 
 - Personal to Team to Office switching was re-verified in the browser, both by URL and in place without a reload (`e2e/team-edit.mjs`, `e2e/team-switch-live.mjs`); no editing bug reproduced on this build. A manual walk of every team-mode screen (permissions, invites) is still open.
+- Not done in the 12 Nov night run: the manual walk of team-mode screens, because the editing bug did not reproduce earlier and only Plan my day work was added.
 - Screenshots from the new tests are written to `D:\Peblo\_shots`; they were not visually inspected.
