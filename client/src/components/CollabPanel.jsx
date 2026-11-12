@@ -147,7 +147,7 @@ export function CollabPanel({
   return (
     <aside className="cp" role="dialog" aria-label="Live collaboration" data-testid="live-panel" ref={ref}>
       <div className="cp-head">
-        <span className="cp-title"><i className={offline ? 'off' : ''} />Live collaboration</span>
+        <span className="cp-title"><i className={offline ? 'off' : ''} />{mode === 'guest' ? <span className="cp-title-t">People here<small>{rows.length} now</small></span> : 'Live collaboration'}</span>
         {mode === 'owner' && <span className="cp-bell-wrap"><button type="button" className="cp-bell" data-testid="notif-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={bell} onClick={() => { setBell((v) => !v); setSeenAt(Date.now()); }}><Bell size={15} />{unread > 0 && <i data-testid="notif-count">{unread}</i>}</button>
           {bell && <div className="cp-notifs" data-testid="notif-list" role="menu">
             {waiting.map((w) => <div className="cp-n" key={w.id}><b>{w.name}</b> is asking to join<span><button type="button" onClick={() => onAdmit?.(w.id)}>Let in</button></span></div>)}

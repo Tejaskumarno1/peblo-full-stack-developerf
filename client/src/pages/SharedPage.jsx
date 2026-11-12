@@ -1005,7 +1005,7 @@ export default function SharedPage() {
   useEffect(() => {
     if (!shownFly) return undefined;
     const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
-    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
+    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver, .hd-stack')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
     document.addEventListener('keydown', esc); document.addEventListener('click', away);
     return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);
@@ -1090,7 +1090,7 @@ export default function SharedPage() {
           {data && <div className="crumb"><ChevronRight className="sep" size={14} /><span>Shared page</span><ChevronRight className="sep" size={14} /><b title={pageTitle}>{pageTitle}</b></div>}
           {data && <button type="button" className="sp-bar" data-testid="palette-btn" aria-label="Search or jump to a heading" onClick={() => setPaletteOpen(true)}><SearchIcon size={15} /><span>Search or jump to a heading</span><kbd>Ctrl K</kbd></button>}
           <span className="spacer" />
-          {data && viewers.length > 0 && <div className="hd-stack" data-testid="hd-stack" aria-label={`${viewers.length} on this page`}>{viewers.slice(0, 3).map((v) => <span key={v.id} className="hd-av" title={v.name} style={{ background: v.self ? myColor : peerColor(v.id) }}>{(v.name || 'G')[0].toUpperCase()}</span>)}{viewers.length > 3 && <span className="hd-av more">+{viewers.length - 3}</span>}</div>}
+          {data && viewers.length > 0 && <button type="button" className="hd-stack" data-testid="hd-stack" aria-label={`${viewers.length} on this page, show people`} onClick={() => openFly('people')}>{viewers.slice(0, 3).map((v) => <span key={v.id} className="hd-av" title={v.name} style={{ background: v.self ? myColor : peerColor(v.id) }}>{(v.name || 'G')[0].toUpperCase()}</span>)}{viewers.length > 3 && <span className="hd-av more">+{viewers.length - 3}</span>}</button>}
           {data && <span className={`pill ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={15} /> : <Eye size={15} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>}
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>

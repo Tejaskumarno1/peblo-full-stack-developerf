@@ -1079,3 +1079,18 @@ html.pb-public-share[data-fs] body { overflow: visible; }
   .pb-shared .srail-fly[data-testid="fly-history"] .ver-row, .pb-shared .srail-fly[data-testid="fly-history"] .fly-btn[data-testid="fly-bookmarks"] { border-radius: 20px; background: #f6efe4; padding: 10px 14px; }
   .pb-shared .srail-fly[data-testid="fly-history"] .fly-foot { display: block; margin: auto 0 0; font-size: 12.5px; font-weight: 600; color: var(--fg2); line-height: 1.35; }
 }
+
+/* S12: People here opens in the right column, as the board */
+.pb-shared button.hd-stack { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+@media (min-width: 1281px) {
+  .pb-shared .srail-fly.people { left: auto; top: 96px; right: max(48px, calc((100vw - 2000px) / 2)); width: 284px; height: calc(100vh - 120px); border: 0; border-radius: 30px; background: #fff; box-shadow: 0 18px 50px rgba(80, 55, 30, .18); z-index: 45; }
+  .pb-shared .srail-fly.cp-drawer.docked.people { left: auto; top: 96px; right: max(48px, calc((100vw - 2000px) / 2)); bottom: auto; }
+  .pb-shared .srail-fly.people .cp { height: 100%; border: 0; box-shadow: none; background: transparent; }
+  .pb-shared .srail-fly.people .cp-row { margin: 0 12px 8px; padding: 10px 12px; border-radius: 22px; background: #f6efe4; }
+}
+@media (min-width: 1281px) {
+  .pb-shared .srail-fly.people .cp-title i { display: none; }
+  .pb-shared .srail-fly.people .cp-title-t { display: flex; flex-direction: column; font: 800 22px 'Figtree', system-ui, sans-serif; letter-spacing: -.01em; }
+  .pb-shared .srail-fly.people .cp-title-t small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2); }
+  .pb-shared .srail-fly.people .cp-h, .pb-shared .srail-fly.people .cp-tip { display: none; }
+}
