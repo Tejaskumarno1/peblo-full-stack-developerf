@@ -219,15 +219,18 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
   const renderCard = (c) => {
     const list = replies.get(c.id) || [];
     const done = c.status !== 'open';
+    const quote = c.quote ? <blockquote style={{ borderColor: c.author.color }}>{c.kind === 'suggestion' ? <del>{c.quote}</del> : c.quote}</blockquote> : null;
     return (
       <li key={c.id} className={`pb-cthread${focusId === c.id ? ' on' : ''}${done ? ' done' : ''}`} data-thread={c.id} data-testid="comment-thread">
-        {c.quote && <blockquote style={{ borderColor: c.author.color }}>{c.kind === 'suggestion' ? <del>{c.quote}</del> : c.quote}</blockquote>}
+
         {c.kind === 'suggestion' && <div className="pb-csug" data-testid="suggestion"><Ic name="arrowRight" size={13} style={{ marginRight: 4, verticalAlign: '-2px' }} /><ins>{c.replacement || '(delete)'}</ins>{c.status === 'accepted' && <em> accepted</em>}{c.status === 'rejected' && <em> rejected</em>}</div>}
-        {[c, ...list].map((x) => (
+        {!soft && quote}
+        {[c, ...list].map((x, xi) => (
           <div key={x.id} className="pb-citem">
             <div className="who"><i style={{ background: x.author.color }}>{(x.author.name[0] || '?').toUpperCase()}</i><b>{x.author.name}{x.author.self ? ' (you)' : ''}</b><span>{ago(x.createdAt)}</span>
               {(x.author.self || !target.sid) && <button type="button" className="x" aria-label="Delete this comment" onClick={() => remove(x)}><Ic name="x" size={15} /></button>}
             </div>
+            {soft && xi === 0 && quote}
             {x.body && <p><Body text={x.body} /></p>}
           </div>
         ))}
@@ -251,6 +254,20 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
     );
   };
 
+  const startBlock = (<>
+            {draft ? (
+              <div className="pb-cnew" data-testid="comment-draft">
+                {draft.quote ? <blockquote>{draft.quote}</blockquote> : <p className="hint">No words are selected. Select some words in the note, then press Comment, to attach this to them.</p>}
+                <Composer mode={draft.mode} quote={draft.quote} people={people} busy={busy} autoFocus soft={soft} onCancel={() => setDraft(null)} onSubmit={submit(null)} />
+              </div>
+            ) : (
+              <div className="pb-cstart">
+                <button type="button" onClick={() => startFromSelection('comment')} data-testid="comment-on-selection">Comment on selection</button>
+                <button type="button" onClick={() => startFromSelection('suggest')} data-testid="suggest-on-selection">Suggest an edit</button>
+              </div>
+            )}
+  </>);
+
   return (
     <>
       <div className="pb-dock" style={{ '--pb-bg': dark ? '#1f2430' : '#ffffff' }}>
@@ -262,7 +279,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
       {open && createPortal(
         <aside className={`pb-cpanel${soft ? ' soft' : ''}`} role="complementary" aria-label="Comments" data-testid="comments-panel" style={soft ? undefined : { background: col.bg, color: col.fg, borderColor: col.line }}>
           <header>
-            <h3>Comments</h3>
+            <h3>Comments{soft && <small>{nOpen} open on this page</small>}</h3>
             {!soft && (
               <div className="tabs" role="tablist">
                 <button type="button" role="tab" aria-selected={tab === 'open'} onClick={() => setTab('open')}>Open{nOpen > 0 ? ` ${nOpen}` : ''}</button>
@@ -279,17 +296,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
             </div>
           )}
           <div className="scroll">
-            {draft ? (
-              <div className="pb-cnew" data-testid="comment-draft">
-                {draft.quote ? <blockquote>{draft.quote}</blockquote> : <p className="hint">No words are selected. Select some words in the note, then press Comment, to attach this to them.</p>}
-                <Composer mode={draft.mode} quote={draft.quote} people={people} busy={busy} autoFocus soft={soft} onCancel={() => setDraft(null)} onSubmit={submit(null)} />
-              </div>
-            ) : (
-              <div className="pb-cstart">
-                <button type="button" onClick={() => startFromSelection('comment')} data-testid="comment-on-selection">Comment on selection</button>
-                <button type="button" onClick={() => startFromSelection('suggest')} data-testid="suggest-on-selection">Suggest an edit</button>
-              </div>
-            )}
+            {!soft && startBlock}
             {err && <p role="alert" className="pb-cerr">{err === 'moved' ? 'Those words changed, so this suggestion cannot be applied any more.' : err}</p>}
             {shown.length > 1 && <div className="pb-csort"><button type="button" data-testid="comment-sort" onClick={() => setOrder((o) => (o === 'new' ? 'old' : 'new'))}>{order === 'new' ? 'Newest first' : 'Oldest first'}</button></div>}
             <ul>
@@ -297,6 +304,7 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
               {shown.length === 0 && <li className="hint">{tab === 'open' ? 'No open comments. Select some words and press Comment.' : tab === 'mine' ? 'You have not commented yet.' : 'Nothing finished yet.'}</li>}
             </ul>
           </div>
+          {soft && <div className="pb-cfoot">{startBlock}</div>}
         </aside>,
         (soft && document.querySelector('.pb-shared')) || document.body, // inside the share page so the Soft Studio colours apply
       )}
@@ -358,6 +366,12 @@ export default function CommentsDock({ rt, editor, rootRef, target, ready, dark,
         .pb-cpanel.soft .soft-tabs { display: flex; gap: 0; padding: 3px; border-radius: 999px; background: var(--chip, #F4EEE5); }
         .pb-cpanel.soft .soft-tabs button { flex: 1; height: 34px; padding: 0; border-radius: 999px; font-weight: 800; font-size: 13px; color: var(--fg2, #564D43); }
         .pb-cpanel.soft .soft-tabs button[aria-selected="true"] { background: var(--surface, #fff); color: var(--fg, #241F1A); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        .pb-cpanel.soft h3 { display: flex; flex-direction: column; gap: 1px; }
+        .pb-cpanel.soft h3 small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2, #564D43); }
+        .pb-cpanel.soft .x { background: transparent; width: 24px; height: 24px; }
+        .pb-cpanel.soft .pb-cfoot { padding: 10px 0 2px; margin-top: auto; }
+        .pb-cpanel.soft .pb-cfoot .pb-cnew { padding: 0; background: transparent; }
+        .pb-cpanel.soft .pb-cfoot .pb-cform textarea { min-height: 96px; border: 2px solid var(--accent, #C4441C); background: var(--bg, #FBF6EE); border-radius: 22px; }
         .pb-cpanel.soft .scroll { padding: 0; margin: 0 -4px; padding: 0 4px; }
         .pb-cpanel.soft ul { margin: 8px 0 0; gap: 10px; }
         .pb-cpanel.soft .pb-cthread { border: 0; border-radius: 22px; padding: 12px 14px; background: var(--chip, #F4EEE5); display: flex; flex-direction: column; gap: 6px; }
