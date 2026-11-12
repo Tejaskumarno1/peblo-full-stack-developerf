@@ -110,7 +110,7 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 }
 
 export function CollabPanel({
-  viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
+  viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents, onRetry,
   onRemove, onExtend, editRequest, onAllowEdit, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
 }) {
   const [tab, setTab] = useState('viewers');
@@ -160,7 +160,7 @@ export function CollabPanel({
         {mode === 'owner' && onCopy && <button type="button" className="cp-share" onClick={onCopy}><Link2 size={14} />Share</button>}
         <button type="button" className="cp-x" aria-label="Close" onClick={onClose}><X size={16} /></button>
       </div>
-      {offline && <div className="cp-banner off" role="status"><WifiOff size={14} />Reconnecting… your changes are kept and will sync.</div>}
+      {offline && <div className="cp-banner off" role="status" data-testid="offline-banner"><WifiOff size={14} /><span>Offline. Your edits are kept on this device and will sync.</span>{onRetry && <button type="button" className="cp-link" data-testid="offline-retry" onClick={onRetry}>Retry</button>}</div>}
       {!offline && synced && <div className="cp-banner ok" role="status">Back online. Everything is synced.</div>}
       <div className="cp-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'viewers'} className={tab === 'viewers' ? 'on' : ''} onClick={() => setTab('viewers')}>Viewers</button>
@@ -244,7 +244,7 @@ export function CollabPanel({
           <small className="cp-stopl">Where readers stop, top to bottom of the page</small>
           <ul className="cp-rlist">{stats.readers.people.slice(0, 6).map((r, i) => <li key={i}><span>{r.name}</span><em>{r.progress}% · {fmtSecs(r.secs)}</em></li>)}</ul>
         </div>}
-        <h3 className="cp-h">Recent activity {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
+        <h3 className="cp-h">Recent activity <small className="cp-live-note">Live, while you read</small> {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
         {log.length === 0 && <p className="cp-empty">Nothing yet.</p>}
         <ul className="cp-log" data-testid="live-activity">
           {log.map((a) => (
@@ -252,6 +252,7 @@ export function CollabPanel({
           ))}
         </ul>
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
+        <p className="cp-quiet-tip" data-testid="quiet-tip">Switch on Quiet mode in Look to hide notices.</p>
       </div>}
 
       <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}.cp{position:relative}.cp-bell-wrap{margin-left:auto}.cp-bell{position:relative;border:0;background:transparent;color:inherit;border-radius:8px;padding:5px;cursor:pointer;display:inline-flex}.cp-bell i{position:absolute;top:-2px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:#e2501a;color:#fff;font-size:10px;font-style:normal;display:grid;place-items:center;padding:0 3px}.cp-notifs{position:absolute;left:12px;right:12px;top:54px;z-index:5;max-height:320px;overflow:auto;background:var(--cp-surface,#fff);color:inherit;border:1px solid rgba(127,127,127,.3);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:8px}.cp-n{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 4px;font-size:12.5px;border-bottom:1px solid rgba(127,127,127,.15)}.cp-n span{margin-left:auto}.cp-n small{opacity:.6;margin-left:auto}.cp-n button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:2px 8px;font:inherit;cursor:pointer}.cp-readers{padding:6px 0 10px;border-top:1px solid rgba(127,127,127,.25)}.cp-rhead{display:flex;gap:18px}.cp-rhead div{display:flex;flex-direction:column}.cp-rhead b{font-size:17px}.cp-rhead small,.cp-stopl{opacity:.65;font-size:11.5px}.cp-stops{display:flex;align-items:flex-end;gap:3px;height:36px;margin:8px 0 2px}.cp-stops i{flex:1;background:currentColor;border-radius:2px}.cp-rlist{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cp-rlist li{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.cp-rlist em{opacity:.65;font-style:normal}.cp-extreq{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(226,80,26,.1);font-size:12.5px}.cp-extreq button{margin-left:6px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}.cp-short{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}.cp-short span{opacity:.65}.cp-short code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.cp-short button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}'}</style>

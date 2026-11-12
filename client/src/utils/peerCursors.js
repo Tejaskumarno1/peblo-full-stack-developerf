@@ -5,7 +5,7 @@ import './peer-cursors.css';
  * caret is in (just a number); we draw a coloured bar and their name next to that block. The marks live in their own
  * layer on top of the page, so the editor's own elements are never touched. Only blocks are marked, never characters.
  */
-const PALETTE = ['#E2501A', '#2350FF', '#1B8A5A', '#B05AF0', '#946E00', '#0A7A85', '#E0457B'];
+const PALETTE = ['#C9430F', '#2350FF', '#177A4E', '#9440D6', '#946E00', '#0A7A85', '#C93A6B'];
 export const peerColor = (id = '') => PALETTE[[...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % PALETTE.length];
 /** Idle people are drawn grey so they are not mistaken for someone who is active. */
 const colorOf = (p) => (p.status === 'idle' ? '#8A8071' : peerColor(p.id));

@@ -398,6 +398,16 @@ async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) 
 }
 
 // The share link remains public, but only its owner can see management controls or revoke it.
+// POST /api/public/note/:token/summary { summary } -> the owner writes (or clears) the short summary readers see under the title.
+publicRoutes.post('/note/:token/summary', authenticate, async (req, res, next) => {
+  try {
+    if (!validToken(req.params.token) || !(await shareOwner('note', req.params.token, req.user!.id))) return res.status(404).json({ error: 'Not found.' });
+    const text = typeof req.body?.summary === 'string' ? req.body.summary.trim().slice(0, 400) : '';
+    await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, summary) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET summary = EXCLUDED.summary', 'note', req.params.token, text || null);
+    res.json({ summary: text || null });
+  } catch (e) { next(e); }
+});
+
 // POST /api/public/:kind/:token/password { password } -> the owner sets or clears the password from the Share panel on the page.
 publicRoutes.post('/:kind/:token/password', authenticate, async (req, res, next) => {
   try {
@@ -662,8 +672,9 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, isOwner);
     if (!acc.allowed) return res.json({ kind: 'note', waiting: acc.waiting || 'waiting' });
     if (await isBlocked('note', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
-    const st = (await prisma.$queryRawUnsafe<{ style: string | null }[]>('SELECT style FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0]?.style || null;
-    res.json({ unlock: stored ? unlockFor('note', req.params.token, stored) : undefined, hasPassword: !!stored, ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
+    const stRow = (await prisma.$queryRawUnsafe<{ style: string | null; summary: string | null }[]>('SELECT style, summary FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0];
+    const st = stRow?.style || null;
+    res.json({ unlock: stored ? unlockFor('note', req.params.token, stored) : undefined, hasPassword: !!stored, summary: stRow?.summary || null, ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
   } catch (e) { next(e); }
 });
 

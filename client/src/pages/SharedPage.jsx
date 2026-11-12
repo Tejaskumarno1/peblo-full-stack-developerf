@@ -3,7 +3,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo,
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
+import { Sparkles, ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
 import SharePalette from './SharePalette';
 import SharePanel from './SharePanel';
@@ -259,6 +259,7 @@ export default function SharedPage() {
   const [joined, setJoined] = useState(() => { try { return localStorage.getItem('peblo-guest-joined') === '1' || !!localStorage.getItem('peblo-guest-name'); } catch { return false; } });
   const markJoined = () => { setJoined(true); try { localStorage.setItem('peblo-guest-joined', '1'); } catch { /* not remembered */ } };
   const [tocSheet, setTocSheet] = useState(false);
+  const [cardsSheet, setCardsSheet] = useState(false);
   const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -1115,7 +1116,7 @@ export default function SharedPage() {
           </div>}
           {data && <div className="menu-wrap" ref={shareRef}>
             <button className="btn share-btn" type="button" data-testid="share-btn" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen((o) => !o)}><Share2 size={16} /><span>Share</span></button>
-            {shareOpen && <SharePanel kindPath={kindPath} token={token} hasPassword={!!data.hasPassword} link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
+            {shareOpen && <SharePanel kindPath={kindPath} token={token} hasPassword={!!data.hasPassword} summary={data.summary || ''} onSummary={(text) => setData((d) => ({ ...d, summary: text || null }))} link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
           </div>}
           {data && <div className="menu-wrap" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
@@ -1160,7 +1161,7 @@ export default function SharedPage() {
       </aside>}
       {data && !error && shownFly === 'people' && <div className="srail-fly people cp-drawer docked" data-testid="fly-people">
             <CollabPanel
-              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
+              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced} onRetry={() => { missed.current = 0; setRev((n) => n + 1); }}
               muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
               followId={followId} onFollow={setFollowId}
             />
@@ -1249,6 +1250,7 @@ export default function SharedPage() {
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
+              {data.summary && <div className="sum-card" data-testid="page-summary"><span className="sum-ic" aria-hidden="true"><Sparkles size={16} /></span><div><div className="sum-cap">Summary by {data.author || 'the owner'}</div><p>{data.summary}</p></div></div>}
               {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
                 <label className="guest-name"><span>You are editing as</span>
                   <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
@@ -1276,7 +1278,7 @@ export default function SharedPage() {
                   {data.tags.map((tag) => <span key={tag} className="chip l">#{tag}</span>)}
                   {!data.canEdit && <span className="chip lock" data-testid="todo-lock"><Lock size={13} />Only editors can tick this</span>}
                 </div>
-                {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
+                {data.canEdit && !previewMode ? <textarea className="task-title-in" rows={1} ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
                 <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span>{data.canEdit && <span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span>}</div>
                 <button type="button" className={`check${data.completed ? ' done' : ''}`} aria-pressed={data.completed} disabled={!data.canEdit || previewMode} onClick={() => patchTask({ completed: !data.completed })}><span className="box">{data.completed && <Check size={17} />}</span><span className="t">{data.completed ? (data.canEdit && !previewMode ? 'Done (tap to undo)' : 'Done') : data.canEdit && !previewMode ? 'Mark as done' : 'To do'}</span></button>
                 <div className="tmeta"><div><small>Due</small><b>{data.deadline ? when(data.deadline) : 'No due date'}</b></div><div><small>Priority</small><b>{data.priority}</b></div><div><small>Status</small><b>{data.completed ? 'Done' : 'To do'}</b></div></div>
@@ -1360,10 +1362,18 @@ export default function SharedPage() {
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
         {data.kind === 'note' && headings.length > 0 && <button type="button" aria-label="Outline" onClick={() => setTocSheet(true)}><List size={20} /><span>Outline</span></button>}
         <button type="button" aria-label="People" aria-pressed={panelOpen} onClick={() => setPanelOpen((open) => !open)}><Users size={20} /><span>People{others.length ? ` ${others.length}` : ''}</span></button>
-        <button type="button" aria-label="Appearance" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={20} /><span>Look</span></button>
-        <button type="button" aria-label="Copy link" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={20} /><span>Link</span></button>
+        {data.kind === 'note' && <button type="button" aria-label="Comments" data-testid="mbar-comments" onClick={() => setCardsSheet(true)}><MessageSquare size={20} /><span>Comments</span></button>}
+        {data.kind === 'note' && <button type="button" aria-label="History" data-testid="mbar-history" onClick={() => openFly('history')}><History size={20} /><span>History</span></button>}
+        {data.kind !== 'note' && <button type="button" aria-label="Appearance" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={20} /><span>Look</span></button>}
+        {data.kind !== 'note' && <button type="button" aria-label="Copy link" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={20} /><span>Link</span></button>}
         <button type="button" className="main" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={20} /><span>Save</span></button>
       </nav>}
+      {cardsSheet && data.kind === 'note' && <div className="sheet-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCardsSheet(false); }}>
+        <section className="sheet cards-sheet" role="dialog" aria-modal="true" aria-label="Comments and page cards" data-testid="cards-sheet">
+          <header><h2>Comments</h2><button type="button" aria-label="Close" onClick={() => setCardsSheet(false)}><X size={18} /></button></header>
+          <ShareCards sheet token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => { setCardsSheet(false); openFly('history'); }} />
+        </section>
+      </div>}
       {tocSheet && <div className="sheet-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTocSheet(false); }}>
         <section className="sheet" role="dialog" aria-modal="true" aria-label="On this page" data-testid="toc-sheet">
           <header><h2>On this page</h2><button type="button" aria-label="Close" onClick={() => setTocSheet(false)}><X size={18} /></button></header>

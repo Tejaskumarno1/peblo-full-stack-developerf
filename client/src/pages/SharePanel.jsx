@@ -1,10 +1,22 @@
 import { useState } from 'react';
-import { Check, Clock, Link2, Lock, Mail, Pencil, Eye, Power } from 'lucide-react';
+import { Check, Clock, Link2, Lock, Mail, Pencil, Eye, Power, Sparkles } from 'lucide-react';
 import ShareQr from '../components/ShareQr';
 import { authHeaders } from '../api/token';
 
 /** S27: the Share panel in the header of a shared page: copy the link, who can do what, QR, invite by email. */
-export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, onCopy, onTurnOff, kindPath, token, hasPassword }) {
+export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, onCopy, onTurnOff, kindPath, token, hasPassword, summary = '', onSummary }) {
+  const [sumOpen, setSumOpen] = useState(false);
+  const [sumText, setSumText] = useState(summary);
+  const [sumErr, setSumErr] = useState('');
+  const saveSummary = async (clear) => {
+    setSumErr('');
+    try {
+      const r = await fetch(`/api/public/note/${encodeURIComponent(token)}/summary`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ summary: clear ? '' : sumText }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save the summary.');
+      onSummary?.(j.summary || ''); setSumOpen(false); if (clear) setSumText('');
+    } catch (cause) { setSumErr(cause.message); }
+  };
   const [pwOn, setPwOn] = useState(!!hasPassword);
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState('');
@@ -43,6 +55,14 @@ export default function SharePanel({ link, canEdit, expiresAt, title, isOwner, o
         {pwOn && <button className="btn" type="button" data-testid="sp-password-clear" onClick={() => savePw(true)}>Remove</button>}
       </form>}
       {pwErr && <p className="sp-note" role="alert">{pwErr}</p>}
+      {isOwner && kindPath === 'note' && <>
+        <div className="sp-row" data-testid="sp-summary-row"><Sparkles size={16} /><span>Summary for readers</span><button type="button" className="sp-link" data-testid="sp-summary-toggle" onClick={() => { setSumText(summary); setSumOpen((o) => !o); }}>{summary ? 'Edit' : 'Add'}</button></div>
+        {sumOpen && <div className="sp-pw sum">
+          <textarea aria-label="Summary" data-testid="sp-summary" rows={3} maxLength={400} placeholder="One or two sentences readers see under the title" value={sumText} onChange={(e) => setSumText(e.target.value)} />
+          <div className="sp-sum-btns"><button className="btn dark" type="button" data-testid="sp-summary-save" onClick={() => saveSummary(false)}>Save</button>{summary && <button className="btn" type="button" data-testid="sp-summary-clear" onClick={() => saveSummary(true)}>Remove</button>}</div>
+        </div>}
+        {sumErr && <p className="sp-note" role="alert">{sumErr}</p>}
+      </>}
       <form className="sp-invite" onSubmit={invite}>
         <input type="email" aria-label="Invite by email" data-testid="sp-email" placeholder="Invite by email" value={email} onChange={(e) => { setEmail(e.target.value); setSent(false); }} />
         <button className="btn" type="submit" data-testid="sp-invite"><Mail size={15} />{sent ? 'Opened' : 'Invite'}</button>

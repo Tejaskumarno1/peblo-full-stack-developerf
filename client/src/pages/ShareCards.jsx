@@ -48,7 +48,7 @@ function answer(kind, text, headings) {
   return h ? `See the section "${h.title}".` : 'I could not find that on this page.';
 }
 
-export default function ShareCards({ token, sid, name, canEdit, owner, canComment, pageText, headings, changes, showChanges, onToggleChanges, onHistory, onJump }) {
+export default function ShareCards({ token, sid, name, canEdit, owner, canComment, pageText, headings, changes, showChanges, onToggleChanges, onHistory, onJump, sheet }) {
   const [q, setQ] = useState('');
   const [reply, setReply] = useState('');
   const [comments, setComments] = useState([]);
@@ -68,7 +68,7 @@ export default function ShareCards({ token, sid, name, canEdit, owner, canCommen
   const submit = (event) => { event.preventDefault(); if (q.trim()) { ask(q.trim()); } };
 
   return (
-    <aside className="rcards" data-testid="rcards" aria-label="Page cards">
+    <aside className={`rcards${sheet ? ' in-sheet' : ''}`} data-testid={sheet ? 'rcards-sheet' : 'rcards'} aria-label="Page cards">
       <section className="rc rc-ask" data-testid="rc-ask">
         <h3><Sparkles size={16} />Ask about this page</h3>
         <form className="rc-q" onSubmit={submit}>
