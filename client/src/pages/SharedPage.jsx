@@ -1170,6 +1170,19 @@ export default function SharedPage() {
       </header>
       {data?.kind === 'note' && !error && <FocusChrome container={rootRef.current} active={fullscreen} prefs={fsp} set={setFsp} title={data.title || 'Untitled'} saveStatus={status === 'saved' ? 'saved' : status === 'error' || status === 'conflict' ? 'error' : 'saving'} words={wordCount} docKey={token} getScroller={() => articleRef.current}
         outline={headings.map((h) => ({ level: h.level, text: h.title }))} onJump={(text, index) => { const h = headings[index]; if (h) scrollToHeading(h.id); }} onExit={toggleFullscreen}
+        noteNode={<>
+          <button type="button" role="menuitem" data-testid="fs-x-md" onClick={() => exportShared('md')}><Download size={15} />Download as Markdown</button>
+          <button type="button" role="menuitem" data-testid="fs-x-pdf" onClick={() => exportShared('pdf')}><FileText size={15} />Download as PDF</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={15} />Download as Word</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={15} />Download as HTML</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={15} />Download as plain text</button>
+          <button type="button" role="menuitem" onClick={() => exportDocs([{ title: data?.title || 'Untitled', content: data?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog'))}><Printer size={15} />Print</button>
+          <button type="button" role="menuitem" onClick={() => copy(`# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={15} />Copy as Markdown</button>
+        </>}
+        shareNode={<>
+          <p className="fsx-muted">Anyone with this link can {data?.canEdit ? 'edit' : 'read'} this note.</p>
+          <button type="button" className="fsx-wide" data-testid="fs-copy-link" onClick={() => copy(window.location.href, 'Link copied')}><Link2 size={15} />Copy link</button>
+        </>}
         barItems={[
           { id: 'who', label: 'Shared by', node: <span className="fsx-chip"><span className="av" aria-hidden="true">{initials(data.author)}</span>{data.author || 'Shared note'}</span> },
           { id: 'save', label: 'Save to my Peblo', node: <button type="button" className="fsx-save" data-testid="fs-save" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={14} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button> },

@@ -48,7 +48,7 @@ export function useFocusKeys({ enabled, active, toggle, exit }) {
       const c = ref.current;
       if (c.enabled && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); e.stopPropagation(); c.toggle(); return; }
       if (c.active && e.key === 'Escape' && !e.defaultPrevented) {
-        if (document.querySelector('.bn-suggestion-menu, .pb-find, .pb-crop-veil, .pb-lightbox, .pb-sel-menu, .pb-picbar-row, [role="dialog"], [role="menu"]')) return;
+        if (document.querySelector('.bn-suggestion-menu, .pb-find, .pb-crop-veil, .pb-lightbox, .pb-sel-menu, .pb-picbar-row, [role="dialog"], [role="menu"]:not(.fsx-nm)')) return; // the Note tab of the panel is a menu that is always on screen: it is not a reason to stay in full screen
         const a = document.activeElement;
         if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !a.closest('.s-note-head, .r-sheet, .o-title-row')) return;
         c.exit();
@@ -64,9 +64,9 @@ const BAR_KEY = 'peblo-fs-bar';
 const readBar = () => {
   try {
     const j = JSON.parse(rd(BAR_KEY, 'null'));
-    if (j && typeof j === 'object') return { order: Array.isArray(j.order) ? j.order : [], off: Array.isArray(j.off) ? j.off : [], drawer: j.drawer !== false, tab: ['bar', 'note', 'share'].includes(j.tab) ? j.tab : 'bar' };
+    if (j && typeof j === 'object') return { order: Array.isArray(j.order) ? j.order : [], off: Array.isArray(j.off) ? j.off : [], drawer: j.drawer !== false, tab: ['bar', 'note', 'share'].includes(j.tab) ? j.tab : 'note' };
   } catch { /* defaults */ }
-  return { order: [], off: [], drawer: true, tab: 'bar' };
+  return { order: [], off: [], drawer: true, tab: 'note' };
 };
 export function useBarPrefs() {
   const [b, setB] = useState(readBar);
@@ -122,6 +122,11 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
   useEffect(() => { if (!active) return undefined; const t = setInterval(() => tick((n) => n + 1), 20000); return () => clearInterval(t); }, [active]);
 
   const drawerOn = !!noteNode && bar.drawer;
+  const outlineInDrawer = !!noteNode; // the outline lives at the top of the panel's Note tab (no column of its own, so the page gets the width)
+  const openOutline = () => {
+    if (outlineInDrawer && !(drawerOn && bar.tab === 'note')) { setBar({ drawer: true, tab: 'note' }); if (!prefs.outline) set('outline', true); return; }
+    set('outline', !prefs.outline);
+  };
   // the page is restyled through attributes on <html>
   useLayoutEffect(() => {
     if (!active) return undefined;
@@ -299,6 +304,31 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
   });
   const startSprint = (m) => { setSprintDone(null); setSprint({ end: Date.now() + m * 60000, from: words, mins: m }); setNow(Date.now()); };
 
+  const counterNode = (
+    <aside className="fsx-count" aria-label="Words written today" data-testid="fs-counter">
+          <span className="lab">Today</span>
+          <span className="n" data-testid="fs-today">{day.n}</span>
+          <span className="of">words</span>
+          <span className="track" role="progressbar" aria-label="Progress to today's word goal" aria-valuemin={0} aria-valuemax={100} aria-valuenow={goalPct}><i style={{ width: `${goalPct}%` }} /></span>
+          <button type="button" className="goal" data-testid="fs-goal" title="Change the daily goal" onClick={nextGoal}>goal {prefs.goal}</button>
+        </aside>
+  );
+
+  const outlineNav = (
+    <nav className="fsx-outline" aria-label="Outline" data-testid="fs-outline">
+          <div className="lab"><span>Outline</span><span className="ct">{outline.length} {outline.length === 1 ? 'section' : 'sections'}</span></div>
+          {outline.length === 0 && <div className="none">Add a heading to see it here.</div>}
+          {outline.map((h, i) => (
+            <button key={i} type="button" className={i === cur ? 'on' : ''} style={{ paddingLeft: 10 + (h.level - 1) * 12 }} aria-current={i === cur ? 'true' : undefined} onClick={() => onJump?.(h.text, i)}>
+              <span className="mark" />
+              <span className="txt">{plain(h.text)}</span>
+              {mins[i] > 0 && <span className="rt" data-testid="outline-mins">{mins[i]} min</span>}
+              {(h.pips || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{h.pips.map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: p.color }} />)}</span>}
+            </button>
+          ))}
+        </nav>
+  );
+
   return createPortal(
     <div className="fsx" data-shown={shown ? '1' : '0'} data-testid="fs-root">
       <div className="fsx-progress" data-testid="fs-progress" role="progressbar" aria-label="How far through the note" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><i style={{ width: `${pct}%` }} /></div>
@@ -314,7 +344,7 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
           {sprintDone && <button type="button" className="fsx-sprint done" data-testid="fs-sprint-done" onClick={() => setSprintDone(null)} title="Dismiss">Sprint done: +{sprintDone.words} words in {sprintDone.mins} min</button>}
         </div>
         <span className="fsx-grow" />
-        <button {...btn('Outline', { on: prefs.outline, id: 'fs-outline-btn', onClick: () => set('outline', !prefs.outline) })}><Svg><path d="M4 6h16M8 12h12M12 18h8" /></Svg></button>
+        <button {...btn('Outline', { on: prefs.outline, id: 'fs-outline-btn', onClick: openOutline })}><Svg><path d="M4 6h16M8 12h12M12 18h8" /></Svg></button>
         <button {...btn('Typewriter mode', { on: prefs.type, id: 'fs-type', onClick: () => set('type', !prefs.type) })}><Svg><path d="M4 12h16M12 4v4M12 16v4" /></Svg></button>
         <button {...btn('Focus on one paragraph', { on: prefs.para, id: 'fs-para', onClick: () => set('para', !prefs.para) })}><Svg><path d="M4 7h16M4 12h16M4 17h16" opacity=".35" /><path d="M4 12h16" /></Svg></button>
         <button {...btn('Find in note', { id: 'fs-find', onClick: () => window.dispatchEvent(new Event('pb-find-open')) })}><Svg><circle cx="11" cy="11" r="6" /><path d="M20 20l-4-4" /></Svg></button>
@@ -386,37 +416,18 @@ export default function FocusChrome({ active, prefs, set, title, saveStatus = 's
                 </div>
               </>
             )}
+            {bar.tab === 'note' && outlineInDrawer && prefs.outline && <>{outlineNav}<div className="fsx-rule" /></>}
             {bar.tab === 'note' && <div className="fsx-nm" data-testid="fs-note-tab" role="menu">{noteNode}</div>}
             {bar.tab === 'share' && <div className="fsx-share" data-testid="fs-share-tab">{shareNode}</div>}
           </div>
+          {counterOn && counterNode}
           <div className="fsx-dfoot"><span>Opens by default on the three dots</span><button type="button" data-testid="fs-drawer-close" onClick={() => setBar({ drawer: false })}>Close</button></div>
         </aside>
       )}
 
-      {prefs.outline && (
-        <nav className="fsx-outline" aria-label="Outline" data-testid="fs-outline">
-          <div className="lab">Outline</div>
-          {outline.length === 0 && <div className="none">Add a heading to see it here.</div>}
-          {outline.map((h, i) => (
-            <button key={i} type="button" className={i === cur ? 'on' : ''} style={{ paddingLeft: (h.level - 1) * 12 }} aria-current={i === cur ? 'true' : undefined} onClick={() => onJump?.(h.text, i)}>
-              <span className="mark" />
-              <span className="txt">{plain(h.text)}</span>
-              {mins[i] > 0 && <span className="rt" data-testid="outline-mins">{mins[i]} min</span>}
-              {(h.pips || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{h.pips.map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: p.color }} />)}</span>}
-            </button>
-          ))}
-        </nav>
-      )}
+      {prefs.outline && !outlineInDrawer && outlineNav}
 
-      {counterOn && (
-        <aside className="fsx-count" aria-label="Words written today" data-testid="fs-counter">
-          <span className="lab">Today</span>
-          <span className="n" data-testid="fs-today">{day.n}</span>
-          <span className="of">words</span>
-          <span className="track" role="progressbar" aria-label="Progress to today's word goal" aria-valuemin={0} aria-valuemax={100} aria-valuenow={goalPct}><i style={{ width: `${goalPct}%` }} /></span>
-          <button type="button" className="goal" data-testid="fs-goal" title="Change the daily goal" onClick={nextGoal}>goal {prefs.goal}</button>
-        </aside>
-      )}
+      {counterOn && !drawerOn && counterNode}
 
       {qc !== null && (
         <form className="fsx-quick" data-testid="fs-quick" onSubmit={(e) => { e.preventDefault(); sendQuick(); }}>

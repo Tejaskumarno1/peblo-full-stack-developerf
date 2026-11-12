@@ -49,6 +49,7 @@ try {
   await page.screenshot({ path: 'e2e/focus-bar-default.png' });
 
   // ---- reorder by drag, hide, remember
+  await page.locator('[data-testid="fs-tab-bar"]').click(); await wait(200);
   await page.locator('[data-row="copy"]').dragTo(page.locator('[data-row="tag"]')); await wait(400);
   const o1 = await order();
   check('dragging a row reorders the bar', o1.indexOf('copy') < o1.indexOf('tag'), o1.join(','));
@@ -67,7 +68,9 @@ try {
   await page.locator('[data-testid="fs-tab-share"]').click();
   check('Share tab shows the share state', /Shared/.test(await page.locator('[data-testid="fs-share-tab"]').innerText()));
   await page.locator('[data-testid="fs-tab-bar"]').click();
+  await page.locator('[data-testid="fs-tab-note"]').click(); await wait(200);
   check('the outline shows minutes per section', (await page.locator('[data-testid="outline-mins"]').count()) > 0);
+  await page.locator('[data-testid="fs-tab-bar"]').click(); await wait(200);
   await page.locator('[data-testid="fs-sw-counter"]').click(); await wait(200);
   check('the counter can be switched off', (await page.locator('[data-testid="fs-counter"]').count()) === 0);
   await page.locator('[data-testid="fs-sw-counter"]').click(); await wait(200);

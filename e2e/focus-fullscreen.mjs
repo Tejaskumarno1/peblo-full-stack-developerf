@@ -38,22 +38,22 @@ try {
     const want = ['Outline', 'Typewriter mode', 'Focus on one paragraph', 'Find in note', 'Narrow', 'Wide', 'Full', 'Smaller text', 'Larger text', 'Dark theme', 'Exit full screen'];
     check(`${T} the bar has every button from the mockup`, want.every((w) => labels.includes(w)), labels.join(' | '));
     const bar = await page.locator('[data-testid="fs-bar"]').boundingBox();
-    check(`${T} bar sits at the top, 52px tall, inside the screen`, !!bar && Math.abs(bar.y - 10) < 3 && Math.abs(bar.height - 52) < 3 && bar.x >= 12 && bar.x + bar.width <= 1268, JSON.stringify(bar));
+    check(`${T} bar sits at the top, 48px tall, inside the screen`, !!bar && Math.abs(bar.y - 9) < 3 && Math.abs(bar.height - 48) < 3 && bar.x >= 12 && bar.x + bar.width <= 1268, JSON.stringify(bar));
     const status = await page.locator('[data-testid="fs-status"]').innerText();
     check(`${T} save state, word count and reading time are shown`, /Saved|Saving|Editing/.test(status) && /\d+ words?/.test(status) && /min read/.test(status), status);
     // the column
     const col = async () => page.evaluate(() => { const e = document.querySelector('.bn-editor'); const r = e.getBoundingClientRect(); const p = e.querySelector('[data-content-type="paragraph"] .bn-inline-content, [data-content-type="paragraph"]'); const cs = getComputedStyle(p); return { x: r.x, w: r.width, font: cs.fontFamily, size: parseFloat(cs.fontSize), lh: parseFloat(cs.lineHeight) }; });
     let c = await col();
     // centred in the free space between the outline rail (left) and the drawer (right, when open)
-    const mid = await page.evaluate(() => { const o = document.querySelector('[data-testid="fs-outline"]'); const d = document.querySelector('[data-testid="fs-drawer"]'); const l = o ? o.getBoundingClientRect().right : 0; const r = d ? d.getBoundingClientRect().left : window.innerWidth; return d ? (l + r) / 2 : window.innerWidth / 2; });
-    check(`${T} wide column is about 680px and centred (beside the drawer when it is open)`, Math.abs(c.w - 680) < 30 && Math.abs(c.x + c.w / 2 - mid) < 40, JSON.stringify({ ...c, mid }));
+    const mid = await page.evaluate(() => { const d = document.querySelector('[data-testid="fs-drawer"]'); return d ? (48 + window.innerWidth - 300) / 2 : window.innerWidth / 2; }); // the page sits between its side padding and the panel
+    check(`${T} wide column is about 900px (or what fits beside the drawer) and centred`, Math.abs(c.w - Math.min(900, 1280 - 348)) < 40 && Math.abs(c.x + c.w / 2 - mid) < 40, JSON.stringify({ ...c, mid }));
     check(`${T} writing column is the Newsreader serif at 21px`, /Newsreader|Georgia|serif/i.test(c.font) && Math.abs(c.size - 21) < 0.6, JSON.stringify(c));
     const title = await page.evaluate(() => { const t = document.querySelector('#s-note-title, #r-note-title, #o-note-title'); const cs = t && getComputedStyle(t); const r = t && t.getBoundingClientRect(); return t ? { size: parseFloat(cs.fontSize), weight: cs.fontWeight, w: r.width, x: r.x } : null; });
     check(`${T} the title is the big sans heading in the column`, !!title && title.size >= 40 && Number(title.weight) >= 700 && title.w > 400, JSON.stringify(title));
     if (SHOT) await page.screenshot({ path: `${SHOT}/focus-${style}-wide.png` });
     // width
     await page.locator('[data-testid="fs-w-narrow"]').click(); await wait(250);
-    c = await col(); check(`${T} Narrow makes the column about 560px`, Math.abs(c.w - 560) < 30, JSON.stringify(c));
+    c = await col(); check(`${T} Narrow makes the column about 600px`, Math.abs(c.w - 600) < 30, JSON.stringify(c));
     await page.locator('[data-testid="fs-w-full"]').click(); await wait(250);
     c = await col(); check(`${T} Full makes the column wider than Wide`, c.w > 720, JSON.stringify(c));
     await page.locator('[data-testid="fs-w-wide"]').click(); await wait(250);

@@ -70,7 +70,7 @@ html[data-fs] body { overflow: hidden; }
 .fsx-hint kbd { background: rgba(255, 255, 255, 0.18); font-weight: 700; font-size: 13px; padding: 3px 8px; border-radius: 8px; }
 .fsx[data-shown="0"] .fsx-bar { opacity: 0; transform: translateY(-10px); pointer-events: none; }
 .fsx[data-shown="0"] .fsx-hint { opacity: 0; pointer-events: none; }
-@media (max-width: 1180px) { .fsx-outline { display: none; } }
+@media (max-width: 1180px) { .fsx > .fsx-outline { display: none; } }
 @media (max-width: 1000px) { .fsx-count { display: none; } .fsx-seg { display: none; } }
 @media (max-width: 760px) { .fsx-sizes, .fsx-hint, .fsx-title .s { display: none; } .fsx-bar { left: 8px; right: 8px; } }
 
@@ -254,3 +254,38 @@ html[data-fs] .eb-flash { z-index: 9420; }
 html[data-fs] .eb-back { z-index: 9450; }
 /* the find bar is a floating tool: above everything in full screen */
 html[data-fs] .pb-find { z-index: 9500 !important; }
+
+/* Focus mode: the head bar and the side drawer are about 8% smaller, and the title keeps its own room so nothing overlaps */
+.fsx-bar { left: 14px; right: 14px; top: 9px; height: 48px; border-radius: 17px; padding: 0 9px 0 14px; gap: 3px; }
+.fsx-title { flex: 0 1 auto; min-width: 96px; margin-right: 6px; overflow: hidden; }
+.fsx-title .t { font-size: 13px; max-width: 170px; }
+.fsx-title .s { font-size: 11px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; }
+.fsx-ic { width: 31px; height: 31px; border-radius: 10px; }
+.fsx-sizes .fsx-ic { width: 26px; }
+.fsx-sep { height: 22px; margin: 0 4px; }
+.fsx-seg { font-size: 12px; }
+.fsx-seg button { padding: 4px 8px; font-size: 11.5px; }
+.fsx-exit { padding: 7px 12px; font-size: 12px; gap: 6px; }
+.fsx .cp-chip, .fsx .s-dashed, .fsx .s-tag, .fsx .s-tag-input, .fsx-sprint { height: 27px; font-size: 11.5px; }
+.fsx .cp-chip { padding: 0 10px; }
+.fsx-items { gap: 5px; }
+.fsx-drawer { top: 66px; right: 14px; bottom: 14px; width: 270px; zoom: .93; }
+.fsx-hint { font-size: 12px; padding: 9px 16px; }
+
+/* The outline lives at the top of the panel's Note tab and the page takes the width the left column used to hold */
+.fsx-drawer .fsx-outline { position: static; width: auto; max-height: 190px; overflow-y: auto; gap: 2px; padding: 2px 0 4px; flex: none; }
+.fsx-drawer .fsx-outline .lab { display: flex; justify-content: space-between; padding: 2px 8px 6px; }
+.fsx-drawer .fsx-outline .lab .ct { font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--fs-faint); }
+.fsx-drawer .fsx-outline button { padding-top: 8px; padding-bottom: 8px; padding-right: 10px; border-radius: 12px; font-weight: 700; }
+.fsx-drawer .fsx-outline button .mark { display: none; }
+.fsx-drawer .fsx-outline button.on { background: color-mix(in srgb, var(--fs-acc) 14%, transparent); color: var(--fs-acc); }
+.fsx-rule { height: 1px; background: var(--fs-line); margin: 4px 0; flex: none; }
+.fsx-drawer .fsx-count { position: static; flex: none; margin: 0 12px 8px; align-self: flex-start; }
+html[data-fs-width="narrow"] { --fs-col: 600px; }
+html[data-fs-width="wide"] { --fs-col: 900px; }
+html[data-fs-width="full"] { --fs-col: min(1500px, calc(100vw - 96px)); }
+html[data-fs-width="full"][data-fs-drawer="1"] { --fs-col: min(1500px, calc(100vw - 348px)); }
+@media (min-width: 1181px) {
+  .soft .s-notes.focus .s-note-main { padding-left: 48px; padding-right: 48px; }
+  html[data-fs-drawer="1"] .soft .s-notes.focus .s-note-main { padding-right: 300px; }
+}

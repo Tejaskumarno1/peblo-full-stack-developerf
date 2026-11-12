@@ -1,0 +1,13 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: 'Three themes came up across the six client interviews: speed of delivery, clarity of briefs, and how corrections are handled.\n\n## 1. What we heard\n\nClients were not unhappy with quality. What they described was waiting: for a review slot, for an answer on a brief.\n\n## 2. Next steps\n\nNext quarter we trial a Tuesday review slot.', tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: false })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1536, height: 864 } });
+await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); localStorage.setItem('peblo-guest-joined', '1'); } catch {} });
+const g = await c.newPage();
+await g.goto(`${base}/s/note/${tok}`); await g.locator('article').waitFor({ timeout: 20000 }); await g.waitForTimeout(1200);
+await g.locator('[data-testid="tt-full"]').first().click(); await g.waitForTimeout(1500);
+await g.mouse.move(700, 30); await g.waitForTimeout(400);
+console.log('drawer', await g.locator('[data-testid="fs-drawer"]').count(), 'outline items', await g.locator('[data-testid="fs-outline"] button').count());
+await g.screenshot({ path: 'D:/Peblo/_shots/sharefs.png' });
+await finish();

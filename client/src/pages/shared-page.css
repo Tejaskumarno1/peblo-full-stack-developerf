@@ -1020,7 +1020,7 @@ html.pb-public-share #root { position: absolute !important; inset: 0 !important;
 .pb-shared.is-fs { background: var(--fs-bg); color: var(--fs-fg); }
 .pb-shared.is-fs .top, .pb-shared.is-fs .srail, .pb-shared.is-fs .srail-fly, .pb-shared.is-fs .blobs, .pb-shared.is-fs .toc, .pb-shared.is-fs .rcards, .pb-shared.is-fs .title-tools, .pb-shared.is-fs .by, .pb-shared.is-fs .sum-card, .pb-shared.is-fs .welcome, .pb-shared.is-fs article .cta, .pb-shared.is-fs article .foot, .pb-shared.is-fs .endcap, .pb-shared.is-fs .totop { display: none !important; }
 .pb-shared.is-fs .stage.note-stage { position: fixed; inset: 0; z-index: 8990; display: block; width: 100%; margin: 0; padding: 0; background: var(--fs-bg); }
-.pb-shared.is-fs .stage.note-stage > article { position: absolute; inset: 0; width: auto; padding: 92px 224px 120px; border-radius: 0; box-shadow: none; background: transparent; overflow-y: auto; }
+.pb-shared.is-fs .stage.note-stage > article { position: absolute; inset: 0; width: auto; padding: 92px 48px 120px; border-radius: 0; box-shadow: none; background: transparent; overflow-y: auto; }
 .pb-shared.is-fs article > * { max-width: var(--fs-col); margin-left: auto; margin-right: auto; }
 .pb-shared.is-fs .title-in, .pb-shared.is-fs .title { width: 100%; height: auto; font: 800 36px/1.2 var(--fs-sans); letter-spacing: -.02em; color: var(--fs-fg); margin-bottom: 14px; }
 .pb-shared.is-fs .stage.note-stage .block-editor-container { margin-top: 0; }
@@ -1271,3 +1271,6 @@ html.pb-public-share .pb-find .n { background: transparent; font-weight: 700; }
   .pb-shared .srail-fly.people .cp-title-t small { font: 700 12.5px 'Figtree', system-ui, sans-serif; letter-spacing: 0; color: var(--fg2); }
   .pb-shared .srail-fly .fly-foot, .pb-shared .srail-fly .toc-foot { font: 600 12.5px 'Figtree', system-ui, sans-serif; color: var(--fg2); }
 }
+
+/* S61: the full-screen page takes the width the outline column held; the side panel (Bar, Note, Share) holds the outline */
+html[data-fs-drawer="1"] .pb-shared.is-fs .stage.note-stage > article { padding-right: 300px; }

@@ -11,7 +11,8 @@ const savePos = (p) => { try { localStorage.setItem(POS_KEY, JSON.stringify(p));
 // CSS zoom on html or body (the text-size setting) multiplies left and top of a fixed element, so the position is divided by it
 const zoomOf = () => { const z = (n) => { const v = parseFloat(getComputedStyle(n).zoom); return v > 0 ? v : 1; }; return z(document.documentElement) * z(document.body); };
 const clamp = (p, w, h) => ({ x: Math.max(8, Math.min(window.innerWidth - w - 8, p.x)), y: Math.max(8, Math.min(window.innerHeight - h - 8, p.y)) });
-const homeOf = (w, h) => ({ x: window.innerWidth - w - 20, y: window.innerHeight - h - (window.innerWidth < 1280 ? 104 : 24) });
+const homeOf = (w, h) => ({ x: window.innerWidth - w - 20 - (document.documentElement.getAttribute('data-fs-drawer') === '1' ? 290 : 0), // beside the full-screen side panel, never over it
+   y: window.innerHeight - h - (window.innerWidth < 1280 ? 104 : 24) });
 
 /** The microphone control for the note editor: a small round button that opens into a pill, draggable anywhere, remembered. */
 export default function VoicePill({ editor, openSignal, onActive }) {
@@ -40,7 +41,10 @@ export default function VoicePill({ editor, openSignal, onActive }) {
     const fit = () => setPos((p) => place(p));
     window.addEventListener('resize', fit);
     fit();
-    return () => window.removeEventListener('resize', fit);
+    // the full-screen side panel opening or closing moves the resting place (a spot the person chose is left alone)
+    const mo = new MutationObserver(() => { let saved = null; try { saved = localStorage.getItem(POS_KEY); } catch { /* x */ } if (!saved) setPos(place(null)); });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-fs-drawer'] });
+    return () => { window.removeEventListener('resize', fit); mo.disconnect(); };
   }, [place, on, state]);
 
   const insert = useCallback((text) => {
