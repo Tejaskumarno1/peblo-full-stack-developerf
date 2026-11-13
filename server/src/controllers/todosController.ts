@@ -8,6 +8,7 @@ import prisma from '../db.js';
 import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
 import { isValidRecurrence, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
+import { taskVisible, assigneesOf, moveToColumn } from '../utils/taskAccess.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
@@ -65,7 +66,8 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
     // Tasks that Claude or a guest only proposed wait in the approval inbox: ?proposals=only shows just those, ?proposals=all both.
     const prop = (t: any) => !!(t.meta as any)?.proposal;
     const mode = String(req.query.proposals || '');
-    res.json({ todos: mode === 'only' ? todos.filter(prop) : mode === 'all' ? todos : todos.filter((t) => !prop(t)) });
+    const seen = todos.filter((t) => taskVisible(t as any, req.user!.id));
+    res.json({ todos: mode === 'only' ? seen.filter(prop) : mode === 'all' ? seen : seen.filter((t) => !prop(t)) });
   } catch (error) {
     next(error);
   }
@@ -140,7 +142,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
       take: 2000,
     });
 
-    res.json({ todos: todos.filter((t) => !(t.meta as any)?.proposal) });
+    res.json({ todos: todos.filter((t) => !(t.meta as any)?.proposal && taskVisible(t as any, req.user!.id)) });
   } catch (error) {
     next(error);
   }
@@ -185,7 +187,20 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       if (!(await spaceMembers(own.spaceId)).includes(req.body.assigneeId)) return res.status(400).json({ error: 'That person is not in this space.' });
       base.assigneeId = req.body.assigneeId;
     }
-    const cleanMeta = cleanTodoMeta(meta);
+    const cleanMeta: any = cleanTodoMeta(meta);
+    if ('spaceId' in own) {
+      const members = await spaceMembers(own.spaceId);
+      const wanted: string[] = Array.isArray(req.body.assignees) ? req.body.assignees.filter((x: any) => typeof x === 'string') : (Array.isArray(cleanMeta.assignees) ? cleanMeta.assignees : []);
+      if (wanted.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+      if (wanted.length) { cleanMeta.assignees = [...new Set(wanted)].slice(0, 10); base.assigneeId = cleanMeta.assignees[0]; } else delete cleanMeta.assignees;
+      if (Array.isArray(cleanMeta.viewers)) cleanMeta.viewers = cleanMeta.viewers.filter((v: string) => members.includes(v));
+      if (typeof req.body.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(req.body.column)) {
+        const mv = moveToColumn(req.body.column as any, cleanMeta);
+        base.completed = mv.completed;
+        for (const k of Object.keys(cleanMeta)) delete cleanMeta[k];
+        Object.assign(cleanMeta, mv.meta);
+      }
+    }
     // "Ask me before Claude adds tasks" (Plan my day): a task added through an access token / MCP waits in the approval inbox.
     // Decided here, on the server, because an access token may not read account settings.
     if (req.user!.viaToken && !(cleanMeta as any).proposal) {
@@ -212,6 +227,9 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
     await syncDoneTag((todo as any).noteId);
+    const allAssigned: string[] = ((cleanMeta as any).assignees as string[] | undefined) || (base.assigneeId ? [base.assigneeId] : []);
+    const extra = allAssigned.filter((a) => a !== userId && a !== base.assigneeId);
+    if (extra.length) await notifyUsers(req.app, extra, { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
     if (base.assigneeId && base.assigneeId !== userId) await notifyUsers(req.app, [base.assigneeId], { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
 
     res.status(201).json({ todo });
@@ -233,7 +251,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       where: { id: id as string, ...own }
     });
 
-    if (!todo) {
+    if (!todo || !taskVisible(todo as any, userId)) {
       return res.status(404).json({ error: 'Todo not found' });
     }
 
@@ -291,6 +309,26 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       if (a && !(await spaceMembers(own.spaceId)).includes(a)) return res.status(400).json({ error: 'That person is not in this space.' });
       (data as any).assigneeId = a || null;
     }
+    if ('spaceId' in own && Array.isArray(req.body.assignees)) {
+      const members = await spaceMembers(own.spaceId);
+      const list = [...new Set(req.body.assignees.filter((x: any) => typeof x === 'string'))] as string[];
+      if (list.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+      const m: any = { ...(((data.meta ?? todo.meta) || {}) as any) };
+      if (list.length) m.assignees = list.slice(0, 10); else delete m.assignees;
+      data.meta = m; data.assigneeId = list[0] || null;
+    }
+    if ('spaceId' in own && data.meta && Array.isArray((data.meta as any).viewers)) {
+      const members = await spaceMembers(own.spaceId);
+      (data.meta as any).viewers = (data.meta as any).viewers.filter((v: string) => members.includes(v));
+    }
+    {
+      // board columns: Done is the completed flag, In progress and In review are meta.status; the two stay in step
+      const m: any = { ...(((data.meta ?? todo.meta) || {}) as any) };
+      const col = typeof req.body.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(req.body.column) ? req.body.column : null;
+      if (col) { const mv = moveToColumn(col as any, m); data.completed = mv.completed; data.meta = mv.meta; }
+      else if (data.completed === true && m.status) { delete m.status; data.meta = m; }
+      else if (data.completed === undefined && (data.meta as any)?.status && todo.completed) data.completed = false;
+    }
     const newAssignee: string | null = 'spaceId' in own && typeof req.body.assigneeId === 'string' && req.body.assigneeId ? req.body.assigneeId : null;
     const updatedTodo = await prisma.todo.update({
       where: { id: id as string, spaceId: todo.spaceId },
@@ -299,6 +337,12 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     });
 
     if (newAssignee && newAssignee !== userId && newAssignee !== (todo as any).assigneeId) await notifyUsers(req.app, [newAssignee], { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
+
+    {
+      const before = assigneesOf(todo as any); const after = assigneesOf(updatedTodo as any);
+      const added = after.filter((a) => !before.includes(a) && a !== userId && a !== newAssignee);
+      if (added.length) await notifyUsers(req.app, added, { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
+    }
 
     if (startSeries && updatedTodo.deadline) {
       const series = await prisma.todoSeries.create({
@@ -357,7 +401,7 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
       where: { id: id as string, ...own }
     });
 
-    if (!todo) {
+    if (!todo || !taskVisible(todo as any, userId)) {
       return res.status(404).json({ error: 'Todo not found' });
     }
 
@@ -384,4 +428,39 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
   } catch (error) {
     next(error);
   }
+}
+
+/** POST /todos/bulk { ids, set: { column?, assignees?, priority?, label?, visibility? } }: the same change for many tasks of the open space. */
+export async function bulkTodos(req: Request, res: Response, next: NextFunction) {
+  try {
+    const own = await noteScope(req, res, 'write', { tasks: true });
+    if (!own) return;
+    const userId = req.user!.id;
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: unknown) => typeof x === 'string').slice(0, 200) : [];
+    const set = (req.body?.set && typeof req.body.set === 'object') ? req.body.set : {};
+    if (!ids.length) return res.status(400).json({ error: 'Choose some tasks.' });
+    const members = 'spaceId' in own ? await spaceMembers(own.spaceId) : [];
+    const list: string[] | null = Array.isArray(set.assignees) ? [...new Set(set.assignees.filter((x: unknown) => typeof x === 'string'))] as string[] : null;
+    if (list && list.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+    const todos = await prisma.todo.findMany({ where: { id: { in: ids }, ...own } });
+    let changed = 0; const newly: Record<string, any> = {};
+    for (const t of todos) {
+      if (!taskVisible(t as any, userId)) continue;
+      const data: any = {}; let m: any = { ...((t.meta as any) || {}) };
+      if (typeof set.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(set.column)) { const mv = moveToColumn(set.column as any, m); data.completed = mv.completed; m = mv.meta; }
+      if (list) { if (list.length) m.assignees = list.slice(0, 10); else delete m.assignees; data.assigneeId = list[0] || null; }
+      if (['low', 'medium', 'high'].includes(set.priority)) data.priority = set.priority;
+      if (set.visibility === 'me' || set.visibility === 'people' || set.visibility === 'team') { if (set.visibility === 'team') { delete m.visibility; delete m.viewers; } else m.visibility = set.visibility; }
+      if (typeof set.label === 'string' || set.label === null) m = cleanTodoMeta({ label: set.label }, m);
+      data.meta = m;
+      const u = await prisma.todo.update({ where: { id: t.id, spaceId: t.spaceId }, data });
+      changed++;
+      if (list) { const added = assigneesOf(u as any).filter((a) => !assigneesOf(t as any).includes(a) && a !== userId); if (added.length) await notifyUsers(req.app, added, { kind: 'assigned', title: u.text, from: await nameOf(userId), spaceId: (t as any).spaceId, todoId: u.id }); }
+      newly[t.id] = u.noteId;
+    }
+    for (const n of new Set(Object.values(newly))) await syncDoneTag(n as string | null);
+    const io = req.app.get('io');
+    if (io) io.to(userId).emit('todos_changed');
+    res.json({ ok: true, changed });
+  } catch (error) { next(error); }
 }

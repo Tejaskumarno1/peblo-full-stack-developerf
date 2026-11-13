@@ -52,7 +52,13 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
       return Object.keys(out).length ? out : undefined;
     },
     label: (v) => ((LABELS as readonly string[]).includes(v) ? v : undefined),
-    status: (v) => (v === 'doing' ? 'doing' : undefined),
+    // board column: "doing" and "review"; a task with neither is To do, a completed one is Done
+    status: (v) => (v === 'doing' || v === 'review' ? v : undefined),
+    // who sees a team task: nothing = the whole team, "me" = only the creator and the assignees, "people" = those plus the chosen viewers
+    visibility: (v) => (v === 'me' || v === 'people' ? v : undefined),
+    viewers: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 50) : undefined),
+    assignees: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
+    watchers: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 50) : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
     // every reminder lead time in minutes (an event can ring more than once), and the trip time that makes "time to leave" ring

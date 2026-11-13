@@ -45,6 +45,8 @@ export const todoSchemas = {
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional(),
       assigneeId: z.string().nullable().optional(),
+      assignees: z.array(z.string()).max(10).optional(),
+      column: z.enum(['todo', 'doing', 'review', 'done']).optional(),
       meta: z.record(z.string(), z.any()).optional()
     })
   },
@@ -61,6 +63,8 @@ export const todoSchemas = {
       tags: z.array(z.string()).optional(),
       noteId: z.string().nullable().optional(),
       assigneeId: z.string().nullable().optional(),
+      assignees: z.array(z.string()).max(10).optional(),
+      column: z.enum(['todo', 'doing', 'review', 'done']).optional(),
       meta: z.record(z.string(), z.any()).optional()
     })
   }
