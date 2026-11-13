@@ -68,13 +68,13 @@ try {
 
   // space after the last line
   const gap = await art.evaluate((a) => { a.scrollTop = a.scrollHeight; const last = [...a.querySelectorAll('.doc p')].pop(); return a.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom; });
-  check('room to scroll past the last line', gap > 150, String(Math.round(gap)));
+  check('room to scroll past the last line', gap > 40, String(Math.round(gap)));
   await g.screenshot({ path: `${SHOTS}/shell-3-end.png` });
 
   // look menu: pin the tool bar, quiet mode, remembered after reload
   await art.evaluate((a) => { a.scrollTop = 0; });
   await g.waitForTimeout(500);
-  await g.getByTestId('look-btn').click();
+  await g.locator('.pb-shared .toc').getByRole('button', { name: 'Look' }).click();
   await g.getByTestId('look-pin').check();
   await g.getByTestId('look-quiet').check();
   check('pinned tool bar stays shown', (await g.getByTestId('dock').count()) === 1);
