@@ -61,3 +61,14 @@
 .ts-menu-hot { background: var(--s-accent-soft) !important; color: var(--s-accent-ink) !important; font-weight: 700; }
 
 .ts-task:focus-within { border-color: var(--s-accent); }
+
+/* team tasks: sheet fields */
+.tk-chip { display:inline-flex; gap:6px; align-items:center; }
+.tk-chip span { opacity:.6; font-weight:700; }
+.tk-add, .tk-watch { border:1.5px dashed var(--s-line, #d9d2c7); background:transparent; color:inherit; border-radius:999px; padding:6px 12px; font:inherit; font-weight:600; cursor:pointer; }
+.tk-add:hover, .tk-watch:hover { border-style:solid; }
+.tk-watch { margin-left:auto; }
+.tk-watch.on { border-style:solid; background:var(--s-accent-soft, #fde8dc); }
+.tk-anyone, .tk-hint { color:var(--s-muted, #8a8378); font-size:13px; }
+.tk-hint { display:block; margin-top:8px; }
+.tk-people { margin-top:8px; }

@@ -65,7 +65,15 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [customTime, setCustomTime] = useState(false);
   const [priority, setPriority] = useState(task.priority || 'medium');
   const team = useSpaceMembers();
-  const [assignee, setAssignee] = useState(task.assigneeId || '');
+  const startAssignees = useMemo(() => (Array.isArray(task.meta?.assignees) && task.meta.assignees.length ? task.meta.assignees : task.assigneeId ? [task.assigneeId] : []), [task]);
+  const [assignees, setAssignees] = useState(startAssignees);
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [visibility, setVisibility] = useState(task.meta?.visibility === 'me' || task.meta?.visibility === 'people' ? task.meta.visibility : 'team');
+  const [viewers, setViewers] = useState(Array.isArray(task.meta?.viewers) ? task.meta.viewers : []);
+  const startStatus = task.completed ? 'done' : task.meta?.status === 'doing' || task.meta?.status === 'review' ? task.meta.status : 'todo';
+  const [status, setStatus] = useState(startStatus);
+  const [watching, setWatching] = useState(Array.isArray(task.meta?.watchers) && task.meta.watchers.includes(team.me));
+  const toggleIn = (list, set, id) => set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   const [tags, setTags] = useState(tagsOf(task));
   const [tagMenu, setTagMenu] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -85,7 +93,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [estimate, setEstimate] = useState(task.meta?.estimateMin ?? null);
   const [confirmEsc, setConfirmEsc] = useState(false);
   const snap0 = useRef(null);
-  const snapNow = JSON.stringify({ assignee, text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
+  const snapNow = JSON.stringify({ assignees, visibility, viewers, status, watching, text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
   if (snap0.current === null) snap0.current = snapNow;
   const dirty = snapNow !== snap0.current || !!tagDraft.trim();
   const requestClose = () => { if (dirty && !saving) setConfirmEsc(true); else onClose(); };
@@ -141,8 +149,15 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       await todosAPI.update(task.id, {
         text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, scope,
         ...(ruleChanged ? { recurrence } : {}),
-        ...(team.canAssign && assignee !== (task.assigneeId || '') ? { assigneeId: assignee || null } : {}),
-        meta: { link: link.trim() || null, subtasks: steps, remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
+        ...(team.canAssign && JSON.stringify(assignees) !== JSON.stringify(startAssignees) ? { assignees } : {}),
+        ...(team.canAssign && status !== startStatus && status !== 'done' ? { column: status } : {}),
+        meta: {
+          ...(team.canAssign ? {
+            visibility: visibility === 'team' ? null : visibility,
+            viewers: visibility === 'people' && viewers.length ? viewers : null,
+            watchers: (() => { const w = (Array.isArray(task.meta?.watchers) ? task.meta.watchers : []).filter((x) => x !== team.me); if (watching) w.push(team.me); return w.length ? w : null; })(),
+          } : {}),
+          link: link.trim() || null, subtasks: steps, remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
       });
       refresh();
       onChanged?.();
@@ -298,9 +313,48 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       {team.canAssign && (
         <section className="s-sheet-sec" aria-label="Assigned to">
           <span className="s-sheet-lab">Assigned to</span>
-          <div className="s-sheet-pills" role="radiogroup" aria-label="Assigned to">
-            <button type="button" role="radio" aria-checked={!assignee} className={!assignee ? 'on' : ''} onClick={() => setAssignee('')}>Anyone</button>
-            {team.people.map((p) => <button key={p.id} type="button" role="radio" aria-checked={assignee === p.id} className={assignee === p.id ? 'on' : ''} data-testid="assign-pill" onClick={() => setAssignee(p.id)}>{p.id === team.me ? 'Me' : p.name.split(' ')[0]}</button>)}
+          <div className="s-sheet-pills" aria-label="Assigned to" data-testid="assignee-chips">
+            {assignees.length === 0 && <span className="tk-anyone">Anyone on the team</span>}
+            {assignees.map((id) => {
+              const p = team.people.find((x) => x.id === id);
+              return <button key={id} type="button" className="on tk-chip" data-testid="sheet-assignee" title="Remove" onClick={() => setAssignees(assignees.filter((x) => x !== id))}>{id === team.me ? 'Me' : (p?.name || 'Member').split(' ')[0]} <span aria-hidden>×</span></button>;
+            })}
+            <button type="button" className="tk-add" data-testid="assignee-add" aria-expanded={addingPerson} onClick={() => setAddingPerson(!addingPerson)}>+ Add person</button>
+          </div>
+          {addingPerson && (
+            <div className="s-sheet-pills tk-people" role="group" aria-label="Pick people">
+              {team.people.filter((p) => !assignees.includes(p.id)).map((p) => <button key={p.id} type="button" data-testid="assign-pill" onClick={() => { setAssignees([...assignees, p.id]); setAddingPerson(false); }}>{p.id === team.me ? 'Me' : p.name.split(' ')[0]}</button>)}
+              {team.people.every((p) => assignees.includes(p.id)) && <span className="tk-anyone">Everyone is already on it</span>}
+            </div>
+          )}
+        </section>
+      )}
+
+      {team.canAssign && (
+        <section className="s-sheet-sec" aria-label="Who can see this">
+          <span className="s-sheet-lab">Who can see this</span>
+          <div className="s-sheet-pills" role="radiogroup" aria-label="Who can see this">
+            {[['team', 'Whole team'], ['people', 'Picked people'], ['me', 'Just me']].map(([v, name]) => (
+              <button key={v} type="button" role="radio" aria-checked={visibility === v} className={visibility === v ? 'on' : ''} data-testid={`vis-${v}`} onClick={() => setVisibility(v)}>{name}</button>
+            ))}
+          </div>
+          {visibility === 'people' && (
+            <div className="s-sheet-pills tk-people" role="group" aria-label="People who can see it">
+              {team.people.filter((p) => p.id !== team.me).map((p) => <button key={p.id} type="button" aria-pressed={viewers.includes(p.id)} className={viewers.includes(p.id) ? 'on' : ''} data-testid="viewer-pill" onClick={() => toggleIn(viewers, setViewers, p.id)}>{p.name.split(' ')[0]}</button>)}
+            </div>
+          )}
+          <span className="tk-hint">{visibility === 'team' ? 'Everyone in this team sees it on the board and in lists.' : visibility === 'me' ? 'Only you and the people assigned to it.' : 'You, the people assigned, and the people picked here.'}</span>
+        </section>
+      )}
+
+      {team.canAssign && startStatus !== 'done' && (
+        <section className="s-sheet-sec" aria-label="Status">
+          <span className="s-sheet-lab">Status</span>
+          <div className="s-sheet-pills" role="radiogroup" aria-label="Status">
+            {[['todo', 'To do'], ['doing', 'In progress'], ['review', 'In review']].map(([v, name]) => (
+              <button key={v} type="button" role="radio" aria-checked={status === v} className={status === v ? 'on' : ''} data-testid={`status-${v}`} onClick={() => setStatus(v)}>{name}</button>
+            ))}
+            <button type="button" aria-pressed={watching} className={`tk-watch ${watching ? 'on' : ''}`} data-testid="task-watch" onClick={() => setWatching(!watching)}>{watching ? 'Watching' : 'Watch this task'}</button>
           </div>
         </section>
       )}

@@ -508,7 +508,11 @@ export default function SoftTasks() {
           {chipsFor(t, column).map((c) => <span key={c.label} className={`s-mini ${c.kind || ''}`}>{c.kind === 'repeat' && <Repeat size={11} />}{c.label}</span>)}
           {stepsOf(t).length > 0 && <StepsBar steps={stepsOf(t)} />}
           {t.note && <Link to={`/notes/${t.note.id}`} className="s-mini note">{t.note.title || 'Note'}</Link>}
-          {t.assigneeId && <span className={`s-mini s-assignee${t.assigneeId === team.me ? ' mine' : ''}`} data-testid="assignee-chip">{t.assigneeId === team.me ? 'You' : (team.people.find((x) => x.id === t.assigneeId)?.name || 'Someone').split(' ')[0]}</span>}
+          {(Array.isArray(t.meta?.assignees) && t.meta.assignees.length ? t.meta.assignees : t.assigneeId ? [t.assigneeId] : []).map((id) => <span key={id} className={`s-mini s-assignee${id === team.me ? ' mine' : ''}`} data-testid="assignee-chip">{id === team.me ? 'You' : (team.people.find((x) => x.id === id)?.name || 'Someone').split(' ')[0]}</span>)}
+          {t.meta?.visibility === 'me' && <span className="s-mini" data-testid="vis-chip">Private</span>}
+          {t.meta?.visibility === 'people' && <span className="s-mini" data-testid="vis-chip">Picked people</span>}
+          {!t.completed && t.meta?.status === 'doing' && <span className="s-mini">In progress</span>}
+          {!t.completed && t.meta?.status === 'review' && <span className="s-mini">In review</span>}
         </span>
       </div>
       {!selMode && !t.completed && <Link to={`/tasks/focus/${t.id}`} className="s-card-x focus" aria-label={`Focus on "${t.text}"`} title="Focus on this task"><Target size={14} strokeWidth={2.4} /></Link>}

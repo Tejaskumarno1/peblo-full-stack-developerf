@@ -16,6 +16,8 @@ try {
   }, org.spaceId);
   await p.goto(b.base + '/tasks', { waitUntil: 'networkidle' });
   await p.getByText('Draft the launch checklist').first().click();
+  await p.getByTestId('assignee-add').waitFor({ timeout: 8000 });
+  await p.getByTestId('assignee-add').click();
   await p.getByTestId('assign-pill').first().waitFor({ timeout: 8000 });
   ok(await p.getByTestId('assign-pill').count() >= 1, 'the task sheet lists the team members to assign to');
   await p.screenshot({ path: shots + '\\ws-assign.png' });
