@@ -72,3 +72,11 @@
 .tk-anyone, .tk-hint { color:var(--s-muted, #8a8378); font-size:13px; }
 .tk-hint { display:block; margin-top:8px; }
 .tk-people { margin-top:8px; }
+
+/* kanban status board */
+.kb-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 14px; }
+.kb-filters button { border:1.5px solid var(--s-line, #e3ddd3); background:transparent; color:inherit; border-radius:999px; padding:6px 14px; font:inherit; font-weight:600; cursor:pointer; }
+.kb-filters button.on { background:var(--s-ink, #2b2620); color:var(--s-paper, #fff); border-color:transparent; }
+.kb-sep { width:1px; height:20px; background:var(--s-line, #e3ddd3); }
+.kb-board { grid-template-columns:repeat(4, minmax(240px, 1fr)); }
+.kb-more { margin-top:8px; border:0; background:transparent; font:inherit; font-weight:600; text-decoration:underline; cursor:pointer; color:inherit; }

@@ -16,6 +16,7 @@ import './lists.css';
 import TaskReview from './TaskReview';
 import { ChevronDown, GripVertical } from 'lucide-react';
 import SavedViews from './SavedViews';
+import KanbanBoard from './KanbanBoard';
 import './tasksCompact.css';
 import { loadViews } from './viewStore';
 import './taskreview.css';
@@ -44,7 +45,7 @@ export function repeatLabel(t) {
   return '';
 }
 const SMART = [['all', 'All'], ['inbox', 'Inbox'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['waiting', 'Waiting'], ['someday', 'Someday'], ['overdue', 'Overdue'], ['high', 'High priority']];
-const VIEWS = [['board', 'Board'], ['list', 'List'], ['table', 'Table'], ['timeline', 'Timeline']];
+const VIEWS = [['board', 'Board'], ['kanban', 'Kanban'], ['list', 'List'], ['table', 'Table'], ['timeline', 'Timeline']];
 const stepsOf = (t) => (Array.isArray(t.meta?.subtasks) ? t.meta.subtasks : []);
 
 function StepsBar({ steps }) {
@@ -529,6 +530,7 @@ export default function SoftTasks() {
 
   const visibleTasks = view === 'table' || view === 'timeline'
     ? [...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later]
+    : view === 'kanban' ? [...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]
     : view === 'board' ? columns.flatMap((c) => [...c.items, ...(c.extra || [])]) : shownGroups.flatMap((g) => g.items);
   const visibleIds = visibleTasks.map((t) => t.id);
   flatRef.current = visibleTasks;
@@ -657,7 +659,9 @@ export default function SoftTasks() {
         </nav>
       )}
       {view === 'list' && lg !== 'none' && lg !== 'priority' && otherGroups.length > 0 && <MiniCards groups={otherGroups} picked={gPick} onPick={setGPick} />}
-      {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'board' ? (
+      {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'kanban' ? (
+        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} card={card} onError={setErr} />
+      ) : view === 'board' ? (
         <div className="s-board">
           {columns.map((c) => (
             <section key={c.key} data-col={c.key} className={`s-col${overCol === c.key ? ' over' : ''}`} style={{ background: `var(--s-${c.tone})` }} aria-labelledby={`s-col-${c.key}`} {...dropProps(c.key)}>
