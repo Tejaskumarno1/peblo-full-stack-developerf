@@ -44,12 +44,19 @@ export async function noteLevel(userId: string, noteId: string, spaceId: string)
  */
 export async function liveLevel(userId: string, noteId: string, spaceId: string): Promise<Effective> {
   if (await isOffice(spaceId)) return (await noteLevel(userId, noteId, spaceId)).level;
-  const inSpace = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM notes WHERE id = ${noteId} AND space_id = ${spaceId} AND NOT is_deleted`;
+  const inSpace = await prisma.$queryRaw<{ user_id: string; level: string | null }[]>`SELECT user_id, meta -> 'teamShare' ->> 'level' AS level FROM notes WHERE id = ${noteId} AND space_id = ${spaceId} AND NOT is_deleted`;
   if (!inSpace[0]) return null;
   if (inSpace[0].user_id === userId) return 'owner';
   const sa = await spaceAccess(userId, spaceId);
   if (!sa) return null;
+  if (inSpace[0].level === 'view') return 'view'; // shared with the team "can view": only the author edits
   return can('space.write', sa.org, sa.role) ? 'edit' : 'view';
+}
+
+/** A note shared into a Team with "can view" may be changed by its author only. */
+export async function teamViewOnly(userId: string, noteId: string, spaceId: string): Promise<boolean> {
+  const r = await prisma.$queryRaw<{ user_id: string; level: string | null }[]>`SELECT user_id, meta -> 'teamShare' ->> 'level' AS level FROM notes WHERE id = ${noteId} AND space_id = ${spaceId}`;
+  return !!r[0] && r[0].level === 'view' && r[0].user_id !== userId;
 }
 
 /** Adds owner / access / everyone / sharedCount to notes read from an Office. Notes outside an Office are left as they are. */

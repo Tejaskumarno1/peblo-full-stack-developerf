@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
+import { listFolders, memberFolder } from '../controllers/teamShare.js';
 
 /* Workspaces: the spaces a person can switch between, and creating an organization or a team. Tables: 035_workspaces_expand.sql. */
 const router = Router();
@@ -119,5 +120,9 @@ router.post('/orgs/:orgId/spaces', async (req, res) => {
   await audit(req.params.orgId, userId, 'space.created', spaceId, { name, kind });
   res.status(201).json({ id: spaceId });
 });
+
+/** "Shared by members" (mockups T03, T04): a folder per member who shared a note into this team. */
+router.get('/:spaceId/shared', listFolders);
+router.get('/:spaceId/shared/:userId', memberFolder);
 
 export default router;

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { can, spaceAccess } from './access.js';
-import { hiddenNoteIds, isOffice, noteLevel } from './noteAccess.js';
+import { hiddenNoteIds, isOffice, noteLevel, teamViewOnly } from './noteAccess.js';
 
 /**
  * Who a request may read and write for. Phase 0 of the workspaces plan: every controller asks this one helper instead of
@@ -46,7 +46,11 @@ export async function noteScope(req: Request, res: Response, need: 'read' | 'wri
     res.status(403).json({ error: need === 'read' ? 'No access.' : 'You can read this space but not change it.' });
     return null;
   }
-  if (opts.tasks || !(await isOffice(raw))) return { spaceId: raw };
+  if (opts.tasks || !(await isOffice(raw))) {
+    const id = typeof req.params?.id === 'string' ? req.params.id : '';
+    if (!opts.tasks && id && need === 'write' && (await teamViewOnly(user.id, id, raw))) { res.status(403).json({ error: 'This note is shared with the team to read only.', code: 'view_only' }); return null; }
+    return { spaceId: raw };
+  }
   const noteId = typeof req.params?.id === 'string' ? req.params.id : '';
   if (noteId) {
     const lv = await noteLevel(user.id, noteId, raw);

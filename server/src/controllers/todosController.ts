@@ -1,3 +1,4 @@
+﻿import { syncDoneTag } from '../utils/doneTag.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
 import { seeable } from '../utils/noteAccess.js';
@@ -70,7 +71,7 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-// GET /todos/today — Tasks due today + overdue, sorted by priority
+// GET /todos/today â€” Tasks due today + overdue, sorted by priority
 export async function getTodayTodos(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
@@ -116,7 +117,7 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
   }
 }
 
-// GET /todos/range?from=...&to=... — Tasks in a date range (for Calendar)
+// GET /todos/range?from=...&to=... â€” Tasks in a date range (for Calendar)
 export async function getTodosRange(req: Request, res: Response, next: NextFunction) {
   try {
     const own = await noteScope(req, res, 'read', { tasks: true });
@@ -210,6 +211,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    await syncDoneTag((todo as any).noteId);
     if (base.assigneeId && base.assigneeId !== userId) await notifyUsers(req.app, [base.assigneeId], { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
 
     res.status(201).json({ todo });
@@ -335,6 +337,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    for (const n of new Set([updatedTodo.noteId, todo.noteId])) await syncDoneTag(n);
 
     res.json({ todo: updatedTodo });
   } catch (error) {
@@ -375,6 +378,7 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    await syncDoneTag(todo.noteId);
 
     res.json({ success: true });
   } catch (error) {
