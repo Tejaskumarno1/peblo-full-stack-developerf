@@ -1,0 +1,61 @@
+/* Team sharing (mockups T01 to T07): the share dialog, "Shared by members", and the Done tag on a shared note. Soft Studio tokens only. */
+.ts-cap { font: 700 11px var(--s-body); letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); margin: 14px 0 6px; }
+.ts-people { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--s-chip-solid); color: var(--s-fg2); font-size: 13px; }
+.ts-toggle { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 6px; cursor: pointer; }
+.ts-toggle input { margin-top: 3px; accent-color: var(--s-accent); width: 16px; height: 16px; }
+.ts-toggle b { display: block; font-size: 14px; color: var(--s-fg); }
+.ts-toggle small { color: var(--s-fg3); font-size: 12.5px; }
+.ts-tasks { display: grid; gap: 6px; margin: 6px 0 4px; }
+.ts-task { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 10px; border: 1px solid var(--s-line); border-radius: 12px; background: var(--s-surface); }
+.ts-task i { width: 14px; height: 14px; border: 2px solid var(--s-dash); border-radius: 5px; flex: none; }
+.ts-task input { flex: 1; min-width: 0; border: 0; background: transparent; font: 500 14px var(--s-body); color: var(--s-fg); padding: 6px 0; outline: none; }
+.ts-task button { border: 0; background: transparent; color: var(--s-fg3); cursor: pointer; padding: 4px; border-radius: 8px; }
+.ts-add { justify-self: start; border: 1.5px dashed var(--s-dash); background: transparent; border-radius: 999px; padding: 5px 12px; font: 600 12.5px var(--s-body); color: var(--s-fg2); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.ts-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--s-line); border-radius: 12px; background: var(--s-surface); margin: 8px 0; color: var(--s-fg3); }
+.ts-search input { flex: 1; border: 0; background: transparent; font: 500 14px var(--s-body); color: var(--s-fg); outline: none; }
+.ts-pick { max-height: 300px; overflow: auto; }
+
+.ts-page { max-width: 980px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-left, 0px)) 120px; font-family: var(--s-body); color: var(--s-fg); }
+.ts-page h1 { font: 700 28px var(--s-display); margin: 0; text-wrap: balance; }
+.ts-page p { color: var(--s-fg2); margin: 4px 0 0; }
+.ts-top { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 16px; }
+.ts-primary { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; background: var(--s-accent); color: var(--s-on-accent); font: 700 14px var(--s-body); padding: 10px 18px; cursor: pointer; box-shadow: var(--s-soft-shadow); }
+.ts-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.ts-chips button { border: 1px solid var(--s-line); background: var(--s-chip); color: var(--s-fg2); border-radius: 999px; padding: 6px 14px; font: 600 13px var(--s-body); cursor: pointer; }
+.ts-chips button.on { background: var(--s-fg); color: var(--s-bg); border-color: var(--s-fg); }
+.ts-chips small { opacity: .7; margin-left: 4px; }
+.ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.ts-card { text-align: left; display: grid; gap: 8px; align-content: start; border: 1px solid var(--s-line); background: var(--s-surface); border-radius: 20px; padding: 16px; cursor: pointer; box-shadow: var(--s-soft-shadow); font-family: inherit; color: inherit; transition: transform .15s, box-shadow .15s; }
+.ts-card:hover { transform: translateY(-2px); box-shadow: var(--s-card-shadow); }
+.ts-card b { font: 700 16px var(--s-display); }
+.ts-card small { color: var(--s-fg3); font-size: 12.5px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ts-card-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ts-card-chips em, .ts-tag { font-style: normal; font: 700 11.5px var(--s-body); border-radius: 999px; padding: 3px 9px; background: var(--s-chip-solid); color: var(--s-fg2); display: inline-flex; gap: 4px; align-items: center; }
+.ts-card-chips em.done, .ts-tag.done { background: var(--s-mint); color: #1B5E3A; }
+.ts-tag.todo { background: var(--s-butter); color: #5A4300; }
+.ts-av { display: inline-grid; place-items: center; border-radius: var(--s-blob); font-style: normal; font-weight: 800; color: var(--s-fg); font-family: var(--s-display); flex: none; }
+.ts-back { border: 0; background: transparent; color: var(--s-fg2); font: 600 13px var(--s-body); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; padding: 4px 0; margin-bottom: 10px; }
+.ts-profile { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
+.ts-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ts-row { width: 100%; display: flex; justify-content: space-between; gap: 16px; align-items: center; text-align: left; border: 1px solid var(--s-line); background: var(--s-surface); border-radius: 16px; padding: 14px 16px; cursor: pointer; font-family: inherit; color: inherit; box-shadow: var(--s-soft-shadow); }
+.ts-row-main { display: grid; gap: 3px; min-width: 0; }
+.ts-row-main b { font: 700 15px var(--s-display); }
+.ts-row-main small { color: var(--s-fg3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ts-row-meta { display: grid; gap: 6px; justify-items: end; flex: none; }
+.ts-row-meta small { color: var(--s-fg3); font-size: 12px; }
+.ts-bar { width: 110px; height: 6px; border-radius: 999px; background: var(--s-chip-solid); overflow: hidden; }
+.ts-bar i { display: block; height: 100%; background: var(--s-local); border-radius: 999px; }
+.ts-none { color: var(--s-fg3); padding: 18px 4px; list-style: none; }
+.ts-empty { max-width: 520px; margin: 60px auto; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.ts-empty h2 { font: 700 24px var(--s-display); margin: 6px 0 0; }
+.ts-steps { text-align: left; color: var(--s-fg2); margin: 10px 0; padding-left: 22px; display: grid; gap: 6px; }
+.ts-teams { display: grid; gap: 6px; width: 100%; }
+.ts-toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); display: inline-flex; gap: 8px; align-items: center; z-index: 80; }
+
+/* the shared-note strip (T05, T06) */
+.ts-strip { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 14px; border-radius: 16px; background: var(--s-chip-solid); font: 500 13px var(--s-body); color: var(--s-fg2); }
+.ts-strip b { color: var(--s-fg); }
+.ts-strip .ts-bar { width: 90px; }
+.ts-strip.done { background: var(--s-mint); color: #1B5E3A; }
+@media (max-width: 560px) { .ts-row { flex-direction: column; align-items: flex-start; } .ts-row-meta { justify-items: start; } }
+.ts-menu-hot { background: var(--s-accent-soft) !important; color: var(--s-accent-ink) !important; font-weight: 700; }

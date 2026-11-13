@@ -27,6 +27,7 @@ export const notesAPI = {
   daily: (date) => api.post('/notes/daily', { date }),
   move: (id, to, space) => api.post(`/notes/${id}/move`, { to }, space !== undefined ? { headers: { 'x-peblo-space': space || 'personal' } } : undefined),
   copy: (id, to) => api.post(`/notes/${id}/copy`, { to }),
+  teamShare: (id, data) => api.post(`/notes/${id}/team-share`, data, { headers: { 'x-peblo-space': 'personal' } }),
   create: (data) => api.post('/notes', data),
   update: (id, data) => api.patch(`/notes/${id}`, data),
   // Without { permanent: true } a note is only moved to the trash (and a repeat call on a trashed note does nothing).
@@ -165,6 +166,8 @@ export const calSyncAPI = {
 export const workspacesAPI = {
   list: () => api.get('/workspaces'),
   createOrg: (data) => api.post('/workspaces/orgs', data),
+  sharedFolders: (spaceId) => api.get(`/workspaces/${spaceId}/shared`),
+  sharedFolder: (spaceId, userId) => api.get(`/workspaces/${spaceId}/shared/${userId}`),
   createSpace: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/spaces`, data),
   teamRange: (from, to) => api.get('/workspaces/team-range', { params: { from, to, tz: Intl.DateTimeFormat().resolvedOptions().timeZone } }),
   announcements: (spaceId) => api.get(`/workspaces/spaces/${spaceId}/announcements`),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Check, ChevronDown, Plus, User, Users, Building2, X } from 'lucide-react';
+import { Check, ChevronDown, FolderOpen, Plus, User, Users, Building2, X } from 'lucide-react';
 import { workspacesAPI } from '../api';
 import { getSpace, setSpace, SPACE_EVENT } from '../api/space';
 import './spaces.css';
@@ -69,6 +69,7 @@ export function SpacePill() {
   const { data } = useWorkspaces();
   const current = useCurrentSpace();
   const switchTo = useSwitchSpace();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(null);
   const ref = useRef(null);
@@ -121,6 +122,7 @@ export function SpacePill() {
           {offices.length > 0 && <div className="s-space-cap">Office</div>}
           {offices.map(row)}
           <div className="s-space-sep" />
+          {teams.length > 0 && <button type="button" className="s-space-row plain" data-testid="space-shared" onClick={() => { setOpen(false); if (!here || here.kind !== 'team') switchTo(teams[0].id); navigate('/team-shared'); }}><FolderOpen size={15} /> Shared by members</button>}
           <button type="button" className="s-space-row plain" onClick={() => { setOpen(false); setCreating(orgs.filter((o) => o.role === 'owner' || o.role === 'admin' || o.role === 'member')); }}><Plus size={15} /> Create a team</button>
         </div>
       )}

@@ -3,11 +3,13 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
+import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
 import MoveNote from './MoveNote';
+import ShareToTeam, { useShareTargets } from './ShareToTeam';
+import TeamNoteStrip from './TeamNoteStrip';
 import { useSpaceRole, useCurrentSpace, useWorkspaces } from './spaces';
 import { AccessChip, NoAccess } from './OfficeAccess';
 import CompareBox from '../components/CompareBox';
@@ -98,6 +100,8 @@ export default function SoftNotes() {
   const [fsp, setFsp] = useFocusPrefs(); // full-screen choices (width, text size, theme, tools), kept per person in this browser
   
   const [shareOpen, setShareOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const shareTargets = useShareTargets();
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
   const [editorKey, setEditorKey] = useState('none');
@@ -653,7 +657,8 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions'}</button>}
-<button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
+{!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
@@ -665,6 +670,7 @@ export default function SoftNotes() {
     <div className={`soft-page s-notes${focus ? ' focus' : ''}${phone ? (routeId ? ' ph-note' : ' ph-list') : ''}`} data-width={wide}>
       {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
+      {teamOpen && doc && !doc.isDraft && <ShareToTeam noteId={doc.id} title={doc.title} onClose={() => setTeamOpen(false)} onDone={({ team, tasks }) => flash(`Shared with ${team.name}${tasks ? ` with ${tasks} task${tasks === 1 ? '' : 's'}` : ''}`)} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
       <aside className={`s-notes-list np lay-${layout}${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
@@ -825,6 +831,7 @@ export default function SoftNotes() {
           <>
             <div className="ph-back"><button type="button" className="np-ib" aria-label="Back to notes" onClick={() => { forceSaveRef.current(); navigate('/notes'); }}><ChevronLeft size={18} strokeWidth={1.9} /></button><b>Notes</b></div>
             <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
+            {doc?.meta?.teamShare && !doc.isDraft && <TeamNoteStrip doc={doc} />}
             <div className="s-note-bar s-note-head">
               <label htmlFor="s-note-title" className="s-sr">Title</label>
               <textarea
