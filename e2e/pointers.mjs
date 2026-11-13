@@ -82,21 +82,20 @@ try {
   check('11 a pointer goes away when its owner leaves the note', await until(async () => (await ptr(page, 'Anna').count()) === 0 && (await ptr(c, 'Anna').count()) === 0 && (await edge(c, 'Anna').count()) === 0));
 
   // share page: reading preferences and the outline
-  await c.locator('[data-testid="toc-toggle"]').waitFor({ timeout: 8000 });
+  await c.locator('.pb-shared .toc').waitFor({ timeout: 8000 });
   const tocW = async () => (await c.locator('.pb-shared .toc').boundingBox())?.width || 0;
   const w0 = await tocW();
-  await c.locator('[data-testid="toc-toggle"]').click();
+  await c.keyboard.press('[');
   check('12 the outline unpins', await until(async () => (await c.locator('.pb-shared .toc').count()) === 0), `${w0}`);
   const artW0 = (await c.locator('.pb-shared article').boundingBox()).width;
   check('13 and the page gets the room', artW0 > 0);
   await c.reload();
   await ready(c);
   check('14 the choice is remembered after a reload', (await c.locator('.pb-shared .toc').count()) === 0);
-  await c.locator('[data-testid="rail-outline"]').click();
-  await c.locator('[data-testid="fly-outline"] [data-testid="toc-toggle"]').click();
+  await c.keyboard.press('[');
   check('15 pinning the outline brings it back', await until(async () => (await tocW()) > 150));
 
-  await c.locator('[data-testid="look-btn"]').click();
+  await c.locator('.pb-shared .toc').getByRole('button', { name: 'Look' }).click();
   const fs0 = await c.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pb-shared .bn-editor')).zoom || '1'));
   await c.locator('[data-testid="look-size-l"]').click();
   const fs1 = await c.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pb-shared .bn-editor')).zoom || '1'));
