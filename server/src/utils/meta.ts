@@ -53,7 +53,7 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     },
     label: (v) => ((LABELS as readonly string[]).includes(v) ? v : undefined),
     // board column: "doing" and "review"; a task with neither is To do, a completed one is Done
-    status: (v) => (v === 'doing' || v === 'review' ? v : undefined),
+    status: (v) => (typeof v === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(v) && v !== 'todo' && v !== 'done' ? v : undefined),
     // who sees a team task: nothing = the whole team, "me" = only the creator and the assignees, "people" = those plus the chosen viewers
     visibility: (v) => (v === 'me' || v === 'people' ? v : undefined),
     viewers: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 50) : undefined),

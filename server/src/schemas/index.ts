@@ -46,7 +46,7 @@ export const todoSchemas = {
       noteId: z.string().nullable().optional(),
       assigneeId: z.string().nullable().optional(),
       assignees: z.array(z.string()).max(10).optional(),
-      column: z.enum(['todo', 'doing', 'review', 'done']).optional(),
+      column: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional(),
       meta: z.record(z.string(), z.any()).optional()
     })
   },
@@ -64,7 +64,7 @@ export const todoSchemas = {
       noteId: z.string().nullable().optional(),
       assigneeId: z.string().nullable().optional(),
       assignees: z.array(z.string()).max(10).optional(),
-      column: z.enum(['todo', 'doing', 'review', 'done']).optional(),
+      column: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional(),
       meta: z.record(z.string(), z.any()).optional()
     })
   }

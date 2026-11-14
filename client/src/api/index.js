@@ -77,6 +77,8 @@ export const dashboardAPI = {
 export const todosAPI = {
   getAll: (params) => api.get('/todos', { params }),
   getToday: () => api.get('/todos/today'),
+  board: () => api.get('/todos/board'),
+  saveBoard: (columns) => api.put('/todos/board', { columns }),
   thread: (id) => api.get(`/todos/${id}/thread`),
   comment: (id, body, mentions = []) => api.post(`/todos/${id}/comments`, { body, mentions }),
   requestReview: (id, to, note) => api.post(`/todos/${id}/review`, { to, note }),

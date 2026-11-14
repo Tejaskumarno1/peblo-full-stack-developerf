@@ -19,15 +19,16 @@ export function taskVisible(t: TaskLike, userId: string): boolean {
 }
 
 /** The board column of a task: done wins, then the stored status, else To do. */
-export function columnOf(t: { completed: boolean; meta?: any }): 'todo' | 'doing' | 'review' | 'done' {
+export const COLUMN_KEY = /^[a-z][a-z0-9_]{0,31}$/;
+export function columnOf(t: { completed: boolean; meta?: any }): string {
   if (t.completed) return 'done';
   const s = t.meta?.status;
-  return s === 'doing' || s === 'review' ? s : 'todo';
+  return typeof s === 'string' && COLUMN_KEY.test(s) && s !== 'todo' && s !== 'done' ? s : 'todo';
 }
 
 /** Moves a task to a column: the completed flag and meta.status stay in step. Returns the data and meta to save. */
-export function moveToColumn(col: 'todo' | 'doing' | 'review' | 'done', meta: any): { completed: boolean; meta: any } {
+export function moveToColumn(col: string, meta: any): { completed: boolean; meta: any } {
   const m = { ...(meta || {}) };
-  if (col === 'doing' || col === 'review') m.status = col; else delete m.status;
+  if (col !== 'todo' && col !== 'done' && COLUMN_KEY.test(col)) m.status = col; else delete m.status;
   return { completed: col === 'done', meta: m };
 }

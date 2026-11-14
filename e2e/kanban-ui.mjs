@@ -50,7 +50,8 @@ try {
   // assign from the board
   const before = await p.getByTestId('kb-avatar').count();
   await p.getByTestId('kb-assign').first().click();
-  await p.getByTestId('kb-assign-person').first().click();
+  await p.getByTestId('assign-person').first().click();
+  await p.getByTestId('assign-done').click();
   await p.waitForTimeout(1200);
   ok((await p.getByTestId('kb-avatar').count()) === before + 1, 'assigning from a card shows an avatar on it', `${before} -> ${await p.getByTestId('kb-avatar').count()}`);
   const bar = await p.locator('.s-addbar').boundingBox();

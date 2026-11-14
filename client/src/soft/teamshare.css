@@ -1,4 +1,4 @@
-﻿/* Team sharing (mockups T01 to T07): the share dialog, "Shared by members", and the Done tag on a shared note. Soft Studio tokens only. */
+/* Team sharing (mockups T01 to T07): the share dialog, "Shared by members", and the Done tag on a shared note. Soft Studio tokens only. */
 .ts-cap { font: 700 11px var(--s-body); letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); margin: 14px 0 6px; }
 .ts-people { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--s-chip-solid); color: var(--s-fg2); font-size: 13px; }
 .ts-toggle { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 6px; cursor: pointer; }
@@ -182,7 +182,7 @@
 .soft .kb-col.over { box-shadow:inset 0 0 0 3px #c4441c; }
 .soft .kb-head { display:flex; align-items:center; justify-content:space-between; margin:14px 14px 12px; height:36px; padding:0 14px; border-radius:999px; font-weight:800; flex:none; }
 .soft .kb-head h2 { margin:0; font:inherit; }
-.soft .kb-head.todo { background:var(--kb-todo); } .soft .kb-head.doing { background:var(--kb-doing); } .soft .kb-head.review { background:var(--kb-review); } .soft .kb-head.done { background:var(--kb-done); }
+
 .soft .kb-n { display:inline-flex; align-items:center; height:26px; padding:0 10px; border-radius:999px; background:rgba(255,255,255,.7); color:#2B2320; font-size:12px; font-weight:700; }
 .soft .kb-cards { padding:0 14px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; min-height:0; flex:1; }
 .soft .kb-card { background:var(--kb-card); border-radius:20px; box-shadow:0 6px 16px rgba(120,80,40,.10); padding:14px 16px; display:grid; gap:9px; cursor:grab; }
@@ -226,3 +226,45 @@
 .kb-menu.pick button:hover, .kb-menu.pick button[aria-checked=true] { background:rgba(120,80,40,.08); }
 .kb-menu.pick .kb-a { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:800; color:#2B2320; margin:0; }
 .kb-menu.pick button svg { margin-left:auto; }
+
+/* Custom columns, collapsing, assign pop-up, board settings */
+.soft .kb { --kb-sky:#D3E6FF; --kb-peach:#FFD8C2; }
+.theme-dark .soft .kb { --kb-sky:#162739; --kb-peach:#3A261E; }
+.soft .tone-sand { background:var(--kb-todo); } .soft .tone-butter { background:var(--kb-doing); } .soft .tone-lilac { background:var(--kb-review); } .soft .tone-mint { background:var(--kb-done); } .soft .tone-sky { background:var(--kb-sky); } .soft .tone-peach { background:var(--kb-peach); }
+.soft .kb-board { overflow-x:auto; overflow-y:hidden; transition:grid-template-columns .2s ease; }
+.soft .kb-head-r { display:inline-flex; align-items:center; gap:6px; }
+.soft .kb-fold { display:grid; place-items:center; width:26px; height:26px; border:0; border-radius:50%; background:rgba(255,255,255,.55); color:inherit; cursor:pointer; padding:0; }
+.soft .kb-col.strip { padding:0; }
+.soft .kb-strip { width:100%; height:100%; min-height:200px; border:0; display:flex; flex-direction:column; align-items:center; gap:12px; padding:14px 0; color:inherit; font:inherit; font-weight:800; cursor:pointer; border-radius:26px; }
+.soft .kb-vert { writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; }
+.soft .kb-card.dragging { opacity:.45; }
+.soft .kb-pill.icon { width:36px; padding:0; justify-content:center; text-decoration:none; color:inherit; }
+.ad { display:flex; flex-direction:column; gap:12px; padding-top:4px; min-width:min(380px, 80vw); }
+.ad-search { display:flex; align-items:center; gap:8px; padding:0 12px; height:42px; border-radius:999px; background:var(--s-chip, #F5ECDD); }
+.ad-search input { flex:1; border:0; background:transparent; font:inherit; color:inherit; outline:none; }
+.ad-chosen { display:flex; flex-wrap:wrap; gap:6px; }
+.ad-pill { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 10px 0 4px; border-radius:999px; border:0; background:var(--s-chip, #F5ECDD); color:inherit; font:700 12px inherit; font-family:inherit; cursor:pointer; }
+.ad-list { list-style:none; margin:0; padding:0; max-height:300px; overflow:auto; display:flex; flex-direction:column; gap:2px; }
+.ad-list button { width:100%; display:flex; align-items:center; gap:10px; padding:8px 10px; border:0; border-radius:14px; background:transparent; color:inherit; font:600 14px inherit; font-family:inherit; text-align:left; cursor:pointer; }
+.ad-list button:hover, .ad-list button.on { background:var(--s-chip, #F5ECDD); }
+.ad-name { flex:1; } .ad-name em { margin-left:8px; font-style:normal; font-size:12px; opacity:.6; }
+.ad-tick { width:18px; display:grid; place-items:center; }
+.ad-none { padding:12px; opacity:.7; }
+.ad .kb-a { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:800; color:#2B2320; border:0; margin:0; }
+.bs { display:flex; flex-direction:column; gap:12px; }
+.bs-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.bs-row { display:flex; align-items:center; gap:10px; }
+.bs-row input, .bs-add input, .bs-row select { flex:1; height:38px; padding:0 12px; border-radius:12px; border:1px solid var(--s-line, #EADFD0); background:transparent; color:inherit; font:inherit; min-width:0; }
+.bs-row select { flex:none; width:100px; }
+.bs-dot { width:18px; height:18px; border-radius:6px; flex:none; border:1px solid rgba(0,0,0,.08); }
+.bs-act { display:inline-flex; gap:6px; align-items:center; }
+.bs-act button { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; border:1px solid var(--s-line, #EADFD0); background:transparent; color:inherit; cursor:pointer; }
+.bs-act button:disabled { opacity:.4; cursor:default; }
+.bs-add { display:flex; gap:8px; }
+.bs-btn { display:inline-flex; align-items:center; gap:6px; height:38px; padding:0 16px; border-radius:999px; border:1px solid var(--s-line, #EADFD0); background:transparent; color:inherit; font:700 13px inherit; font-family:inherit; cursor:pointer; }
+.bs-btn.primary { background:var(--s-ink, #2B2320); color:var(--s-bg, #fff); border-color:transparent; }
+.bs-btn:disabled { opacity:.5; cursor:default; }
+.bs-save { display:flex; align-items:center; gap:10px; }
+.bs-note { margin:0; font-size:13px; opacity:.7; }
+.bs small { opacity:.65; }
+.bs .tone-sand { background:#F5ECDD; } .bs .tone-butter { background:#FFE594; } .bs .tone-lilac { background:#E4DAFB; } .bs .tone-mint { background:#BFE8CF; } .bs .tone-sky { background:#D3E6FF; } .bs .tone-peach { background:#FFD8C2; }

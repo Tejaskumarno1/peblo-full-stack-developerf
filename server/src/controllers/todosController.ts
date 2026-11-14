@@ -1,4 +1,4 @@
-﻿import { syncDoneTag } from '../utils/doneTag.js';
+import { syncDoneTag } from '../utils/doneTag.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
 import { seeable } from '../utils/noteAccess.js';
@@ -8,7 +8,7 @@ import prisma from '../db.js';
 import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
 import { isValidRecurrence, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
-import { taskVisible, assigneesOf, moveToColumn, columnOf } from '../utils/taskAccess.js';
+import { taskVisible, assigneesOf, moveToColumn, columnOf, COLUMN_KEY } from '../utils/taskAccess.js';
 import { logActivity } from './teamTalk.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
@@ -74,7 +74,7 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-// GET /todos/today â€” Tasks due today + overdue, sorted by priority
+// GET /todos/today — Tasks due today + overdue, sorted by priority
 export async function getTodayTodos(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
@@ -120,7 +120,7 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
   }
 }
 
-// GET /todos/range?from=...&to=... â€” Tasks in a date range (for Calendar)
+// GET /todos/range?from=...&to=... — Tasks in a date range (for Calendar)
 export async function getTodosRange(req: Request, res: Response, next: NextFunction) {
   try {
     const own = await noteScope(req, res, 'read', { tasks: true });
@@ -195,8 +195,8 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       if (wanted.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
       if (wanted.length) { cleanMeta.assignees = [...new Set(wanted)].slice(0, 10); base.assigneeId = cleanMeta.assignees[0]; } else delete cleanMeta.assignees;
       if (Array.isArray(cleanMeta.viewers)) cleanMeta.viewers = cleanMeta.viewers.filter((v: string) => members.includes(v));
-      if (typeof req.body.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(req.body.column)) {
-        const mv = moveToColumn(req.body.column as any, cleanMeta);
+      if (typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column)) {
+        const mv = moveToColumn(req.body.column, cleanMeta);
         base.completed = mv.completed;
         for (const k of Object.keys(cleanMeta)) delete cleanMeta[k];
         Object.assign(cleanMeta, mv.meta);
@@ -325,8 +325,8 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     {
       // board columns: Done is the completed flag, In progress and In review are meta.status; the two stay in step
       const m: any = { ...(((data.meta ?? todo.meta) || {}) as any) };
-      const col = typeof req.body.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(req.body.column) ? req.body.column : null;
-      if (col) { const mv = moveToColumn(col as any, m); data.completed = mv.completed; data.meta = mv.meta; }
+      const col = typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column) ? req.body.column : null;
+      if (col) { const mv = moveToColumn(col, m); data.completed = mv.completed; data.meta = mv.meta; }
       else if (data.completed === true && m.status) { delete m.status; data.meta = m; }
       else if (data.completed === undefined && (data.meta as any)?.status && todo.completed) data.completed = false;
     }
@@ -353,7 +353,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
           await logActivity(updatedTodo.id, sp, userId, colAfter === 'done' ? 'done' : 'status', colAfter);
           const w: string[] = Array.isArray((updatedTodo.meta as any)?.watchers) ? (updatedTodo.meta as any).watchers : [];
           const others = [...new Set([todo.userId, ...w])].filter((u) => u !== userId);
-          if (others.length) await notifyUsers(req.app, others, { kind: colAfter === 'done' ? 'done' : 'status', title: updatedTodo.text, body: colAfter === 'done' ? 'Marked done' : colAfter === 'doing' ? 'Now in progress' : colAfter === 'review' ? 'Now in review' : 'Back to To do', from: await nameOf(userId), spaceId: sp, todoId: updatedTodo.id });
+          if (others.length) await notifyUsers(req.app, others, { kind: colAfter === 'done' ? 'done' : 'status', title: updatedTodo.text, body: colAfter === 'done' ? 'Marked done' : colAfter === 'doing' ? 'Now in progress' : colAfter === 'review' ? 'Now in review' : colAfter === 'todo' ? 'Back to To do' : 'Moved to another column', from: await nameOf(userId), spaceId: sp, todoId: updatedTodo.id });
         }
         const aBefore = assigneesOf(todo as any); const aAfter = assigneesOf(updatedTodo as any);
         if (aAfter.some((a) => !aBefore.includes(a))) await logActivity(updatedTodo.id, sp, userId, 'assign', aAfter.join(','));
@@ -463,7 +463,7 @@ export async function bulkTodos(req: Request, res: Response, next: NextFunction)
     for (const t of todos) {
       if (!taskVisible(t as any, userId)) continue;
       const data: any = {}; let m: any = { ...((t.meta as any) || {}) };
-      if (typeof set.column === 'string' && ['todo', 'doing', 'review', 'done'].includes(set.column)) { const mv = moveToColumn(set.column as any, m); data.completed = mv.completed; m = mv.meta; }
+      if (typeof set.column === 'string' && COLUMN_KEY.test(set.column)) { const mv = moveToColumn(set.column, m); data.completed = mv.completed; m = mv.meta; }
       if (list) { if (list.length) m.assignees = list.slice(0, 10); else delete m.assignees; data.assigneeId = list[0] || null; }
       if (['low', 'medium', 'high'].includes(set.priority)) data.priority = set.priority;
       if (set.visibility === 'me' || set.visibility === 'people' || set.visibility === 'team') { if (set.visibility === 'team') { delete m.visibility; delete m.viewers; } else m.visibility = set.visibility; }

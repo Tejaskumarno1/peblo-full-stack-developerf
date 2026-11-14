@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Search, User, Users, Building2, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop, Shield, KeyRound, AlignLeft, Download } from 'lucide-react';
+import { Search, User, Users, Building2, Palette, PenLine, Sparkles, Plug, Link2, Archive, Keyboard, Info, Check, Bell, Laptop, Shield, KeyRound, AlignLeft, Download, Columns3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SaveCtx, isDesktopApp } from './settings/ui';
 import { ProfileSection, AccountsSection, AppearanceSection, NotesSection } from './settings/sections1';
@@ -8,6 +8,7 @@ import { OrgsPage as OrganizationsSection, MembersPage, TeamsPage, PolicyPage, A
 import { AISection, ConnectSection, SharedSection, DataSection, ShortcutsSection, AboutSection, NotificationsSection, SystemSection } from './settings/sections2';
 import './soft.css';
 import './soft2.css';
+import BoardSection from './settings/BoardSection';
 import './settingsSkins.css';
 
 const GROUPS = [
@@ -19,6 +20,9 @@ const GROUPS = [
   { label: 'Look and feel', items: [
     { id: 'appearance', name: 'Appearance', icon: Palette, view: AppearanceSection, words: 'style theme dark light midnight compact soft river orbit colours' },
     { id: 'notes', name: 'Notes and calendar', icon: PenLine, view: NotesSection, words: 'text size font week monday sunday voice' },
+  ] },
+  { label: 'Tasks', items: [
+    { id: 'board', name: 'Board columns', icon: Columns3, view: BoardSection, words: 'kanban board column status to do in progress review interview done add custom stage' },
   ] },
   { label: 'Reminders', items: [
     { id: 'notifications', name: 'Notifications', icon: Bell, view: NotificationsSection, words: 'reminder meeting popup alert notification email sound join' },
@@ -49,7 +53,7 @@ const ORG_ITEMS = [
   { id: 'org-audit', name: 'Audit log', icon: AlignLeft, view: AuditPage, admin: true, words: 'audit log history who did what', sub: () => 'Who did what, and when.' },
   { id: 'org-export', name: 'Export and seats', icon: Download, view: ExportPage, admin: true, words: 'export seats plan trial download organization', sub: () => 'Take everything out, and see what your plan covers.' },
 ];
-const TONES = { Organization: 'sky', You: 'mint', 'Look and feel': 'butter', Reminders: 'sky', AI: 'lilac', Connections: 'sky', 'Your data': 'peach', 'This computer': 'line', Help: 'line' };
+const TONES = { Organization: 'sky', You: 'mint', 'Look and feel': 'butter', Tasks: 'lilac', Reminders: 'sky', AI: 'lilac', Connections: 'sky', 'Your data': 'peach', 'This computer': 'line', Help: 'line' };
 const SUBS = {
   profile: 'How you appear in Peblo and in notes you share.',
   accounts: 'Who you are, and which account Peblo is using right now.',
@@ -57,6 +61,7 @@ const SUBS = {
   appearance: 'Make Peblo look the way you like to work.',
   notes: 'Writing, calendar and voice.',
   notifications: 'Heads-up before meetings, and pop-up alerts.',
+  board: 'Add, rename and order the columns of your Kanban board.',
   system: 'How the Peblo app behaves on this computer.',
   ai: 'Choose where Peblo\'s AI runs. Your notes only leave this computer when you pick the cloud.',
   connect: 'Let other AI apps work with your Peblo, safely.',

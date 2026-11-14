@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getTodos, getTodayTodos, getTodosRange, createTodo, updateTodo, deleteTodo, bulkTodos } from '../controllers/todosController.js';
+import { getBoard, putBoard } from '../controllers/boardController.js';
 import { getThread, postComment, requestReview } from '../controllers/teamTalk.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -9,6 +10,8 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get('/board', getBoard);
+router.put('/board', putBoard);
 router.get('/', getTodos);
 router.get('/today', getTodayTodos);
 router.get('/range', getTodosRange);
