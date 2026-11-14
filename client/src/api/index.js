@@ -22,7 +22,7 @@ export const profileAPI = {
 
 export const notesAPI = {
   getAll: (params) => api.get('/notes', { params }),
-  get: (id) => api.get(`/notes/${id}`),
+  get: (id, opts) => api.get(`/notes/${id}`, opts && opts.deleted ? { params: { deleted: 1 } } : undefined),
   backlinks: (id) => api.get(`/notes/${id}/backlinks`),
   daily: (date) => api.post('/notes/daily', { date }),
   move: (id, to, space) => api.post(`/notes/${id}/move`, { to }, space !== undefined ? { headers: { 'x-peblo-space': space || 'personal' } } : undefined),

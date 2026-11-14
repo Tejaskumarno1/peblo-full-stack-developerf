@@ -457,7 +457,7 @@ export default function SoftNotes() {
   };
   const restoreVersion = async (v) => {
     await notesAPI.revertBackup(doc.id, v.id);
-    const { data } = await notesAPI.get(doc.id);
+    const { data } = await notesAPI.get(doc.id, { deleted: !!doc.isDeleted });
     open(data.note);
     refreshLists();
     queryClient.invalidateQueries({ queryKey: ['notes', 'backups', doc.id] });

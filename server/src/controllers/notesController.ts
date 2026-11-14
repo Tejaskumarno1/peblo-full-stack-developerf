@@ -367,7 +367,7 @@ export async function getNote(req: any, res: any, next: any) {
     const own = await noteScope(req, res, 'read');
     if (!own) return;
     const note = await prisma.note.findFirst({
-      where: { id: req.params.id, ...own },
+      where: { id: req.params.id, ...own, ...(req.query.deleted === '1' ? {} : { isDeleted: false }) },
       include: noteInclude
     });
 
