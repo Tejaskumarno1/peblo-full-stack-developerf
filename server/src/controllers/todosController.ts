@@ -8,7 +8,8 @@ import prisma from '../db.js';
 import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
 import { isValidRecurrence, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
-import { taskVisible, assigneesOf, moveToColumn } from '../utils/taskAccess.js';
+import { taskVisible, assigneesOf, moveToColumn, columnOf } from '../utils/taskAccess.js';
+import { logActivity } from './teamTalk.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
@@ -342,6 +343,21 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       const before = assigneesOf(todo as any); const after = assigneesOf(updatedTodo as any);
       const added = after.filter((a) => !before.includes(a) && a !== userId && a !== newAssignee);
       if (added.length) await notifyUsers(req.app, added, { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
+    }
+
+    if ((todo as any).spaceId) {
+      try {
+        const sp = (todo as any).spaceId as string;
+        const colBefore = columnOf(todo as any); const colAfter = columnOf(updatedTodo as any);
+        if (colBefore !== colAfter) {
+          await logActivity(updatedTodo.id, sp, userId, colAfter === 'done' ? 'done' : 'status', colAfter);
+          const w: string[] = Array.isArray((updatedTodo.meta as any)?.watchers) ? (updatedTodo.meta as any).watchers : [];
+          const others = [...new Set([todo.userId, ...w])].filter((u) => u !== userId);
+          if (others.length) await notifyUsers(req.app, others, { kind: colAfter === 'done' ? 'done' : 'status', title: updatedTodo.text, body: colAfter === 'done' ? 'Marked done' : colAfter === 'doing' ? 'Now in progress' : colAfter === 'review' ? 'Now in review' : 'Back to To do', from: await nameOf(userId), spaceId: sp, todoId: updatedTodo.id });
+        }
+        const aBefore = assigneesOf(todo as any); const aAfter = assigneesOf(updatedTodo as any);
+        if (aAfter.some((a) => !aBefore.includes(a))) await logActivity(updatedTodo.id, sp, userId, 'assign', aAfter.join(','));
+      } catch { /* activity is best effort */ }
     }
 
     if (startSeries && updatedTodo.deadline) {
