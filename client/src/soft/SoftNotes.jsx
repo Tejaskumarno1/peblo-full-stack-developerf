@@ -10,6 +10,7 @@ import ShareDialog from './ShareDialog';
 import MoveNote from './MoveNote';
 import ShareToTeam, { useShareTargets } from './ShareToTeam';
 import TeamNoteStrip from './TeamNoteStrip';
+import NoteTasks from './NoteTasks';
 import { useSpaceRole, useCurrentSpace, useWorkspaces } from './spaces';
 import { AccessChip, NoAccess } from './OfficeAccess';
 import CompareBox from '../components/CompareBox';
@@ -832,6 +833,7 @@ export default function SoftNotes() {
             <div className="ph-back"><button type="button" className="np-ib" aria-label="Back to notes" onClick={() => { forceSaveRef.current(); navigate('/notes'); }}><ChevronLeft size={18} strokeWidth={1.9} /></button><b>Notes</b></div>
             <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
             {doc?.meta?.teamShare && !doc.isDraft && <TeamNoteStrip doc={doc} />}
+      {doc && !doc.isDraft && <NoteTasks doc={doc} />}
             <div className="s-note-bar s-note-head">
               <label htmlFor="s-note-title" className="s-sr">Title</label>
               <textarea

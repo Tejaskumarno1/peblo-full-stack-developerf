@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Undo2, Redo2 } from 'lucide-react';
 import './bulk.css';
 
@@ -33,7 +33,7 @@ const DATES = [['today', 'Today'], ['tomorrow', 'Tomorrow'], ['weekend', 'This w
 const PRIOS = [['high', 'High'], ['medium', 'Normal'], ['low', 'Low']];
 
 /** The dark pill at the bottom while tasks are selected. */
-export function BulkBar({ count, lists = [], onDone, onDate, onMove, onTag, onPriority, onDelete, onCancel }) {
+export function BulkBar({ count, lists = [], people = [], me = null, onAssign, onStatus, onDone, onDate, onMove, onTag, onPriority, onDelete, onCancel }) {
   const [menu, setMenu] = useState(null);
   const [text, setText] = useState('');
   const pick = (fn) => (v) => { setMenu(null); setText(''); fn(v); };
@@ -43,6 +43,8 @@ export function BulkBar({ count, lists = [], onDone, onDate, onMove, onTag, onPr
       {menu && (
         <div className="s-bulk-menu" role="menu" aria-label={menu}>
           {menu === 'date' && DATES.map(([k, n]) => <button key={k} type="button" role="menuitem" onClick={() => pick(onDate)(k)}>{n}</button>)}
+          {menu === 'assign' && (<><button type="button" role="menuitem" onClick={() => pick(onAssign)('')}>Nobody</button>{people.map((p) => <button key={p.id} type="button" role="menuitem" data-testid="bulk-person" onClick={() => pick(onAssign)(p.id)}>{p.id === me ? 'Me' : p.name.split(' ')[0]}</button>)}</>)}
+          {menu === 'status' && [['todo', 'To do'], ['doing', 'In progress'], ['review', 'In review'], ['done', 'Done']].map(([k, n]) => <button key={k} type="button" role="menuitem" data-testid={`bulk-status-${k}`} onClick={() => pick(onStatus)(k)}>{n}</button>)}
           {menu === 'priority' && PRIOS.map(([k, n]) => <button key={k} type="button" role="menuitem" onClick={() => pick(onPriority)(k)}>{n}</button>)}
           {menu === 'move' && (
             <>
@@ -59,6 +61,8 @@ export function BulkBar({ count, lists = [], onDone, onDate, onMove, onTag, onPr
       <button type="button" aria-expanded={menu === 'date'} onClick={() => open('date')}>Date</button>
       <button type="button" aria-expanded={menu === 'move'} onClick={() => open('move')}>Move</button>
       <button type="button" aria-expanded={menu === 'tag'} onClick={() => open('tag')}>Tag</button>
+      {people.length > 0 && <button type="button" data-testid="bulk-assign" aria-expanded={menu === 'assign'} onClick={() => open('assign')}>Assign</button>}
+      {people.length > 0 && <button type="button" data-testid="bulk-status" aria-expanded={menu === 'status'} onClick={() => open('status')}>Status</button>}
       <button type="button" aria-expanded={menu === 'priority'} onClick={() => open('priority')}>Priority</button>
       <button type="button" className="del" onClick={onDelete}>Delete</button>
       <button type="button" className="x" onClick={onCancel} aria-label="Cancel selection">Cancel</button>
@@ -99,3 +103,4 @@ export function DeleteConfirm({ tasks, repeating, occurrences, onCancel, onConfi
     </div>
   );
 }
+

@@ -4,7 +4,7 @@ import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
 import { listFolders, memberFolder } from '../controllers/teamShare.js';
-import { getFeed, getWorkload, setAvailability } from '../controllers/teamTalk.js';
+import { getFeed, getWorkload, setAvailability, listTemplates, saveTemplate, deleteTemplate, getProjects, openTasksOf, handover } from '../controllers/teamTalk.js';
 
 /* Workspaces: the spaces a person can switch between, and creating an organization or a team. Tables: 035_workspaces_expand.sql. */
 const router = Router();
@@ -127,6 +127,12 @@ router.get('/:spaceId/shared', listFolders);
 router.get('/:spaceId/feed', getFeed);
 router.get('/:spaceId/workload', getWorkload);
 router.put('/:spaceId/availability', setAvailability);
+router.get('/:spaceId/templates', listTemplates);
+router.post('/:spaceId/templates', saveTemplate);
+router.delete('/:spaceId/templates/:id', deleteTemplate);
+router.get('/:spaceId/projects', getProjects);
+router.get('/:spaceId/people/:userId/open', openTasksOf);
+router.post('/:spaceId/handover', handover);
 router.get('/:spaceId/shared/:userId', memberFolder);
 
 export default router;

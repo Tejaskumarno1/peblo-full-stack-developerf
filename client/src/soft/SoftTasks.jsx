@@ -316,6 +316,14 @@ export default function SoftTasks() {
   const bTag = (tag, ids = sel) => bulk(`Tagged #${tag}`, ['tags'], (t) => ({ tags: [...new Set([...tagsOf(t), tag])] }), ids);
   const bPrio = (p, ids = sel) => bulk('Priority changed', ['priority'], () => ({ priority: p }), ids);
 
+  const bAssign = async (userId, ids = sel) => {
+    try { await Promise.all([...ids].map((id) => todosAPI.update(id, { assignees: userId ? [userId] : [], scope: 'this' }))); say(`${userId ? 'Assigned' : 'Unassigned'}: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
+    refresh();
+  };
+  const bStatus = async (col, ids = sel) => {
+    try { await Promise.all([...ids].map((id) => todosAPI.update(id, { column: col, scope: 'this' }))); say(`Status changed: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
+    refresh();
+  };
   const exitSelect = () => { setSelMode(false); setSel(new Set()); lastSel.current = null; };
   const toggleSel = (t, shift = false, ordered = []) => {
     setSel((s) => {
@@ -444,6 +452,8 @@ export default function SoftTasks() {
     const id = searchParams.get('task');
     const qq = searchParams.get('q');
     if (qq) setQ(qq);
+    const ll = searchParams.get('list');
+    if (ll) { setListSel(ll); setSearchParams({}, { replace: true }); return; }
     if (id) {
       if (!todos.length) { if (qq) setSearchParams({ task: id }, { replace: true }); return; }
       const t = todos.find((x) => x.id === id);
@@ -695,7 +705,7 @@ export default function SoftTasks() {
           ))}
         </div>
       )}
-      {selMode && sel.size > 0 && <BulkBar count={sel.size} lists={knownLists} onDone={() => bDone()} onDate={(k) => bDate(k)} onMove={(n) => bMove(n)} onTag={(t) => bTag(t)} onPriority={(p) => bPrio(p)} onDelete={() => setConfirmDel(true)} onCancel={exitSelect} />}
+      {selMode && sel.size > 0 && <BulkBar count={sel.size} lists={knownLists} people={team.canAssign ? team.people : []} me={team.me} onAssign={(u) => bAssign(u)} onStatus={(c) => bStatus(c)} onDone={() => bDone()} onDate={(k) => bDate(k)} onMove={(n) => bMove(n)} onTag={(t) => bTag(t)} onPriority={(p) => bPrio(p)} onDelete={() => setConfirmDel(true)} onCancel={exitSelect} />}
       <UndoRedo canUndo={hist.current.undo.length > 0 && !hist.current.undo.at(-1).expired} canRedo={hist.current.redo.length > 0 && !!hist.current.redo.at(-1).redo} label={hist.current.undo.at(-1)?.label?.toLowerCase() || ''} onUndo={undoLast} onRedo={redoLast} />
       {keys && <ShortcutSheet onClose={() => setKeys(false)} />}
       {confirmDel && <DeleteConfirm {...delStats()} onCancel={() => setConfirmDel(false)} onConfirm={doDelete} />}
