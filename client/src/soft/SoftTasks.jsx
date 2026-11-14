@@ -17,6 +17,7 @@ import TaskReview from './TaskReview';
 import { ChevronDown, GripVertical } from 'lucide-react';
 import SavedViews from './SavedViews';
 import KanbanBoard from './KanbanBoard';
+import WorkloadView from './WorkloadView';
 import './tasksCompact.css';
 import { loadViews } from './viewStore';
 import './taskreview.css';
@@ -592,7 +593,7 @@ export default function SoftTasks() {
         {selMode && <button type="button" className="s-selbtn" onClick={exitSelect}>Cancel</button>}
         {!selMode && <Link to="/tasks/plan" className="s-planbtn plan-link"><Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />Plan my day</Link>}
         <div className="s-seg" role="tablist" aria-label="View">
-          {VIEWS.map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
+          {[...VIEWS, ...(team.canAssign ? [['workload', 'Workload']] : [])].map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
         </div>
       </div>
       <form className="s-addbar" onSubmit={add}>
@@ -659,7 +660,9 @@ export default function SoftTasks() {
         </nav>
       )}
       {view === 'list' && lg !== 'none' && lg !== 'priority' && otherGroups.length > 0 && <MiniCards groups={otherGroups} picked={gPick} onPick={setGPick} />}
-      {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'kanban' ? (
+      {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'workload' ? (
+        <WorkloadView team={team} />
+      ) : view === 'kanban' ? (
         <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} card={card} onError={setErr} />
       ) : view === 'board' ? (
         <div className="s-board">

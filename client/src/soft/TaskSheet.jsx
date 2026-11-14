@@ -5,6 +5,7 @@ import { X, FileText, Check, ChevronLeft, ChevronRight, Copy, Repeat } from 'luc
 import { notesAPI, todosAPI } from '../api';
 import TaskSteps from '../components/TaskSteps';
 import ShareDialog from './ShareDialog';
+import TaskThread from './TaskThread';
 import { askScope } from '../utils/askScope';
 import { useSpaceMembers } from './spaces';
 import './tasks2.css';
@@ -72,7 +73,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const [viewers, setViewers] = useState(Array.isArray(task.meta?.viewers) ? task.meta.viewers : []);
   const startStatus = task.completed ? 'done' : task.meta?.status === 'doing' || task.meta?.status === 'review' ? task.meta.status : 'todo';
   const [status, setStatus] = useState(startStatus);
-  const [watching, setWatching] = useState(Array.isArray(task.meta?.watchers) && task.meta.watchers.includes(team.me));
+  const startWatching = Array.isArray(task.meta?.watchers) && task.meta.watchers.includes(team.me);
+  const [watching, setWatching] = useState(startWatching);
   const toggleIn = (list, set, id) => set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   const [tags, setTags] = useState(tagsOf(task));
   const [tagMenu, setTagMenu] = useState(false);
@@ -155,7 +157,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           ...(team.canAssign ? {
             visibility: visibility === 'team' ? null : visibility,
             viewers: visibility === 'people' && viewers.length ? viewers : null,
-            watchers: (() => { const w = (Array.isArray(task.meta?.watchers) ? task.meta.watchers : []).filter((x) => x !== team.me); if (watching) w.push(team.me); return w.length ? w : null; })(),
+            ...(watching === startWatching ? {} : { watchers: (() => { const w = (Array.isArray(task.meta?.watchers) ? task.meta.watchers : []).filter((x) => x !== team.me); if (watching) w.push(team.me); return w.length ? w : null; })() }),
           } : {}),
           link: link.trim() || null, subtasks: steps, remindMin: remind, reminders: reminders.length ? reminders : null, travelMin: travel || null, estimateMin: estimate, repeatFromDone: fromDone && recurrence !== 'none' ? true : null },
       });
@@ -358,6 +360,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           </div>
         </section>
       )}
+
+      {team.canAssign && !isNew && task.id && <TaskThread taskId={task.id} team={team} />}
 
       <section className="s-sheet-sec" aria-label="Estimate">
         <span className="s-sheet-lab">Estimate</span>

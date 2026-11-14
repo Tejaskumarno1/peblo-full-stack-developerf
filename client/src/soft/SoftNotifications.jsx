@@ -11,8 +11,8 @@ import { useSwitchSpace } from './spaces';
 import { buildNotifications, applyFilter, FILTERS, readDerived, saveDerived, whenLabel, groupOf } from './notifUtils';
 import './notifications.css';
 
-const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, member_joined: UserPlus, org_invite: UserPlus };
-const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', member_joined: 'mint', org_invite: 'mint' };
+const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, comment: AtSign, review: CheckSquare, status: CheckSquare, done: CheckSquare, member_joined: UserPlus, org_invite: UserPlus };
+const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', comment: 'lilac', review: 'butter', status: 'sky', done: 'mint', member_joined: 'mint', org_invite: 'mint' };
 
 /** Soft Studio · Notification centre (mockup: NotifCentre). One list: mentions, meetings and tasks that need you. */
 export default function SoftNotifications() {
@@ -40,7 +40,7 @@ export default function SoftNotifications() {
     void markRead([n]);
     if (n.kind === 'org_invite') { navigate(n.path || '/settings/organizations'); return; }
     if (n.kind === 'member_joined') { navigate('/settings/organizations'); return; }
-    if (n.spaceId && n.kind !== 'note') { switchTo(n.spaceId); navigate(n.kind === 'assigned' ? '/tasks?task=' + n.todoId : '/notes'); return; }
+    if (n.spaceId && n.kind !== 'note') { switchTo(n.spaceId); navigate(n.todoId ? '/tasks?task=' + n.todoId : '/notes'); return; }
     if (n.noteId) navigate('/notes/' + n.noteId);
     else if (n.kind === 'meeting') navigate('/calendar');
     else navigate('/tasks?task=' + n.todoId);

@@ -1,7 +1,8 @@
-// Status board (mockups K02, K08, K09): To do / In progress / In review / Done, drag a card to change its status.
+﻿// Status board (mockups K02, K08, K09): To do / In progress / In review / Done, drag a card to change its status.
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
+import './teamshare.css';
 
 const COLS = [
   ['todo', 'To do', 'peach'],
@@ -79,3 +80,4 @@ export default function KanbanBoard({ tasks, team, card, onError }) {
     </div>
   );
 }
+
