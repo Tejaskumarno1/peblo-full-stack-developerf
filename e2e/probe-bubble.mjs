@@ -1,0 +1,10 @@
+import { boot } from './lib.mjs';
+const { base, api, page, finish } = await boot({ freshPresence: true });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const n = (await api('POST', '/api/notes', { title: 'mistakes 3', content: 'hey in the fullscreen mode the editorial text down bar isnt working needed to fix it\n\nSome more.' })).note;
+await page.setViewportSize({ width: 1536, height: 864 });
+await page.goto(base + '/notes/' + n.id); await page.locator('.bn-editor').waitFor({ timeout: 20000 }); await wait(1200);
+await page.locator('button[aria-label="Full screen"]').click(); await wait(1500);
+const info = await page.evaluate(() => { const el = document.elementFromPoint(1037, 181); const r = el.getBoundingClientRect(); let p = el; const chain = []; while (p && chain.length < 5) { chain.push(p.tagName + '.' + String(p.className).slice(0, 60)); p = p.parentElement; } const ed = document.querySelector('.bn-editor').getBoundingClientRect(); return { chain, r: [r.left, r.right], ed: [ed.left, ed.right] }; });
+console.log(JSON.stringify(info));
+await finish();

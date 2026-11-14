@@ -1,0 +1,15 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'T', content: 'Clients praise the team.\n\nMost delays start with an unclear first brief.', tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true, expiresInDays: 5 })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+const p = await c.newPage();
+await p.goto(`${base}/s/note/${tok}`);
+await p.locator('.bn-editor').waitFor({timeout:20000}); await p.locator('[data-testid="join-card"]').getByLabel('Your name').fill('Priya'); await p.locator('[data-testid="join-submit"]').click(); await p.waitForTimeout(1500);
+await p.waitForTimeout(2500);
+await p.locator('.bn-editor .bn-block-content', { hasText: 'unclear first brief' }).first().click({ clickCount: 3 });
+await p.waitForTimeout(500);
+const r = await p.evaluate(() => { const b = document.querySelector('[data-testid="comments-button"]'); const x = b.getBoundingClientRect(); const top = document.elementFromPoint(x.x + x.width / 2, x.y + x.height / 2); const cs = getComputedStyle(b); return { box: [x.x, x.y, x.width, x.height], top: top?.tagName + '.' + top?.className, vis: cs.visibility, op: cs.opacity, pe: cs.pointerEvents, anim: cs.animationName }; });
+console.log(JSON.stringify(r)); const bs=[]; for (let i=0;i<6;i++){ bs.push(await p.evaluate(()=>{const x=document.querySelector('[data-testid="comments-button"]').getBoundingClientRect(); return [x.x,x.y].join(',');})); await p.waitForTimeout(100);} console.log(bs.join(' | ')); const t=await p.locator('[data-testid="comments-button"]').click({timeout:4000}).then(()=>'clicked',(e)=>String(e.message).split('\n').slice(0,12).join(' // ')); console.log(t);
+await p.screenshot({ path: 'D:/Peblo/_shots/probe2.png' });
+await finish();

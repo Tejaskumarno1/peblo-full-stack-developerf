@@ -46,6 +46,14 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
+  const [adding, setAdding] = useState(null); // column key with the add-task row open
+  const [draft, setDraft] = useState('');
+  const addTask = async (key) => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    try { await todosAPI.create({ text, column: key }); queryClient.invalidateQueries({ queryKey: ['todos'] }); } catch (e) { onError?.(e.response?.data?.error || 'Could not add that task.'); }
+  };
   const people = team.canAssign ? team.people : [];
   const setPeople = async (t, next) => {
     queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => (x.id === t.id ? { ...x, assigneeId: next[0] || null, meta: { ...(x.meta || {}), assignees: next } } : x)));
@@ -138,6 +146,14 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
                   );
                 })}
               </div>
+              {adding === c.key ? (
+                <form className="kb-new" onSubmit={(e) => { e.preventDefault(); addTask(c.key); }}>
+                  <input autoFocus aria-label={`New task in ${c.name}`} data-testid={`kb-new-input-${c.key}`} placeholder="Task name" value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') { setAdding(null); setDraft(''); } }} />
+                  <button type="submit" className="kb-new-go" disabled={!draft.trim()}>Add</button>
+                </form>
+              ) : (
+                <button type="button" className="kb-addtask" data-testid={`kb-addtask-${c.key}`} onClick={() => { setAdding(c.key); setDraft(''); }}><Plus size={15} />Add task</button>
+              )}
               {items.length > lim && <button type="button" className="kb-more" onClick={() => setMore({ ...more, [c.key]: !expanded })}>{expanded ? 'Show less' : `Show ${items.length - lim} more`}</button>}
             </section>
           );

@@ -83,6 +83,22 @@ try {
   await p.getByTestId('assign-done').click();
   ok((await p.getByTestId('kb-avatar').count()) >= 1, 'the avatar shows on the card');
 
+  // add a task straight into a column
+  await p.getByTestId('kb-addtask-todo').click();
+  await p.getByTestId('kb-new-input-todo').fill('Call the venue');
+  await p.keyboard.press('Enter');
+  await p.getByText('Call the venue').first().waitFor({ timeout: 8000 });
+  ok(true, 'Add task creates a card in To do');
+  await p.getByTestId('kb-addtask-done').click();
+  await p.getByTestId('kb-new-input-done').fill('Already finished');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(1200);
+  const dn = (await call('/api/todos', 'GET', null, team)).todos.find((x) => x.text === 'Already finished');
+  ok(dn && dn.completed === true, 'Add task in Done creates a finished task');
+  const sh = await p.locator('.kb-col').first().evaluate((el) => getComputedStyle(el).backgroundColor); const pg = await p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  ok(sh !== pg, 'columns are tinted differently from the page', sh + ' vs ' + pg);
+  await p.screenshot({ path: shots + '\\kb-addtask.png' });
+
   // many columns scroll sideways
   const cols = [{ key: 'todo', name: 'To do' }, ...Array.from({ length: 8 }, (_, i) => ({ key: 'x' + i, name: 'Stage ' + (i + 1), tone: 'sky' })), { key: 'done', name: 'Done' }];
   await call('/api/todos/board', 'PUT', { columns: cols }, team);
