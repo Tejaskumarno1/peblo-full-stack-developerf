@@ -166,3 +166,7 @@
 .pj-meta { font-size: 13px; color: var(--s-mute, #8a8178); }
 .pj-people { display: flex; gap: 4px; }
 @media (max-width: 640px) { .tp { grid-template-columns: 1fr; } }
+
+.s-share:has(.tp) { width: min(680px, 94vw); }
+.tp-items small { white-space: nowrap; }
+.pj-bar { border: 1px solid var(--s-line, #e7e0d6); }
