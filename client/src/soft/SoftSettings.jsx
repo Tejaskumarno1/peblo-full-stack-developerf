@@ -19,10 +19,8 @@ const GROUPS = [
   ] },
   { label: 'Look and feel', items: [
     { id: 'appearance', name: 'Appearance', icon: Palette, view: AppearanceSection, words: 'style theme dark light midnight compact soft river orbit colours' },
-    { id: 'notes', name: 'Notes and calendar', icon: PenLine, view: NotesSection, words: 'text size font week monday sunday voice' },
-  ] },
-  { label: 'Tasks', items: [
     { id: 'board', name: 'Board columns', icon: Columns3, view: BoardSection, words: 'kanban board column status to do in progress review interview done add custom stage' },
+    { id: 'notes', name: 'Notes and calendar', icon: PenLine, view: NotesSection, words: 'text size font week monday sunday voice' },
   ] },
   { label: 'Reminders', items: [
     { id: 'notifications', name: 'Notifications', icon: Bell, view: NotificationsSection, words: 'reminder meeting popup alert notification email sound join' },
