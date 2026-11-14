@@ -7,6 +7,7 @@ const shots = process.env.SHOTS || 'D:\\Peblo\\_shots';
 try { fs.mkdirSync(shots, { recursive: true }); } catch {}
 const p = b.page;
 try {
+  await p.setViewportSize({ width: 1440, height: 900 });
   const made = await b.api('POST', '/api/workspaces/orgs', { name: 'Studio Co', start: 'team' });
   const team = made.spaceId;
   await p.goto(b.base + '/', { waitUntil: 'networkidle' });
@@ -26,9 +27,9 @@ try {
   await p.getByTestId('kanban').waitFor({ timeout: 8000 });
   const n = async (k) => Number(await p.getByTestId('kb-count-' + k).innerText());
   ok((await n('todo')) === 11 && (await n('doing')) === 1 && (await n('review')) === 1 && (await n('done')) === 1, 'cards sit in the column that matches their status', `${await n('todo')}/${await n('doing')}/${await n('review')}/${await n('done')}`);
-  ok(await p.getByText('Show 3 more').isVisible(), 'a long column shows "Show 3 more"');
+  ok(await p.getByText('Show 8 more').isVisible(), 'a long column shows "Show 8 more"');
   await p.screenshot({ path: shots + '\\kb-board.png' });
-  await p.getByText('Show 3 more').click();
+  await p.getByText('Show 8 more').click();
   await p.locator('[data-kb-card]', { hasText: 'Plan the shoot' }).dragTo(p.locator('[data-col="doing"]'));
   await p.waitForTimeout(1200);
   ok((await n('doing')) === 2 && (await n('todo')) === 10, 'dragging a card to In progress moves it');
@@ -39,9 +40,11 @@ try {
   await p.locator('[data-kb-card]', { hasText: 'Cut the reel' }).dragTo(p.locator('[data-col="done"]'), { targetPosition: { x: 100, y: 50 } });
   await p.waitForTimeout(1200);
   ok((await n('done')) === 2, 'dragging to Done completes the task', `${await n('todo')}/${await n('doing')}/${await n('review')}/${await n('done')} ` + JSON.stringify(await p.evaluate(async (sp) => { const t = localStorage.getItem('peblo-token'); const r = await fetch('/api/todos', { headers: { Authorization: 'Bearer ' + t, 'x-peblo-space': sp } }).then((x) => x.json()); return (r.todos || []).filter((x) => x.text === 'Cut the reel').map((x) => [x.completed, x.meta]); }, team)));
+  await p.getByTestId('kb-who').click();
   await p.getByTestId('kb-me').click();
   ok((await n('doing')) === 0 && (await n('todo')) === 0, 'the Mine filter hides tasks that are not assigned to me');
-  await p.getByRole('button', { name: 'Everyone' }).click();
+  await p.getByTestId('kb-who').click();
+  await p.getByRole('menuitemradio', { name: 'Everyone' }).click();
   ok((await n('todo')) === 10, 'Everyone brings them back');
   await p.screenshot({ path: shots + '\\kb-filter.png' });
 } catch (e) { b.check('kanban UI ran without error', false, e.stack || e.message); }

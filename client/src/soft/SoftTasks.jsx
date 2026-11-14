@@ -673,7 +673,7 @@ export default function SoftTasks() {
       {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'workload' ? (
         <WorkloadView team={team} />
       ) : view === 'kanban' ? (
-        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} card={card} onError={setErr} />
+        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} open={(t) => setSheet({ task: t, isNew: false })} onError={setErr} />
       ) : view === 'board' ? (
         <div className="s-board">
           {columns.map((c) => (

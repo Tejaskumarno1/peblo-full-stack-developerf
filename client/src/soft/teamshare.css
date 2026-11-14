@@ -1,4 +1,4 @@
-/* Team sharing (mockups T01 to T07): the share dialog, "Shared by members", and the Done tag on a shared note. Soft Studio tokens only. */
+﻿/* Team sharing (mockups T01 to T07): the share dialog, "Shared by members", and the Done tag on a shared note. Soft Studio tokens only. */
 .ts-cap { font: 700 11px var(--s-body); letter-spacing: .08em; text-transform: uppercase; color: var(--s-fg3); margin: 14px 0 6px; }
 .ts-people { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--s-chip-solid); color: var(--s-fg2); font-size: 13px; }
 .ts-toggle { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 6px; cursor: pointer; }
@@ -74,12 +74,6 @@
 .tk-people { margin-top:8px; }
 
 /* kanban status board */
-.kb-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 14px; }
-.kb-filters button { border:1.5px solid var(--s-line, #e3ddd3); background:transparent; color:inherit; border-radius:999px; padding:6px 14px; font:inherit; font-weight:600; cursor:pointer; }
-.kb-filters button.on { background:var(--s-ink, #2b2620); color:var(--s-paper, #fff); border-color:transparent; }
-.kb-sep { width:1px; height:20px; background:var(--s-line, #e3ddd3); }
-.kb-board { grid-template-columns:repeat(4, minmax(240px, 1fr)); }
-.kb-more { margin-top:8px; border:0; background:transparent; font:inherit; font-weight:600; text-decoration:underline; cursor:pointer; color:inherit; }
 
 /* task discussion (K04) */
 .tt-list { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:12px; max-height:260px; overflow:auto; }
@@ -170,3 +164,36 @@
 .s-share:has(.tp) { width: min(680px, 94vw); }
 .tp-items small { white-space: nowrap; }
 .pj-bar { border: 1px solid var(--s-line, #e7e0d6); }
+
+/* Status board (K09) */
+.soft .kb { --kb-col:#FAF4EA; --kb-card:#fff; --kb-chip:#F5ECDD; --kb-mute:#6F635A; --kb-todo:#F5ECDD; --kb-doing:#FFE594; --kb-review:#E4DAFB; --kb-done:#BFE8CF; --kb-late-bg:#FFD3C9; --kb-late-fg:#8A2B12; display:flex; flex-direction:column; min-height:0; flex:1; }
+.theme-dark .soft .kb { --kb-col:#1A1621; --kb-card:#241F2D; --kb-chip:#2F2839; --kb-mute:#BDB3C7; --kb-todo:#3A261E; --kb-doing:#332B13; --kb-review:#2A2549; --kb-done:#18302A; --kb-late-bg:#4A2118; --kb-late-fg:#FFB8A5; }
+.soft .kb-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 14px; }
+.soft .kb-who { position:relative; }
+.soft .kb-pill { display:inline-flex; align-items:center; gap:8px; height:40px; padding:0 16px; border-radius:999px; border:0; background:var(--kb-chip); color:inherit; font:inherit; font-weight:700; cursor:pointer; }
+.soft .kb-pill.dark { background:var(--s-ink, #2B2320); color:var(--s-bg, #fff); }
+.soft .kb-pill.late { background:var(--kb-late-bg); color:var(--kb-late-fg); font-weight:800; }
+.soft .kb-pill.late.on { box-shadow:inset 0 0 0 2px var(--kb-late-fg); }
+.soft .kb-menu { position:absolute; top:46px; left:0; z-index:20; min-width:180px; padding:6px; border-radius:18px; background:var(--kb-card); box-shadow:0 12px 28px rgba(120,80,40,.18); display:flex; flex-direction:column; }
+.soft .kb-menu button { text-align:left; border:0; background:transparent; color:inherit; font:inherit; font-weight:600; padding:9px 12px; border-radius:12px; cursor:pointer; }
+.soft .kb-menu button[aria-checked=true] { background:var(--kb-chip); font-weight:800; }
+.soft .kb-board { flex:1; min-height:0; display:grid; grid-template-columns:repeat(4, minmax(240px, 1fr)); gap:14px; }
+.soft .kb-col { position:relative; display:flex; flex-direction:column; min-height:0; border-radius:26px; background:var(--kb-col); overflow:hidden; padding-bottom:12px; }
+.soft .kb-col.over { box-shadow:inset 0 0 0 3px #c4441c; }
+.soft .kb-head { display:flex; align-items:center; justify-content:space-between; margin:14px 14px 12px; height:36px; padding:0 14px; border-radius:999px; font-weight:800; flex:none; }
+.soft .kb-head h2 { margin:0; font:inherit; }
+.soft .kb-head.todo { background:var(--kb-todo); } .soft .kb-head.doing { background:var(--kb-doing); } .soft .kb-head.review { background:var(--kb-review); } .soft .kb-head.done { background:var(--kb-done); }
+.soft .kb-n { display:inline-flex; align-items:center; height:26px; padding:0 10px; border-radius:999px; background:rgba(255,255,255,.7); color:#2B2320; font-size:12px; font-weight:700; }
+.soft .kb-cards { padding:0 14px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; min-height:0; flex:1; }
+.soft .kb-card { background:var(--kb-card); border-radius:20px; box-shadow:0 6px 16px rgba(120,80,40,.10); padding:14px 16px; display:grid; gap:9px; cursor:grab; }
+.soft .kb-t { text-align:left; border:0; background:transparent; padding:0; color:inherit; font:700 14.5px/1.3 inherit; font-family:inherit; cursor:pointer; }
+.soft .kb-t.done { text-decoration:line-through; color:var(--kb-mute); }
+.soft .kb-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.soft .kb-chip { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border-radius:999px; background:var(--kb-chip); font-size:12px; font-weight:700; white-space:nowrap; }
+.soft .kb-chip.late { background:var(--kb-late-bg); color:var(--kb-late-fg); }
+.soft .kb-av { display:flex; padding-left:6px; }
+.soft .kb-a { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:800; color:#2B2320; margin-left:-6px; border:2px solid var(--kb-card); }
+.soft .kb-empty { margin:0; padding:0 4px; color:var(--kb-mute); font-size:13px; }
+.soft .kb-more { margin:10px 14px 0; height:38px; border:0; border-radius:999px; background:rgba(255,255,255,.8); color:var(--kb-mute); font:inherit; font-weight:700; cursor:pointer; flex:none; }
+.theme-dark .soft .kb-more { background:rgba(255,255,255,.07); }
+@media (max-width: 900px) { .soft .kb-board { grid-template-columns:1fr; } }
