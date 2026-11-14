@@ -277,3 +277,18 @@
 .soft .kb-new-go { height:40px; padding:0 16px; border:0; border-radius:999px; background:var(--s-ink, #2B2320); color:var(--s-bg, #fff); font:700 13px inherit; font-family:inherit; cursor:pointer; }
 .soft .kb-new-go:disabled { opacity:.5; cursor:default; }
 .soft .kb-col { padding-bottom:12px; }
+
+/* Kanban columns use the app palette (same pastels as the Board tab), and menus are solid. */
+.soft .s-kanban { --kb-card:#fff; --kb-chip:#F5ECDD; --kb-mute:#6F635A; --kb-late-bg:#FFD3C9; --kb-late-fg:#8A2B12; }
+.theme-dark .soft .s-kanban { --kb-card:#2C2637; --kb-chip:#2F2839; --kb-mute:#BDB3C7; --kb-late-bg:#4A2118; --kb-late-fg:#FFB8A5; }
+.soft .kb-menu { background:var(--kb-card); z-index:40; }
+.soft .kb-col { background:var(--s-peach); }
+.soft .kb-col.tone-sand, .soft .kb-col.tone-peach { background:var(--s-peach); }
+.soft .kb-col.tone-butter { background:var(--s-butter); }
+.soft .kb-col.tone-lilac { background:var(--s-lilac); }
+.soft .kb-col.tone-mint { background:var(--s-mint); }
+.soft .kb-col.tone-sky { background:var(--s-sky); }
+.soft .kb-col .kb-head, .soft .kb-col .kb-strip { background:transparent; }
+.soft .kb-col .kb-head { height:40px; margin:10px 14px 8px; padding:0 4px; font-size:19px; font-family:var(--s-display, inherit); }
+.soft .kb-col .kb-n { background:var(--kb-card); }
+.soft .kb-addtask, .soft .kb-more { border-color:var(--kb-mute); }

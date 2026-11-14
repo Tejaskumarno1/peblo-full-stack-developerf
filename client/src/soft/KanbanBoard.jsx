@@ -104,16 +104,16 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
           const dnd = { onDragOver: (e) => { e.preventDefault(); setOver(c.key); }, onDragLeave: () => setOver((o) => (o === c.key ? null : o)), onDrop: (e) => dropOn(e, c.key) };
           if (folded) {
             return (
-              <section key={c.key} data-col={c.key} data-folded="true" className={`kb-col strip${over === c.key ? ' over' : ''}`} aria-label={`${c.name}, ${items.length} tasks, collapsed`} {...dnd}>
-                <button type="button" className={`kb-strip tone-${c.tone}`} data-testid={`kb-expand-${c.key}`} aria-label={`Expand ${c.name}`} onClick={() => setFolded(c.key, false)}>
+              <section key={c.key} data-col={c.key} data-folded="true" className={`kb-col strip tone-${c.tone}${over === c.key ? ' over' : ''}`} aria-label={`${c.name}, ${items.length} tasks, collapsed`} {...dnd}>
+                <button type="button" className="kb-strip" data-testid={`kb-expand-${c.key}`} aria-label={`Expand ${c.name}`} onClick={() => setFolded(c.key, false)}>
                   <ChevronsRight size={16} /><span className="kb-n" data-testid={`kb-count-${c.key}`}>{items.length}</span><span className="kb-vert">{c.name}</span>
                 </button>
               </section>
             );
           }
           return (
-            <section key={c.key} data-col={c.key} className={`kb-col${over === c.key ? ' over' : ''}`} aria-labelledby={`kb-${c.key}`} {...dnd}>
-              <div className={`kb-head tone-${c.tone}`}>
+            <section key={c.key} data-col={c.key} className={`kb-col tone-${c.tone}${over === c.key ? ' over' : ''}`} aria-labelledby={`kb-${c.key}`} {...dnd}>
+              <div className="kb-head">
                 <h2 id={`kb-${c.key}`}>{c.name}</h2>
                 <span className="kb-head-r">
                   <span className="kb-n" data-testid={`kb-count-${c.key}`}>{items.length}</span>
