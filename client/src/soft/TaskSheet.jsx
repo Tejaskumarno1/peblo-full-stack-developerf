@@ -408,7 +408,16 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
             </div>
           </div>
         ) : (
-          <button type="button" className="s-sheet-linkbtn" onClick={() => setPicking(true)}>+ Link a note</button>
+          <span className="s-sheet-pills">
+            <button type="button" className="s-sheet-linkbtn" onClick={() => setPicking(true)}>+ Link a note</button>
+            <button type="button" className="s-sheet-linkbtn" data-testid="note-from-task" disabled={!text.trim()} onClick={async () => {
+              try {
+                const r = await notesAPI.create({ title: text.trim(), content: '' });
+                const n = r.data?.note || r.data;
+                if (n?.id) { setNote({ id: n.id, title: n.title || text.trim() }); queryClient.invalidateQueries({ queryKey: ['notes'] }); }
+              } catch (e) { setError(e.response?.data?.error || 'Could not create the note.'); }
+            }}>+ Make a note for this task</button>
+          </span>
         )}
       </section>
 
