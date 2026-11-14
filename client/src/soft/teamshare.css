@@ -197,3 +197,32 @@
 .soft .kb-more { margin:10px 14px 0; height:38px; border:0; border-radius:999px; background:rgba(255,255,255,.8); color:var(--kb-mute); font:inherit; font-weight:700; cursor:pointer; flex:none; }
 .theme-dark .soft .kb-more { background:rgba(255,255,255,.07); }
 @media (max-width: 900px) { .soft .kb-board { grid-template-columns:1fr; } }
+
+/* Board gets the screen: one slim row instead of add bar, saved views, search and filters */
+.soft .s-kanban .s-tasktools, .soft .s-kanban .s-understood, .soft .s-kanban .tl-crumbs { display:none; }
+.soft .s-kanban .s-page-head { margin-bottom:8px; }
+.soft .s-kanban .s-addbar { display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:4px 4px 4px 14px; min-height:48px; }
+.soft .s-kanban .s-addbar input { flex:1; min-width:120px; }
+.soft .s-kanban .s-addbar .s-accent-btn { height:36px; padding:0 18px; }
+.soft .kb-slot { display:flex; margin-left:auto; padding-left:8px; }
+.soft .s-kanban .kb-filters { margin:0; flex-wrap:nowrap; }
+.soft .s-kanban .kb-pill { height:36px; padding:0 14px; }
+.soft .kb-who-row { display:flex; align-items:center; gap:8px; min-height:26px; }
+.soft .kb-names { font-size:12px; font-weight:600; color:var(--kb-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soft .kb-asg { margin-left:auto; }
+.soft .kb-add { display:inline-flex; align-items:center; gap:3px; height:24px; min-width:24px; padding:0 8px; border-radius:999px; border:1.5px dashed var(--kb-mute); background:transparent; color:var(--kb-mute); font:700 11px inherit; font-family:inherit; cursor:pointer; justify-content:center; }
+.soft .kb-add:hover { color:inherit; border-color:currentColor; }
+.soft .kb-scrim { position:fixed; inset:0; background:transparent; border:0; z-index:998; cursor:default; }
+.soft .kb-menu.pick { position:fixed; z-index:999; }
+.soft .kb-menu.pick button { display:flex; align-items:center; gap:8px; }
+.soft .kb-menu.pick button .kb-a { margin:0; border-color:transparent; }
+.soft .kb-menu.pick button svg { margin-left:auto; }
+
+.s-kanban .s-tasktools, .s-kanban .s-understood, .s-kanban .tl-crumbs { display:none !important; }
+.kb-scrim { position:fixed; inset:0; background:transparent; border:0; z-index:998; cursor:default; padding:0; }
+.kb-menu.pick { position:fixed; z-index:999; min-width:200px; padding:6px; border-radius:18px; background:#fff; color:#2B2320; box-shadow:0 12px 28px rgba(120,80,40,.22); display:flex; flex-direction:column; font-family:inherit; }
+.theme-dark .kb-menu.pick { background:#241F2D; color:#F5F0F7; }
+.kb-menu.pick button { display:flex; align-items:center; gap:8px; text-align:left; border:0; background:transparent; color:inherit; font:600 14px inherit; font-family:inherit; padding:8px 10px; border-radius:12px; cursor:pointer; }
+.kb-menu.pick button:hover, .kb-menu.pick button[aria-checked=true] { background:rgba(120,80,40,.08); }
+.kb-menu.pick .kb-a { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:800; color:#2B2320; margin:0; }
+.kb-menu.pick button svg { margin-left:auto; }

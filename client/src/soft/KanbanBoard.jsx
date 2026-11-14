@@ -1,6 +1,7 @@
 ﻿// Status board (mockups K02, K08, K09): To do / In progress / In review / Done, drag a card to change its status.
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, Filter, AlertTriangle, ChevronDown } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Clock, Filter, AlertTriangle, ChevronDown, Plus, Check } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { todosAPI } from '../api';
 import './teamshare.css';
@@ -22,7 +23,8 @@ export const columnOf = (t) => (t.completed ? 'done' : t.meta?.status === 'doing
 const assigneesOf = (t) => (Array.isArray(t.meta?.assignees) && t.meta.assignees.length ? t.meta.assignees : t.assigneeId ? [t.assigneeId] : []);
 
 
-export default function KanbanBoard({ tasks, team, open, onError }) {
+export default function KanbanBoard({ tasks, team, open, onError, slot }) {
+  const [asg, setAsg] = useState(null);
   const queryClient = useQueryClient();
   const [who, setWho] = useState('all'); // all | me | <userId>
   const [menu, setMenu] = useState(false);
@@ -47,12 +49,17 @@ export default function KanbanBoard({ tasks, team, open, onError }) {
   };
 
   const people = team.canAssign ? team.people : [];
+  const assign = async (t, id) => {
+    const cur = assigneesOf(t); const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => (x.id === t.id ? { ...x, assigneeId: next[0] || null, meta: { ...(x.meta || {}), assignees: next } } : x)));
+    try { await todosAPI.update(t.id, { assignees: next, scope: 'this' }); } catch { onError?.('Could not change who is on that task.'); }
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  };
   const whoLabel = who === 'all' ? 'Everyone' : who === 'me' ? 'Mine only' : `${(people.find((p) => p.id === who)?.name || '').split(' ')[0]} only`;
   const pick = (v) => { setWho(v); setMenu(false); };
   const nameOf = (id) => (id === team.me ? 'You' : people.find((p) => p.id === id)?.name || 'Someone');
 
-  return (
-    <div data-testid="kanban" className="kb">
+  const bar = (
       <div className="kb-filters" role="group" aria-label="Filter the board">
         {people.length > 0 && (
           <div className="kb-who">
@@ -68,6 +75,11 @@ export default function KanbanBoard({ tasks, team, open, onError }) {
         )}
         <button type="button" className={`kb-pill late${only === 'overdue' ? ' on' : ''}`} aria-pressed={only === 'overdue'} data-testid="kb-overdue" onClick={() => setOnly(only === 'overdue' ? 'all' : 'overdue')}><AlertTriangle size={16} />Overdue {lateCount}</button>
       </div>
+  );
+
+  return (
+    <div data-testid="kanban" className="kb">
+      {slot ? createPortal(bar, slot) : bar}
       <div className="kb-board">
         {COLS.map(([key, title]) => {
           const items = shown.filter((t) => columnOf(t) === key);
@@ -95,7 +107,24 @@ export default function KanbanBoard({ tasks, team, open, onError }) {
                           {t.note && <span className="kb-chip">{t.note.title || 'Note'}</span>}
                         </div>
                       )}
-                      {a.length > 0 && <div className="kb-av">{a.slice(0, 4).map((id) => <span key={id} className="kb-a" style={{ background: avOf(id) }} title={nameOf(id)} data-testid="kb-avatar">{nameOf(id).trim()[0]?.toUpperCase()}</span>)}</div>}
+                      {(a.length > 0 || people.length > 0) && (
+                        <div className="kb-who-row">
+                          <span className="kb-av">{a.slice(0, 4).map((id) => <span key={id} className="kb-a" style={{ background: avOf(id) }} title={nameOf(id)} data-testid="kb-avatar">{(people.find((p) => p.id === id)?.name || nameOf(id)).trim()[0]?.toUpperCase()}</span>)}</span>
+                          {a.length > 0 && <span className="kb-names">{a.map((id) => nameOf(id).split(' ')[0]).join(', ')}</span>}
+                          {people.length > 0 && !t.completed && (
+                            <span className="kb-asg">
+                              <button type="button" className="kb-add" data-testid="kb-assign" aria-label={`Change who is on "${t.text}"`} aria-expanded={asg?.id === t.id} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAsg(asg?.id === t.id ? null : { id: t.id, x: Math.min(r.left, window.innerWidth - 230), y: Math.min(r.bottom + 6, window.innerHeight - 260) }); }}>{a.length === 0 ? <><Plus size={12} />Assign</> : <Plus size={12} />}</button>
+                              {asg?.id === t.id && createPortal(
+                                <>
+                                  <button type="button" className="kb-scrim" aria-label="Close" onClick={() => setAsg(null)} />
+                                  <div className="kb-menu pick" role="menu" style={{ position: 'fixed', left: asg.x, top: asg.y }}>
+                                    {people.map((p) => <button key={p.id} type="button" role="menuitemcheckbox" aria-checked={a.includes(p.id)} data-testid="kb-assign-person" onClick={() => assign(t, p.id)}><span className="kb-a" style={{ background: avOf(p.id) }}>{p.name[0]?.toUpperCase()}</span>{p.id === team.me ? 'Me' : p.name}{a.includes(p.id) && <Check size={14} />}</button>)}
+                                  </div>
+                                </>, document.body)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -108,3 +137,5 @@ export default function KanbanBoard({ tasks, team, open, onError }) {
     </div>
   );
 }
+
+

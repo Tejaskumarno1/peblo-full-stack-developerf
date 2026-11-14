@@ -127,6 +127,7 @@ export default function SoftTasks() {
   const pendingDel = useRef(null);
   const flatRef = useRef([]);
   const { settings: acct, updateSettings } = useAuth();
+  const [kbSlot, setKbSlot] = useState(null);
   const [listSel, setListSel] = useState(null); // null = all tasks, INBOX, or a list name
   const [showLists, setShowLists] = useState(() => { try { return localStorage.getItem('peblo-task-lists-open') === '1'; } catch { return false; } });
   const [showArch, setShowArch] = useState(false);
@@ -593,7 +594,7 @@ export default function SoftTasks() {
   const toggleLists = () => { const n = !showLists; setShowLists(n); try { localStorage.setItem('peblo-task-lists-open', n ? '1' : '0'); } catch { /* ignore */ } };
 
   return (
-    <div className={`soft-page s-tasks${acct?.calmMode === true ? ' calm' : ''}`}>
+    <div className={`soft-page s-tasks${acct?.calmMode === true ? ' calm' : ''}${view === 'kanban' ? ' s-kanban' : ''}`}>
       <div className="s-page-head">
         <div className="s-page-title">
           <h1 className="s-h1">{selMode ? `${sel.size} selected` : 'Tasks'}</h1>
@@ -610,6 +611,7 @@ export default function SoftTasks() {
         <label htmlFor="task-add" className="s-sr">Add a task</label>
         <input id="task-add" ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder='Add a task… try "revise BCNF tomorrow !high #exams"' autoComplete="off" />
         <button type="submit" className="s-accent-btn" disabled={!parsed || saving}>Add</button>
+        {view === 'kanban' && <span ref={setKbSlot} className="kb-slot" />}
       </form>
 
       {parsed ? (
@@ -673,7 +675,7 @@ export default function SoftTasks() {
       {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'workload' ? (
         <WorkloadView team={team} />
       ) : view === 'kanban' ? (
-        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} open={(t) => setSheet({ task: t, isNew: false })} onError={setErr} />
+        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} open={(t) => setSheet({ task: t, isNew: false })} onError={setErr} slot={kbSlot} />
       ) : view === 'board' ? (
         <div className="s-board">
           {columns.map((c) => (

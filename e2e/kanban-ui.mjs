@@ -47,5 +47,17 @@ try {
   await p.getByRole('menuitemradio', { name: 'Everyone' }).click();
   ok((await n('todo')) === 10, 'Everyone brings them back');
   await p.screenshot({ path: shots + '\\kb-filter.png' });
+  // assign from the board
+  const before = await p.getByTestId('kb-avatar').count();
+  await p.getByTestId('kb-assign').first().click();
+  await p.getByTestId('kb-assign-person').first().click();
+  await p.waitForTimeout(1200);
+  ok((await p.getByTestId('kb-avatar').count()) === before + 1, 'assigning from a card shows an avatar on it', `${before} -> ${await p.getByTestId('kb-avatar').count()}`);
+  const bar = await p.locator('.s-addbar').boundingBox();
+  const colTop = await p.locator('.kb-board').boundingBox();
+  ok(colTop.y < 330, 'the board starts high on the page', String(colTop.y));
+  await p.keyboard.press('Escape');
+  await p.getByTestId('kanban').screenshot({ path: shots + '\\kb-assign.png' });
+  await p.screenshot({ path: shots + '\\kb-full.png' });
 } catch (e) { b.check('kanban UI ran without error', false, e.stack || e.message); }
 await b.finish();
