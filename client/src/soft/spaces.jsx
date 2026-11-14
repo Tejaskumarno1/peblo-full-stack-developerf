@@ -19,7 +19,7 @@ export function useSpaceMembers() {
   const org = (data?.orgs || []).find((o) => o.spaces.some((s) => s.id === current));
   const { data: m } = useQuery({ queryKey: ['org-members', org?.id], enabled: !!org, staleTime: 60000, queryFn: () => workspacesAPI.members(org.id).then((r) => r.data) });
   if (!org) return { people: [], me: data?.me?.id || null, canAssign: false };
-  const people = (m?.members || []).filter((x) => x.status === 'active' && x.spaces.some((s) => s.id === current)).map((x) => ({ id: x.userId, name: x.name }));
+  const people = (m?.members || []).filter((x) => x.status === 'active' && x.spaces.some((s) => s.id === current)).map((x) => ({ id: x.userId, name: x.name, avatar: x.avatar || null }));
   return { people, me: data?.me?.id || null, canAssign: people.length > 0 };
 }
 

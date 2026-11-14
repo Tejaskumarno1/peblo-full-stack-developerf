@@ -54,7 +54,7 @@ export async function listFolders(req: any, res: any, next: any) {
     const acc = await spaceAccess(req.user.id, spaceId);
     if (!acc || !can('space.read', acc.org, acc.role)) return res.status(404).json({ error: 'Team not found.' });
     const rows = await prisma.$queryRaw<FolderRow[]>`
-      SELECT n.user_id AS "userId", u.name, count(*)::int AS notes,
+      SELECT n.user_id AS "userId", u.name, u.avatar, count(*)::int AS notes,
              count(*) FILTER (WHERE d.total > 0)::int AS "withTodos",
              count(*) FILTER (WHERE d.total > 0 AND d.open = 0)::int AS done,
              max(n.created_at) AS "lastAt",
@@ -63,7 +63,7 @@ export async function listFolders(req: any, res: any, next: any) {
       JOIN users u ON u.id = n.user_id
       LEFT JOIN LATERAL (SELECT count(*)::int AS total, count(*) FILTER (WHERE NOT t.is_completed)::int AS open FROM todos t WHERE t.linked_note_id = n.id) d ON true
       WHERE n.space_id = ${spaceId} AND NOT n.is_deleted AND NOT n.is_archived AND n.meta -> 'teamShare' IS NOT NULL
-      GROUP BY n.user_id, u.name ORDER BY max(n.created_at) DESC`;
+      GROUP BY n.user_id, u.name, u.avatar ORDER BY max(n.created_at) DESC`;
     res.json({ me: req.user.id, members: rows, total: rows.reduce((s, r) => s + r.notes, 0), withTodos: rows.reduce((s, r) => s + r.withTodos, 0), done: rows.reduce((s, r) => s + r.done, 0) });
   } catch (error) { next(error); }
 }
@@ -77,7 +77,7 @@ export async function memberFolder(req: any, res: any, next: any) {
     const acc = await spaceAccess(req.user.id, spaceId);
     if (!acc || !can('space.read', acc.org, acc.role)) return res.status(404).json({ error: 'Team not found.' });
     const who = String(req.params.userId);
-    const person = (await prisma.$queryRaw<{ id: string; name: string }[]>`SELECT u.id, u.name FROM users u JOIN space_members sm ON sm.user_id = u.id AND sm.space_id = ${spaceId} WHERE u.id = ${who}`)[0];
+    const person = (await prisma.$queryRaw<{ id: string; name: string; avatar: string | null }[]>`SELECT u.id, u.name, u.avatar FROM users u JOIN space_members sm ON sm.user_id = u.id AND sm.space_id = ${spaceId} WHERE u.id = ${who}`)[0];
     const role = (await prisma.$queryRaw<{ role: string }[]>`SELECT role FROM space_members WHERE space_id = ${spaceId} AND user_id = ${who}`)[0]?.role ?? 'member';
     const rows = await prisma.$queryRaw<NoteRow[]>`
       SELECT n.id, n.title, left(regexp_replace(n.content, '[#*>\`\\[\\]!()_{}"]|\\n', ' ', 'g'), 120) AS preview,

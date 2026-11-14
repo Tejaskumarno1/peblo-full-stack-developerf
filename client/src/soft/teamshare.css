@@ -292,3 +292,5 @@
 .soft .kb-col .kb-head { height:40px; margin:10px 14px 8px; padding:0 4px; font-size:19px; font-family:var(--s-display, inherit); }
 .soft .kb-col .kb-n { background:var(--kb-card); }
 .soft .kb-addtask, .soft .kb-more { border-color:var(--kb-mute); }
+.soft .kb-a { overflow:hidden; }
+.soft .ts-av { overflow:hidden; }

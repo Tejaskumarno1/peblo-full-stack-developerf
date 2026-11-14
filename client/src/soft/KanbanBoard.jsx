@@ -6,6 +6,7 @@ import { Clock, Filter, AlertTriangle, ChevronDown, ChevronsLeft, ChevronsRight,
 import { Link } from 'react-router-dom';
 import { todosAPI } from '../api';
 import { useBoardColumns, columnFor } from './useBoard';
+import PhotoOrInitial from '../components/Avatar';
 import AssignDialog, { avColor } from './AssignDialog';
 import './teamshare.css';
 
@@ -135,7 +136,7 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
                       )}
                       {(a.length > 0 || people.length > 0) && (
                         <div className="kb-who-row">
-                          <span className="kb-av">{a.slice(0, 4).map((id) => <span key={id} className="kb-a" style={{ background: avColor(id) }} title={nameOf(id)} data-testid="kb-avatar">{(people.find((p) => p.id === id)?.name || nameOf(id)).trim()[0]?.toUpperCase()}</span>)}</span>
+                          <span className="kb-av">{a.slice(0, 4).map((id) => <span key={id} className="kb-a" style={{ background: avColor(id) }} title={nameOf(id)} data-testid="kb-avatar"><PhotoOrInitial src={people.find((p) => p.id === id)?.avatar} fallback={(people.find((p) => p.id === id)?.name || nameOf(id)).trim()[0]?.toUpperCase()} /></span>)}</span>
                           {a.length > 0 && <span className="kb-names">{a.map((id) => nameOf(id).split(' ')[0]).join(', ')}</span>}
                           {people.length > 0 && !t.completed && (
                             <button type="button" className="kb-add" data-testid="kb-assign" aria-label={`Change who is on "${t.text}"`} onClick={() => setAsg(t.id)}>{a.length === 0 ? <><Plus size={12} />Assign</> : <Plus size={12} />}</button>

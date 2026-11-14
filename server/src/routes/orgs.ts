@@ -31,7 +31,7 @@ router.get('/orgs/:orgId/members', async (req, res) => {
   if (!(await gate(req, res, false))) return;
   const orgId = req.params.orgId;
   const members = await prisma.$queryRaw<any[]>`
-    SELECT m.user_id AS "userId", u.name, u.email, m.role, m.status, m.guest_until AS "guestUntil", m.joined_at AS "joinedAt",
+    SELECT m.user_id AS "userId", u.name, u.avatar, u.email, m.role, m.status, m.guest_until AS "guestUntil", m.joined_at AS "joinedAt",
            (SELECT count(*)::int FROM todos t WHERE t.assignee_id = m.user_id AND t.is_completed = false AND t.space_id IN (SELECT id FROM spaces WHERE org_id = m.org_id)) AS "openTasks",
            COALESCE((SELECT json_agg(json_build_object('id', s.id, 'name', s.name, 'kind', s.kind, 'role', sm.role) ORDER BY s.created_at)
                      FROM space_members sm JOIN spaces s ON s.id = sm.space_id AND s.org_id = m.org_id AND s.closed_at IS NULL

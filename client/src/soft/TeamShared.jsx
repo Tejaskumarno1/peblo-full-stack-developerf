@@ -14,7 +14,8 @@ const toneFor = (id) => TONES[[...String(id)].reduce((a, c) => a + c.charCodeAt(
 const ago = (d) => { const s = (Date.now() - new Date(d).getTime()) / 1000; if (s < 90) return 'just now'; if (s < 3600) return `${Math.round(s / 60)} min ago`; if (s < 86400) return `${Math.round(s / 3600)} h ago`; return `${Math.round(s / 86400)} d ago`; };
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-export function Avatar({ id, name, size = 40 }) {
+export function Avatar({ id, name, src, size = 40 }) {
+  if (src) return <i className="ts-av" style={{ width: size, height: size, overflow: "hidden", background: "transparent" }}><img src={src} alt="" draggable="false" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%", display: "block" }} /></i>;
   return <i className="ts-av" style={{ width: size, height: size, fontSize: size * 0.38, background: `var(--s-${toneFor(id)})` }} aria-hidden="true">{initials(name)}</i>;
 }
 
@@ -88,7 +89,7 @@ export default function TeamShared() {
       <div className="ts-page" data-testid="ts-member">
         <button type="button" className="ts-back" onClick={() => setSp({})}><ArrowLeft size={14} /> Shared by members</button>
         <header className="ts-profile">
-          <Avatar id={who} name={d?.person?.name} size={56} />
+          <Avatar id={who} name={d?.person?.name} src={d?.person?.avatar} size={56} />
           <div><h1>{d?.person?.name || '...'}</h1><p>{d?.person?.role === 'lead' ? 'Team lead' : 'Member'} of {team.name}. Shared {plural(counts.all, 'note')}, {plural(counts.done, 'finished to-do list')}.</p></div>
         </header>
         <div className="ts-chips" role="tablist">
@@ -135,7 +136,7 @@ export default function TeamShared() {
       <div className="ts-grid">
         {members.map((m) => (
           <button key={m.userId} type="button" className="ts-card" data-testid="ts-folder" onClick={() => setSp({ m: m.userId })}>
-            <Avatar id={m.userId} name={m.name} />
+            <Avatar id={m.userId} name={m.name} src={m.avatar} />
             <b>{m.name}{m.userId === d.me ? ' (you)' : ''}</b>
             <span className="ts-card-chips"><em>{plural(m.notes, 'note')}</em>{m.withTodos > 0 && <em>{plural(m.withTodos, 'to-do list')}</em>}{m.done > 0 && <em className="done">{m.done} Done</em>}</span>
             <small>{(m.titles || []).join(' · ')}</small>
