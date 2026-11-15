@@ -442,6 +442,8 @@ export async function updateNote(req: any, res: any, next: any) {
   try {
     const own = await noteScope(req, res, 'write');
     if (!own) return;
+    // archiving through PATCH is the same act as POST /:id/archive, so it needs the same right (the author or a team lead)
+    if (req.body?.isArchived !== undefined && !(await noteScope(req, res, 'manage'))) return;
     scrubBody(req.body, ['title', 'content', 'category', 'baseContent']);
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
     // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.

@@ -146,7 +146,7 @@ router.post('/invites/accept', async (req, res) => {
     const claimed = await tx.$executeRaw`UPDATE org_invites SET accepted_at = now() WHERE id = ${inv.id} AND accepted_at IS NULL AND revoked_at IS NULL`;
     if (!claimed) return false;
     await tx.$executeRaw`INSERT INTO org_members (org_id, user_id, role, guest_until) VALUES (${inv.orgId}, ${userId}, ${inv.orgRole}, ${guestUntil}) ON CONFLICT DO NOTHING`;
-    for (const s of spaceIds) await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) SELECT id, ${userId}, ${inv.spaceRole}, ${inv.invitedBy ?? null} FROM spaces WHERE id = ${s} AND org_id = ${inv.orgId} AND closed_at IS NULL ON CONFLICT DO NOTHING`;
+    for (const s of spaceIds) await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) SELECT id, ${userId}::text, ${inv.spaceRole}::text, ${inv.invitedBy ?? null}::text FROM spaces WHERE id = ${s} AND org_id = ${inv.orgId} AND closed_at IS NULL ON CONFLICT DO NOTHING`;
     return true;
   });
   if (!accepted) return res.status(409).json({ error: 'This invite cannot be accepted.', state: 'used' });
@@ -210,7 +210,7 @@ router.delete('/orgs/:orgId/join-links/:id', async (req, res) => {
 async function lookupJoin(token: string, userId: string) {
   const rows = await prisma.$queryRaw<any[]>`
     SELECT l.id, l.org_id AS "orgId", l.space_id AS "spaceId", l.space_role AS "spaceRole", l.created_by AS "createdBy", l.max_uses AS "maxUses", l.uses,
-           l.expires_at AS "expiresAt", l.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", s.name AS "spaceName", s.closed_at AS "spaceClosed"
+           l.expires_at AS "expiresAt", l.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", o.status AS "orgStatus", s.name AS "spaceName", s.closed_at AS "spaceClosed"
     FROM org_join_links l JOIN organizations o ON o.id = l.org_id JOIN spaces s ON s.id = l.space_id WHERE l.token_hash = ${hash(token)}`;
   const l = rows[0];
   if (!l) return { state: 'invalid' as const };
