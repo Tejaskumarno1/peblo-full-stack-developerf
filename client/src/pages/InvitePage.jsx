@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import './verify-email.css';
 
 const COPY = {
+  seat_limit: ['This organization is full', 'It has reached its seat limit. Ask an owner or admin to free a seat, then try again.'],
   invalid: ['This invite link is not valid', 'Open it again from the email, or ask for a new invite.'],
   revoked: ['This invite was withdrawn', 'Ask the person who invited you to send a new one.'],
   used: ['This invite was already used', 'Each invite link works once.'],

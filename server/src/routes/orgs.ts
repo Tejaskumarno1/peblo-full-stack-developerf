@@ -8,6 +8,7 @@ import { refreshUserRooms, kickFromSpace, refreshSpaceRoom } from '../utils/spac
 import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
 import { decryptSecret, encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
+import { seatBlock, SeatLimitError } from '../utils/seats.js';
 
 /* Members, invitations and the audit trail of an organization. Tables: 035_workspaces_expand.sql. */
 const router = Router();
@@ -74,6 +75,7 @@ router.post('/orgs/:orgId/invites', async (req, res) => {
   }
   const already = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${orgId} AND lower(u.email) = ${email}`;
   if ((already[0]?.n ?? 0) > 0) return res.status(409).json({ error: 'That person is already a member.' });
+  if (orgRole !== 'guest') { const full = await seatBlock(prisma, orgId, { excludeEmail: email }); if (full) return res.status(409).json(full); } // R15: members and pending invites share the seat limit
   await prisma.$executeRaw`UPDATE org_invites SET revoked_at = now() WHERE org_id = ${orgId} AND email = ${email}::citext AND accepted_at IS NULL AND revoked_at IS NULL`;
   const raw = crypto.randomBytes(32).toString('base64url');
   const id = crypto.randomUUID();
@@ -143,14 +145,16 @@ router.post('/invites/accept', async (req, res) => {
   const inv = r.inv;
   const spaceIds: string[] = Array.isArray(inv.spaceIds) ? inv.spaceIds : [];
   const guestUntil = inv.orgRole === 'guest' ? new Date(Date.now() + 30 * 86400000) : null;
-  const accepted = await prisma.$transaction(async (tx) => {
+  let accepted = false;
+  try { accepted = await prisma.$transaction(async (tx) => {
     // claim the invite first; a second request for the same invite updates nothing and does nothing else
     const claimed = await tx.$executeRaw`UPDATE org_invites SET accepted_at = now() WHERE id = ${inv.id} AND accepted_at IS NULL AND revoked_at IS NULL`;
     if (!claimed) return false;
+    if (inv.orgRole !== 'guest') { await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${inv.orgId} FOR UPDATE`; const full = await seatBlock(tx, inv.orgId); if (full) throw new SeatLimitError(full); } // R15: the claimed invite no longer counts as pending
     await tx.$executeRaw`INSERT INTO org_members (org_id, user_id, role, guest_until) VALUES (${inv.orgId}, ${userId}, ${inv.orgRole}, ${guestUntil}) ON CONFLICT DO NOTHING`;
     for (const s of spaceIds) await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) SELECT id, ${userId}::text, ${inv.spaceRole}::text, ${inv.invitedBy ?? null}::text FROM spaces WHERE id = ${s} AND org_id = ${inv.orgId} AND closed_at IS NULL ON CONFLICT DO NOTHING`;
     return true;
-  });
+  }); } catch (e) { if (e instanceof SeatLimitError) return res.status(409).json({ ...e.body, state: 'seat_limit' }); throw e; }
   if (!accepted) return res.status(409).json({ error: 'This invite cannot be accepted.', state: 'used' });
   await audit(inv.orgId, userId, 'member.joined', userId, { orgRole: inv.orgRole, spaceIds });
   rooms(req, userId);
@@ -240,13 +244,16 @@ router.post('/join-links/accept', async (req, res) => {
   if (r.state !== 'ready') return res.status(409).json({ error: 'This link cannot be used.', state: r.state });
   const l = r.link;
   // the use is counted inside the same transaction as the inserts: two people racing for the last place cannot both get it, and a failed join does not burn a use
-  const took = await prisma.$transaction(async (tx) => {
+  let took = false;
+  try { took = await prisma.$transaction(async (tx) => {
     const n = await tx.$executeRaw`UPDATE org_join_links SET uses = uses + 1 WHERE id = ${l.id} AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)`;
     if (!n) return false;
+    const isMember = (await tx.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM org_members WHERE org_id = ${l.orgId} AND user_id = ${userId}`)[0]?.n ?? 0;
+    if (!isMember) { await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${l.orgId} FOR UPDATE`; const full = await seatBlock(tx, l.orgId); if (full) throw new SeatLimitError(full); } // R15: a use is not burned when there is no seat
     await tx.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${l.orgId}, ${userId}, 'member') ON CONFLICT DO NOTHING`;
     await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${l.spaceId}, ${userId}, ${l.spaceRole}, ${l.createdBy ?? null}) ON CONFLICT DO NOTHING`;
     return true;
-  });
+  }); } catch (e) { if (e instanceof SeatLimitError) return res.status(409).json({ ...e.body, state: 'seat_limit' }); throw e; }
   if (!took) return res.status(409).json({ error: 'This link cannot be used.', state: 'full' });
   await audit(l.orgId, userId, 'member.joined_via_link', userId, { linkId: l.id, spaceId: l.spaceId });
   rooms(req, userId);
@@ -269,9 +276,27 @@ router.patch('/orgs/:orgId/members/:userId', async (req, res) => {
   const status = req.body?.status === 'paused' || req.body?.status === 'active' ? req.body.status : undefined;
   if ((role === 'owner' || target[0].role === 'owner') && org.role !== 'owner') return res.status(403).json({ error: 'Only an owner can change an owner.' });
   if (target[0].role === 'owner' && ((role && role !== 'owner') || status === 'paused') && (await ownerCount(orgId)) <= 1) return res.status(409).json({ error: 'Make someone else an owner first.' });
+  // R15: guest expiry. An owner or admin sets a new end date (it must be in the future, at most a year away); only guests have one.
+  let guestUntil: Date | null | undefined;
+  if (req.body?.guestUntil !== undefined) {
+    const becomesGuest = (role ?? target[0].role) === 'guest';
+    if (!becomesGuest) return res.status(400).json({ error: 'Only a guest has an end date.' });
+    guestUntil = new Date(String(req.body.guestUntil));
+    if (!Number.isFinite(+guestUntil) || +guestUntil <= Date.now()) return res.status(400).json({ error: 'Choose an end date in the future.' });
+    if (+guestUntil > Date.now() + 366 * 86400000) return res.status(400).json({ error: 'A guest can stay for at most a year at a time.' });
+  }
+  // a guest who becomes a member, or a paused member who comes back, takes a seat
+  const wasPaused = (await prisma.$queryRaw<{ status: string }[]>`SELECT status FROM org_members WHERE org_id = ${orgId} AND user_id = ${userId}`)[0]?.status === 'paused';
+  const nextRole = role ?? target[0].role;
+  if (nextRole !== 'guest' && ((target[0].role === 'guest') || (wasPaused && status === 'active'))) {
+    const full = await seatBlock(prisma, orgId); if (full) return res.status(409).json(full);
+  }
+  if (role === 'guest' && target[0].role !== 'guest' && guestUntil === undefined) guestUntil = new Date(Date.now() + 30 * 86400000);
+  if (role && role !== 'guest') await prisma.$executeRaw`UPDATE org_members SET guest_until = NULL WHERE org_id = ${orgId} AND user_id = ${userId}`;
+  if (guestUntil) await prisma.$executeRaw`UPDATE org_members SET guest_until = ${guestUntil} WHERE org_id = ${orgId} AND user_id = ${userId}`;
   if (role) await prisma.$executeRaw`UPDATE org_members SET role = ${role} WHERE org_id = ${orgId} AND user_id = ${userId}`;
   if (status) await prisma.$executeRaw`UPDATE org_members SET status = ${status} WHERE org_id = ${orgId} AND user_id = ${userId}`;
-  await audit(orgId, uid(req), 'member.updated', userId, { role, status });
+  await audit(orgId, uid(req), 'member.updated', userId, { role, status, guestUntil: guestUntil ? guestUntil.toISOString() : undefined });
   rooms(req, userId);
   res.json({ ok: true });
 });

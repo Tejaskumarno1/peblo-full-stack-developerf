@@ -30,6 +30,9 @@ const emailA = `smoke-a-${runId}@peblo.test`;
 const emailB = `smoke-b-${runId}@peblo.test`;
 const emailC = `smoke-c-${runId}@peblo.test`;
 const emailD = `smoke-d-${runId}@peblo.test`;
+const emailE = `smoke-e-${runId}@peblo.test`;
+const emailF = `smoke-f-${runId}@peblo.test`;
+const emailG = `smoke-g-${runId}@peblo.test`;
 // Requests to our own server carry the current account's sign-in token (also the raw fetch() calls below).
 const rawFetch = globalThis.fetch;
 globalThis.fetch = (u, o = {}) => (token && String(u).startsWith(base)
@@ -1370,13 +1373,142 @@ async function prismaOffUser() {
       await prismaR.user.deleteMany({ where: { email: { in: [rtA.email, rtB.email] } } });
     }
   }
+
+  // ---- (added UNRUN) Team lifecycle: note handover, remove from team, reopen, delete organization, seat limit, read-only team notes ----
+  {
+    const { default: prismaT } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const pwT = 'correct horse battery';
+    const mkUser = async (email, name) => { const s2 = await call('POST', '/api/auth/signup', { email, password: pwT, name }); const u = await prismaT.user.findUnique({ where: { email } }); return { token: s2.json.token, id: u.id }; };
+    const own = await mkUser(emailE, 'Owner E'); const mem = await mkUser(emailF, 'Member F'); const lead2 = await mkUser(emailG, 'Lead G');
+    token = own.token;
+    const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke lifecycle org' });
+    check('lifecycle: organization created', org.status === 201, org);
+    const orgId = org.json.id; const teamId = org.json.spaceId;
+    // put F and G in the org and the team directly (the invite flow needs verified email addresses)
+    await prismaT.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${orgId}, ${mem.id}, 'member'), (${orgId}, ${lead2.id}, 'member')`;
+    await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${teamId}, ${mem.id}, 'member'), (${teamId}, ${lead2.id}, 'lead')`;
+    const office = await call('POST', `/api/workspaces/orgs/${orgId}/spaces`, { name: 'Smoke office', kind: 'office' });
+    await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${office.json.id}, ${mem.id}, 'member')`;
+
+    // F writes a team note and a private Office note
+    token = mem.token;
+    const asHdr = (t, sp) => ({ Authorization: `Bearer ${t}`, 'X-Peblo-Space': sp });
+    const post = (t, sp, body) => rawFetch(base + '/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json', ...asHdr(t, sp) }, body: JSON.stringify(body) }).then((x) => x.json());
+    const tn = await post(mem.token, teamId, { title: 'F team note', content: 'x', tags: ['handover-tag'] });
+    const on = await post(mem.token, office.json.id, { title: 'F private office note', content: 'secret' });
+    check('lifecycle: F wrote a team note and an office note', !!tn.note?.id && !!on.note?.id, [tn, on]);
+
+    // R26/R27/R33: the owner reads F's team note: author, read-write, no manage rights
+    const lst = await rawFetch(base + '/api/notes', { headers: asHdr(own.token, teamId) }).then((x) => x.json());
+    const row = (lst.notes || []).find((n) => n.id === tn.note.id);
+    check('team notes: the list carries the author and access', row && row.team === true && row.owner?.id === mem.id && row.owner?.name === 'Member F' && row.access === 'edit' && row.canManage === false, row);
+    check('team notes: a lead (G) can manage someone else\'s note', ((await rawFetch(base + '/api/notes', { headers: asHdr(lead2.token, teamId) }).then((x) => x.json())).notes || []).find((n) => n.id === tn.note.id)?.canManage === true);
+    const own1 = ((await rawFetch(base + '/api/notes', { headers: asHdr(mem.token, teamId) }).then((x) => x.json())).notes || []).find((n) => n.id === tn.note.id);
+    check('team notes: the author sees access owner and canManage', own1?.access === 'owner' && own1?.canManage === true, own1);
+
+    // R8: handover. Not to a non-member; admin-only; into the Office only after the receiver is in it
+    token = own.token;
+    const hn = (to, extra = {}) => call('POST', `/api/workspaces/orgs/${orgId}/members/${mem.id}/handover-notes`, { toUserId: to, ...extra });
+    let h = await hn(own.id, { spaceIds: [office.json.id] });
+    check('handover: refused while the receiver is not in the Office (nothing moved)', h.status === 200 && h.json.moved === 0 && h.json.skipped?.length === 1, h);
+    h = await hn('not-a-user');
+    check('handover: a receiver who is not a member is refused (400)', h.status === 400 && h.json.code === 'not_member', h);
+    token = mem.token;
+    h = await call('POST', `/api/workspaces/orgs/${orgId}/members/${own.id}/handover-notes`, { toUserId: mem.id });
+    check('handover: a plain member cannot hand notes over (403)', h.status === 403, h);
+    token = own.token;
+    await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${office.json.id}, ${own.id}, 'member')`;
+    h = await hn(own.id);
+    check('handover: team and private Office notes move to the receiver', h.status === 200 && h.json.moved === 2 && h.json.privateOffice === 1, h);
+    const moved = await prismaT.$queryRaw`SELECT id, user_id FROM notes WHERE id IN (${tn.note.id}, ${on.note.id})`;
+    check('handover: both notes now belong to the owner', moved.length === 2 && moved.every((m) => m.user_id === own.id), moved);
+    const tg = await prismaT.$queryRaw`SELECT t.user_id FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = ${tn.note.id}`;
+    check('handover: the tag was re-linked to the receiver\'s own tag', tg.length === 1 && tg[0].user_id === own.id, tg);
+    check('handover: audit_log has member.notes_handover', (await prismaT.$queryRaw`SELECT 1 FROM audit_log WHERE org_id = ${orgId} AND action = 'member.notes_handover'`).length === 1);
+
+    // R6: remove one person from one team; last-lead guard
+    token = mem.token;
+    let rm = await call('DELETE', `/api/workspaces/spaces/${teamId}/members/${lead2.id}`);
+    check('remove from team: a plain member cannot (403)', rm.status === 403, rm);
+    token = lead2.token;
+    rm = await call('DELETE', `/api/workspaces/spaces/${teamId}/members/${lead2.id}`);
+    check('remove from team: the last lead is protected (409 last_lead)', rm.status === 409 && rm.json.code === 'last_lead', rm);
+    token = own.token;
+    rm = await call('DELETE', `/api/workspaces/spaces/${teamId}/members/${mem.id}`);
+    check('remove from team: an org owner (even outside the team) removes a member (200)', rm.status === 200 && !(await prismaT.$queryRaw`SELECT 1 FROM space_members WHERE space_id = ${teamId} AND user_id = ${mem.id}`).length, rm);
+    check('remove from team: they are still in the organization', (await prismaT.$queryRaw`SELECT 1 FROM org_members WHERE org_id = ${orgId} AND user_id = ${mem.id}`).length === 1);
+
+    // R16: reopen a closed team
+    token = lead2.token;
+    const cl = await call('POST', `/api/workspaces/spaces/${teamId}/close`);
+    check('reopen: the lead closes the team', cl.status === 200, cl);
+    let ro = await call('GET', `/api/workspaces/orgs/${orgId}/closed-spaces`);
+    check('reopen: the closed team is listed for its lead', ro.status === 200 && ro.json.spaces.some((x) => x.id === teamId), ro);
+    token = mem.token;
+    ro = await call('POST', `/api/workspaces/spaces/${teamId}/reopen`);
+    check('reopen: a member who is not a lead cannot (403)', ro.status === 403, ro);
+    token = lead2.token;
+    ro = await call('POST', `/api/workspaces/spaces/${teamId}/reopen`);
+    check('reopen: the lead reopens it (200)', ro.status === 200, ro);
+    ro = await call('POST', `/api/workspaces/spaces/${teamId}/reopen`);
+    check('reopen: reopening an open team is 409', ro.status === 409, ro);
+
+    // R15: seat limit. Three active non-guest members (E, F, G): limit 3 leaves no seat
+    token = own.token;
+    await prismaT.$executeRaw`UPDATE organizations SET policy = jsonb_set(policy, '{seatLimit}', '3'::jsonb, true) WHERE id = ${orgId}`;
+    let inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `new-${runId}@peblo.test`, orgRole: 'member' });
+    check('seat limit: an invite past the limit is refused (409 seat_limit)', inv.status === 409 && inv.json.code === 'seat_limit' && /limit of 3/.test(inv.json.error), inv);
+    await prismaT.$executeRaw`UPDATE organizations SET policy = jsonb_set(policy, '{seatLimit}', '4'::jsonb, true) WHERE id = ${orgId}`;
+    inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `new-${runId}@peblo.test`, orgRole: 'member' });
+    check('seat limit: one seat left, the invite is created and now counts as pending', inv.status === 201, inv);
+    inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `new2-${runId}@peblo.test`, orgRole: 'member' });
+    check('seat limit: pending invites reserve seats (409)', inv.status === 409 && inv.json.code === 'seat_limit', inv);
+    inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `guest-${runId}@peblo.test`, orgRole: 'guest' });
+    check('seat limit: a guest invite does not use a seat (201 if guests are on, else 403)', inv.status === 201 || inv.status === 403, inv);
+    const sl = await call('POST', `/api/workspaces/orgs/${orgId}/join-links`, { spaceId: office.json.id });
+    const slJoin = sl.json.link ? new URL(sl.json.link).searchParams.get('token') : null;
+    token = (await mkUser(`smoke-h-${runId}@peblo.test`, 'Joiner H')).token;
+    const jn = await call('POST', '/api/workspaces/join-links/accept', { token: slJoin });
+    check('seat limit: a join link does not admit past the limit and burns no use (needs a verified email to reach the check)', jn.status === 409 && (jn.json.code === 'seat_limit' || jn.json.state === 'unverified') && (await prismaT.$queryRaw`SELECT uses FROM org_join_links WHERE org_id = ${orgId}`)[0].uses === 0, jn);
+    await prismaT.user.deleteMany({ where: { email: `smoke-h-${runId}@peblo.test` } });
+
+    // R15: guest expiry
+    token = own.token;
+    await prismaT.$executeRaw`UPDATE org_members SET role = 'guest', guest_until = now() + interval '2 days' WHERE org_id = ${orgId} AND user_id = ${mem.id}`;
+    let gu = await call('PATCH', `/api/workspaces/orgs/${orgId}/members/${mem.id}`, { guestUntil: new Date(Date.now() - 86400000).toISOString() });
+    check('guest expiry: a date in the past is refused (400)', gu.status === 400, gu);
+    gu = await call('PATCH', `/api/workspaces/orgs/${orgId}/members/${mem.id}`, { guestUntil: new Date(Date.now() + 40 * 86400000).toISOString() });
+    check('guest expiry: an owner extends a guest (200)', gu.status === 200 && (await prismaT.$queryRaw`SELECT guest_until FROM org_members WHERE org_id = ${orgId} AND user_id = ${mem.id}`)[0].guest_until > new Date(Date.now() + 30 * 86400000), gu);
+    gu = await call('PATCH', `/api/workspaces/orgs/${orgId}/members/${lead2.id}`, { guestUntil: new Date(Date.now() + 86400000).toISOString() });
+    check('guest expiry: a non-guest has no end date (400)', gu.status === 400, gu);
+
+    // R16: delete the organization (soft close)
+    let del = await call('DELETE', `/api/workspaces/orgs/${orgId}`, { confirmName: 'wrong name' });
+    check('delete org: a wrong name is refused (400)', del.status === 400 && del.json.code === 'name_mismatch', del);
+    del = await call('DELETE', `/api/workspaces/orgs/${orgId}`, { confirmName: 'Smoke lifecycle org' });
+    check('delete org: other active members block it (409 has_members)', del.status === 409 && del.json.code === 'has_members', del);
+    token = lead2.token;
+    del = await call('DELETE', `/api/workspaces/orgs/${orgId}`, { confirmName: 'Smoke lifecycle org' });
+    check('delete org: a non-owner cannot (403)', del.status === 403, del);
+    token = own.token;
+    await prismaT.$executeRaw`DELETE FROM space_members WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId}) AND user_id IN (${mem.id}, ${lead2.id})`;
+    await prismaT.$executeRaw`DELETE FROM org_members WHERE org_id = ${orgId} AND user_id IN (${mem.id}, ${lead2.id})`;
+    del = await call('DELETE', `/api/workspaces/orgs/${orgId}`, { confirmName: 'Smoke lifecycle org' });
+    const closedRow = (await prismaT.$queryRaw`SELECT status, closed_at, purge_after FROM organizations WHERE id = ${orgId}`)[0];
+    check('delete org: the sole owner closes it; data kept, purge_after about 30 days out', del.status === 200 && closedRow.status === 'closed' && !!closedRow.closed_at && closedRow.purge_after > new Date(Date.now() + 29 * 86400000), [del, closedRow]);
+    check('delete org: nothing was physically deleted (notes and spaces remain)', (await prismaT.$queryRaw`SELECT 1 FROM notes WHERE id = ${tn.note.id}`).length === 1 && (await prismaT.$queryRaw`SELECT 1 FROM spaces WHERE org_id = ${orgId}`).length >= 2);
+    const wl = await call('GET', '/api/workspaces');
+    check('delete org: it disappears from the owner\'s workspace list', !(wl.json.orgs || []).some((o) => o.id === orgId), wl.json.orgs);
+    await prismaT.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`; // notes.space_id is ON DELETE RESTRICT
+    await prismaT.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`; // test clean-up (physical delete is not an app feature)
+  }
 } catch (err) {
   failures++;
   console.error(err);
 } finally {
   server.close();
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
-  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC, emailD] } } }); } catch {} // cascades to everything they created
+  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC, emailD, emailE, emailF, emailG] } } }); } catch {} // cascades to everything they created
   await prisma.$disconnect();
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
   process.exit(failures ? 1 : 0);

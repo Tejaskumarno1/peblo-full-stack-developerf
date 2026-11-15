@@ -43,6 +43,7 @@ import { TagFilterBar, BulkFailDialog } from './NotesExtras';
 import { useNotesKeys } from './notesKeys';
 import { bulkRun, partialText } from './bulkRun';
 import { folderCounts } from './folderCounts';
+import { TeamNoteByline, noteManageable } from './TeamNoteInfo';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 // the first line of a note, used as its name while it has no title
@@ -71,7 +72,7 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
   const first = untitled ? firstOfNote(n) : '';
   return (
       <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id, e.shiftKey); } else onLeave(); }}
-        draggable={!selectMode && !(n.access && n.access !== 'owner')}
+        draggable={!selectMode && !(n.access && n.access !== 'owner' && !n.canManage)}
         onDragStart={(e) => { e.dataTransfer.setData('application/x-peblo-note', n.id); e.dataTransfer.effectAllowed = 'move'; if (onDrag) setTimeout(() => onDrag(n.id), 0); }}
         onDragEnd={() => { if (onDrag) setTimeout(() => onDrag(null), 0); }}
         onContextMenu={(e) => { if (onCtx) { e.preventDefault(); onCtx(e, n); } }}
@@ -85,7 +86,7 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
         <span className="txt">
           <span className={`t${n.meta?.pinned ? ' pin' : ''}${untitled && first ? ' fb' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{untitled ? first || 'Untitled' : n.title}</span>
           {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : untitled && first ? 'No title yet' : snippetOfNote(n) || 'Empty note'}</span>}
-          <span className="m">{n.access && n.access !== 'owner' && <span className="oa-own">{n.owner?.name ? `by ${n.owner.name} · ` : ''}</span>}{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
+          <span className="m">{n.access && n.access !== 'owner' && <span className="oa-own">{n.owner?.name ? `by ${n.owner.name} · ` : ''}</span>}{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.team && n.lastEditedBy && n.lastEditedBy !== n.owner?.name ? ` · edited by ${n.lastEditedBy}` : ''}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
         </span>
       </Link>
 
@@ -152,6 +153,7 @@ export default function SoftNotes() {
   const [own, setOwn] = useState('all'); // Office only: all | mine | shared with me
   const [denied, setDenied] = useState(null);
   const viewer = spaceRole === 'viewer' || doc?.access === 'view';
+  const manageable = noteManageable(doc, spaceRole); // R27: archive, pin, move, trash, duplicate and share need the author or a team lead
   const canPurge = !spaceRole || spaceRole === 'lead';
   const [q, setQ] = useState(() => params.get('q') || ''); // the search box (the palette's "See all" arrives with ?q=)
   const [dq, setDq] = useState(''); // what was typed, after a short pause
@@ -651,7 +653,7 @@ export default function SoftNotes() {
       const id = e.dataTransfer.getData('application/x-peblo-note');
       const n = allNotes.find((x) => x.id === id);
       if (!id || !n) return;
-      if (n.access && n.access !== 'owner') { flash('Only the owner can move this note'); return; }
+      if (n.access && n.access !== 'owner' && !n.canManage) { flash('Only the owner can move this note'); return; }
       moveTo(d.name, id);
     },
   });
@@ -851,7 +853,7 @@ export default function SoftNotes() {
   const fsParts = useShareParts(doc?.id);
   const renderTags = () => (
     <div className="s-note-tags">
-      {viewer && <span className="s-viewer-note" data-testid="viewer-note"><Lock size={13} /> Read only</span>}
+      {viewer && <span className="s-viewer-note" data-testid="viewer-note"><Lock size={13} /> View only</span>}
                 {doc.tags.map((t) => (
                   <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
                     #{t}
@@ -872,30 +874,30 @@ export default function SoftNotes() {
                     placeholder="tag"
                   />
                 )}
-                {!doc.isDeleted && !doc.isDraft && !viewer && <MoveNote noteId={doc.id} title={doc.title} />}
+                {!doc.isDeleted && !doc.isDraft && manageable && !viewer && <MoveNote noteId={doc.id} title={doc.title} />}
               </div>
   );
   const renderMenuItems = () => (
     <>
-      {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+      {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-archive" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-pin" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     <div className="s-menu-sep" role="separator" />
       <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
-                    <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
+                    {manageable && <button type="button" role="menuitem" data-testid="menu-duplicate" onClick={duplicate}><Copy size={15} />Duplicate note</button>}
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
+          {manageable && <button type="button" role="menuitem" data-testid="menu-move" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>}
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{vErrText || (versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions')}</button>}
 {!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
           <div className="s-menu-sep" role="separator" />
-      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
+      {manageable && <button type="button" role="menuitem" data-testid="menu-share" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>}
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
                     <div className="s-menu-sep" role="separator" />
-      {(!doc.isDeleted || canPurge) && <button type="button" role="menuitem" className="danger" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
+      {manageable && (!doc.isDeleted || canPurge) && <button type="button" role="menuitem" className="danger" data-testid="menu-trash" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
     </>
   );
   const quickTask = async (text) => { await todosAPI.create({ text, priority: 'medium', noteId: doc.id }); queryClient.invalidateQueries({ queryKey: ['todos'] }); };
@@ -917,7 +919,7 @@ export default function SoftNotes() {
         </div>
       )}
       {rowMenu && (() => {
-        const n = rowMenu.n; const mine = !n.access || n.access === 'owner';
+        const n = rowMenu.n; const mine = !n.access || n.access === 'owner' || n.canManage === true;
         return (
           <NavMenu onClose={() => setRowMenu(null)} className="s-tab-menu s-row-menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" role="menuitem" onClick={() => { setRowMenu(null); navigate(`/notes/${n.id}`); }}>Open</button>
@@ -1111,7 +1113,8 @@ export default function SoftNotes() {
               {!doc.isDraft && <span className="s-note-stats" title={`${words} words · ${chars} characters · ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</span></span>}
               {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
               {!doc.isDraft && !focus && <ShareChips noteId={doc.id} />}
-              {!doc.isDraft && !focus && doc.access && <AccessChip note={doc} />}
+              {!doc.isDraft && !focus && doc.access && !doc.team && <AccessChip note={doc} />}
+              {!doc.isDraft && !focus && doc.team && <TeamNoteByline doc={doc} me={wsData?.me?.id} />}
               <span className="grow" />
               {doc.isDeleted ? (
                 <button type="button" className="s-outline" onClick={guarded(restore, 'Could not restore the note')}>Restore</button>

@@ -5,6 +5,7 @@ import { Megaphone, Link2, Building2, Users, User, UserPlus, MoreHorizontal, Shi
 import { workspacesAPI } from '../../api';
 import { useWorkspaces, useCurrentSpace, CreateOrgDialog } from '../spaces';
 import { Card } from './ui';
+import { NotesHandoverPicker, FormerMembersCard, GuestExpiry, TeamMemberList, ClosedTeams, DeleteOrgDialog } from './OrgLifecycle';
 import '../orgpages.css';
 
 const TONES = ['peach', 'sky', 'mint', 'butter', 'lilac'];
@@ -54,6 +55,8 @@ function useRun() {
       qc.invalidateQueries({ queryKey: ['org-members'] });
       qc.invalidateQueries({ queryKey: ['org-audit'] });
       qc.invalidateQueries({ queryKey: ['workspaces'] });
+      qc.invalidateQueries({ queryKey: ['closed-spaces'] });
+      qc.invalidateQueries({ queryKey: ['orphaned-notes'] });
       return true;
     } catch (e) { setMsg(e.response?.data?.error || 'That did not work. Try again.'); return false; }
   };
@@ -101,7 +104,7 @@ function InviteDialog({ org, onClose }) {
     const out = [];
     for (const email of list) {
       try { const r = await workspacesAPI.invite(org.id, { email, orgRole: 'member', spaceIds, spaceRole: role }); out.push({ email, link: r.data.link }); }
-      catch (e) { out.push({ email, error: e.response?.data?.error || 'Could not invite.' }); }
+      catch (e) { out.push({ email, error: e.response?.data?.error || 'Could not invite.', code: e.response?.data?.code }); }
     }
     setBusy(false); setSent(out);
     qc.invalidateQueries({ queryKey: ['org-members', org.id] });
@@ -111,6 +114,7 @@ function InviteDialog({ org, onClose }) {
   if (sent) {
     return (
       <Dialog icon={UserPlus} title="Invites sent" onClose={onClose}>
+        {sent.some((x) => x.code === 'seat_limit') && <div className="og-banner rose" data-testid="seat-limit-banner"><b>No seats left</b><span>Pending invites count as seats. Withdraw an invite, remove a member, or invite the person as a guest (guests are free).</span></div>}
         <p className="og-note">Each person gets an email. If it does not arrive, send them their own link below. A link works once, only for that email address.</p>
         <div className="og-rows">
           {sent.map((s) => (
@@ -151,13 +155,15 @@ function InviteDialog({ org, onClose }) {
 
 function RemoveDialog({ org, m, me, onClose, run }) {
   const [tasks, setTasks] = useState('unassign');
+  const [notesTo, setNotesTo] = useState('');
   const first = m.name.split(' ')[0];
-  const go = async () => { if (await run(() => workspacesAPI.removeMember(org.id, m.userId, tasks === 'me' ? me : undefined))) onClose(); };
+  const go = async () => { if (await run(async () => { if (notesTo) await workspacesAPI.handoverNotes(org.id, m.userId, { toUserId: notesTo }); await workspacesAPI.removeMember(org.id, m.userId, tasks === 'me' ? me : undefined); })) onClose(); };
   const n = m.openTasks || 0;
   return (
     <Dialog icon={LogOut} tone="peach" title={`Remove ${m.name}?`} onClose={onClose} narrow>
       <div className="og-banner butter"><b>Access ends at once</b><span>Their sign-in to this organization, access tokens, open editing sessions and share links stop immediately.</span></div>
-      <div className="og-banner mint"><b>{first}'s Personal notes are untouched</b><span>Notes written in team spaces stay with the team and show their name.</span></div>
+      <div className="og-banner mint"><b>{first}'s Personal notes are untouched</b><span>Notes written in team spaces stay with the team and show their name, unless you hand them over below.</span></div>
+      <NotesHandoverPicker org={org} userId={m.userId} first={first} value={notesTo} onChange={setNotesTo} />
       {n > 0 && (
         <>
           <div className="og-cap">{first}'s open tasks ({n})</div>
@@ -266,6 +272,7 @@ export function MembersPage() {
                 <span className="og-av" style={{ background: `var(--s-${TONES[i % TONES.length]})` }}>{(m.name || '?')[0].toUpperCase()}</span>
                 <div className="txt"><b>{m.name}{self ? ' (you)' : ''}</b><small>{m.email}</small></div>
                 <span className={`og-tag ${m.status === 'paused' ? 'sand' : 'mint'}`}>{m.status === 'paused' ? 'Paused' : 'Active'}</span>
+                <GuestExpiry m={m} org={org} admin={admin && !self} run={run} />
                 {admin && !self ? (
                   <select className="og-rolesel" aria-label={`Role of ${m.name}`} value={m.role} onChange={(e) => run(() => workspacesAPI.setMember(org.id, m.userId, { role: e.target.value }))}>
                     {ROLES.map((r) => <option key={r} value={r}>{cap(r)}</option>)}
@@ -296,6 +303,7 @@ export function MembersPage() {
             <div key={r} className="og-role"><span className={`og-tag ${t}`} style={t ? undefined : { background: 'transparent' }}>{r}</span><span>{d}</span></div>
           ))}
         </section>
+        {admin && <FormerMembersCard org={org} run={run} />}
         <section className="og-card" aria-label="Joining"><h2>Joining</h2><p>People accept with the email address that was invited, and it must be verified.</p></section>
       </div>
       {inviting && <InviteDialog org={org} onClose={() => setInviting(false)} />}
@@ -346,7 +354,7 @@ export function CreateTeamPanel({ org, people, onClose, onMade }) {
   );
 }
 
-function TeamPair({ s, admin, policy, run }) {
+function TeamPair({ s, admin, policy, run, org, me }) {
   const canManage = admin || s.role === 'lead';
   const [name, setName] = useState(s.name);
   const [closing, setClosing] = useState(false);
@@ -371,6 +379,7 @@ function TeamPair({ s, admin, policy, run }) {
             <div className="og-head" style={{ flexWrap: 'nowrap' }}><b style={{ fontSize: 14.5 }}>Allow public links for this team</b>
               <button type="button" role="switch" aria-checked={links} aria-label="Allow public links for this team" disabled={!orgAllows} className={`og-sw${links ? ' on' : ''}`} onClick={() => run(() => workspacesAPI.updateSpace(s.id, { publicLinks: !links }))}><span /></button></div>
             <p>Needs the organization setting to be on.</p>
+            <TeamMemberList s={s} org={org} me={me} canManage={canManage} run={run} />
           </>
         ) : <p>{s.kind === 'office' ? 'The Office. Only publishers post announcements.' : 'Each team has its own notes, tasks and members.'}</p>}
       </section>
@@ -388,7 +397,7 @@ function TeamPair({ s, admin, policy, run }) {
 }
 
 export function TeamsPage() {
-  const { org, admin, isLoading } = useActiveOrg();
+  const { org, admin, isLoading, me } = useActiveOrg();
   const { msg, run } = useRun();
   const [creating, setCreating] = useState(false);
   const policy = useQuery({ queryKey: ['org-policy', org?.id], enabled: !!org && admin, queryFn: () => workspacesAPI.policy(org.id).then((r) => r.data.policy) });
@@ -402,7 +411,8 @@ export function TeamsPage() {
         <div className="og-head">{org.spaces.length === 0 ? <p className="og-note">No teams yet.</p> : <span />}<button type="button" className="og-btn pri" onClick={() => setCreating(true)} data-testid="team-create"><Plus size={15} /> Create a team</button></div>
       </div>
       <div data-testid="team-settings" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {org.spaces.map((s) => <TeamPair key={s.id} s={s} admin={admin} policy={policy.data} run={run} />)}
+        {org.spaces.map((s) => <TeamPair key={s.id} s={s} admin={admin} policy={policy.data} run={run} org={org} me={me} />)}
+        <ClosedTeams org={org} run={run} />
       </div>
       {creating && <CreateTeamPanel org={org} people={(members.data?.members || []).filter((m) => m.status === 'active' && m.role !== 'guest')} onClose={() => setCreating(false)} />}
     </>
@@ -705,6 +715,7 @@ export function OrgsPage() {
   const [creating, setCreating] = useState(false);
   const [leaving, setLeaving] = useState(null);
   const [transfer, setTransfer] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const orgs = data?.orgs || [];
   const me = data?.me?.id;
   const desc = (o) => {
@@ -726,6 +737,7 @@ export function OrgsPage() {
               <div className="txt"><b>{o.name}</b><small>{desc(o)}</small></div>
               <span className="og-tag" style={{ height: 34, padding: '0 14px' }}>{cap(o.role)}</span>
               {o.role === 'owner' && <button type="button" className="og-btn plain" onClick={() => setTransfer(o)} data-testid="org-transfer">Transfer</button>}
+              {o.role === 'owner' && <button type="button" className="og-btn plain" onClick={() => setDeleting(o)} data-testid="org-delete">Delete</button>}
               <button type="button" className="og-btn plain" onClick={() => setLeaving(o)} data-testid="org-leave">Leave</button>
             </div>
           ))}
@@ -738,6 +750,7 @@ export function OrgsPage() {
       {creating && <CreateOrgDialog onClose={() => setCreating(false)} />}
       {leaving && <LeaveDialog org={leaving} me={me} run={run} onClose={() => setLeaving(null)} />}
       {transfer && <TransferDialog org={transfer} me={me} run={run} onClose={() => setTransfer(null)} />}
+      {deleting && <DeleteOrgDialog org={deleting} me={me} run={run} onClose={() => setDeleting(null)} />}
     </div>
   );
 }
