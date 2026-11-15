@@ -39,7 +39,9 @@ export const smartMatch = (n, rules) => (rules || []).length > 0 && rules.every(
 export function inFolder(n, def, defs, withSub) {
   const kids = withSub ? defs.filter((d) => d.parent === def.id && !d.smart) : [];
   const names = [def.name, ...kids.map((d) => d.name)];
-  if (names.includes(n.meta?.folder || '')) return true;
+  const own = n.meta?.folder || '';
+  if (own) return names.includes(own); // a note that was put in a folder belongs to that folder only
+  // only a note with no folder of its own can be collected by a tag
   const tags = [def.tag, ...kids.map((d) => d.tag)].filter(Boolean);
   return tags.some((t) => (n.tags || []).includes(t));
 }

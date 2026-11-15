@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
 
   const [theme, setThemeState] = useState(() => {
-    try { return localStorage.getItem('peblo-theme') || 'light'; } catch { return 'light'; }
+    try { return localStorage.getItem('peblo-theme') || 'system'; } catch { return 'system'; }
   });
   // Style: 'soft' (friendly, with a dock; the default), 'river' or 'orbit'.
   const [uiStyle, setUiStyleState] = useState(() => {
@@ -121,6 +121,11 @@ export function AuthProvider({ children }) {
     rememberAccount(u);
     // The account decides the style on every device
     const acctStyle = u?.settings?.uiStyle;
+    const acctTheme = u?.settings?.theme;
+    if (['light', 'dark', 'midnight', 'system'].includes(acctTheme)) { // the account decides the theme on every device, like the style
+      setThemeState(acctTheme);
+      try { localStorage.setItem('peblo-theme', acctTheme); } catch { /* ignore */ }
+    }
     if (VALID_STYLES.includes(acctStyle)) {
       setUiStyleState(acctStyle);
       try { localStorage.setItem('peblo-style', acctStyle); } catch { /* ignore */ }
@@ -249,6 +254,7 @@ export function AuthProvider({ children }) {
   const setTheme = useCallback((newTheme) => {
     setThemeState(newTheme);
     try { localStorage.setItem('peblo-theme', newTheme); } catch { /* storage blocked: theme still applies for this session */ }
+    if (getToken()) profileAPI.updateProfile({ settings: { theme: newTheme } }).catch((e) => console.error('Failed to save the theme to the account:', e));
   }, []);
 
   // Other windows (the quick-capture window) share localStorage: follow style / theme changes made there.

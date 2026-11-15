@@ -1,4 +1,4 @@
-﻿import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { Fragment, memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -18,8 +18,9 @@ import { inlineMedia } from '../utils/imageData';
 import { sanitizeHtml } from '../utils/safeHtml';
 import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
+import { usePublicUrl } from '../api/publicUrl';
 import { useAutoSave } from '../hooks';
-import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
+import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import ShareChips from '../components/ShareChips';
 import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/presencePref';
@@ -28,6 +29,16 @@ import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
+// the first line of a note, used as its name while it has no title
+const firstLine = (content) => {
+  for (const raw of String(content || '').split('\n')) {
+    const t = raw.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]*>/g, '').replace(/^\s*(?:#{1,6}\s+|>\s*|[-*]\s+(?:\[[ xX]\]\s*)?)+/, '').replace(/[*_`]/g, '').trim();
+    if (t) return t.length > 60 ? `${t.slice(0, 57)}…` : t;
+  }
+  return '';
+};
+const rowFirst = new WeakMap();
+const firstOfNote = (n) => { let v = rowFirst.get(n); if (v === undefined) { v = firstLine(n.content); rowFirst.set(n, v); } return v; };
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 // Per-note numbers shown in the list rows, worked out once per note object. Without this every keystroke in the open note
 // re-scanned the text of every note in the list (about 11 MB for 3000 notes) and typing lagged by half a second or more.
@@ -40,12 +51,14 @@ const snippetOfNote = (n) => { let v = rowSnippets.get(n); if (v === undefined) 
 // rebuild thousands of rows that did not change.
 const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels, dq, fdef, onPick, onLeave }) {
   const w = wordsOfNote(n);
+  const untitled = !n.title || n.title === 'Untitled';
+  const first = untitled ? firstOfNote(n) : '';
   return (
       <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id); } else onLeave(); }}>
         {selectMode && <span className={`np-ck${sel ? ' on' : ''}`} role="checkbox" aria-checked={sel} aria-label={`Select ${n.title || 'Untitled'}`}>{sel && <Check size={14} strokeWidth={2.6} />}</span>}
         <span className="txt">
-          <span className={`t${n.meta?.pinned ? ' pin' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{n.title && n.title !== 'Untitled' ? n.title : 'Untitled'}</span>
-          {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : snippetOfNote(n) || 'Empty note'}</span>}
+          <span className={`t${n.meta?.pinned ? ' pin' : ''}${untitled && first ? ' fb' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{untitled ? first || 'Untitled' : n.title}</span>
+          {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : untitled && first ? 'No title yet' : snippetOfNote(n) || 'Empty note'}</span>}
           <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
         </span>
       </Link>
@@ -90,6 +103,16 @@ export default function SoftNotes() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [question, setQuestion] = useState('');
   const [toast, setToast] = useState('');
+  const [toastAct, setToastAct] = useState(null); // { label, run }: a button on the message (Undo)
+  const toastTimer = useRef(null);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  useEffect(() => {
+    const on = () => setOnline(true); const off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  const [allLinked, setAllLinked] = useState(false);
+  const publicUrl = usePublicUrl();
   const [q, setQ] = useState(''); // the search box
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
@@ -201,9 +224,21 @@ export default function SoftNotes() {
     } else {
       const start = new Date(); start.setHours(0, 0, 0, 0);
       const week = start.getTime() - 6 * 86400000;
-      const buckets = [['today', 'Today', []], ['week', 'This week', []], ['earlier', 'Earlier', []]];
-      for (const n of rest) { const t = time(n, sort === 'created' ? 'createdAt' : 'updatedAt'); (t >= start.getTime() ? buckets[0] : t >= week ? buckets[1] : buckets[2])[2].push(n); }
+      const buckets = [['today', 'Today', []], ['week', 'This week', []]];
+      const older = new Map(); // month and year groups, newest first because the notes are already sorted
+      for (const n of rest) {
+        const t = time(n, sort === 'created' ? 'createdAt' : 'updatedAt');
+        if (t >= start.getTime()) buckets[0][2].push(n);
+        else if (t >= week) buckets[1][2].push(n);
+        else {
+          const d = new Date(t);
+          const k = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+          if (!older.has(k)) older.set(k, { label: d.toLocaleDateString('en-GB', { month: 'long', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }), notes: [] });
+          older.get(k).notes.push(n);
+        }
+      }
       for (const [key, label, notes] of buckets) if (notes.length) out.push({ key, label, notes });
+      for (const [k, g] of older) out.push({ key: `m-${k}`, label: g.label, notes: g.notes });
     }
     return out;
   }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -228,12 +263,17 @@ export default function SoftNotes() {
     setHistoryOpen(false);
   }, []);
 
+  // set when the person closed every tab on purpose: the list must not open a note again by itself
+  const noAuto = useRef(false);
+  const closeDoc = useCallback(() => { noAuto.current = true; setDoc(null); setEditorKey('none'); navigate('/notes', { replace: true }); }, [navigate]);
   const startDraft = useCallback(() => {
-    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], createdAt: new Date().toISOString() });
+    noAuto.current = false;
+    const folderName = selDef && !selDef.smart ? selDef.name : '';
+    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], meta: folderName ? { folder: folderName } : undefined, createdAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
     setPreview(false);
     navigate('/notes', { replace: true });
-  }, [filter, navigate]);
+  }, [filter, navigate, selDef, selTags]);
 
   useEffect(() => {
     if (params.get('new') === '1') {
@@ -242,10 +282,11 @@ export default function SoftNotes() {
       return;
     }
     if (!routeId) {
-      if (!doc && allNotes[0]) navigate(`/notes/${allNotes[0].id}`, { replace: true });
+      if (!doc && !noAuto.current && allNotes[0]) navigate(`/notes/${allNotes[0].id}`, { replace: true });
       return;
     }
     if (doc?.id === routeId) return;
+    noAuto.current = false;
     const found = allNotes.find((n) => n.id === routeId) || listed.find((n) => n.id === routeId);
     if (found) open(found);
     else notesAPI.get(routeId).then((r) => open(r.data.note)).catch(() => navigate('/notes', { replace: true }));
@@ -260,11 +301,12 @@ export default function SoftNotes() {
 
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {
-      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled' });
+      const dm = docRef.current?.meta;
+      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled', ...(dm?.folder ? { meta: { folder: dm.folder } } : {}) });
       const created = data.note;
       // Keep the editor as it is; only the id changes.
       setNoteBase(created.id, created.updatedAt, payload.content);
-      setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
+      setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, meta: created.meta || d.meta, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       navigate(`/notes/${created.id}`, { replace: true });
       return;
@@ -277,7 +319,15 @@ export default function SoftNotes() {
       : old));
   }, [navigate, queryClient]);
 
-  const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn);
+  const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn, 1000, saveNoteOnUnload);
+  // "Saved" is shown for two seconds after a save finishes, then fades back to the quiet tick
+  const [justSaved, setJustSaved] = useState(false);
+  const prevSave = useRef(saveStatus);
+  useEffect(() => {
+    const was = prevSave.current; prevSave.current = saveStatus;
+    if (was === 'saving' && saveStatus === 'saved') { setJustSaved(true); const t = setTimeout(() => setJustSaved(false), 2000); return () => clearTimeout(t); }
+    return undefined;
+  }, [saveStatus]);
   const forceSaveRef = useRef(forceSave);
   forceSaveRef.current = forceSave;
   const leaveNote = useCallback(() => forceSaveRef.current(), []); // stable, so the memoised rows are not rebuilt when the save function changes
@@ -326,16 +376,17 @@ export default function SoftNotes() {
     setMenuOpen(false);
     await notesAPI.archive(doc.id);
     refreshLists();
-    setDoc(null);
-    navigate('/notes', { replace: true });
+    closeDoc();
   };
   const trash = async () => {
     setMenuOpen(false);
-    if (!window.confirm(doc.isDeleted ? 'Delete this note forever? This cannot be undone.' : 'Move this note to the Trash?')) return;
-    await notesAPI.delete(doc.id, { permanent: !!doc.isDeleted });
+    const perm = !!doc.isDeleted;
+    if (perm && !window.confirm('Delete this note forever? This cannot be undone.')) return; // only the final delete asks; the Trash can be undone
+    const id = doc.id;
+    await notesAPI.delete(id, { permanent: perm });
     refreshLists();
-    setDoc(null);
-    navigate('/notes', { replace: true });
+    closeDoc();
+    if (!perm) flash('Moved to the Trash', { label: 'Undo', run: async () => { await notesAPI.restore(id); refreshLists(); navigate(`/notes/${id}`); } });
   };
   const restore = async () => {
     await notesAPI.restore(doc.id);
@@ -419,11 +470,28 @@ export default function SoftNotes() {
   const moveTo = async (name) => {
     setSheet(null);
     const ids = selectMode && picked.length ? picked : doc ? [doc.id] : [];
+    if (!selectMode && doc?.isDraft) { // not saved yet: the folder is used when the note is first saved
+      patch({ meta: name ? { ...(doc.meta || {}), folder: name } : undefined });
+      flash(name ? `Will be saved in ${name}` : 'No folder');
+      setPicked([]); setSelectMode(false);
+      return;
+    }
+    // a folder that also collects by tag would pull a note back in, so taking a note out drops those tags too
+    const collecting = (n) => (name ? [] : allDefs.filter((d) => !d.smart && d.tag && (n.tags || []).includes(d.tag)).map((d) => d.tag));
+    const dropped = new Set();
     try {
-      await Promise.all(ids.map((id) => notesAPI.update(id, { meta: { folder: name || '' } })));
-      if (!selectMode && doc) patch({ meta: { ...(doc.meta || {}), folder: name || '' } });
+      await Promise.all(ids.map((id) => {
+        const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
+        const drop = n ? collecting(n) : [];
+        drop.forEach((t) => dropped.add(t));
+        return notesAPI.update(id, { meta: { folder: name || '' }, ...(drop.length ? { tags: (n.tags || []).filter((t) => !drop.includes(t)) } : {}) });
+      }));
+      if (!selectMode && doc) {
+        const drop = collecting(doc);
+        patch({ meta: { ...(doc.meta || {}), folder: name || '' }, ...(drop.length ? { tags: (doc.tags || []).filter((t) => !drop.includes(t)) } : {}) });
+      }
       refreshLists();
-      flash(name ? `Moved to ${name}` : 'Removed from folder');
+      flash(name ? `Moved to ${name}` : dropped.size ? `Removed from the folder (and ${[...dropped].map((t) => `#${t}`).join(', ')})` : 'Removed from folder');
     } catch { flash('Could not move'); }
     setPicked([]); setSelectMode(false);
   };
@@ -459,7 +527,7 @@ export default function SoftNotes() {
   useOutside(outsideHist, historyOpen, () => setHistoryOpen(false));
   const bulk = async (kind) => {
     if (!picked.length) return;
-    if (kind === 'trash' && !window.confirm(`Move ${picked.length} note(s) to the Trash?`)) return;
+    const ids = [...picked];
     try {
       if (kind === 'pin') {
         const sel = allNotes.filter((n) => picked.includes(n.id));
@@ -474,8 +542,8 @@ export default function SoftNotes() {
       } else {
         await Promise.all(picked.map((id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true }))));
         refreshLists();
-        flash(kind === 'trash' ? 'Moved to the Trash' : 'Archived');
-        if (picked.includes(routeId)) navigate('/notes');
+        flash(kind === 'trash' ? `Moved ${ids.length} to the Trash` : 'Archived', kind === 'trash' ? { label: 'Undo', run: async () => { await Promise.all(ids.map((id) => notesAPI.restore(id))); refreshLists(); } } : undefined);
+        if (doc && picked.includes(doc.id)) closeDoc();
       }
     } catch { flash('Something went wrong'); }
     setPicked([]); setSelectMode(false);
@@ -494,7 +562,7 @@ export default function SoftNotes() {
     const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
     if (!n) return;
     try {
-      const { data } = await notesAPI.create({ title: `Copy of ${n.title || 'Untitled'}`, content: n.content || '', tags: n.tags || [] });
+      const { data } = await notesAPI.create({ title: `Copy of ${n.title || 'Untitled'}`, content: n.content || '', tags: n.tags || [], ...(n.meta?.folder ? { meta: { folder: n.meta.folder } } : {}) });
       refreshLists();
       navigate(`/notes/${data.note.id}`);
       flash('Duplicated');
@@ -504,7 +572,7 @@ export default function SoftNotes() {
     setMenuOpen(false);
     forceSave();
     try {
-      const { data } = await notesAPI.create({ title: `Copy of ${doc.title || 'Untitled'}`, content: doc.content || '', tags: doc.tags || [] });
+      const { data } = await notesAPI.create({ title: `Copy of ${doc.title || 'Untitled'}`, content: doc.content || '', tags: doc.tags || [], ...(doc.meta?.folder ? { meta: { folder: doc.meta.folder } } : {}) });
       refreshLists();
       navigate(`/notes/${data.note.id}`);
       flash('Duplicated');
@@ -525,7 +593,11 @@ export default function SoftNotes() {
     navigate(`/ai?${p.toString()}`);
   };
 
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
+  const flash = (msg, act) => {
+    clearTimeout(toastTimer.current); // one timer: a newer message is not cut short by the older one
+    setToast(msg); setToastAct(act || null);
+    toastTimer.current = setTimeout(() => { setToast(''); setToastAct(null); }, act ? 6000 : 2200);
+  };
   // runs an action and shows a message instead of failing silently
   const guarded = (fn, msg) => (...a) => Promise.resolve().then(() => fn(...a)).catch(() => flash(msg));
   const toggleTask = async (t) => {
@@ -540,7 +612,17 @@ export default function SoftNotes() {
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
   }, [focus]);
-  const outline = useMemo(() => (doc?.content || '').split('\n').map((l) => /^(#{1,3})\s+(.+)$/.exec(l)).filter(Boolean).map((m) => ({ level: m[1].length, text: m[2].replace(/[*_`]/g, '').trim() })), [doc?.content]);
+  const outline = useMemo(() => {
+    const out = [];
+    let fence = false;
+    for (const l of (doc?.content || '').split('\n')) {
+      if (/^\s*(```|~~~)/.test(l)) { fence = !fence; continue; } // a # line inside a code block is not a heading
+      if (fence) continue;
+      const m = /^(#{1,3})\s+(.+)$/.exec(l);
+      if (m) out.push({ level: m[1].length, text: m[2].replace(/[*_`]/g, '').trim() });
+    }
+    return out;
+  }, [doc?.content]);
   // who else is in which section (shown as dots on the Outline card)
   const live = useLive();
   const [sec, setSec] = useState({});
@@ -561,13 +643,14 @@ export default function SoftNotes() {
   const chars = useMemo(() => plainText.replace(/\s+/g, ' ').trim().length, [plainText]);
 
   // Notes that mention this note's title
+  const deferredTitle = useDeferredValue(doc?.title); // a title keystroke should not wait for a scan of every note
   const mentions = useMemo(() => {
-    const title = (doc?.title || '').trim().toLowerCase();
-    if (title.length < 4) return [];
+    const title = (deferredTitle || '').trim().toLowerCase();
+    if (!doc || title.length < 4) return []; // the deferred title can outlive the note for one render
     return allNotes.filter((n) => n.id !== doc.id && (n.content || '').toLowerCase().includes(title)).slice(0, 4);
-  }, [allNotes, doc?.id, doc?.title]);
+  }, [allNotes, doc?.id, deferredTitle]);
 
-  const crumb = doc?.isDeleted ? 'Trash' : doc?.isArchived ? 'Archive' : doc?.tags?.[0] ? cap(doc.tags[0]) : null;
+  const crumb = doc?.isDeleted ? 'Trash' : doc?.isArchived ? 'Archive' : doc?.meta?.folder ? doc.meta.folder : doc?.tags?.[0] ? cap(doc.tags[0]) : null;
   const saved = saveStatus === 'saving' ? { text: 'Saving…', icon: <Loader2 size={14} className="s-spin" /> }
     : saveStatus === 'unsaved' ? { text: 'Editing…', icon: null }
       : saveStatus === 'error' ? { text: "Couldn't save", icon: null, bad: true }
@@ -621,8 +704,20 @@ export default function SoftNotes() {
         {!selectMode && filter !== 'archive' && filter !== 'trash' && (viewOpen || sort !== 'updated' || group !== 'date' || selTags.length > 0) && (
           <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
         )}
+        {selDef && !selectMode && filter !== 'archive' && filter !== 'trash' && (
+          <div className="np-folderbar" data-testid="folder-bar">
+            <span className="np-dot" style={{ background: selDef.smart ? '#F2C94C' : colorOf(selDef.color)[2] }} />
+            <b title={selDef.name}>{selDef.name}</b><i>{shownList.length}</i>
+            <span className="grow" />
+            {!selDef.smart && <button type="button" className="np-fb primary" data-testid="folder-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} />New note</button>}
+            {!selDef.smart && !selDef.legacy && <button type="button" className="np-fb" data-testid="folder-new-sub" title="New subfolder" aria-label="New subfolder" onClick={() => { setMoveAfter(false); setFolderEdit({ parent: selDef.parent || selDef.id }); setSheet('folder'); }}><Folder size={14} strokeWidth={2} /></button>}
+            <button type="button" className="np-fb" data-testid="folder-edit" title="Rename or edit this folder" aria-label="Edit folder" onClick={() => openEdit(selDef)}><Pencil size={14} strokeWidth={2} /></button>
+            <button type="button" className="np-fb" title="Show all notes" aria-label="Close folder" onClick={() => setFSel(null)}><X size={14} strokeWidth={2.2} /></button>
+          </div>
+        )}
         <div className="s-notes-rows">
           {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && !dq && filter !== 'trash' && filter !== 'archive' && (!selDef || !selDef.smart) && <div style={{ padding: '4px 12px' }}><button type="button" className="s-accent-btn" data-testid="empty-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} /> {selDef ? `New note in ${selDef.name}` : 'New note'}</button></div>}
           {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
@@ -637,11 +732,11 @@ export default function SoftNotes() {
           </div>
         ) : (
           <div className="s-notes-foot">
-            <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => setFilter(filter === 'archive' ? 'all' : 'archive')}><Archive size={18} strokeWidth={1.8} />Archive</button>
-            <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
+            <button type="button" className={filter === 'archive' ? 'on' : ''} onClick={() => { setFSel(null); setFilter(filter === 'archive' ? 'all' : 'archive'); }}><Archive size={18} strokeWidth={1.8} />Archive</button>
+            <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => { setFSel(null); setFilter(filter === 'trash' ? 'all' : 'trash'); }}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
             <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
             <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
-            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
+            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) closeDoc(); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
         {viewOpen && <><div className="np-dim" style={{ background: 'rgba(58,42,26,.18)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
@@ -655,6 +750,8 @@ export default function SoftNotes() {
 
       {/* ---------- editor ---------- */}
       <main className="s-note-main" aria-label="Note">
+        {!online && <div className="s-offline" role="status" data-testid="offline-banner">You are offline. What you write is kept on this screen and is saved when the connection is back.</div>}
+        <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} onEmpty={closeDoc} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
         {!doc ? (
           <div className="s-note-empty">
             <h2 className="s-h2">Write something</h2>
@@ -663,19 +760,17 @@ export default function SoftNotes() {
           </div>
         ) : (
           <>
-            <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
             <div className="s-note-bar s-note-head">
               <label htmlFor="s-note-title" className="s-sr">Title</label>
               <textarea
                 id="s-note-title"
                 className="s-note-title"
                 rows={1}
-                wrap="off"
                 value={doc.title}
-                placeholder="Untitled note"
+                placeholder={firstLine(doc.content) || 'Untitled note'}
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                 onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); bodyRef.current?.querySelector('[contenteditable="true"]')?.focus(); } }}
                 disabled={doc.isDeleted}
               />
               <div className="s-note-tags">
@@ -700,7 +795,7 @@ export default function SoftNotes() {
                   />
                 )}
               </div>
-              <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad ? '' : 's-sr'}>{saved.text}</span></span>
+              <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad || justSaved ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad || justSaved ? '' : 's-sr'}>{saved.text}</span>{saved.bad && <button type="button" className="s-retry" data-testid="save-retry" onClick={(e) => { e.stopPropagation(); forceSave(); }}>Retry</button>}</span>
               {!doc.isDraft && <span className="s-note-stats" title={`${words} words · ${chars} characters · ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</span></span>}
               {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
               {!doc.isDraft && <ShareChips noteId={doc.id} />}
@@ -723,22 +818,33 @@ export default function SoftNotes() {
               </button>
               <div className="s-menu-wrap" ref={outsideMenu}>
                 <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
+                {menuOpen && doc.isDraft && (
+                  <div className="s-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
+                  </div>
+                )}
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <div className="s-menu-sep" role="separator" />
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
                     <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
-          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${window.location.origin}/notes/${doc.id}`); flash('Link copied'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
+                    <div className="s-menu-sep" role="separator" />
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
+                    <div className="s-menu-sep" role="separator" />
                     <button type="button" role="menuitem" className="danger" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
                   </div>
                 )}
@@ -767,9 +873,9 @@ export default function SoftNotes() {
                 formattingToolbar
               />
             </div>
-            {toast && <div className="s-toast" role="status">{toast}</div>}
           </>
         )}
+        {toast && <div className="s-toast" role="status">{toast}{toastAct && <button type="button" className="s-toast-act" data-testid="toast-undo" onClick={() => { const a = toastAct; setToast(''); setToastAct(null); Promise.resolve().then(a.run).catch(() => flash('Could not undo')); }}>{toastAct.label}</button>}</div>}
       </main>
 
       {/* ---------- helpers ---------- */}
@@ -790,7 +896,7 @@ export default function SoftNotes() {
         <section className="s-side-card" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
           <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>
           {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
-          {linked.slice(0, 8).map((t) => (
+          {(allLinked ? linked : linked.slice(0, 8)).map((t) => (
             <div key={t.id} className="s-linked-row">
               <label className={`s-side-task${t.completed ? ' done' : ''}`}>
                 <input type="checkbox" className="s-check small" checked={!!t.completed} onChange={() => toggleTask(t)} />
@@ -800,6 +906,7 @@ export default function SoftNotes() {
               <button type="button" className="s-unlink" aria-label={`Unlink ${t.text}`} title="Unlink" onClick={guarded(() => unlinkTask(t), 'Could not unlink the task')}><X size={12} /></button>
             </div>
           ))}
+          {linked.length > 8 && <button type="button" className="s-more" data-testid="linked-more" onClick={() => setAllLinked((v) => !v)}>{allLinked ? 'Show fewer' : `Show all ${linked.length}`}</button>}
           {noteId && (
             <form className="s-linked-add" onSubmit={addLinkedTask}>
               <input aria-label="Add a task to this note" value={taskDraft} onChange={(e) => setTaskDraft(e.target.value)} placeholder="Add a task…" autoComplete="off" />

@@ -141,3 +141,31 @@
 .soft .np .np-page .np-btns { margin-top: auto; }
 
 .soft .np.selecting .np-sheet.move { bottom: 62px; border-radius: 28px 28px 0 0; box-shadow: 0 -10px 30px rgba(70,45,20,.16); }
+
+/* open folder: a visible header with New note / Edit */
+.soft .np .np-folderbar { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; padding: 6px 8px; border-radius: 12px; background: var(--s-card, #fff); border: 1px solid var(--s-line, rgba(0,0,0,.08)); flex: none; }
+.soft .np .np-folderbar b { font-size: 14px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.soft .np .np-folderbar i { font-style: normal; font-size: 12px; opacity: .6; }
+.soft .np .np-folderbar .grow { flex: 1; }
+.soft .np .np-fb { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--s-line, rgba(0,0,0,.1)); background: transparent; color: inherit; font: inherit; font-size: 12.5px; cursor: pointer; }
+.soft .np .np-fb:hover { background: rgba(0,0,0,.05); }
+.soft .np .np-fb.primary { background: var(--s-accent, #5b4bdb); border-color: transparent; color: #fff; font-weight: 600; }
+
+.soft .s-saved .s-retry { margin-left: 8px; height: 24px; padding: 0 10px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+.soft .s-note-row .t.fb { font-style: italic; opacity: .85; }
+.soft .s-toast { display: inline-flex; align-items: center; gap: 12px; }
+.soft .s-toast .s-toast-act { border: 0; background: transparent; color: var(--s-dock-on); font: inherit; font-weight: 800; cursor: pointer; padding: 0 2px; text-decoration: underline; }
+
+.soft .s-offline { margin: 0 0 8px; padding: 8px 14px; border-radius: 12px; background: var(--s-butter); color: var(--s-fg); font-size: 13px; font-weight: 600; }
+.soft .s-menu .s-menu-sep { height: 1px; margin: 4px 8px; background: var(--s-line); }
+.soft .s-tab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--s-accent); flex: none; }
+
+/* folder bar: the name keeps a full line when the buttons do not fit beside it */
+.soft .np .np-folderbar { flex-wrap: wrap; row-gap: 6px; }
+.soft .np .np-folderbar .grow { display: none; }
+.soft .np .np-folderbar b { flex: 1 1 110px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: none; }
+.soft .np .np-folderbar i { flex: none; }
+.soft .np .np-fb { flex: none; white-space: nowrap; }
+.soft .np .np-fb.primary { flex: 1 1 auto; justify-content: center; }
+.soft .np .np-folderbar b { flex: 1 1 200px; }

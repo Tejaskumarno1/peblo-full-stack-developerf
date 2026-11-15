@@ -126,7 +126,7 @@ export function NewFolderSheet({ defs, notes, initial, onSave, onSmart, onDelete
   const [parent, setParent] = useState(initial?.parent || '');
   const [pickParent, setPickParent] = useState(false);
   const tag = tagFor(name);
-  const [collect, setCollect] = useState(edit ? !!initial.tag : true);
+  const [collect, setCollect] = useState(edit ? !!initial.tag : false);
   const tagged = tag ? notes.filter((n) => (n.tags || []).includes(tag)).length : 0;
   const top = defs.filter((d) => !d.smart && !d.parent && d.id !== initial?.id);
   const parentName = top.find((d) => d.id === parent)?.name || 'Top level';

@@ -423,3 +423,26 @@ Hints shown in UI: "New note (Ctrl+Alt+N)" tooltip (`NotesSidebar.jsx:85`, wrong
 - Unused deps/config: `react-window`, `@tanstack/react-query-devtools`, `tailwindcss` + `@tailwindcss/vite` (plugin not registered), `VITE_GOOGLE_CLIENT_ID` and the COOP/COEP headers in `vite.config.js` (Google sign-in leftovers).
 - `AppShell` imports SoftShell/RiverShell/OrbitShell eagerly, so their code ships in the main chunk even for Studio users.
 - No TODO/FIXME comments were found in the scoped files; the "Coming next"/"Later" MCP and Peblo Connect cards in ConnectionsPage are the only placeholders.
+
+
+## Soft notes page: folders, tabs, saving (round: ISSUES-AND-FEATURES N1, N2, N8-N10, N15, N22, N23, N29)
+- **Folder membership** (`soft/folders.js` `inFolder`): a note with `meta.folder` belongs to that folder only. A folder's collecting tag (`def.tag`) pulls in only notes with no folder of their own. New folders no longer collect by tag unless "Also collect notes tagged #x" is switched on. Taking a note out of a folder (`moveTo('')` in `SoftNotes.jsx`) also removes any tag that would collect it again, and the toast names the removed tags.
+- **Open folder**: a folder bar (New note, New subfolder, Edit, Close) shows above the list; a note started while a folder is open is created with `meta.folder`. Archive / Trash clear the folder filter.
+- **Tabs** (`NoteTabs.jsx`): always mounted. Closing the last tab calls `onEmpty` (`closeDoc`), which clears the open note and sets `noAuto` so the list does not open one by itself. Tabs of notes missing from the notes list are dropped.
+- **Saving** (`hooks/index.js` `useAutoSave`): a failed save retries by itself after 5 s, 10 s, 20 s, then every 30 s while that note is open; the "Couldn't save" status has a Retry button. On `beforeunload` the 5th argument `unloadFn` (`saveNoteOnUnload` in `utils/noteSync.js`) sends the save with `fetch(..., { keepalive: true })`; bodies over about 55 KB fall back to the normal save.
+- **Drafts**: the "···" menu works on an unsaved note (folder, text size, page width, typewriter). A folder picked there is stored in the draft's `meta` and sent when the note is first created.
+
+### Soft notes page: writing and deleting (N24, N30, N31, N48, N51, toast timer)
+- **Title**: wraps (no `wrap="off"`); Enter moves the cursor into the note body. While a note has no title its placeholder shows its first line, and the list row shows that first line in italics (`firstLine` in `SoftNotes.jsx`; display only, the saved title stays "Untitled").
+- **Save status**: "Saved" is shown for 2 s after a save finishes (`justSaved`), then goes back to the quiet tick.
+- **Delete**: "Move to the Trash" (one note or bulk) no longer asks; the toast has an **Undo** button (6 s) that restores the note(s). Only "Delete forever" still asks. `flash(msg, { label, run })` now takes an optional action, and one timer is shared so a newer message is not cut short.
+- **Copy link to note** uses the server's public address (`usePublicUrl`); with none set it says the link only works on this computer.
+
+### Soft notes page: tabs, offline, outline, dates, theme (round 3: N16-N18, N20, N21, N25, N26, N33, N36, N41, T1, T3, FT1, FT2)
+- **Tabs** (`NoteTabs.jsx`): stored per account (`peblo-note-tabs:<userId>`); the back / forward trail and the closed-tab list are kept in `sessionStorage` so a refresh keeps them. An unsaved note has its own "draft" tab. Tab menu adds "Close tabs to the right" and "Close all tabs"; Left/Right arrows move between tabs, Delete closes one.
+- **Offline**: a banner shows while `navigator.onLine` is false; autosave delay is 1 s.
+- **Outline** ignores `#` lines inside code fences. **Date groups**: Today, This week, then one group per month (with the year for earlier years).
+- **"···" menu** has separators. **Linked tasks** show 8, with "Show all N". The "Mentioned in" scan uses `useDeferredValue` for the title and must tolerate `doc === null`.
+- **Theme**: first run follows the system theme; the choice is saved on the account (`settings.theme`) and the account value wins on sign-in, like `uiStyle`.
+- **Toast** is drawn outside the "a note is open" branch, so messages (and Undo) show when no note is open.
+- **Tests**: `client/src/soft/folders.test.mjs` (folder rules) and `e2e/notes-mock.mjs` (real build in Chrome against a fake in-memory API, no database: tabs, folders, drafts, retry, trash + undo, offline). Run `npm run build:client` first.

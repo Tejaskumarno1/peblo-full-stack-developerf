@@ -1,4 +1,6 @@
 import { notesAPI } from '../api';
+import api from '../api/client';
+import { authHeaders } from '../api/token';
 
 /*
  * Safe saving for notes that someone else may be editing too (a shared link, another window).
@@ -51,3 +53,22 @@ export async function saveNoteSafe(id, payload) {
 
 /** Call once the editor has swapped to the merged text. */
 export const applyMerged = (detail) => setNoteBase(detail.id, detail.updatedAt, detail.content);
+
+/**
+ * Last-chance save while the window is closing. A normal request is cancelled then, so this one is sent with `keepalive`
+ * (the browser finishes it after the page is gone). Returns true when it was sent. Browsers refuse a keepalive body over
+ * about 60 KB; then it returns false and the caller falls back to the normal save.
+ */
+export function saveNoteOnUnload(id, payload) {
+  try {
+    if (!id || id === '__draft__' || typeof payload?.content !== 'string') return false;
+    const base = bases.get(id);
+    const body = live.get(id) === 'live'
+      ? { ...payload, title: payload.title || 'Untitled', collab: true, baseUpdatedAt: base?.updatedAt || new Date().toISOString() }
+      : base ? { ...payload, title: payload.title || 'Untitled', baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : { ...payload, title: payload.title || 'Untitled' };
+    const text = JSON.stringify(body);
+    if (text.length > 55000) return false;
+    fetch(`${api.defaults.baseURL}/notes/${encodeURIComponent(id)}`, { method: 'PATCH', keepalive: true, headers: authHeaders({ 'Content-Type': 'application/json' }), body: text });
+    return true;
+  } catch { return false; }
+}

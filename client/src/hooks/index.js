@@ -9,14 +9,19 @@ export function useDebounce(value, delay = 500) {
   return debounced;
 }
 
-export function useAutoSave(noteId, data, saveFn, delay = 1500) {
+export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null) {
   const [saveStatus, setSaveStatus] = useState('saved');
   const timeoutRef = useRef(null);
   const lastSavedRef = useRef('');
   const pendingRef = useRef({});
   const saveFnRef = useRef(saveFn);
+  const unloadFnRef = useRef(unloadFn);
+  const idRef = useRef(noteId);
+  const retryRef = useRef({ timer: null, n: 0 });
 
   saveFnRef.current = saveFn;
+  unloadFnRef.current = unloadFn;
+  idRef.current = noteId;
 
   if (noteId && data) {
     pendingRef.current[noteId] = data;
@@ -32,11 +37,17 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
       await saveFnRef.current(id, payload);
       lastSavedRef.current = current;
       delete pendingRef.current[id];
+      clearTimeout(retryRef.current.timer); retryRef.current.n = 0;
       setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
       return true;
     } catch (err) {
       setSaveStatus(prev => prev !== 'error' ? 'error' : prev);
       console.error('Auto-save failed:', err);
+      // try again by itself (5 s, 10 s, 20 s, then every 30 s) while this note is still the open one
+      const r = retryRef.current;
+      clearTimeout(r.timer);
+      r.timer = setTimeout(() => { if (idRef.current === id && pendingRef.current[id]) persist(id, pendingRef.current[id]); }, Math.min(30000, 5000 * 2 ** r.n));
+      r.n += 1;
       return false;
     }
   }, []);
@@ -50,8 +61,10 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
   // Flush when switching to another note
   useEffect(() => {
     const id = noteId;
+    retryRef.current.n = 0;
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      clearTimeout(retryRef.current.timer);
       const pending = pendingRef.current[id];
       if (!id || !pending) return;
       const snapshot = JSON.stringify(pending);
@@ -86,6 +99,8 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500) {
       if (!noteId || !data) return;
       const current = JSON.stringify(data);
       if (current === lastSavedRef.current) return;
+      // a normal request is cancelled when the window closes; the unload version is sent with keepalive so it still goes out
+      if (unloadFnRef.current && unloadFnRef.current(noteId, data)) return;
       persist(noteId, data);
     };
     window.addEventListener('beforeunload', onLeave);

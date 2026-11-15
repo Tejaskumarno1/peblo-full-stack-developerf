@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pin, Copy, X, Undo2, Plus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const KEY = 'peblo-note-tabs';
-const load = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
+// Tabs belong to the signed-in person (another account on this computer starts with none).
+// The back / forward trail and the "reopen closed" list last for this session, so a refresh keeps them.
+const keyFor = (uid) => `peblo-note-tabs:${uid || 'anon'}`;
+const load = (key) => { try { const s = JSON.parse(localStorage.getItem(key)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
+const loadSession = (key) => { try { return JSON.parse(sessionStorage.getItem(`${key}:trail`)) || {}; } catch { return {}; } };
 
 // Open notes as tabs above the page, with back / forward, pin, duplicate, close others and reopen closed.
-export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dirty }) {
-  const [tabs, setTabs] = useState(load);
-  const [closed, setClosed] = useState([]);
+export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onEmpty, dirty }) {
+  const { user } = useAuth();
+  const KEY = keyFor(user?.id);
+  const [tabs, setTabs] = useState(() => load(KEY));
+  const [closed, setClosed] = useState(() => (loadSession(KEY).closed || []));
   const [menu, setMenu] = useState(null); // { id, x, y }
-  const hist = useRef({ list: [], i: -1, skip: false });
+  const hist = useRef((() => { const t = loadSession(KEY).hist; return t && Array.isArray(t.list) ? { list: t.list, i: Math.min(t.i, t.list.length - 1), skip: false } : { list: [], i: -1, skip: false }; })());
   const [, bump] = useState(0);
   const tabsRef = useRef(tabs); tabsRef.current = tabs;
   const closedRef = useRef(closed); closedRef.current = closed;
   const docId = doc && !doc.isDraft ? doc.id : null;
 
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs]);
+  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs, KEY]);
+  const saveTrail = () => { try { sessionStorage.setItem(`${KEY}:trail`, JSON.stringify({ closed: closedRef.current.slice(-20), hist: { list: hist.current.list.slice(-50), i: hist.current.i } })); } catch { /* ignore */ } };
+  useEffect(() => { saveTrail(); }, [closed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const titleOf = useCallback((t) => {
     if (doc && t.id === doc.id) return doc.title || 'Untitled';
@@ -32,6 +40,7 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
     if (h.list[h.i] === docId) return;
     h.list = [...h.list.slice(0, h.i + 1), docId];
     h.i = h.list.length - 1;
+    saveTrail();
     bump((n) => n + 1);
   }, [docId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -40,6 +49,13 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
     if (!docId || !doc.title) return;
     setTabs((ts) => (ts.some((t) => t.id === docId && t.title !== doc.title) ? ts.map((t) => (t.id === docId ? { ...t, title: doc.title } : t)) : ts));
   }, [docId, doc?.title]);
+
+  // a note that was deleted for good, or moved to the Trash or Archive, should not leave a dead tab behind
+  useEffect(() => {
+    if (!notes.length) return;
+    const alive = new Set(notes.map((n) => n.id));
+    setTabs((ts) => (ts.some((t) => !alive.has(t.id) && t.id !== docId) ? ts.filter((t) => alive.has(t.id) || t.id === docId) : ts));
+  }, [notes, docId]);
 
   const go = useCallback((id) => navigate(`/notes/${id}`), [navigate]);
   const ordered = [...tabs.filter((t) => t.pinned), ...tabs.filter((t) => !t.pinned)];
@@ -54,9 +70,9 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
     if (docId === id) {
       const idx = ts.findIndex((x) => x.id === id);
       const next = rest[Math.min(idx, rest.length - 1)];
-      if (next) go(next.id); else navigate('/notes');
+      if (next) go(next.id); else if (onEmpty) onEmpty(); else navigate('/notes');
     }
-  }, [docId, go, navigate]);
+  }, [docId, go, navigate, onEmpty]);
 
   const closeOthers = (id) => {
     const ts = tabsRef.current;
@@ -65,6 +81,26 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
     setTabs(ts.filter((t) => t.id === id || t.pinned));
     setClosed((c) => [...c, ...gone]);
     if (docId !== id && !ts.find((t) => t.id === docId && t.pinned)) go(id);
+  };
+  const closeRight = (id) => {
+    const ts = tabsRef.current;
+    const ord = [...ts.filter((t) => t.pinned), ...ts.filter((t) => !t.pinned)];
+    const at = ord.findIndex((t) => t.id === id);
+    const gone = ord.slice(at + 1).filter((t) => !t.pinned);
+    if (!gone.length) return;
+    const ids = new Set(gone.map((t) => t.id));
+    setTabs(ts.filter((t) => !ids.has(t.id)));
+    setClosed((c) => [...c, ...gone]);
+    if (docId && ids.has(docId)) go(id);
+  };
+  const closeAll = () => {
+    const ts = tabsRef.current;
+    const gone = ts.filter((t) => !t.pinned);
+    if (!gone.length) return;
+    setTabs(ts.filter((t) => t.pinned));
+    setClosed((c) => [...c, ...gone]);
+    const keep = ts.find((t) => t.pinned);
+    if (keep) { if (docId !== keep.id) go(keep.id); } else if (onEmpty) onEmpty(); else navigate('/notes');
   };
   const reopen = useCallback(() => {
     const c = closedRef.current;
@@ -81,6 +117,7 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
     const j = h.i + d;
     if (j < 0 || j >= h.list.length) return;
     h.i = j; h.skip = true;
+    saveTrail();
     go(h.list[j]);
   }, [go]);
   const cycle = useCallback((d) => {
@@ -122,7 +159,16 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
           const on = t.id === docId;
           return (
             <div key={t.id} role="tab" aria-selected={on} tabIndex={0} data-testid="note-tab" data-id={t.id} className={`s-tab${on ? ' on' : ''}${t.pinned ? ' pinned' : ''}`}
-              onClick={() => !on && go(t.id)} onKeyDown={(e) => { if (e.key === 'Enter') go(t.id); }}
+              onClick={() => !on && go(t.id)} onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(t.id); }
+                else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  const i = ordered.findIndex((x) => x.id === t.id);
+                  const nx = ordered[(i + (e.key === 'ArrowRight' ? 1 : -1) + ordered.length) % ordered.length];
+                  const el = e.currentTarget.parentElement?.querySelector(`[data-id="${nx.id}"]`);
+                  el?.focus();
+                } else if (e.key === 'Delete') { e.preventDefault(); close(t.id); }
+              }}
               onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); close(t.id); } }}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ id: t.id, x: e.clientX, y: e.clientY }); }}>
               {t.pinned && <Pin size={13} strokeWidth={2} />}
@@ -133,11 +179,18 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, dir
           );
         })}
       </div>
+      {doc?.isDraft && (
+        <div className="s-tab-row" style={{ flex: 'none' }}>
+          <div role="tab" aria-selected="true" tabIndex={0} data-testid="draft-tab" className="s-tab on"><b>{doc.title || 'New note'}</b><span className="s-tab-dot" title="Not saved yet" /></div>
+        </div>
+      )}
       <button type="button" className="s-tab-nav" data-testid="tab-new" aria-label="New note" title="New note" onClick={onNew}><Plus size={16} strokeWidth={2.2} /></button>
       {menu && mt && (
         <div className="s-tab-menu" role="menu" data-testid="tab-menu" style={{ left: Math.min(menu.x, window.innerWidth - 260), top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
           <button type="button" role="menuitem" data-testid="tm-pin" onClick={() => { togglePin(menu.id); setMenu(null); }}><Pin size={15} />{mt.pinned ? 'Unpin tab' : 'Pin tab'}</button>
           <button type="button" role="menuitem" data-testid="tm-dup" onClick={() => { const id = menu.id; setMenu(null); onDuplicate(id); }}><Copy size={15} />Duplicate</button>
+          <button type="button" role="menuitem" data-testid="tm-right" onClick={() => { closeRight(menu.id); setMenu(null); }}><X size={15} />Close tabs to the right</button>
+          <button type="button" role="menuitem" data-testid="tm-all" onClick={() => { closeAll(); setMenu(null); }}><X size={15} />Close all tabs</button>
           <button type="button" role="menuitem" data-testid="tm-others" onClick={() => { closeOthers(menu.id); setMenu(null); }}><X size={15} />Close others</button>
           <button type="button" role="menuitem" data-testid="tm-reopen" disabled={!closed.length} onClick={() => { reopen(); setMenu(null); }}><Undo2 size={15} />Reopen closed<kbd>Ctrl+Shift+T</kbd></button>
         </div>
