@@ -49,7 +49,7 @@
 .soft .set-layout .pv { height: 172px; border-radius: 16px; background: var(--s-surface); box-shadow: 0 0 0 1px var(--s-line); display: grid; gap: 6px; padding: 12px; align-content: start; }
 .soft .set-layout .pv.cards { grid-template-columns: 1fr 1fr; }
 .soft .set-layout .pc { height: 44px; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; box-sizing: border-box; }
-.soft .set-layout .pc.pe { background: #FFD9C4; } .soft .set-layout .pc.mi { background: #CDEBD9; } .soft .set-layout .pc.bu { background: #FFE9A6; } .soft .set-layout .pc.li { background: #DDD8FF; }
+.soft .set-layout .pc.pe { background: var(--s-peach); } .soft .set-layout .pc.mi { background: var(--s-mint); } .soft .set-layout .pc.bu { background: var(--s-butter); } .soft .set-layout .pc.li { background: var(--s-lilac); }
 .soft .set-layout i { display: block; border-radius: 4px; }
 .soft .set-layout i.d { height: 7px; background: var(--s-fg); opacity: .7; width: 60%; }
 .soft .set-layout i.l { height: 5px; background: var(--s-fg); opacity: .3; width: 35%; }
@@ -61,7 +61,7 @@
 .soft .set-layout .pl i.l { width: 35%; opacity: 1; background: var(--s-line); }
 .soft .set-layout .nm { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .soft .set-layout .nm b { font-size: 14px; font-weight: 800; }
-.soft .set-layout .nm em { font-style: normal; font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; background: #FFE9A6; color: #3A2A1A; }
+.soft .set-layout .nm em { font-style: normal; font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; background: var(--s-butter); color: var(--s-fg); }
 .soft .set-layout .rd { width: 17px; height: 17px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--s-fg); flex: none; }
 .soft .set-layout[aria-pressed="true"] .rd { background: radial-gradient(var(--s-fg) 0 4.5px, transparent 5px); }
 .soft .set-layout small { font-size: 12.5px; font-weight: 500; opacity: .75; line-height: 1.35; }

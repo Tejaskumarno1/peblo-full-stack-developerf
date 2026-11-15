@@ -2,14 +2,15 @@ import '../notesV2.css';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Sun, Moon, Monitor } from 'lucide-react';
+import { Check, Plus, Sun, Moon, Monitor, Clock } from 'lucide-react';
 import { useAuth, getSavedAccounts, forgetAccount, clearAccountData } from '../../context/AuthContext';
 import { authAPI } from '../../api';
 import { getToken, setToken, clearToken } from '../../api/token';
 import { Card, Row, Switch, Seg, Confirm, PasswordInput, passwordStrength, useSave } from './ui';
 import Avatar from '../../components/Avatar';
 import ProfilePage from './ProfilePage';
-import { load as loadA11y, store as storeA11y, apply as applyA11y } from '../../utils/a11yPrefs';
+import { effectiveDensity } from '../../utils/appearance';
+import { AccentCard, ScheduleRow, DensityRow, A11yCard } from './AppearanceExtras';
 
 const initialOf = (u) => (String(u?.name || u?.email || 'You').trim().charAt(0) || 'Y').toUpperCase();
 const apiBase = () => import.meta.env.VITE_API_URL || '/api';
@@ -164,6 +165,7 @@ const THEMES = [
   { id: 'dark', name: 'Dark', icon: Moon },
   { id: 'midnight', name: 'Midnight', icon: Moon },
   { id: 'system', name: 'System', icon: Monitor },
+  { id: 'auto', name: 'Auto by time', icon: Clock },
 ];
 
 export function AppearanceSection() {
@@ -183,37 +185,21 @@ export function AppearanceSection() {
           ))}
         </div>
       </Card>
-      <Card title="Colours" hint="System follows your computer.">
+      <Card title="Colours" hint="System follows your computer. Auto by time is dark between two times you choose.">
         <div className="settings-theme-grid s-set-themegrid" role="radiogroup" aria-label="Theme">
           {THEMES.map(({ id, name, icon: Icon }) => (
             <button key={id} type="button" role="radio" aria-checked={theme === id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => save(async () => (await setTheme(id)) !== false)}>
-              <span className={`theme-preview ${id === 'midnight' ? 'dark' : id}`} style={id === 'midnight' ? { background: '#000' } : undefined} />
+              <span className={`theme-preview ${id === 'midnight' ? 'dark' : id === 'auto' ? 'system' : id}`} style={id === 'midnight' ? { background: '#000' } : undefined} />
               <span className="s-set-themename"><Icon size={14} /> {name}</span>
             </button>
           ))}
         </div>
-        <Row label="Compact" hint="Tighter lists and cards, so more fits on screen.">
-          <Switch label="Compact" checked={!!settings?.compact} onChange={(v) => save({ compact: v })} />
-        </Row>
+        <ScheduleRow />
+        <DensityRow />
       </Card>
+      <AccentCard />
       <A11yCard />
     </>
-  );
-}
-
-/** Text size, motion, contrast and focus ring: kept on this device only. */
-function A11yCard() {
-  const [p, setP] = useState(() => loadA11y());
-  const set = (patch) => { const n = { ...p, ...patch }; setP(n); storeA11y(n); applyA11y(n); };
-  return (
-    <Card title="Accessibility" hint="Saved on this device only, so a phone and a big screen can differ.">
-      <Row label="Text size" hint="Makes the whole app larger or smaller.">
-        <Seg label="Text size" value={p.size} onChange={(v) => set({ size: v })} options={[{ id: 'S', label: 'S' }, { id: 'M', label: 'M' }, { id: 'L', label: 'L' }, { id: 'XL', label: 'XL' }]} />
-      </Row>
-      <Row label="Reduce motion" hint="Turns off animations and slides."><Switch label="Reduce motion" checked={p.motion} onChange={(v) => set({ motion: v })} /></Row>
-      <Row label="High contrast" hint="Darker text and clearer outlines."><Switch label="High contrast" checked={p.contrast} onChange={(v) => set({ contrast: v })} /></Row>
-      <Row label="Visible focus ring" hint="A bold outline on whatever the keyboard is on."><Switch label="Visible focus ring" checked={p.focus} onChange={(v) => set({ focus: v })} /></Row>
-    </Card>
   );
 }
 
@@ -252,7 +238,7 @@ export function NotesSection() {
           <Seg label="Default grouping" value={['date', 'tag', 'folder', 'none'].includes(settings?.noteGroup) ? settings.noteGroup : 'date'} onChange={(v) => save({ noteGroup: v })} options={[{ id: 'date', label: 'Date' }, { id: 'folder', label: 'Folder' }, { id: 'tag', label: 'Tag' }, { id: 'none', label: 'None' }]} />
         </Row>
         <Row label="Density" hint="Cozy shows a preview line under each title.">
-          <Seg label="Density" value={settings?.noteDensity === 'compact' ? 'compact' : 'cozy'} onChange={(v) => save({ noteDensity: v })} options={[{ id: 'cozy', label: 'Cozy' }, { id: 'compact', label: 'Compact' }]} />
+          <Seg label="Density" value={effectiveDensity(settings)} onChange={(v) => save({ noteDensity: v })} options={[{ id: 'cozy', label: 'Cozy' }, { id: 'compact', label: 'Compact' }]} />
         </Row>
         <Row label="Remember folded groups" hint="Applies to the Folded sections layout.">
           <Switch label="Remember folded groups" checked={settings?.rememberFolds !== false} onChange={(v) => save({ rememberFolds: v })} />
@@ -261,7 +247,7 @@ export function NotesSection() {
       </div>
       <Card title="Writing">
         <Row label="Text size in notes" hint="Only changes what you read and write in a note.">
-          <Seg label="Text size" value={settings?.fontSize || 'medium'} onChange={(v) => save({ fontSize: v })} options={[{ id: 'small', label: 'Small' }, { id: 'medium', label: 'Medium' }, { id: 'large', label: 'Large' }]} />
+          <Seg label="Text size" value={settings?.fontSize || 'medium'} onChange={(v) => { try { localStorage.removeItem('peblo-note-font'); } catch { /* ignore */ } save({ fontSize: v }); }} options={[{ id: 'small', label: 'Small' }, { id: 'medium', label: 'Medium' }, { id: 'large', label: 'Large' }]} />
         </Row>
         <Row label="Check spelling" hint="Underline misspelled words while you type in a note.">
           <Switch label="Check spelling" checked={settings?.spellcheck !== false} onChange={(v) => save({ spellcheck: v })} />

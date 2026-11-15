@@ -4,7 +4,15 @@ html[data-a11y-motion] *, html[data-a11y-motion] *::before, html[data-a11y-motio
 }
 html[data-a11y-contrast] .soft { --s-fg2: var(--s-fg); --s-fg3: var(--s-fg); --s-line: var(--s-fg); }
 html[data-a11y-contrast] .soft button, html[data-a11y-contrast] .soft input, html[data-a11y-contrast] .soft select { border-color: var(--s-fg); }
-html[data-a11y-focus] :focus-visible { outline: 3px solid var(--s-accent, #C4441C) !important; outline-offset: 3px !important; border-radius: 8px; }
+/* High contrast in every style: secondary text and lines take the main text colour, controls get a solid outline. */
+html[data-a11y-contrast] .river { --r-fg2: var(--r-fg); --r-fg3: var(--r-fg); --r-line: var(--r-fg); }
+html[data-a11y-contrast] .orbit { --o-fg2: var(--o-fg); --o-fg3: var(--o-fg); --o-line: var(--o-fg); --o-wire: var(--o-fg); }
+html[data-a11y-contrast] body[data-style] { --pb-fg-2: var(--pb-fg); --pb-fg-3: var(--pb-fg); --pb-line: var(--pb-fg); --pb-line-2: var(--pb-fg); }
+html[data-a11y-contrast] .river button, html[data-a11y-contrast] .river input, html[data-a11y-contrast] .river select,
+html[data-a11y-contrast] .orbit button, html[data-a11y-contrast] .orbit input, html[data-a11y-contrast] .orbit select,
+html[data-a11y-contrast] body[data-style="studio"] button, html[data-a11y-contrast] body[data-style="studio"] input, html[data-a11y-contrast] body[data-style="studio"] select,
+html[data-a11y-contrast] body[data-style="console"] button, html[data-a11y-contrast] body[data-style="console"] input, html[data-a11y-contrast] body[data-style="console"] select { border-color: var(--r-fg, var(--o-fg, var(--pb-fg))); }
+html[data-a11y-focus] :focus-visible { outline: 3px solid var(--s-accent, var(--r-now, var(--o-path, var(--pb-solid, #C4441C)))) !important; outline-offset: 3px !important; border-radius: 8px; }
 
 /* offline bar */
 .soft .s-offline { display: flex; align-items: center; gap: 10px; margin: 0 auto 8px; width: min(1344px, calc(100% - 96px)); padding: 10px 18px; border-radius: 999px; background: var(--s-butter); color: var(--s-fg); font: 600 13.5px var(--s-body); }

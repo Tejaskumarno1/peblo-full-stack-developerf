@@ -597,3 +597,14 @@ Labels:
     - `useDismiss` is defined twice, identically (`orbit/OrbitShell.jsx:24-35`, `river/RiverShell.jsx:16-27`).
     - Styles depend on each other's util modules: Orbit imports from `river/riverUtils` and `soft/softUtils`; River imports from `soft/softUtils`. Removing or changing one style can break the others.
 44. **[Inconsistency] Optimistic updates only touch one cache key each.** Orbit uses `['todos','orbit-all']`, River `['todos','range','river',...]`, Soft `['todos','all']` or `['todos','today']`. The real state arrives after `invalidateQueries`, so other views on the page briefly disagree.
+
+
+---
+
+## Appearance and accessibility (themes branch)
+
+- **Accent colour.** Settings > Appearance > Accent colour: six curated colours plus a custom picker (hex validated, live preview, Apply, Reset). Stored as `settings.accent` on the account and as `peblo-accent` plus the generated CSS in `peblo-accent-css` on the device. `utils/appearance.js` derives light, dark and midnight variants (dark ones are lightened) and picks the on-accent text colour (white or near-black, nudging the fill when neither reaches 4.5:1). `buildAccentCss` writes one `<style id="pb-accent">` that re-colours `--s-accent*`, `--r-now*`, `--o-path*` and the Studio/Console `--pb-accent/solid/soft` tokens; the pre-paint script in `client/index.html` injects the stored CSS on first paint. River and Orbit still hard-code white text on a few accent fills (badges, quiz buttons).
+- **Dark schedule.** Theme choice "Auto by time" (`theme: 'auto'`) with `settings.themeSchedule = { from, to, dark }` (HH:MM, may span midnight, dark or midnight at night). `utils/useAppearanceSync.js` (called from AuthProvider) resolves the theme, re-checks every minute and on focus, and also owns accent, density (`data-compact`) and account a11y application. The schedule is mirrored in `peblo-schedule` for the pre-paint script.
+- **Accessibility.** Text size, motion, contrast and focus ring are saved on the account (`settings.a11y`); "Only this device" (`peblo-a11y-device`) keeps a local override. High contrast now also acts in River, Orbit, Studio and Console (`styles/a11y.css`). UI lives in `soft/settings/AppearanceExtras.jsx`.
+- **One text size, one density.** Accessibility Text size is the single global control. The per-note "Text size" menu item is gone; note text size is Settings > Notes > Text size in notes (`settings.fontSize`; the old `peblo-note-font` is still read until that is set). Density is `settings.noteDensity` only: Settings > Notes Density, the global Compact switch and the notes list View menu all read and write it (old `settings.compact` and the density in `peblo-notes-view` are read as fallbacks).
+- **Contrast sweep.** `node scripts/contrast-check.mjs` checks the `--s-*` text and fill pairs of the notes list and tiles in light, dark and midnight (4.5:1). Tests: `client/src/utils/appearance.test.mjs`, browser checks in `e2e/notes-mock.mjs`.

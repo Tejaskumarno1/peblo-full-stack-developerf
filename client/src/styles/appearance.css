@@ -1,0 +1,14 @@
+/* Settings > Appearance: accent colour and dark-mode schedule controls (see soft/settings/AppearanceExtras.jsx). */
+.ax-swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 0 8px; }
+.ax-sw { width: 40px; height: 40px; border-radius: 999px; border: 3px solid var(--s-surface); background: var(--ax); color: var(--ax-on); box-shadow: 0 0 0 1px var(--s-line); cursor: pointer; font: 800 16px var(--s-body); display: grid; place-items: center; }
+.ax-sw[aria-checked="true"] { box-shadow: 0 0 0 3px var(--s-fg); }
+.ax-custom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ax-custom input[type="color"] { width: 40px; height: 36px; padding: 0; border: 1px solid var(--s-line); border-radius: 10px; background: var(--s-surface); cursor: pointer; }
+.ax-hex { width: 96px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: 600 14px var(--s-body); text-transform: uppercase; }
+.ax-hex[aria-invalid="true"] { border-color: var(--s-accent-ink); }
+.ax-err { display: block; min-height: 16px; color: var(--s-accent-ink); font-size: 13px; }
+.ax-preview { display: flex; gap: 8px; padding-top: 4px; }
+.ax-pv { padding: 6px 14px; border-radius: 999px; font: 700 12.5px var(--s-body); text-transform: capitalize; }
+.ax-sched { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ax-sched label { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.ax-sched input[type="time"] { padding: 7px 10px; border-radius: 10px; border: 1px solid var(--s-line); background: var(--s-surface); color: var(--s-fg); font: 600 14px var(--s-body); }
