@@ -16,17 +16,17 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [~] R3 **(fixed in code 94ced39, NOT yet run against a database)** **HIGH** A note shared "can view" can still be trashed or moved by teammates ("manage" needs are not checked). `scope.ts:50-52`, `noteAccess.ts:57`.
 - [~] R4 **(fixed in code 94ced39, NOT yet run against a database)** Read-only members can request a review, which reopens a finished task. `teamTalk.ts:22-77`.
 - [~] R5 **(fixed in code 94ced39, NOT yet run against a database)** No "last lead" guard when changing team roles; an org guest can be made lead. `routes/orgs.ts:291-302`.
-- [ ] R6 No way to remove another person from one team (leads can only set "viewer").
+- [~] R6 **(fixed in code on feat-team, NOT yet run against a database)** No way to remove another person from one team (leads can only set "viewer").
 - [~] R7 **(fixed in code 94ced39, NOT yet run against a database)** Guests can list every member's email, role and spaces. `orgs.ts:30-48`.
-- [ ] R8 A leaving member's private Office notes become unreadable to everyone; no note handover (tasks only). `orgs.ts:263-272`.
+- [~] R8 **(fixed in code on feat-team, NOT yet run against a database)** A leaving member's private Office notes become unreadable to everyone; no note handover (tasks only). `orgs.ts:263-272`.
 - [ ] R9 Org policy "publicShares" is not applied to existing links; per-team public-links toggle is never read; team notes cannot be shared by link yet the UI offers it. `utils/orgPolicy.ts`, `share.ts:288`.
 - [ ] R10 Version history (restore, name) is broken for team notes (queries ignore the space). `notesController.ts:628-770`.
 - [ ] R11 Live events only reach the editing user's own room; teammates see nothing until a refetch. `index.ts:234`, `teamTalk.ts:55`.
 - [~] R12 **(fixed in code 94ced39, NOT yet run against a database)** A removed member can still live-edit their own team note. `services/collab.ts:403`.
 - [~] R13 (accept is now atomic, 94ced39; token in notification/URL still open) Invite token stored in plaintext in the notification, sent in a URL query, reminder not throttled, accept not atomic. `orgs.ts:48-150`.
 - [~] R14 **(fixed in code 94ced39, NOT yet run against a database)** Join-link use is counted before the inserts and the org status is not checked. `orgs.ts:200-247`.
-- [ ] R15 Seat limit and trial are shown but never enforced. `orgs.ts:427-437`.
-- [ ] R16 Any lead can close a team and there is no reopen. `orgs.ts:390-396`.
+- [~] R15 **(fixed in code on feat-team, NOT yet run against a database)** Seat limit and trial are shown but never enforced. `orgs.ts:427-437`. (Seat limit and guest expiry are now enforced and a guest can be extended; the trial is still NOT enforced.)
+- [~] R16 **(fixed in code on feat-team, NOT yet run against a database)** Any lead can close a team and there is no reopen. `orgs.ts:390-396`. (Reopen and a soft-closing Delete organization exist now; there is no purge job and no restore of a deleted organization.)
 - [ ] R17 Tags are per user; a teammate's tag edit replaces the author's links. `notesController.ts:498`.
 - [~] R18 **(fixed in code 94ced39, NOT yet run against a database)** Task assignment ignores paused orgs and expired guests. `utils/access.ts:22-65`.
 - [ ] R19 Org export has no paging, includes trashed text and has no extra rate limit. `orgs.ts:331-352`.
@@ -38,14 +38,14 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [ ] R23 While a live connection is down typed text is neither sent nor kept; text typed during an AI request is not marked dirty. `components/BlockEditor.jsx:831-858`.
 - [ ] R24 Switching notes by keyboard may drop the last 200 ms of typing *(unverified)*. `BlockEditor.jsx:881`.
 - [ ] R25 Notes over about 55 KB lose their last edits when the window closes. `utils/noteSync.js:144`.
-- [ ] R26 A team note shared "can view" opens editable for non-authors (the list has no userId), so saves fail forever. `SoftNotes.jsx:148,1069`.
-- [ ] R27 Archive, Pin, Move, Trash, Duplicate and Share are shown to read-only viewers. `SoftNotes.jsx:779-800`.
+- [~] R26 **(fixed in code on feat-team (browser-checked with a fake API in e2e/notes-mock.mjs); the server part is NOT yet run against a database)** A team note shared "can view" opens editable for non-authors (the list has no userId), so saves fail forever. `SoftNotes.jsx:148,1069`.
+- [~] R27 **(fixed in code on feat-team (browser-checked); the server part is NOT yet run against a database)** Archive, Pin, Move, Trash, Duplicate and Share are shown to read-only viewers. `SoftNotes.jsx:779-800`.
 - [~] R28 (partly: no more silent folder divergence; bulk still one Promise.all) Bulk actions use one `Promise.all` and report one generic error. `SoftNotes.jsx:638,649`.
 - [x] R29 A failed account save is ignored while the notes are renamed or cleared (folders and notes diverge). `SoftNotes.jsx:593-621`.
 - [ ] R30 Open tabs of one space are written under another space's key after a switch *(partly unverified)*. `NoteTabs.jsx:9-18`.
 - [x] R31 A link to a note in another space or the Trash silently goes to /notes. `SoftNotes.jsx:343`.
 - [ ] R32 Move dialog text is wrong for non-authors; Undo failures are swallowed. `MoveNote.jsx:66,91`.
-- [ ] R33 Team notes show no author in the list or "Shared by" strip. `TeamNoteStrip.jsx:37`.
+- [~] R33 **(fixed in code on feat-team (browser-checked); the server part is NOT yet run against a database)** Team notes show no author in the list or "Shared by" strip. `TeamNoteStrip.jsx:37`.
 
 ### Notes: performance and accessibility
 - [ ] R34 The sidebar and the list each fetch every note with full text; every autosave refetches the library. `SoftNotes.jsx:188-197`.

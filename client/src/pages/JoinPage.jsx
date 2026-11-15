@@ -7,6 +7,7 @@ import { getToken } from '../api/token';
 import './verify-email.css';
 
 const COPY = {
+  seat_limit: ['This organization is full', 'It has reached its seat limit. Ask an owner or admin to free a seat, then try again.'],
   invalid: ['This link is not valid', 'Check the link, or ask for a new one.'],
   revoked: ['This link was turned off', 'Ask the person who shared it for a new link.'],
   expired: ['This link has expired', 'Ask the person who shared it for a new link.'],

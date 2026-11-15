@@ -30,6 +30,15 @@ const notes = [
   mk('Biology revision', 'Cell structure', {}),
   mk('', '# Plan for Monday\nbuy milk', {}),
 ];
+// Team space 'team-ro': what the real server sends for team notes (server/src/utils/teamNoteInfo.ts): team, owner, level, access, canManage, lastEditedBy
+let wsOrgs = [];
+const teamBase = { team: true, canManage: false, level: null };
+const teamNotes = [
+  mk('Shared brief', 'Read only for you', { ...teamBase, owner: { id: 'u2', name: 'Dana' }, level: 'view', access: 'view', lastEditedBy: 'Eli', meta: { teamShare: { level: 'view' } } }),
+  mk('My team note', 'Mine to manage', { ...teamBase, owner: { id: 'u1', name: 'Tester' }, access: 'owner', canManage: true, lastEditedBy: 'Tester' }),
+  mk('Open colleague note', 'Anyone may type here', { ...teamBase, owner: { id: 'u2', name: 'Dana' }, access: 'edit', lastEditedBy: 'Dana' }),
+  mk('Lead can manage', 'A lead may trash this', { ...teamBase, owner: { id: 'u2', name: 'Dana' }, access: 'edit', canManage: true, lastEditedBy: 'Dana' }),
+];
 const user = { id: 'u1', email: 'tester@peblo.test', name: 'Tester', settings: { uiStyle: 'soft', noteLayout: 'classic', noteFolders: [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }] } };
 const reqs = [];
 let failPatches = 0;
@@ -45,17 +54,18 @@ async function handle(route) {
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
-  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: [], invites: [] });
+  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: wsOrgs, invites: [] });
   if (p === '/notes' && method === 'GET') {
     const q = Object.fromEntries(url.searchParams);
-    let list = notes.filter((n) => (q.deleted ? n.isDeleted : !n.isDeleted) && (q.archived ? n.isArchived : !n.isArchived));
+    const pool = req.headers()['x-peblo-space'] === 'team-ro' ? teamNotes : notes;
+    let list = pool.filter((n) => (q.deleted ? n.isDeleted : !n.isDeleted) && (q.archived ? n.isArchived : !n.isArchived));
     if (q.search) list = list.filter((n) => (n.title + n.content).toLowerCase().includes(q.search.toLowerCase()));
     return json(route, { notes: list });
   }
   if (p === '/notes' && method === 'POST') { const n = mk(body.title || 'Untitled', body.content || '', { tags: body.tags || [], meta: body.meta || {} }); notes.unshift(n); return json(route, { note: n }, 201); }
   let m = /^\/notes\/([^/]+)$/.exec(p);
   if (m) {
-    const n = notes.find((x) => x.id === m[1]);
+    const n = notes.find((x) => x.id === m[1]) || teamNotes.find((x) => x.id === m[1]);
     if (!n) return json(route, { error: 'nope' }, 404);
     if (method === 'GET') return json(route, { note: n });
     if (method === 'PATCH') {
@@ -205,6 +215,46 @@ try {
   await page.screenshot({ path: 'e2e/notes-mock-dark.png' });
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // midnight
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // back to light
+
+  // 7e. Team notes (R26, R27, R33): author on the row, read only for a note shared "can view", and no manage actions without manage rights
+  wsOrgs = [{ id: 'o1', name: 'Org', status: 'active', role: 'member', spaces: [{ id: 'team-ro', name: 'Design', kind: 'team', role: 'member', members: 3 }] }];
+  await page.evaluate(() => localStorage.setItem('peblo-space', 'team-ro'));
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row', { hasText: 'Shared brief' }).waitFor(TO);
+  const rowText = (t) => page.locator('.s-note-row', { hasText: t }).first().innerText();
+  check('a team note row shows who wrote it', /by Dana/.test(await rowText('Shared brief')), await rowText('Shared brief'));
+  check('a team note row shows who edited it last', /edited by Eli/.test(await rowText('Shared brief')));
+  check('your own team note row has no "by" label', !/by Tester/.test(await rowText('My team note')));
+  const openTeam = async (t) => { await page.locator('.s-note-row', { hasText: t }).first().click(); await page.locator('textarea.s-note-title').waitFor(TO); await wait(700); };
+  const openMenu = async () => { await page.locator('.s-menu-wrap button[aria-label="More"]').click(); await wait(250); };
+  const closeMenu = async () => { await page.locator('.s-menu-wrap button[aria-label="More"]').click().catch(() => {}); await wait(150); };
+
+  await openTeam('Shared brief');
+  check('a "can view" team note shows a View only badge', await page.locator('[data-testid="viewer-note"]').isVisible() && /View only/.test(await page.locator('[data-testid="viewer-note"]').innerText()));
+  check('..the editor is not editable', (await page.locator('.s-note-body [contenteditable="true"], [contenteditable="true"]').count()) === 0);
+  check('..the title cannot be typed in', await page.locator('textarea.s-note-title').isDisabled());
+  check('..and the byline names the author and the last editor', /Dana/.test(await page.locator('[data-testid="team-byline"]').innerText()) && /Eli/.test(await page.locator('[data-testid="team-byline"]').innerText()));
+  await openMenu();
+  for (const id of ['menu-archive', 'menu-pin', 'menu-duplicate', 'menu-move', 'menu-share', 'menu-trash']) check(`..${id} is hidden for someone without manage rights`, (await page.locator(`[data-testid="${id}"]`).count()) === 0);
+  await closeMenu();
+
+  await openTeam('My team note');
+  check('your own team note has no View only badge and is editable', (await page.locator('[data-testid="viewer-note"]').count()) === 0 && (await page.locator('[contenteditable="true"]').count()) > 0);
+  await openMenu();
+  check('the author keeps Archive, Pin, Duplicate, Share and Trash', (await page.locator('[data-testid="menu-archive"], [data-testid="menu-pin"], [data-testid="menu-duplicate"], [data-testid="menu-share"], [data-testid="menu-trash"]').count()) === 5);
+  await closeMenu();
+
+  await openTeam('Open colleague note');
+  check('a colleague\'s open team note is editable but not manageable', (await page.locator('[data-testid="viewer-note"]').count()) === 0 && (await page.locator('[contenteditable="true"]').count()) > 0);
+  await openMenu();
+  check('..no Archive, Trash or Share for a plain writer', (await page.locator('[data-testid="menu-archive"], [data-testid="menu-trash"], [data-testid="menu-share"]').count()) === 0);
+  await closeMenu();
+
+  await openTeam('Lead can manage');
+  await openMenu();
+  check('a team lead sees Archive and Trash on a colleague\'s note', (await page.locator('[data-testid="menu-archive"]').count()) === 1 && (await page.locator('[data-testid="menu-trash"]').count()) === 1);
+  await closeMenu();
+  await page.evaluate(() => localStorage.removeItem('peblo-space'));
+  wsOrgs = [];
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);

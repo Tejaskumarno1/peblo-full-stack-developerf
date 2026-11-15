@@ -45,7 +45,7 @@ export default function TeamProjects() {
         ))}
       </div>
       {dlg === 'template' && <TemplatePicker onClose={() => setDlg(null)} onDone={(n, c) => { setMsg(`${c} tasks added to ${n}`); refetch(); }} />}
-      {dlg === 'handover' && <HandoverDialog onClose={() => setDlg(null)} onDone={(c, who) => { setMsg(`${c} task${c === 1 ? '' : 's'} handed to ${who}`); refetch(); }} />}
+      {dlg === 'handover' && <HandoverDialog onClose={() => setDlg(null)} onDone={(c, who, n = 0) => { setMsg([c ? `${c} task${c === 1 ? '' : 's'}` : '', n ? `${n} note${n === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ') + ` handed to ${who}`); refetch(); }} />}
     </div>
   );
 }

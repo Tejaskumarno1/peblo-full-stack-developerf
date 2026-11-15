@@ -1,5 +1,6 @@
 import prisma from '../db.js';
 import { can, spaceAccess } from './access.js';
+import { decorateTeamNotes } from './teamNoteInfo.js';
 
 /*
  * Private notes in an Office (mockups WsE01 to WsE03). A note written in an Office is private to its author until the author
@@ -62,7 +63,8 @@ export async function teamViewOnly(userId: string, noteId: string, spaceId: stri
 
 /** Adds owner / access / everyone / sharedCount to notes read from an Office. Notes outside an Office are left as they are. */
 export async function decorateNotes(userId: string, spaceId: string | null | undefined, notes: any[]): Promise<void> {
-  if (!spaceId || !notes.length || !(await isOffice(spaceId))) return;
+  if (!spaceId || !notes.length) return;
+  if (!(await isOffice(spaceId))) return decorateTeamNotes(userId, spaceId, notes); // a Team: author, share level and manage rights (teamNoteInfo.ts)
   const ids = notes.map((n) => n.id);
   const rows = await prisma.$queryRaw<{ id: string; uid: string; everyone: Level | null; grant: Level | null; shared: number; owner_name: string | null }[]>`
     SELECT n.id, n.user_id AS uid, n.office_everyone AS everyone, (SELECT a.level FROM note_access a WHERE a.note_id = n.id AND a.user_id = ${userId}) AS grant,
