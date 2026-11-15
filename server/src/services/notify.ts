@@ -2,9 +2,19 @@ import crypto from 'crypto';
 import prisma from '../db.js';
 import { encField } from '../dataCrypto.js';
 
+/** Kinds aimed at one person: a muted team does not silence these. */
+const DIRECT_KINDS = new Set(['mention', 'note_mention', 'assigned']);
+
 /** A stored notification for people in a workspace (one per person per event) plus a live nudge to their open windows. */
 export async function notifyUsers(app: any, userIds: string[], n: { kind: string; title: string; body?: string; from: string; spaceId?: string | null; todoId?: string | null; noteId?: string | null }) {
-  const ids = [...new Set(userIds)];
+  let ids = [...new Set(userIds)];
+  // A person who muted this team gets nothing stored and no live nudge for it, except what is aimed at them (a direct @mention, a task given to them).
+  if (n.spaceId && ids.length && !DIRECT_KINDS.has(n.kind)) {
+    try {
+      const muted = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM space_prefs WHERE space_id = ${n.spaceId} AND muted = TRUE AND user_id = ANY(${ids}::text[])`;
+      if (muted.length) { const m = new Set(muted.map((r) => r.user_id)); ids = ids.filter((x) => !m.has(x)); }
+    } catch { /* if the preference cannot be read, notify as before */ }
+  }
   for (const userId of ids) {
     const nid = crypto.randomUUID();
     try {

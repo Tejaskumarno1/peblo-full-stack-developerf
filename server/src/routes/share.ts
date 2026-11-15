@@ -19,14 +19,15 @@ export const shareRoutes = Router();
 shareRoutes.use(authenticate);
 shareRoutes.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); }); // an AI client cannot publish a #private note
 
-import { policyOfSpace } from '../utils/orgPolicy.js';
+import { shareableNote, shareBlockReason, shareVerdict } from '../utils/shareScope.js';
 const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);
 // A link whose end date has passed stops working (the owner can turn it on again from the share box).
 const LIVE = () => ({ OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] });
 
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
-  if (kind === 'note') return prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true } });
+  // a note: its author when it is Personal; in a Team or the Office anyone who can write in that space (utils/shareScope.ts)
+  if (kind === 'note') return shareableNote(userId, id);
   return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } });
 }
 /** A turned-off link leaves nothing behind: guests, presence, blocks, read stats, short code. */
@@ -52,6 +53,15 @@ shareRoutes.get('/', async (req, res, next) => {
       ...todos.map((t) => ({ kind: 'todo', id: t.id, title: t.text || 'Task', token: t.shareToken, edit: !!t.shareEdit, expiresAt: t.shareExpiresAt ?? null, updatedAt: t.updatedAt })),
     ].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
     res.json({ links: rows });
+  } catch (e) { next(e); }
+});
+
+// GET /api/share/:kind/:id/allowed -> { allowed, code?, reason? }: may this person make a public link here? The client hides the button and shows the reason when not.
+shareRoutes.get('/:kind/:id/allowed', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    res.json(await shareVerdict(req.user!.id, kind, req.params.id));
   } catch (e) { next(e); }
 });
 
@@ -284,10 +294,11 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    if (kind === 'note') {
-      const sp = (await prisma.$queryRaw<{ space_id: string | null }[]>`SELECT space_id FROM notes WHERE id = ${row.id}`)[0]?.space_id;
-      const pol = await policyOfSpace(sp);
-      if (pol && !pol.publicShares && !row.shareToken) return res.status(403).json({ error: 'Your organization has turned public links off.' });
+    if (!row.shareToken) {
+      // a new link needs both the organization policy and the team's own switch to allow it
+      const sp = kind === 'note' ? (row as any).spaceId : (await prisma.todo.findFirst({ where: { id: row.id }, select: { spaceId: true } }))?.spaceId;
+      const block = await shareBlockReason(sp);
+      if (block) return res.status(403).json({ error: block.reason, code: block.code });
     }
     const edit = typeof req.body?.edit === 'boolean' ? req.body.edit : !!row.shareEdit;
     let token = row.shareToken;

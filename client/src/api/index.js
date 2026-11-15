@@ -168,6 +168,7 @@ export const calSyncAPI = {
   share: (data) => api.put('/calendar-sync/share', data),
 };
 
+const inviteRef = (r) => (typeof r === 'string' ? { token: r } : r && r.inviteId ? { inviteId: r.inviteId } : { token: r?.token || '' });
 export const workspacesAPI = {
   list: () => api.get('/workspaces'),
   createOrg: (data) => api.post('/workspaces/orgs', data),
@@ -200,7 +201,8 @@ export const workspacesAPI = {
   setSpaceRole: (spaceId, userId, role) => api.put(`/workspaces/spaces/${spaceId}/members/${userId}`, { role }),
   policy: (orgId) => api.get(`/workspaces/orgs/${orgId}/policy`),
   setPolicy: (orgId, data) => api.patch(`/workspaces/orgs/${orgId}/policy`, data),
-  exportOrg: (orgId) => api.get(`/workspaces/orgs/${orgId}/export`),
+  // the export needs the owner's or admin's password again; trashed notes are left out unless includeTrash
+  exportOrg: (orgId, password, includeTrash = false) => api.post(`/workspaces/orgs/${orgId}/export`, { password, includeTrash }),
   updateSpace: (spaceId, data) => api.patch(`/workspaces/spaces/${spaceId}`, data),
   leaveSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/leave`),
   closeSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/close`),
@@ -210,9 +212,17 @@ export const workspacesAPI = {
   removeAiKey: (orgId, provider) => api.delete(`/workspaces/orgs/${orgId}/ai-keys/${provider}`),
   seats: (orgId) => api.get(`/workspaces/orgs/${orgId}/seats`),
   exports: (orgId) => api.get(`/workspaces/orgs/${orgId}/exports`),
-  lookupInvite: (token) => api.get('/workspaces/invites/lookup', { params: { token } }),
-  acceptInvite: (token) => api.post('/workspaces/invites/accept', { token }),
-  remindInviter: (token) => api.post('/workspaces/invites/remind', { token }),
+  // An invite is named by its token (from the emailed link, read from the URL fragment) or by its id (from the person's own pending list). Never put a token in a query string.
+  lookupInvite: (ref) => api.post('/workspaces/invites/lookup', inviteRef(ref)),
+  acceptInvite: (ref) => api.post('/workspaces/invites/accept', inviteRef(ref)),
+  remindInviter: (ref) => api.post('/workspaces/invites/remind', inviteRef(ref)),
+  myInvites: () => api.get('/workspaces/invites/mine'),
+  // issues a NEW link for a pending invite (the old one stops working); mail:false only returns it, to copy
+  resendInvite: (orgId, id, mail = true) => api.post(`/workspaces/orgs/${orgId}/invites/${id}/resend`, { mail }),
+  spacePrefs: (spaceId) => api.get(`/workspaces/spaces/${spaceId}/prefs`),
+  setSpacePrefs: (spaceId, data) => api.put(`/workspaces/spaces/${spaceId}/prefs`, data),
+  peopleLite: (spaceId, noteId) => api.get(`/workspaces/spaces/${spaceId}/people-lite`, { params: noteId ? { noteId } : undefined }),
+  shareAllowed: (kind, id) => api.get(`/share/${kind}/${id}/allowed`),
   // Expiring join links for an Office. create({ expiresInDays, maxUses, spaceRole, spaceId }) -> { id, link, expiresAt, ... }
   joinLinks: (orgId) => api.get(`/workspaces/orgs/${orgId}/join-links`),
   createJoinLink: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/join-links`, data || {}),

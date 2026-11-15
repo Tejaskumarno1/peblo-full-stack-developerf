@@ -1306,6 +1306,113 @@ async function prismaOffUser() {
     const l3 = await call('GET', '/api/tags');
     check('tags: deleted topic is gone', !(l3.json.tags || []).some((t) => t.name === 'smoke-b'));
   }
+
+// ---- (added UNRUN) sharing, invites, export protection, mute, @mentions (docs/SERVER-TESTS-TO-RUN.md items 9 to 14) ----
+{
+  const sSave = token;
+  const mkUser = async (tag) => { const e = `smoke-sh-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: 'correct horse battery', name: `Sh ${tag}` }); return { e, id: r.json.user.id, tok: r.json.token }; };
+  const O = await mkUser('o'), M = await mkUser('m');
+  await prismaDel.$executeRaw`UPDATE users SET email_verified_at = now() WHERE id IN (${O.id}, ${M.id})`;
+  const inSpace = (sp, tok, method, url, body) => rawFetch(base + url, { method, headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json', ...(sp ? { 'x-peblo-space': sp } : {}) }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => { const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; } return { status: r.status, json: j }; });
+  token = O.tok;
+  const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke share org', start: 'team' });
+  const orgId = org.json.id, spaceId = org.json.spaceId;
+
+  // R13 invites: the notification holds no token, the link uses #token=, the invitee opens it from their own list
+  const inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: M.e, spaceIds: [spaceId] });
+  check('invite: link keeps the token in the fragment', inv.status === 201 && /\/invite#token=/.test(inv.json.link) && !/\?token=/.test(inv.json.link), inv.json);
+  const notif = await prismaDel.$queryRaw`SELECT body FROM user_notifications WHERE user_id = ${M.id} AND kind = 'org_invite'`;
+  check('invite: the notification holds no token (the body is stored encrypted, so also check the length of what the API returns)', notif.length === 1, notif);
+  token = M.tok;
+  const nlist = await call('GET', '/api/collab/notifications');
+  check('invite: the notification body returned by the API is empty', !JSON.stringify(nlist.json).includes('token='), nlist.json);
+  const mine = await call('GET', '/api/workspaces/invites/mine');
+  check('invite: /invites/mine lists it for the verified email', mine.status === 200 && mine.json.invites.length === 1, mine.json);
+  const inviteId = mine.json.invites[0]?.id;
+  token = O.tok;
+  const rs = await call('POST', `/api/workspaces/orgs/${orgId}/invites/${inviteId}/resend`, { mail: false });
+  check('invite: resend (copy link) issues a new link', rs.status === 200 && /#token=/.test(rs.json.link), rs.json);
+  await prismaDel.$executeRaw`UPDATE org_invites SET expires_at = now() - interval '1 hour' WHERE id = ${inviteId}`;
+  token = M.tok;
+  const r1 = await call('POST', '/api/workspaces/invites/remind', { inviteId });
+  const r2 = await call('POST', '/api/workspaces/invites/remind', { inviteId });
+  check('invite: one reminder per 24 h (200 then 429)', r1.status === 200 && r2.status === 429, [r1.status, r2.status]);
+  token = O.tok;
+  const rs2 = await call('POST', `/api/workspaces/orgs/${orgId}/invites/${inviteId}/resend`, { mail: false });
+  token = M.tok;
+  const acc = await call('POST', '/api/workspaces/invites/accept', { token: new URL(rs2.json.link).hash.replace('#token=', '') });
+  check('invite: accepting with the fresh token works', acc.status === 200, acc.json);
+
+  // R9 share policy: a team note can be shared by link; policy off revokes every link in the same request; the team switch is enforced
+  token = O.tok;
+  const tn = await inSpace(spaceId, O.tok, 'POST', '/api/notes', { title: 'Team note', content: 'hello' });
+  const tid = tn.json.note.id;
+  const sh = await call('POST', `/api/share/note/${tid}`, {});
+  check('share: a note in a team can be shared by link', sh.status === 201 && !!sh.json.token, sh.json);
+  token = M.tok;
+  const mAllowed = await call('GET', `/api/share/note/${tid}/allowed`);
+  check('share: /allowed answers for a team member who can write', mAllowed.status === 200 && mAllowed.json.allowed === true, mAllowed.json);
+  token = O.tok;
+  await call('PATCH', `/api/workspaces/spaces/${spaceId}`, { publicLinks: false });
+  const gone = await prismaDel.$queryRaw`SELECT share_token FROM notes WHERE id = ${tid}`;
+  check('share: turning the team switch off revokes its links', gone[0].share_token === null, gone);
+  const blocked = await call('POST', `/api/share/note/${tid}`, {});
+  check('share: a new link is refused while the team switch is off (403 team_off)', blocked.status === 403 && blocked.json.code === 'team_off', blocked.json);
+  await call('PATCH', `/api/workspaces/spaces/${spaceId}`, { publicLinks: true });
+  await call('POST', `/api/share/note/${tid}`, {});
+  const pol = await call('PATCH', `/api/workspaces/orgs/${orgId}/policy`, { publicShares: false });
+  const gone2 = await prismaDel.$queryRaw`SELECT share_token FROM notes WHERE id = ${tid}`;
+  check('share: policy publicShares=false revokes every existing link at once', pol.status === 200 && gone2[0].share_token === null && pol.json.revoked?.notes >= 1, pol.json);
+  const aud = await prismaDel.$queryRaw`SELECT 1 FROM audit_log WHERE org_id = ${orgId} AND action = 'shares.revoked'`;
+  check('share: the revoke is in the audit log', aud.length >= 1);
+  const v = await call('GET', `/api/share/note/${tid}/allowed`);
+  check('share: /allowed says org_policy', v.json.allowed === false && v.json.code === 'org_policy', v.json);
+  await call('PATCH', `/api/workspaces/orgs/${orgId}/policy`, { publicShares: true });
+
+  // R19 export: password, 3 per hour, trash left out unless asked
+  const x0 = await call('POST', `/api/workspaces/orgs/${orgId}/export`, {});
+  check('export: no password is refused (403)', x0.status === 403, x0.json);
+  const x1 = await call('POST', `/api/workspaces/orgs/${orgId}/export`, { password: 'correct horse battery' });
+  check('export: the right password gives the file', x1.status === 200 && Array.isArray(x1.json.notes) && !!x1.json.counts, x1.status);
+  const trashed = await inSpace(spaceId, O.tok, 'POST', '/api/notes', { title: 'Trashed one', content: 'x' });
+  await inSpace(spaceId, O.tok, 'DELETE', `/api/notes/${trashed.json.note.id}`);
+  const x2 = await call('POST', `/api/workspaces/orgs/${orgId}/export`, { password: 'correct horse battery' });
+  check('export: trashed notes are left out by default', x2.status === 200 && !x2.json.notes.some((n) => n.title === 'Trashed one'), x2.status);
+  const x3 = await call('POST', `/api/workspaces/orgs/${orgId}/export?includeTrash=1`, { password: 'correct horse battery' });
+  check('export: ?includeTrash=1 includes them (this was the 3rd export)', x3.status === 200 && x3.json.notes.some((n) => n.title === 'Trashed one'), x3.status);
+  const x4 = await call('POST', `/api/workspaces/orgs/${orgId}/export`, { password: 'correct horse battery' });
+  check('export: the 4th in an hour is refused (429)', x4.status === 429, x4.status);
+
+  // mute and @mentions
+  token = M.tok;
+  const mu = await call('PUT', `/api/workspaces/spaces/${spaceId}/prefs`, { muted: true });
+  check('mute: PUT prefs', mu.status === 200 && mu.json.muted === true, mu.json);
+  token = O.tok;
+  const gp = await call('GET', `/api/workspaces/spaces/${spaceId}/prefs`);
+  check('mute: prefs are per person (the owner is not muted)', gp.json.muted === false, gp.json);
+  const people = await call('GET', `/api/workspaces/spaces/${spaceId}/people-lite`);
+  check('mentions: people-lite lists the other member only', people.status === 200 && people.json.people.length === 1 && people.json.people[0].id === M.id, people.json);
+  const mentionText = `see [@Sh m](peblo-user:${M.id}) and me [@Sh o](peblo-user:${O.id})`;
+  await inSpace(spaceId, O.tok, 'PATCH', `/api/notes/${tid}`, { content: mentionText });
+  await new Promise((r) => setTimeout(r, 800));
+  let nm = await prismaDel.$queryRaw`SELECT title FROM user_notifications WHERE user_id = ${M.id} AND kind = 'note_mention'`;
+  check('mentions: one notification, even though the team is muted (a direct @mention)', nm.length === 1 && nm[0].title.includes('mentioned you'), nm);
+  token = M.tok;
+  const nl2 = await call('GET', '/api/collab/notifications');
+  const mn = (nl2.json.notifications || []).find((n) => n.kind === 'note_mention');
+  check('mentions: the body is the note title only, never its text', mn && mn.body === 'Team note' && !JSON.stringify(mn).includes('see '), mn);
+  const self = await prismaDel.$queryRaw`SELECT 1 FROM user_notifications WHERE user_id = ${O.id} AND kind = 'note_mention'`;
+  check('mentions: nothing for yourself', self.length === 0);
+  await inSpace(spaceId, O.tok, 'PATCH', `/api/notes/${tid}`, { content: 'plain' });
+  await inSpace(spaceId, O.tok, 'PATCH', `/api/notes/${tid}`, { content: mentionText });
+  await new Promise((r) => setTimeout(r, 800));
+  nm = await prismaDel.$queryRaw`SELECT 1 FROM user_notifications WHERE user_id = ${M.id} AND kind = 'note_mention'`;
+  check('mentions: mentioned again within 24 h gives no second notification', nm.length === 1, nm.length);
+
+  await prismaDel.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
+  token = sSave;
+  await prismaDel.user.deleteMany({ where: { id: { in: [O.id, M.id] } } });
+}
 } catch (err) {
   failures++;
   console.error(err);
