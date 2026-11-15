@@ -41,7 +41,7 @@ async function handle(route) {
   const p = url.pathname.replace(/^\/api/, '');
   const method = req.method();
   let body = null; try { body = req.postDataJSON(); } catch { /* none */ }
-  reqs.push({ method, path: p, body, q: Object.fromEntries(url.searchParams) });
+  reqs.push({ method, path: p, body, q: Object.fromEntries(url.searchParams), space: req.headers()['x-peblo-space'] });
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
@@ -188,6 +188,23 @@ try {
   const target = await page.locator('[data-testid="drop-folder"]', { hasText: 'Ideas' }).first().boundingBox();
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 }); await page.mouse.up(); await wait(900);
   check('dragging a note onto a folder moves it there', notes.find((n) => n.id === 'n3').meta.folder === 'Ideas', JSON.stringify(notes.find((n) => n.id === 'n3').meta));
+
+  // 7c. a save started in Personal stays in Personal even if the space is switched meanwhile (no lost last words)
+  await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(700);
+  await page.evaluate(() => localStorage.setItem('peblo-space', 'team-x')); // another window switched space
+  await page.locator('textarea.s-note-title').fill('Sprint plan, space safe'); await wait(2500);
+  const lastPatch = reqs.filter((r) => r.method === 'PATCH' && r.path === '/notes/n1').pop();
+  check('the save carries no team space header after a space switch', lastPatch && lastPatch.space === undefined, JSON.stringify(lastPatch && { space: lastPatch.space, title: lastPatch.body?.title }));
+  check('and the title was saved', notes.find((n) => n.id === 'n1').title === 'Sprint plan, space safe');
+  await page.evaluate(() => localStorage.removeItem('peblo-space'));
+
+  // 7d. dark theme screenshot of the list (contrast fixes), no assertion
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO);
+  await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(800);
+  check('the theme button switches to the dark theme', await page.evaluate(() => document.documentElement.classList.contains('theme-dark') || document.body.classList.contains('theme-dark')));
+  await page.screenshot({ path: 'e2e/notes-mock-dark.png' });
+  await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // midnight
+  await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // back to light
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);

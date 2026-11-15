@@ -14,7 +14,7 @@ api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   // Notes and tasks belong to a space: say which one (nothing means Personal).
-  const space = getSpace();
+  const space = 'spaceOverride' in config ? config.spaceOverride : getSpace(); // a save that was started in one space stays in it
   if (space && !config.headers['x-peblo-space'] && /^\/?(notes|todos)(\/|\?|$)/.test(config.url || '')) config.headers['x-peblo-space'] = space;
   // The server works out "today" for us, so it needs our zone (e.g. Asia/Kolkata)
   try { config.headers['X-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* leave it to the server */ }

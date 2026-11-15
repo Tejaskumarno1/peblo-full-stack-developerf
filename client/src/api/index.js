@@ -28,8 +28,8 @@ export const notesAPI = {
   move: (id, to, space) => api.post(`/notes/${id}/move`, { to }, space !== undefined ? { headers: { 'x-peblo-space': space || 'personal' } } : undefined),
   copy: (id, to) => api.post(`/notes/${id}/copy`, { to }),
   teamShare: (id, data) => api.post(`/notes/${id}/team-share`, data, { headers: { 'x-peblo-space': 'personal' } }),
-  create: (data) => api.post('/notes', data),
-  update: (id, data) => api.patch(`/notes/${id}`, data),
+  create: (data, cfg) => api.post('/notes', data, cfg),
+  update: (id, data, cfg) => api.patch(`/notes/${id}`, data, cfg),
   // Without { permanent: true } a note is only moved to the trash (and a repeat call on a trashed note does nothing).
   delete: (id, opts) => api.delete(`/notes/${id}`, opts?.permanent ? { params: { permanent: 1 } } : undefined),
   restore: (id) => api.post(`/notes/${id}/restore`),

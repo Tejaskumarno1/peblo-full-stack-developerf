@@ -174,7 +174,7 @@ export function AppearanceSection() {
       <Card title="Style" hint="Changes the layout, type and colours of the whole app. Your notes stay exactly the same. Light, dark and midnight work with every style.">
         <div className="style-grid s-set-stylegrid" role="radiogroup" aria-label="Style">
           {STYLES.map((o) => (
-            <button key={o.id} type="button" role="radio" aria-checked={uiStyle === o.id} className={`style-card${uiStyle === o.id ? ' active' : ''}`} onClick={() => save(async () => { setUiStyle(o.id); return true; })}>
+            <button key={o.id} type="button" role="radio" aria-checked={uiStyle === o.id} className={`style-card${uiStyle === o.id ? ' active' : ''}`} onClick={() => save(async () => (await setUiStyle(o.id)) !== false)}>
               <span className={`style-preview ${o.id}`} aria-hidden="true"><i className="a" /><i className="b" /><i className="c" /><i className="d" /><i className="e" /></span>
               <span className="style-name">{o.name}</span>
               <span className="style-desc">{o.desc}</span>
@@ -186,7 +186,7 @@ export function AppearanceSection() {
       <Card title="Colours" hint="System follows your computer.">
         <div className="settings-theme-grid s-set-themegrid" role="radiogroup" aria-label="Theme">
           {THEMES.map(({ id, name, icon: Icon }) => (
-            <button key={id} type="button" role="radio" aria-checked={theme === id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => save(async () => { setTheme(id); return true; })}>
+            <button key={id} type="button" role="radio" aria-checked={theme === id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => save(async () => (await setTheme(id)) !== false)}>
               <span className={`theme-preview ${id === 'midnight' ? 'dark' : id}`} style={id === 'midnight' ? { background: '#000' } : undefined} />
               <span className="s-set-themename"><Icon size={14} /> {name}</span>
             </button>

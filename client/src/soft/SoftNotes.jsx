@@ -28,7 +28,7 @@ import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { usePublicUrl } from '../api/publicUrl';
 import { useAutoSave } from '../hooks';
-import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
+import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive, rememberNoteSpace, noteSpaceCfg, setNoteFlusher } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
 import ShareChips, { useShareParts } from '../components/ShareChips';
@@ -303,6 +303,7 @@ export default function SoftNotes() {
 
   // ---------- open a note ----------
   const open = useCallback((note) => {
+    rememberNoteSpace(note.id);
     setDoc({ ...note, title: editable(note.title), content: note.content || '', tags: note.tags || [] });
     setEditorKey(`${note.id}-${Date.now()}`);
     setPreview(!!note.isDeleted || new URLSearchParams(window.location.search).get('view') === 'reader'); // Open as > Reader view
@@ -318,6 +319,7 @@ export default function SoftNotes() {
 
   const startDraft = useCallback(() => {
     noAuto.current = false;
+    rememberNoteSpace('__draft__');
     const folderName = selDef && !selDef.smart ? selDef.name : '';
     setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], meta: folderName ? { folder: folderName } : undefined, createdAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
@@ -340,7 +342,7 @@ export default function SoftNotes() {
     noAuto.current = false;
     const found = allNotes.find((n) => n.id === routeId) || listed.find((n) => n.id === routeId);
     if (found) open(found);
-    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else navigate('/notes', { replace: true }); });
+    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else { flash(e.response?.status === 404 ? 'That note is not here. It may be in another space, in the Trash, or deleted.' : 'Could not open that note.'); navigate('/notes', { replace: true }); } });
   }, [routeId, allNotes, listed, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- saving ----------
@@ -353,8 +355,9 @@ export default function SoftNotes() {
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {
       const dm = docRef.current?.meta;
-      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled', ...(dm?.folder ? { meta: { folder: dm.folder } } : {}) });
+      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled', ...(dm?.folder ? { meta: { folder: dm.folder } } : {}) }, noteSpaceCfg('__draft__'));
       const created = data.note;
+      rememberNoteSpace(created.id, noteSpaceCfg('__draft__')?.spaceOverride ?? null);
       // Keep the editor as it is; only the id changes.
       setNoteBase(created.id, created.updatedAt, payload.content);
       setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, meta: created.meta || d.meta, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
@@ -382,7 +385,8 @@ export default function SoftNotes() {
   }, [saveStatus]);
   const forceSaveRef = useRef(forceSave);
   forceSaveRef.current = forceSave;
-  const leaveNote = useCallback(() => forceSaveRef.current(), []); // stable, so the memoised rows are not rebuilt when the save function changes
+  const leaveNote = useCallback(() => forceSaveRef.current(), []);
+  useEffect(() => { setNoteFlusher(() => forceSaveRef.current()); return () => setNoteFlusher(null); }, []); // stable, so the memoised rows are not rebuilt when the save function changes
   const pickNote = useCallback((id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id])), []);
   const docRef = useRef(null);
   docRef.current = doc;
@@ -597,7 +601,7 @@ export default function SoftNotes() {
     const next = old || legacyOld ? [...defs.filter((d) => d.id !== def.id), { ...(old || {}), ...def }] : [...defs, def];
     const was = (old || legacyOld)?.name;
     setSheet(null); setFolderEdit(null); setSmartPage(null);
-    await saveDefs(next);
+    if ((await saveDefs(next)) === false) { flash('Could not save the folder. Nothing was changed.'); return; } // do not touch the notes when the account did not take it
     if (was && !def.smart && was !== def.name) {
       try { await Promise.all(allNotes.filter((n) => n.meta?.folder === was).map((n) => notesAPI.update(n.id, { meta: { folder: def.name } }))); refreshLists(); } catch { flash('Could not rename the folder on every note'); }
     }
@@ -610,7 +614,7 @@ export default function SoftNotes() {
     const count = def.smart ? 0 : allNotes.filter((n) => n.meta?.folder === def.name).length;
     if (!window.confirm(def.smart ? `Delete the smart folder "${def.name}"? Your notes are not touched.` : `Delete the folder "${def.name}"?${count ? ` Its ${count} note${count === 1 ? '' : 's'} stay, just out of the folder.` : ''}`)) return;
     setSheet(null); setFolderEdit(null); setSmartPage(null);
-    await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)));
+    if ((await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)))) === false) { flash('Could not delete the folder. Nothing was changed.'); return; }
     if (count) { try { await Promise.all(allNotes.filter((n) => n.meta?.folder === def.name).map((n) => notesAPI.update(n.id, { meta: { folder: '' } }))); refreshLists(); } catch { flash('Could not take every note out'); } }
     if (fSel?.id === def.id) setFSel(null);
   };
@@ -968,7 +972,7 @@ export default function SoftNotes() {
             {filter === 'trash' && canPurge && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
-        {viewOpen && <><div className="np-dim" style={{ background: 'rgba(58,42,26,.18)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
+        {viewOpen && <><div className="np-dim" style={{ background: 'var(--s-backdrop)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
         {sheet === 'move' && <MoveSheet folders={normalDefs} current={selectMode ? '' : doc?.meta?.folder || ''} count={selectMode ? picked.length : 1} bare={selectMode} onMove={moveTo} onNew={() => openNew(true)} onClose={() => setSheet(null)} />}
         {sheet === 'tag' && <TagSheet tags={tagCounts} count={picked.length} bare onApply={tagPicked} onClose={() => setSheet(null)} />}
         {sheet === 'folder' && folderEdit && <NewFolderSheet defs={allDefs} notes={allNotes} initial={folderEdit} onSave={saveFolder} onSmart={(nm) => { setSheet(null); setFolderEdit(null); setSmartPage({ startName: nm }); }} onDelete={() => deleteFolder(folderEdit)} onClose={() => { setSheet(null); setFolderEdit(null); setMoveAfter(false); }} />}

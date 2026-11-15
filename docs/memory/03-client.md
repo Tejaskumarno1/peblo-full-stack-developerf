@@ -456,3 +456,11 @@ Hints shown in UI: "New note (Ctrl+Alt+N)" tooltip (`NotesSidebar.jsx:85`, wrong
 - **Drag a note** (rows are `draggable` for notes you own): a tray of folders ("Drop on a folder", plus "No folder") appears while dragging, so it works in every list layout, including Folder cards. `moveTo(name, id)` does the move (and drops a collecting tag when taking a note out).
 - **Keys**: Up / Down move between note rows; Alt+W closes the open tab, Alt+N starts a new note.
 - Tests: `e2e/notes-mock.mjs` has checks for the row menu, pin from it, arrow keys, Alt+W and the drag tray.
+
+### Data-loss and theme fixes (round 5: audit R20-R22, R29, R31, R42-R47)
+- **Saves stay in their space**: `noteSync.js` remembers the space each note was opened in (`rememberNoteSpace`) and every save, create and the unload save sends that space (`spaceOverride` in the axios config, `api/client.js`), so switching space while the last words are on their way cannot send them to the wrong space.
+- **Move / copy to a team** first saves the open note (`flushOpenNote`, registered by `SoftNotes`). The flush when you leave a note retries 3 times on network, 5xx and 429 errors.
+- **Folders**: when the account save fails, notes are not renamed or cleared. A link to a note that is not in this space says so.
+- **Settings sync**: the account's settings win over this device's older copy. `setTheme` / `setUiStyle` return whether the account save worked, and Settings shows the failure. The first-paint script in `index.html` defaults to system theme and the Soft style, like the app.
+- **Dark / midnight**: notes-panel colours use theme variables (`--s-fg`, `--s-fg2`, `--s-line`, `--s-dash`, `--s-surface`, `--s-backdrop`); the OS "reduce motion" setting is honoured in `styles/a11y.css`.
+- **Server** (commit 94ced39, not run against a database): refuse account deletion for the last organization owner; team notes can be trashed, archived, restored and moved only by the author or a space lead; viewers cannot request reviews; last-lead and guest-to-lead guards; guests only see members of their own spaces; a removed member loses live-edit access; invite accept and join links are atomic; task assignment skips paused orgs and expired guests.

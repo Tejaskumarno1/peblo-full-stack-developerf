@@ -132,7 +132,7 @@ export function AuthProvider({ children }) {
     }
     if (u?.settings && typeof u.settings === 'object') {
       setSettings(prev => {
-        const merged = { ...u.settings, ...prev };
+        const merged = { ...prev, ...u.settings }; // what is saved on the account wins over this device's older copy
         if (u.settings.weekStart) merged.weekStart = u.settings.weekStart; // account wins
         if (u.settings.noteFolders) merged.noteFolders = u.settings.noteFolders; // folders follow the account
         for (const k of ['noteLayout', 'noteGroup', 'noteDensity', 'rememberFolds']) if (u.settings[k] !== undefined) merged[k] = u.settings[k]; // list layout follows the account
@@ -250,13 +250,15 @@ export function AuthProvider({ children }) {
     setUiStyleState(style);
     try { localStorage.setItem('peblo-style', style); } catch { /* ignore */ }
     // Remember it on the account so every device opens in the same style
-    if (getToken()) profileAPI.updateProfile({ settings: { uiStyle: style } }).catch((e) => console.error('Failed to save style to the account:', e));
+    if (!getToken()) return Promise.resolve(true);
+    return profileAPI.updateProfile({ settings: { uiStyle: style } }).then(() => true).catch((e) => { console.error('Failed to save style to the account:', e); return false; });
   }, []);
 
   const setTheme = useCallback((newTheme) => {
     setThemeState(newTheme);
     try { localStorage.setItem('peblo-theme', newTheme); } catch { /* storage blocked: theme still applies for this session */ }
-    if (getToken()) profileAPI.updateProfile({ settings: { theme: newTheme } }).catch((e) => console.error('Failed to save the theme to the account:', e));
+    if (!getToken()) return Promise.resolve(true);
+    return profileAPI.updateProfile({ settings: { theme: newTheme } }).then(() => true).catch((e) => { console.error('Failed to save the theme to the account:', e); return false; });
   }, []);
 
   // Other windows (the quick-capture window) share localStorage: follow style / theme changes made there.

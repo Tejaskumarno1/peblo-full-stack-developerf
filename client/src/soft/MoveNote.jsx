@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { flushOpenNote } from '../utils/noteSync';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRightLeft, Check, Copy, X } from 'lucide-react';
@@ -31,6 +32,7 @@ export default function MoveNote({ noteId, title }) {
     if (!chosen || busy) return;
     setBusy(true); setErr('');
     try {
+      await flushOpenNote(); // the latest words are saved before the note leaves (or is copied from) this space
       if (mode === 'move') {
         await notesAPI.move(noteId, chosen.id);
         await qc.invalidateQueries();

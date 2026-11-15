@@ -11,6 +11,17 @@ import { getSpace } from '../api/space';
  */
 const bases = new Map();
 
+// The space (null = Personal) each open note was loaded in. A save is always sent to that space, so switching space
+// while the last words are still on their way can never send them to the wrong place (where they would 404 and be lost).
+const noteSpaces = new Map();
+export const rememberNoteSpace = (id, space = getSpace()) => { if (id) noteSpaces.set(id, space || null); };
+export const noteSpaceCfg = (id) => (noteSpaces.has(id) ? { spaceOverride: noteSpaces.get(id) } : undefined);
+
+// The page that has a note open registers a function that saves it now; "Move to a team" and the like call it first.
+let flusher = null;
+export const setNoteFlusher = (fn) => { flusher = fn; };
+export const flushOpenNote = async () => { try { if (flusher) await flusher(); } catch { /* the save status already says so */ } };
+
 export const setNoteBase = (id, updatedAt, content) => { if (id && updatedAt) bases.set(id, { updatedAt, content: content ?? '' }); };
 export const getNoteBase = (id) => bases.get(id);
 
@@ -38,7 +49,7 @@ export async function saveNoteSafe(id, payload) {
   const body = live.get(id) === 'live' && hasText
     ? { ...payload, collab: true, baseUpdatedAt: base?.updatedAt || new Date().toISOString() }
     : base && hasText ? { ...payload, baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : payload;
-  const { data } = await notesAPI.update(id, body);
+  const { data } = await notesAPI.update(id, body, noteSpaceCfg(id));
   if (hasText && data?.updatedAt) {
     if (typeof data.content === 'string' && data.status && data.status !== 'saved') {
       // Merged with someone else's edit. Our text is now the base but the time stays old, so a later save still merges
@@ -69,7 +80,7 @@ export function saveNoteOnUnload(id, payload) {
       : base ? { ...payload, title: payload.title || 'Untitled', baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : { ...payload, title: payload.title || 'Untitled' };
     const text = JSON.stringify(body);
     if (text.length > 55000) return false;
-    fetch(`${api.defaults.baseURL}/notes/${encodeURIComponent(id)}`, { method: 'PATCH', keepalive: true, headers: authHeaders({ 'Content-Type': 'application/json', ...(getSpace() ? { 'x-peblo-space': getSpace() } : {}) }), body: text }); // same headers as axios: a team note is saved in its own space
+    fetch(`${api.defaults.baseURL}/notes/${encodeURIComponent(id)}`, { method: 'PATCH', keepalive: true, headers: authHeaders({ 'Content-Type': 'application/json', ...(((noteSpaces.has(id) ? noteSpaces.get(id) : getSpace()) || null) ? { 'x-peblo-space': noteSpaces.has(id) ? noteSpaces.get(id) : getSpace() } : {}) }), body: text }); // same headers as axios: a team note is saved in its own space
     return true;
   } catch { return false; }
 }

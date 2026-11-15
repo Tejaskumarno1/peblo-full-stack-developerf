@@ -75,9 +75,12 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
       if (!id || !pending) return;
       const snapshot = JSON.stringify(pending);
       if (snapshot === lastSavedRef.current) return;
-      saveFnRef.current(id, pending).catch((err) => {
+      const flush = (n) => saveFnRef.current(id, pending).catch((err) => {
         console.error('Flush save failed:', err);
+        const st = err?.response?.status;
+        if (n < 3 && st !== 403 && st !== 404 && st !== 401) setTimeout(() => flush(n + 1), 3000 * (n + 1)); // network, 5xx or 429: try again
       });
+      flush(0);
     };
   }, [noteId]);
 
