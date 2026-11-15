@@ -555,7 +555,7 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft .s-note-head .s-add-tag { padding: 2px 12px; height: 26px; font-size: 13px; }
 .soft .s-note-head .s-note-stats { margin: 0; white-space: nowrap; font-weight: 700; flex: none; }
 .soft .s-note-head .s-saved { padding: 0; background: transparent; width: 10px; height: 10px; flex: none; gap: 0; font-size: 0; }
-.soft .s-note-head .s-saved::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--s-ok, #1e7a46); display: block; }
+.soft .s-note-head .s-saved::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--s-local); display: block; }
 .soft .s-note-head .s-saved > svg { display: none; }
 .soft .s-note-head .s-saved.say { width: auto; height: auto; padding: 4px 12px; border-radius: 999px; background: var(--s-mint); font-size: 12.5px; font-weight: 700; gap: 6px; }
 .soft .s-note-head .s-saved.say::before { display: none; }

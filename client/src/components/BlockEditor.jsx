@@ -1142,7 +1142,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
 
   const title = { todo: 'Action items', improve: card?.command === 'grammar' ? 'Fix grammar' : card?.command === 'shorter' ? 'Make shorter' : card?.command === 'longer' ? 'Make longer' : 'Improve writing', summarize: 'Summary', continue: 'Continue writing', explain: 'Explain', quiz: 'Quiz me' }[card?.kind];
   const target = useMemo(() => (editable !== false ? commentTarget({ noteId, collab }) : null), [noteId, collab?.share, collab?.sid, editable]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'auto' && document.documentElement.classList.contains('theme-dark')) || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
     <div ref={rootRef} data-live={rt && live.ready && live.connected ? '1' : undefined} className={`block-editor-container${focusMode ? ' pb-focus' : ''}${fullPage ? ' pb-editor-full-page' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: fullPage ? 'none' : 1, height: fullPage ? 'auto' : '100%', overflowY: fullPage ? 'visible' : 'auto', cursor: editable ? 'text' : 'default' }}>

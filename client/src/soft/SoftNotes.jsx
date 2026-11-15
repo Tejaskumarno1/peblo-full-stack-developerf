@@ -3,7 +3,7 @@ import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
+import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -14,6 +14,7 @@ import NoteTasks from './NoteTasks';
 import { useSpaceRole, useCurrentSpace, useWorkspaces } from './spaces';
 import { AccessChip, NoAccess } from './OfficeAccess';
 import CompareBox from '../components/CompareBox';
+import { effectiveDensity, effectiveNoteFont } from '../utils/appearance';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
 import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
 import { useAuth } from '../context/AuthContext';
@@ -156,17 +157,25 @@ export default function SoftNotes() {
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
   const [typewriter, setTypewriter] = useState(() => store('peblo-typewriter', 'off'));
-  const [font, setFont] = useState(() => store('peblo-note-font', 'm')); // s, m, l, xl
   const [savedQ, setSavedQ] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-saved-searches') || '[]'); } catch { return []; } });
   const keep = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
   // folders, view options and bulk actions (Notes panel)
   const { settings: acct, updateSettings } = useAuth();
-  const [view, setViewState] = useState(() => {
+  const [viewBase, setViewState] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem('peblo-notes-view') || 'null'); if (v && typeof v === 'object') return { ...DEFAULT_VIEW, ...v }; } catch { /* ignore */ }
     const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', '') };
     return { ...DEFAULT_VIEW, ...(['cozy', 'compact'].includes(acct?.noteDensity) ? { density: acct.noteDensity } : {}), sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : (['date', 'folder', 'tag', 'none'].includes(acct?.noteGroup) ? acct.noteGroup : 'date') };
   });
-  const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-notes-view', JSON.stringify(v)); } catch { /* ignore */ } };
+  // Density has one source, the account's noteDensity (Settings > Notes, the Compact switch and this list's View menu share it).
+  const density = effectiveDensity(acct);
+  const view = useMemo(() => ({ ...viewBase, density }), [viewBase, density]);
+  const setView = (v) => {
+    if (v.density && v.density !== density) updateSettings({ noteDensity: v.density });
+    const { density: _d, ...rest } = v;
+    setViewState(rest); try { localStorage.setItem('peblo-notes-view', JSON.stringify(rest)); } catch { /* ignore */ }
+  };
+  // one-off migration: a compact choice made only in this list's old View menu moves to the account
+  useEffect(() => { try { if (acct?.noteDensity === undefined && JSON.parse(localStorage.getItem('peblo-notes-view') || '{}').density === 'compact') updateSettings({ noteDensity: 'compact' }); } catch { /* ignore */ } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const sort = view.sort;
   const group = view.group;
   const layout = ['cards', 'sections', 'classic'].includes(acct?.noteLayout) ? acct.noteLayout : 'cards';
@@ -185,9 +194,9 @@ export default function SoftNotes() {
   const defs = Array.isArray(acct?.noteFolders) ? acct.noteFolders : [];
   const saveSearch = () => { const t = q.trim(); if (!t || savedQ.includes(t)) return; const n = [t, ...savedQ].slice(0, 8); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
   const dropSearch = (t) => { const n = savedQ.filter((x) => x !== t); setSavedQ(n); keep('peblo-saved-searches', JSON.stringify(n)); };
-  const FONTS = ['s', 'm', 'l', 'xl'];
-  const FONT_NAME = { s: 'Small', m: 'Medium', l: 'Large', xl: 'Extra large' };
   const bodyRef = useRef(null);
+  // the note text size is Settings > Notes > Text size in notes (settings.fontSize); the old per-note 'peblo-note-font' is still read
+  const noteFont = useMemo(() => ({ small: 's', medium: 'm', large: 'l' }[effectiveNoteFont(acct, (() => { try { return localStorage.getItem('peblo-note-font'); } catch { return null; } })())] || 'm'), [acct?.fontSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- data ----------
   const { data: allNotes = [] } = useQuery({
@@ -834,7 +843,6 @@ export default function SoftNotes() {
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions'}</button>}
@@ -1075,7 +1083,6 @@ export default function SoftNotes() {
                 {menuOpen && doc.isDraft && (
                   <div className="s-menu" role="menu">
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                   </div>
@@ -1106,7 +1113,7 @@ export default function SoftNotes() {
               <button type="button" onClick={() => setPhRail('ment')}>Mentioned {mentions.length}</button>
               {noteId && <button type="button" onClick={() => { setPhRail('ver'); setHistoryOpen(true); }}><History size={14} strokeWidth={2} />Versions</button>}
             </div>
-            <div className="s-note-body" ref={bodyRef} data-font={font}>
+            <div className="s-note-body" ref={bodyRef} data-font={noteFont}>
               <BlockEditor
           mentions={false}
                 noteId={doc.id}

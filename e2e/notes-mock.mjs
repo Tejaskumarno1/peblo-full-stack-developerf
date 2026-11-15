@@ -288,6 +288,71 @@ try {
   await page.keyboard.press('Escape'); await wait(200);
   check('closing the View popover returns focus to its button', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'View options'));
 
+  // 7j. appearance: accent colour, dark-mode schedule, account sync, high contrast in River
+  await page.goto(`${base}/settings/appearance`); await page.locator('.ax-swatches').waitFor(TO); await wait(500);
+  const cssVar = (sel, v) => page.evaluate(([s, n]) => getComputedStyle(document.querySelector(s)).getPropertyValue(n).trim().toUpperCase(), [sel, v]);
+  await page.locator('.ax-sw[aria-label="Indigo"]').click(); await wait(600);
+  check('picking an accent changes --s-accent', (await cssVar('.soft', '--s-accent')) === '#4F46E5', await cssVar('.soft', '--s-accent'));
+  check('and --s-on-accent is readable text', ['#FFFFFF', '#1A1210'].includes(await cssVar('.soft', '--s-on-accent')));
+  check('the accent was saved on the account through PUT /profile', user.settings.accent === '#4F46E5' && reqs.some((r) => r.method === 'PUT' && r.path === '/profile' && r.body?.settings?.accent === '#4F46E5'), JSON.stringify(user.settings.accent));
+  check('the accent is kept for the pre-paint script', await page.evaluate(() => localStorage.getItem('peblo-accent') === '#4F46E5' && (localStorage.getItem('peblo-accent-css') || '').includes('--s-accent')));
+  await page.fill('#ax-hex', '#0F766E'); await wait(200);
+  check('typing a custom colour previews it live', (await cssVar('.soft', '--s-accent')) === '#0F766E');
+  await page.fill('#ax-hex', '#zzz'); await wait(200);
+  check('a bad hex is refused with a message', (await page.locator('.ax-err').innerText()).length > 0 && (await cssVar('.soft', '--s-accent')) === '#0F766E');
+  await page.fill('#ax-hex', '#be185d'); await page.getByRole('button', { name: 'Apply' }).click(); await wait(600);
+  check('Apply saves the custom colour', user.settings.accent === '#BE185D', user.settings.accent);
+  await page.reload(); await page.locator('.ax-swatches').waitFor(TO);
+  check('the accent survives a reload', (await cssVar('.soft', '--s-accent')) === '#BE185D');
+  await page.evaluate(() => document.documentElement.classList.add('theme-dark'));
+  const darkAccent = await cssVar('.soft', '--s-accent');
+  check('the dark variant is lighter than the chosen colour', darkAccent !== '#BE185D' && darkAccent.length === 7, darkAccent);
+  await page.evaluate(() => document.documentElement.classList.remove('theme-dark'));
+  await page.getByRole('button', { name: 'Reset' }).click(); await wait(600);
+  check('Reset returns to the default accent and clears the account value', (await cssVar('.soft', '--s-accent')) === '#C4441C' && !user.settings.accent, user.settings.accent);
+
+  // dark-mode schedule
+  await page.getByRole('radio', { name: /Auto by time/ }).click(); await page.locator('[data-testid="dark-schedule"]').waitFor(TO); await wait(500);
+  check('choosing Auto by time saves theme auto on the account', user.settings.theme === 'auto', user.settings.theme);
+  const at = async (offH) => page.evaluate((o) => { const d = new Date(Date.now() + o * 3600000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }, offH);
+  await page.locator('input[aria-label="Dark from"]').fill(await at(-1)); await wait(300);
+  await page.locator('input[aria-label="Dark until"]').fill(await at(1)); await wait(800);
+  check('inside the dark window the dark class is applied', await page.evaluate(() => document.documentElement.classList.contains('theme-dark')));
+  check('the schedule is saved on the account', user.settings.themeSchedule?.from && user.settings.themeSchedule?.to && user.settings.themeSchedule.from !== user.settings.themeSchedule.to, JSON.stringify(user.settings.themeSchedule));
+  await page.locator('input[aria-label="Dark from"]').fill(await at(2)); await wait(300);
+  await page.locator('input[aria-label="Dark until"]').fill(await at(3)); await wait(800);
+  check('outside the window it is light again', !(await page.evaluate(() => document.documentElement.classList.contains('theme-dark'))));
+  await page.locator('input[aria-label="Dark from"]').fill(await at(-1)); await wait(300);
+  await page.locator('input[aria-label="Dark until"]').fill(await at(1)); await wait(600);
+  await page.reload(); await page.locator('.ax-swatches').waitFor(TO);
+  check('after a reload the scheduled dark theme is still applied', await page.evaluate(() => document.documentElement.classList.contains('theme-dark')));
+  await page.getByRole('radio', { name: /^Light/ }).click(); await wait(500);
+
+  // accessibility: synced to the account, high contrast reaches River, Orbit and Studio
+  await page.getByRole('radio', { name: 'XL' }).click(); await wait(600);
+  check('text size is saved on the account (settings.a11y)', user.settings.a11y?.size === 'XL', JSON.stringify(user.settings.a11y));
+  await page.getByRole('switch', { name: 'High contrast' }).click(); await wait(500);
+  const hc = await page.evaluate(() => {
+    const out = {};
+    for (const [cls, fg, line] of [['river', '--r-fg', '--r-line'], ['orbit', '--o-fg', '--o-line']]) {
+      const el = document.createElement('div'); el.className = cls; document.body.appendChild(el);
+      const cs = getComputedStyle(el); out[cls] = cs.getPropertyValue(fg).trim() === cs.getPropertyValue(line).trim() && cs.getPropertyValue(fg).trim() !== ''; el.remove();
+    }
+    return out;
+  });
+  check('high contrast makes River lines and Orbit lines solid', hc.river && hc.orbit, JSON.stringify(hc));
+  await page.getByRole('switch', { name: 'High contrast' }).click(); await page.getByRole('radio', { name: 'M', exact: true }).click(); await wait(500);
+  // density: one value
+  await page.getByRole('switch', { name: 'Compact' }).click(); await wait(500);
+  check('the Compact switch writes noteDensity', user.settings.noteDensity === 'compact' && (await page.evaluate(() => document.documentElement.getAttribute('data-compact'))) === '1', user.settings.noteDensity);
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO);
+  check('the notes list reads the same density', (await page.locator('.s-notes-list.compact').count()) > 0);
+  await page.locator('button[aria-label="View options"]').click();
+  await page.locator('.np-pop').getByRole('radio', { name: 'Cozy' }).click(); await wait(600);
+  check('the View menu density writes the same value', user.settings.noteDensity === 'cozy', user.settings.noteDensity);
+  await page.keyboard.press('Escape');
+  check('the note menu no longer has its own Text size', (await page.getByText(/^Text size:/).count()) === 0);
+  await page.evaluate(() => { localStorage.setItem('peblo-theme', 'light'); });
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);

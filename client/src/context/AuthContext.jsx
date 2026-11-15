@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { profileAPI, authAPI } from '../api/index';
 import { VALID_STYLES } from '../utils/weekStart';
 import { getToken, setToken, clearToken } from '../api/token';
+import useAppearanceSync from '../utils/useAppearanceSync';
 
 const AuthContext = createContext(null);
 
@@ -74,31 +75,12 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // Apply the theme: light (Paper), dark (Graphite), midnight (pure black) or follow the system.
-  useEffect(() => {
-    const apply = () => {
-      const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const resolved = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
-      for (const el of [document.body, document.documentElement]) {
-        el.classList.toggle('theme-dark', resolved === 'dark' || resolved === 'midnight');
-        el.classList.toggle('theme-midnight', resolved === 'midnight');
-      }
-    };
-    apply();
-    if (theme !== 'system' || !window.matchMedia) return undefined;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
-  }, [theme]);
+  // Theme (light, dark, midnight, system, auto by time), accent, density and account a11y: see utils/useAppearanceSync.js
+  useAppearanceSync(settings, theme);
 
   useEffect(() => {
     for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', uiStyle);
   }, [uiStyle]);
-
-  // Compact mode (Settings -> Appearance): tighter lists and cards.
-  useEffect(() => {
-    document.documentElement.setAttribute('data-compact', settings?.compact ? '1' : '0');
-  }, [settings?.compact]);
 
   // Spell checking in notes (Settings -> Notes and calendar): on unless switched off. Editors come and go, so watch for them.
   useEffect(() => {
@@ -122,7 +104,7 @@ export function AuthProvider({ children }) {
     // The account decides the style on every device
     const acctStyle = u?.settings?.uiStyle;
     const acctTheme = u?.settings?.theme;
-    if (['light', 'dark', 'midnight', 'system'].includes(acctTheme)) { // the account decides the theme on every device, like the style
+    if (['light', 'dark', 'midnight', 'system', 'auto'].includes(acctTheme)) { // the account decides the theme on every device, like the style
       setThemeState(acctTheme);
       try { localStorage.setItem('peblo-theme', acctTheme); } catch { /* ignore */ }
     }
