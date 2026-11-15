@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, Zap, Plus, X, ChevronLeft, FileText, Tag as TagIcon } from 'lucide-react';
 import { FOLDER_COLORS, colorOf, RULE_FIELDS, EDITED, YESNO, opOf, tagFor, smartMatch, newId } from './folders';
 import { relTime, snippetOf } from './softUtils';
+import { useDialogFocus } from './a11y';
 
 /** Closes a popover or sheet when the pointer goes down outside it, or on Escape. */
 export function useOutside(ref, on, close) {
@@ -33,9 +34,10 @@ const Toggle = ({ label, on, onChange }) => (
 export function ViewPopover({ view, setView, onClose }) {
   const ref = useRef(null);
   useOutside(ref, true, onClose);
+  useDialogFocus(ref, true);
   const set = (k) => (v) => setView({ ...view, [k]: v });
   return (
-    <div className="np-pop" role="dialog" aria-label="View options" ref={ref}>
+    <div className="np-pop" role="dialog" aria-modal="true" aria-label="View options" ref={ref} tabIndex={-1}>
       <Seg label="Sort by" value={view.sort} opts={[['updated', 'Edited'], ['created', 'Created'], ['title', 'Title']]} onPick={set('sort')} />
       <Seg label="Group by" value={view.group} opts={[['date', 'Date'], ['folder', 'Folder'], ['tag', 'Tag'], ['none', 'None']]} onPick={set('group')} />
       <Seg label="Density" value={view.density} opts={[['cozy', 'Cozy'], ['compact', 'Compact']]} onPick={set('density')} />
@@ -52,6 +54,7 @@ const Sheet = ({ label, onClose, children, cls = '', light = false }) => {
   const ref = useRef(null);
   // in select mode the sheet keeps the list usable: no dim, no close on outside click
   useOutside(ref, !light, onClose);
+  useDialogFocus(ref, !light);
   useEffect(() => {
     if (!light) return undefined;
     const esc = (e) => { if (e.key === 'Escape') onClose(); };
@@ -61,7 +64,7 @@ const Sheet = ({ label, onClose, children, cls = '', light = false }) => {
   return (
     <>
       {!light && <div className="np-dim" aria-hidden="true" />}
-      <div className={`np-sheet ${cls}`} role="dialog" aria-label={label} ref={ref}>
+      <div className={`np-sheet ${cls}`} role="dialog" aria-modal={light ? undefined : 'true'} aria-label={label} ref={ref} tabIndex={-1}>
         <div className="np-grab" aria-hidden="true" />
         {children}
       </div>
@@ -166,6 +169,8 @@ const Pick = ({ value, onChange, opts, label, cls }) => (
 /** Whole-panel page: a smart folder is a set of rules; it shows whichever notes match. */
 export function SmartFolderPage({ defs, notes, tags, folderNames, initial, startName, onSave, onKind, onDelete, onClose }) {
   const edit = !!initial?.id;
+  const pageRef = useRef(null);
+  useDialogFocus(pageRef, true);
   const [name, setName] = useState(initial?.name || startName || '');
   const [rules, setRules] = useState(initial?.smart?.length ? initial.smart : [{ f: 'tag', v: tags[0] || '' }]);
   const match = useMemo(() => notes.filter((n) => smartMatch(n, rules)), [notes, rules]);
@@ -176,7 +181,7 @@ export function SmartFolderPage({ defs, notes, tags, folderNames, initial, start
   const dupe = defs.some((d) => d.smart && d.id !== initial?.id && d.name.toLowerCase() === name.trim().toLowerCase());
   const save = () => ok && !dupe && onSave({ id: initial?.id || newId(), name: name.trim().slice(0, 60), color: initial?.color || 'lilac', smart: rules });
   return (
-    <div className="np-page" role="dialog" aria-label="New smart folder">
+    <div className="np-page" role="dialog" aria-modal="true" aria-label="New smart folder" ref={pageRef} tabIndex={-1}>
       <div className="np-ph"><button type="button" className="np-back" aria-label="Back" onClick={onClose}><ChevronLeft size={18} strokeWidth={1.8} /></button><b>{edit ? 'Edit smart folder' : 'New smart folder'}</b></div>
       {!edit && <KindSeg smart onKind={(s) => !s && onKind(name)} />}
       <label className="np-inp"><Swatch tone="lilac" icon={Zap} /><input autoFocus aria-label="Smart folder name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Smart folder name" /></label>

@@ -37,6 +37,11 @@ import { useLive } from '../utils/liveStore';
 import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 import Toast from '../components/Toast';
+import NavMenu from './NavMenu';
+import { TagFilterBar, BulkFailDialog } from './NotesExtras';
+import { useNotesKeys } from './notesKeys';
+import { bulkRun, partialText } from './bulkRun';
+import { folderCounts } from './folderCounts';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 // the first line of a note, used as its name while it has no title
@@ -64,7 +69,7 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
   const untitled = !n.title || n.title === 'Untitled';
   const first = untitled ? firstOfNote(n) : '';
   return (
-      <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id); } else onLeave(); }}
+      <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id, e.shiftKey); } else onLeave(); }}
         draggable={!selectMode && !(n.access && n.access !== 'owner')}
         onDragStart={(e) => { e.dataTransfer.setData('application/x-peblo-note', n.id); e.dataTransfer.effectAllowed = 'move'; if (onDrag) setTimeout(() => onDrag(n.id), 0); }}
         onDragEnd={() => { if (onDrag) setTimeout(() => onDrag(null), 0); }}
@@ -228,7 +233,8 @@ export default function SoftNotes() {
     if (!selDef) return true;
     return selDef.smart ? smartMatch(n, selDef.smart) : inFolder(n, selDef, allDefs, view.subs);
   };
-  const folderCount = (d) => allNotes.filter((n) => (d.smart ? smartMatch(n, d.smart) : inFolder(n, d, allDefs, view.subs))).length;
+  const fCounts = useMemo(() => folderCounts(allNotes, allDefs, view.subs), [allNotes, allDefs, view.subs]); // one pass for every folder (audit R36)
+  const folderCount = (d) => fCounts.get(d.id) || 0;
   const groups = useMemo(() => {
     const ownOk = (n) => !isOffice || own === 'all' || (own === 'mine' ? n.access === 'owner' : n.access && n.access !== 'owner');
     if (dq) return [{ key: 'found', label: '', notes: found.filter((n) => passes(n) && ownOk(n)) }]; // best match first, as the server ranked them
@@ -387,7 +393,19 @@ export default function SoftNotes() {
   forceSaveRef.current = forceSave;
   const leaveNote = useCallback(() => forceSaveRef.current(), []);
   useEffect(() => { setNoteFlusher(() => forceSaveRef.current()); return () => setNoteFlusher(null); }, []); // stable, so the memoised rows are not rebuilt when the save function changes
-  const pickNote = useCallback((id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id])), []);
+  const lastPick = useRef(null); // the row last ticked: shift-click ticks (or clears) everything between it and the clicked row
+  const visibleRef = useRef([]);
+  const pickNote = useCallback((id, shift) => {
+    const list = visibleRef.current;
+    const a = lastPick.current;
+    const i = shift && a ? list.indexOf(a) : -1;
+    const j = list.indexOf(id);
+    lastPick.current = id;
+    if (i >= 0 && j >= 0) {
+      const range = list.slice(Math.min(i, j), Math.max(i, j) + 1);
+      setPicked((p) => (p.includes(id) ? p.filter((x) => !range.includes(x)) : [...new Set([...p, ...range])]));
+    } else setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  }, []);
   const docRef = useRef(null);
   docRef.current = doc;
 
@@ -535,20 +553,18 @@ export default function SoftNotes() {
     // a folder that also collects by tag would pull a note back in, so taking a note out drops those tags too
     const collecting = (n) => (name ? [] : allDefs.filter((d) => !d.smart && d.tag && (n.tags || []).includes(d.tag)).map((d) => d.tag));
     const dropped = new Set();
-    try {
-      await Promise.all(ids.map((id) => {
-        const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
-        const drop = n ? collecting(n) : [];
-        drop.forEach((t) => dropped.add(t));
-        return notesAPI.update(id, { meta: { folder: name || '' }, ...(drop.length ? { tags: (n.tags || []).filter((t) => !drop.includes(t)) } : {}) });
-      }));
-      if (!selectMode && doc && (!only || only === doc.id)) {
-        const drop = collecting(doc);
-        patch({ meta: { ...(doc.meta || {}), folder: name || '' }, ...(drop.length ? { tags: (doc.tags || []).filter((t) => !drop.includes(t)) } : {}) });
-      }
-      refreshLists();
-      flash(name ? `Moved to ${name}` : dropped.size ? `Removed from the folder (and ${[...dropped].map((t) => `#${t}`).join(', ')})` : 'Removed from folder');
-    } catch { flash('Could not move'); }
+    const res = await runBulk(ids, (id) => {
+      const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
+      const drop = n ? collecting(n) : [];
+      drop.forEach((t) => dropped.add(t));
+      return notesAPI.update(id, { meta: { folder: name || '' }, ...(drop.length ? { tags: (n.tags || []).filter((t) => !drop.includes(t)) } : {}) });
+    });
+    if (!selectMode && doc && (!only || only === doc.id) && res.done.includes(doc.id)) {
+      const drop = collecting(doc);
+      patch({ meta: { ...(doc.meta || {}), folder: name || '' }, ...(drop.length ? { tags: (doc.tags || []).filter((t) => !drop.includes(t)) } : {}) });
+    }
+    refreshLists();
+    if (bulkReport(res, ids.length, { oneFail: 'Could not move' })) flash(name ? `Moved to ${name}` : dropped.size ? `Removed from the folder (and ${[...dropped].map((t) => `#${t}`).join(', ')})` : 'Removed from folder');
     setPicked([]); setSelectMode(false);
   };
   // ---- right-click menu on a note row, and dropping a note on a folder
@@ -603,7 +619,10 @@ export default function SoftNotes() {
     setSheet(null); setFolderEdit(null); setSmartPage(null);
     if ((await saveDefs(next)) === false) { flash('Could not save the folder. Nothing was changed.'); return; } // do not touch the notes when the account did not take it
     if (was && !def.smart && was !== def.name) {
-      try { await Promise.all(allNotes.filter((n) => n.meta?.folder === was).map((n) => notesAPI.update(n.id, { meta: { folder: def.name } }))); refreshLists(); } catch { flash('Could not rename the folder on every note'); }
+      const mine = allNotes.filter((n) => n.meta?.folder === was);
+      const res = await runBulk(mine.map((n) => n.id), (id) => notesAPI.update(id, { meta: { folder: def.name } }));
+      refreshLists();
+      if (!bulkReport(res, mine.length, { oneFail: 'Could not rename the folder on every note' })) return;
     }
     if (moveAfter && !def.smart) { setMoveAfter(false); await moveTo(def.name); return; }
     setFSel({ kind: def.smart ? 'smart' : 'folder', id: def.id });
@@ -615,7 +634,12 @@ export default function SoftNotes() {
     if (!window.confirm(def.smart ? `Delete the smart folder "${def.name}"? Your notes are not touched.` : `Delete the folder "${def.name}"?${count ? ` Its ${count} note${count === 1 ? '' : 's'} stay, just out of the folder.` : ''}`)) return;
     setSheet(null); setFolderEdit(null); setSmartPage(null);
     if ((await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)))) === false) { flash('Could not delete the folder. Nothing was changed.'); return; }
-    if (count) { try { await Promise.all(allNotes.filter((n) => n.meta?.folder === def.name).map((n) => notesAPI.update(n.id, { meta: { folder: '' } }))); refreshLists(); } catch { flash('Could not take every note out'); } }
+    if (count) {
+      const mine = allNotes.filter((n) => n.meta?.folder === def.name);
+      const res = await runBulk(mine.map((n) => n.id), (id) => notesAPI.update(id, { meta: { folder: '' } }));
+      refreshLists();
+      bulkReport(res, mine.length, { oneFail: 'Could not take every note out' });
+    }
     if (fSel?.id === def.id) setFSel(null);
   };
   const openEdit = (d) => { if (d.smart) setSmartPage({ initial: d }); else { setFolderEdit(d); setSheet('folder'); } };
@@ -627,34 +651,41 @@ export default function SoftNotes() {
   const bulk = async (kind) => {
     if (!picked.length) return;
     const ids = [...picked];
-    try {
-      if (kind === 'pin') {
-        const sel = allNotes.filter((n) => picked.includes(n.id));
-        const unpin = sel.every((n) => n.meta?.pinned);
-        const room = 3 - pinnedCount;
-        const todo = unpin ? sel : sel.filter((n) => !n.meta?.pinned).slice(0, Math.max(room, 0));
-        if (!unpin && todo.length < sel.filter((n) => !n.meta?.pinned).length) flash('You can pin up to 3 notes.');
-        await Promise.all(todo.map((n) => notesAPI.update(n.id, { meta: { pinned: !unpin } })));
-        refreshLists();
-        if (!unpin && todo.length === 0) { return; }
-        flash(unpin ? 'Unpinned' : 'Pinned to Home');
-      } else {
-        await Promise.all(picked.map((id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true }))));
-        refreshLists();
-        flash(kind === 'trash' ? `Moved ${ids.length} to the Trash` : 'Archived', kind === 'trash' ? { label: 'Undo', run: async () => { await Promise.all(ids.map((id) => notesAPI.restore(id))); refreshLists(); } } : undefined);
-        if (doc && picked.includes(doc.id)) closeDoc();
+    if (kind === 'pin') {
+      const sel = allNotes.filter((n) => picked.includes(n.id));
+      const unpin = sel.every((n) => n.meta?.pinned);
+      const room = 3 - pinnedCount;
+      const todo = unpin ? sel : sel.filter((n) => !n.meta?.pinned).slice(0, Math.max(room, 0));
+      if (!unpin && todo.length < sel.filter((n) => !n.meta?.pinned).length) flash('You can pin up to 3 notes.');
+      const res = await runBulk(todo.map((n) => n.id), (id) => notesAPI.update(id, { meta: { pinned: !unpin } }));
+      refreshLists();
+      if (!unpin && todo.length === 0) { return; }
+      if (bulkReport(res, todo.length, { oneFail: 'Could not change the pin' })) flash(unpin ? 'Unpinned' : 'Pinned to Home');
+    } else {
+      const res = await runBulk(ids, (id) => (kind === 'trash' ? notesAPI.delete(id) : notesAPI.update(id, { isArchived: true })));
+      refreshLists();
+      const undo = kind === 'trash' && res.done.length ? async () => { const r = await runBulk(res.done, (id) => notesAPI.restore(id)); refreshLists(); if (r.failed.length) flash(partialText(r, res.done.length)); } : null;
+      if (bulkReport(res, ids.length, { oneFail: kind === 'trash' ? 'Could not delete the note' : 'Could not archive the note', extra: undo && { label: `Undo the ${res.done.length} moved`, run: undo } })) {
+        flash(kind === 'trash' ? `Moved ${ids.length} to the Trash` : 'Archived', undo ? { label: 'Undo', run: undo } : undefined);
       }
-    } catch { flash('Something went wrong'); }
+      if (doc && res.done.includes(doc.id)) closeDoc();
+    }
     setPicked([]); setSelectMode(false);
   };
   const tagPicked = async (tag) => {
     setSheet(null);
-    try {
-      await Promise.all(allNotes.filter((n) => picked.includes(n.id)).map((n) => ((n.tags || []).includes(tag) ? null : notesAPI.update(n.id, { tags: [...(n.tags || []), tag] }))));
-      refreshLists();
-      flash(`Tagged #${tag}`);
-    } catch { flash('Could not add the tag'); }
+    const todo = allNotes.filter((n) => picked.includes(n.id) && !(n.tags || []).includes(tag));
+    const res = await runBulk(todo.map((n) => n.id), (id) => notesAPI.update(id, { tags: [...(allNotes.find((x) => x.id === id)?.tags || []), tag] }));
+    refreshLists();
+    if (bulkReport(res, todo.length, { oneFail: 'Could not add the tag' })) flash(`Tagged #${tag}`);
     setPicked([]); setSelectMode(false);
+  };
+  const emptyTrash = async () => {
+    if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return;
+    const res = await runBulk(shownList.map((n) => n.id), (id) => notesAPI.delete(id, { permanent: true }));
+    refreshLists();
+    if (bulkReport(res, shownList.length, { oneFail: 'Could not empty the Trash' })) flash('Trash emptied');
+    if (doc?.isDeleted && res.done.includes(doc.id)) navigate('/notes');
   };
   const duplicateTab = async (id) => {
     forceSave();
@@ -697,6 +728,16 @@ export default function SoftNotes() {
     setToast(msg); setToastAct(act || null);
     toastTimer.current = setTimeout(() => { setToast(''); setToastAct(null); }, act ? 6000 : 2200);
   };
+  // bulk actions: at most 5 requests at a time; a partly failed run says "N of M done, K failed" with a Show button
+  const [fails, setFails] = useState(null); // { list, extra }
+  const titleOf = (id) => { const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id); return !n ? 'Untitled' : n.title && n.title !== 'Untitled' ? n.title : firstOfNote(n) || 'Untitled'; };
+  const runBulk = (ids, fn) => bulkRun(ids.map((id) => ({ id, title: titleOf(id) })), (it) => fn(it.id));
+  const bulkReport = (res, total, { oneFail, extra } = {}) => { // true when everything worked
+    if (!res.failed.length) return true;
+    if (total === 1 && oneFail) flash(oneFail);
+    else flash(partialText(res, total), { label: 'Show', run: () => setFails({ list: res.failed, extra }) });
+    return false;
+  };
   // runs an action and shows a message instead of failing silently
   const guarded = (fn, msg) => (...a) => Promise.resolve().then(() => fn(...a)).catch(() => flash(msg));
   const toggleTask = async (t) => {
@@ -705,6 +746,9 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
+  const visibleList = shownGroups.flatMap((g) => (collapsed[`${group}:${g.key}`] ? [] : g.notes));
+  visibleRef.current = visibleList.map((n) => n.id);
+  useNotesKeys({ selectMode, sheetOpen: !!sheet, visibleIds: visibleRef.current, hasDoc: !!doc, onPickAll: (ids) => setPicked(ids), onLeaveSelect: () => { setSelectMode(false); setPicked([]); setSheet(null); } });
   useFocusKeys({ enabled: !!doc && !doc.isDeleted, active: focus, toggle: () => setFocus((v) => !v), exit: () => { setFocus(false); } });
   const getFsScroller = useCallback(() => document.querySelector('.s-notes.focus .s-note-main'), []);
   const outline = useMemo(() => {
@@ -811,6 +855,7 @@ export default function SoftNotes() {
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
       {teamOpen && doc && !doc.isDraft && <ShareToTeam noteId={doc.id} title={doc.title} onClose={() => setTeamOpen(false)} onDone={({ team, tasks }) => flash(`Shared with ${team.name}${tasks ? ` with ${tasks} task${tasks === 1 ? '' : 's'}` : ''}`)} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
+      {fails && <BulkFailDialog fails={fails.list} extra={fails.extra} onClose={() => setFails(null)} />}
       {/* ---------- list ---------- */}
       {dragId && (
         <div className="np-droptray" data-testid="drop-tray" role="group" aria-label="Drop the note on a folder">
@@ -824,7 +869,7 @@ export default function SoftNotes() {
       {rowMenu && (() => {
         const n = rowMenu.n; const mine = !n.access || n.access === 'owner';
         return (
-          <div className="s-tab-menu s-row-menu" role="menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
+          <NavMenu onClose={() => setRowMenu(null)} className="s-tab-menu s-row-menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" role="menuitem" onClick={() => { setRowMenu(null); navigate(`/notes/${n.id}`); }}>Open</button>
             {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-pin" onClick={() => rowPin(n)}>{n.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
             {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-move" onClick={() => rowMove(n)}>Move to folder…</button>}
@@ -834,7 +879,7 @@ export default function SoftNotes() {
             {mine && !n.isDeleted && <button type="button" role="menuitem" className="danger" data-testid="rm-trash" onClick={() => rowTrash(n)}>Move to Trash</button>}
             {mine && n.isDeleted && <button type="button" role="menuitem" data-testid="rm-restore" onClick={() => rowRestore(n)}>Restore</button>}
             {mine && n.isDeleted && <button type="button" role="menuitem" className="danger" onClick={() => rowDeleteForever(n)}>Delete forever</button>}
-          </div>
+          </NavMenu>
         );
       })()}
       <aside className={`s-notes-list np lay-${layout}${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
@@ -882,9 +927,7 @@ export default function SoftNotes() {
             <button type="button" className="np-chip new" aria-label="New folder" title="New folder" onClick={() => openNew(false)}><Plus size={15} strokeWidth={1.8} /></button>
           </div>
         )}
-        {!selectMode && filter !== 'archive' && filter !== 'trash' && selTags.length > 0 && (
-          <div className="np-sum">{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
-        )}
+        {!selectMode && filter !== 'archive' && filter !== 'trash' && <TagFilterBar tags={tagCounts} sel={selTags} setSel={setSelTags} match={tagMatch} setMatch={setTagMatch} />}
         {(cards || folderMode || fSel) && filter !== 'archive' && filter !== 'trash' && (() => {
           const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
           const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
@@ -969,7 +1012,7 @@ export default function SoftNotes() {
             <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => { setFSel(null); setFilter(filter === 'trash' ? 'all' : 'trash'); }}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
             <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
             <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
-            {filter === 'trash' && canPurge && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
+            {filter === 'trash' && canPurge && shownList.length > 0 && <button type="button" className="danger" onClick={emptyTrash}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
         {viewOpen && <><div className="np-dim" style={{ background: 'var(--s-backdrop)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}

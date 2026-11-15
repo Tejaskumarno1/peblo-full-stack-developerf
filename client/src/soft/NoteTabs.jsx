@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Pin, Copy, X, Undo2, Plus } from 'lucide-rea
 import { useAuth } from '../context/AuthContext';
 
 import { getSpace } from '../api/space';
+import NavMenu from './NavMenu';
 // Tabs belong to the signed-in person AND to the space they are in (Personal or a team), so another account on this
 // computer starts with none and a team note never lingers as a tab in Personal.
 // The back / forward trail and the "reopen closed" list last for this session, so a refresh keeps them.
@@ -197,14 +198,14 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onE
       )}
       <button type="button" className="s-tab-nav" data-testid="tab-new" aria-label="New note" title="New note" onClick={onNew}><Plus size={16} strokeWidth={2.2} /></button>
       {menu && mt && (
-        <div className="s-tab-menu" role="menu" data-testid="tab-menu" style={{ left: Math.min(menu.x, window.innerWidth - 260), top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
+        <NavMenu onClose={() => setMenu(null)} className="s-tab-menu" data-testid="tab-menu" style={{ left: Math.min(menu.x, window.innerWidth - 260), top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
           <button type="button" role="menuitem" data-testid="tm-pin" onClick={() => { togglePin(menu.id); setMenu(null); }}><Pin size={15} />{mt.pinned ? 'Unpin tab' : 'Pin tab'}</button>
           <button type="button" role="menuitem" data-testid="tm-dup" onClick={() => { const id = menu.id; setMenu(null); onDuplicate(id); }}><Copy size={15} />Duplicate</button>
           <button type="button" role="menuitem" data-testid="tm-right" onClick={() => { closeRight(menu.id); setMenu(null); }}><X size={15} />Close tabs to the right</button>
           <button type="button" role="menuitem" data-testid="tm-all" onClick={() => { closeAll(); setMenu(null); }}><X size={15} />Close all tabs</button>
           <button type="button" role="menuitem" data-testid="tm-others" onClick={() => { closeOthers(menu.id); setMenu(null); }}><X size={15} />Close others</button>
           <button type="button" role="menuitem" data-testid="tm-reopen" disabled={!closed.length} onClick={() => { reopen(); setMenu(null); }}><Undo2 size={15} />Reopen closed<kbd>Ctrl+Shift+T</kbd></button>
-        </div>
+        </NavMenu>
       )}
     </div>
   );

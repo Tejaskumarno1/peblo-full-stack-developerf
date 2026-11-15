@@ -9,7 +9,7 @@ const GROUPS = [
   { group: 'Blocks', rows: [['Indent', ['Tab']], ['Outdent', ['Shift', 'Tab']], ['Soft line break', ['Shift', 'Enter']], ['Move block', ['Alt', 'Up']], ['Move block down', ['Alt', 'Down']]] },
   { group: 'Find and move', rows: [['Find', [MOD, 'F']], ['Replace', [MOD, 'H']], ['Back', ['Alt', 'Left']], ['Forward', ['Alt', 'Right']], ['Next tab', ['Ctrl', 'Tab']], ['Reopen closed tab', [MOD, 'Shift', 'T']]] },
   { group: 'Everywhere', rows: [['Command palette', [MOD, 'K']], ['Quick capture (desktop)', [MOD, 'Shift', 'Space']], ['Open the AI Hub', [MOD, 'J']], ['Show help', ['?']]] },
-  { group: 'Notes', rows: [['New note', [MOD, 'N']], ['Save now', [MOD, 'S']], ['Search notes', [MOD, '/']]] },
+  { group: 'Notes', rows: [['New note', [MOD, 'N']], ['Save now', [MOD, 'S']], ['Search notes', [MOD, '/']], ['Focus the notes search box', ['/']], ['Focus the notes search box (from the list)', ['Ctrl', 'Shift', 'F']], ['Close the open tab', ['Alt', 'W']], ['New note (notes page)', ['Alt', 'N']], ['Select a range of notes', ['Shift', 'Click']], ['Select all shown notes (select mode)', [MOD, 'A']], ['Leave select mode', ['Esc']]] },
   { group: 'Quick capture', rows: [['Switch note and task', ['Tab']], ['Close', ['Esc']]] },
 ];
 

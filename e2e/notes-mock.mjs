@@ -26,13 +26,15 @@ let seq = 0;
 const mk = (title, content, extra = {}) => ({ id: `n${++seq}`, title, content, tags: [], meta: {}, isDeleted: false, isArchived: false, taskCount: 0, createdAt: now(), updatedAt: now(), ...extra });
 const notes = [
   mk('Sprint plan', 'Goals for the sprint', { meta: { folder: 'Project Alpha' }, tags: ['alpha'] }),
-  mk('Kickoff notes', 'Agenda and questions', { meta: { folder: 'Project Alpha' } }),
-  mk('Biology revision', 'Cell structure', {}),
+  mk('Kickoff notes', 'Agenda and questions', { meta: { folder: 'Project Alpha' }, tags: ['alpha', 'beta'] }),
+  mk('Biology revision', 'Cell structure', { tags: ['beta'] }),
   mk('', '# Plan for Monday\nbuy milk', {}),
 ];
 const user = { id: 'u1', email: 'tester@peblo.test', name: 'Tester', settings: { uiStyle: 'soft', noteLayout: 'classic', noteFolders: [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }] } };
 const reqs = [];
 let failPatches = 0;
+const failIds = new Set(); // PATCH on these notes always fails with 500
+const rate429 = new Set(); // the first PATCH on these notes answers 429 (too many requests)
 
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function handle(route) {
@@ -59,6 +61,8 @@ async function handle(route) {
     if (!n) return json(route, { error: 'nope' }, 404);
     if (method === 'GET') return json(route, { note: n });
     if (method === 'PATCH') {
+      if (failIds.has(n.id)) return json(route, { error: 'Server said no' }, 500);
+      if (rate429.has(n.id)) { rate429.delete(n.id); return json(route, { error: 'Too many requests' }, 429); }
       if (failPatches > 0) { failPatches--; return json(route, { error: 'boom' }, 500); }
       for (const k of ['title', 'content', 'tags']) if (k in body) n[k] = body[k];
       if (body.meta) for (const [k, v] of Object.entries(body.meta)) { if (v === '' || v === false || v == null) delete n.meta[k]; else n.meta[k] = v; }
@@ -205,6 +209,85 @@ try {
   await page.screenshot({ path: 'e2e/notes-mock-dark.png' });
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // midnight
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // back to light
+
+  // 7e. tag filter: pick tags, Any / All, chips, Clear
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO);
+  const rowCount = () => page.locator('.s-notes-rows .s-note-row').count();
+  const total0 = await rowCount();
+  await page.locator('[data-testid="tag-filter-btn"]').click();
+  await page.locator('[data-testid="tag-picker"] label', { hasText: '#alpha' }).locator('input').check(); await wait(300);
+  check('picking a tag filters the list and shows a chip', (await page.locator('[data-testid="tag-chip"]').count()) === 1 && (await rowCount()) === 2, `${await rowCount()} rows`);
+  await page.locator('[data-testid="tag-picker"] label', { hasText: '#beta' }).locator('input').check(); await wait(300);
+  check('Any: notes with alpha or beta', (await rowCount()) === 3, await rowCount());
+  await page.locator('[data-testid="tag-match-all"]').click(); await wait(300);
+  check('All: only notes with both tags', (await rowCount()) === 1, await rowCount());
+  await page.keyboard.press('Escape'); await wait(200);
+  check('Escape closes the tag picker', !(await page.locator('[data-testid="tag-picker"]').count()));
+  await page.locator('[data-testid="tag-chip"]', { hasText: 'beta' }).getByRole('button').click(); await wait(300);
+  check('removing a chip widens the list again', (await page.locator('[data-testid="tag-chip"]').count()) === 1 && (await rowCount()) === 2, await rowCount());
+  await page.locator('[data-testid="tag-clear"]').click(); await wait(300);
+  check('Clear removes every tag filter', (await page.locator('[data-testid="tag-chip"]').count()) === 0 && (await rowCount()) === total0, `${await rowCount()} vs ${total0}`);
+
+  // 7f. selection: shift-click range, Ctrl+A, Escape
+  await page.getByRole('button', { name: 'Select notes' }).click(); await wait(200);
+  const rows = page.locator('.s-notes-rows .s-note-row');
+  await rows.nth(0).click(); await rows.nth(3).click({ modifiers: ['Shift'] }); await wait(200);
+  check('shift-click selects the range between two rows', (await page.locator('.s-notes-rows .s-note-row.sel').count()) === 4, await page.locator('.s-notes-rows .s-note-row.sel').count());
+  await rows.nth(2).click({ modifiers: ['Shift'] }); await wait(200);
+  check('shift-click on a ticked row clears the range', (await page.locator('.s-notes-rows .s-note-row.sel').count()) === 2, await page.locator('.s-notes-rows .s-note-row.sel').count());
+  await page.keyboard.press('Control+a'); await wait(200);
+  check('Ctrl+A selects every shown note', (await page.locator('.s-notes-rows .s-note-row.sel').count()) === total0, `${await page.locator('.s-notes-rows .s-note-row.sel').count()} of ${total0}`);
+  await page.keyboard.press('Escape'); await wait(200);
+  check('Escape leaves select mode', !(await page.locator('.np-selhead').count()));
+
+  // 7g. shortcuts: "/" and Ctrl+Shift+F focus the search box
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('/'); await wait(150);
+  check('"/" focuses the notes search box', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Search notes'));
+  await page.keyboard.type('x'); await wait(100);
+  check('"/" typed in the search box is just text', (await page.locator('.s-nsearch input').inputValue()) === 'x');
+  await page.locator('.s-nsearch input').fill(''); await page.locator('.s-notes-rows .s-note-row').first().focus();
+  await page.keyboard.press('Control+Shift+F'); await wait(150);
+  check('Ctrl+Shift+F in the list focuses the search box', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Search notes'));
+  await page.locator('.s-nsearch input').blur();
+
+  // 7h. bulk archive with one failure and one 429: "2 of 3 done, 1 failed", Show lists the failed note
+  await page.getByRole('button', { name: 'Select notes' }).click(); await wait(200);
+  const idsByTitle = (t) => notes.find((n) => n.title === t).id;
+  const t1 = 'Sprint plan, space safe'; const t2 = 'Kickoff notes'; const t3 = 'Biology revision v2';
+  failIds.add(idsByTitle(t1)); rate429.add(idsByTitle(t2));
+  for (const t of [t1, t2, t3]) await page.locator('.s-notes-rows .s-note-row', { hasText: t }).first().click();
+  await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click(); await wait(2500);
+  const toastText = await page.locator('.s-toast').innerText();
+  check('a partly failed bulk action says "2 of 3 done, 1 failed"', toastText.includes('2 of 3 done, 1 failed'), toastText);
+  check('the 429 was retried and that note was archived', notes.find((n) => n.title === t2).isArchived === true);
+  check('the failing note was not archived', notes.find((n) => n.title === t1).isArchived === false);
+  await page.locator('[data-testid="toast-undo"]', { hasText: 'Show' }).click(); await wait(300);
+  const dlg = page.locator('[data-testid="bulk-fail-dialog"]');
+  check('Show opens a dialog naming the failed note and why', (await dlg.isVisible()) && (await dlg.innerText()).includes(t1) && (await dlg.innerText()).includes('Server said no'), await dlg.innerText());
+  check('the dialog is modal and has focus', (await dlg.getAttribute('aria-modal')) === 'true' && await page.evaluate(() => !!document.activeElement?.closest('[data-testid="bulk-fail-dialog"]')));
+  await page.keyboard.press('Escape'); await wait(200);
+  check('Escape closes the dialog', !(await dlg.count()));
+  failIds.clear(); for (const n of notes) n.isArchived = false;
+
+  // 7i. menus take focus and use the arrow keys
+  await page.goto(`${base}/notes`); await page.locator('.s-notes-rows .s-note-row').first().waitFor(TO);
+  const firstRow = page.locator('.s-notes-rows .s-note-row').first();
+  await firstRow.click({ button: 'right' }); await wait(300);
+  check('the row menu focuses its first item', await page.evaluate(() => document.activeElement?.textContent === 'Open' && document.activeElement.getAttribute('role') === 'menuitem'));
+  await page.keyboard.press('ArrowDown'); await wait(100);
+  check('ArrowDown moves to the next item', await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'rm-pin'));
+  await page.keyboard.press('End'); await wait(100);
+  check('End goes to the last item', await page.evaluate(() => { const m = [...document.querySelectorAll('[data-testid="row-menu"] [role="menuitem"]')]; return document.activeElement === m[m.length - 1]; }));
+  await page.keyboard.press('Home'); await wait(100);
+  check('Home goes to the first item', await page.evaluate(() => document.activeElement?.textContent === 'Open'));
+  await page.keyboard.press('Escape'); await wait(200);
+  check('Escape closes the row menu', !(await page.locator('[data-testid="row-menu"]').count()));
+  await page.getByRole('button', { name: 'View options' }).click(); await wait(200);
+  check('the View popover is modal and takes focus', (await page.locator('.np-pop').getAttribute('aria-modal')) === 'true' && await page.evaluate(() => !!document.activeElement?.closest('.np-pop')));
+  await page.keyboard.press('Escape'); await wait(200);
+  check('closing the View popover returns focus to its button', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'View options'));
+
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);

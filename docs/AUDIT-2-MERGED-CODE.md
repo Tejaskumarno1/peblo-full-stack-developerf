@@ -40,7 +40,7 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [ ] R25 Notes over about 55 KB lose their last edits when the window closes. `utils/noteSync.js:144`.
 - [ ] R26 A team note shared "can view" opens editable for non-authors (the list has no userId), so saves fail forever. `SoftNotes.jsx:148,1069`.
 - [ ] R27 Archive, Pin, Move, Trash, Duplicate and Share are shown to read-only viewers. `SoftNotes.jsx:779-800`.
-- [~] R28 (partly: no more silent folder divergence; bulk still one Promise.all) Bulk actions use one `Promise.all` and report one generic error. `SoftNotes.jsx:638,649`.
+- [x] R28 (no more silent folder divergence; bulk runs through `bulkRun`, failures listed per note) Bulk actions use one `Promise.all` and report one generic error. `SoftNotes.jsx:638,649`.
 - [x] R29 A failed account save is ignored while the notes are renamed or cleared (folders and notes diverge). `SoftNotes.jsx:593-621`.
 - [ ] R30 Open tabs of one space are written under another space's key after a switch *(partly unverified)*. `NoteTabs.jsx:9-18`.
 - [x] R31 A link to a note in another space or the Trash silently goes to /notes. `SoftNotes.jsx:343`.
@@ -50,11 +50,11 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 ### Notes: performance and accessibility
 - [ ] R34 The sidebar and the list each fetch every note with full text; every autosave refetches the library. `SoftNotes.jsx:188-197`.
 - [ ] R35 Search decrypts and scans every note per keystroke pause. `notesController.ts:~300-340`.
-- [ ] R36 Folder counts are recomputed per render (folders x notes x folders). `SoftNotes.jsx:226-231`.
-- [ ] R37 Bulk actions send one parallel request per note with no limit. `SoftNotes.jsx:638,649,968`.
-- [ ] R38 Dialogs have no aria-modal or focus trap; menus do not take focus. `NotesPanelParts.jsx`, `spaces.jsx`.
+- [x] R36 (`folderCounts.js`, one pass in a useMemo) Folder counts are recomputed per render (folders x notes x folders). `SoftNotes.jsx:226-231`.
+- [x] R37 (`bulkRun.js`: 5 at a time, 429 retried once) Bulk actions send one parallel request per note with no limit. `SoftNotes.jsx:638,649,968`.
+- [~] R38 (done for NotesPanelParts sheets, View popover, smart-folder page, tag picker, failure dialog, row and tab menus; `spaces.jsx` dialogs not touched) Dialogs have no aria-modal or focus trap; menus do not take focus. `NotesPanelParts.jsx`, `spaces.jsx`.
 - [ ] R39 Folder edit is double-click or right-click only; fixed pastel colours. `SoftNotes.jsx:865-889`.
-- [ ] R40 No tag filter UI (any/all). `SoftNotes.jsx:98-99`.
+- [x] R40 (`TagFilterBar` in `NotesExtras.jsx`) No tag filter UI (any/all). `SoftNotes.jsx:98-99`.
 - [ ] R41 The notes page adds its own phone breakpoint and uses `window.confirm`. `SoftNotes.jsx:96,110,437,577,611`.
 
 ### Themes and appearance
