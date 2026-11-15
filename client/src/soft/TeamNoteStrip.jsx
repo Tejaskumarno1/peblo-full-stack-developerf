@@ -12,7 +12,7 @@ export default function TeamNoteStrip({ doc }) {
   const { people } = useSpaceMembers();
   const qc = useQueryClient();
   const { data: todos = [] } = useQuery({
-    queryKey: ['team-note-tasks', doc?.id], enabled: !!share && !!doc?.id, refetchInterval: 8000,
+    queryKey: ['team-note-tasks', doc?.id], enabled: !!share && !!doc?.id, refetchInterval: 60000, // fallback only: the live team room (todos_changed) refreshes it at once
     queryFn: () => api.get('/todos', { params: { noteId: doc.id } }).then((r) => r.data.todos || []),
   });
   const total = todos.length;

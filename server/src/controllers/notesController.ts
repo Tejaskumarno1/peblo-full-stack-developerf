@@ -453,8 +453,7 @@ export async function createNote(req: any, res: any, next: any) {
     });
 
     // Lets other open windows (e.g. after quick capture) refresh their note list.
-    const io = req.app.get('io');
-    if (io) io.to(req.user.id).emit('notes_changed');
+    notify(req, 'notes_changed');
 
     const shaped = formatNote(updated);
     await decorateNotes(req.user.id, 'spaceId' in own ? own.spaceId : null, [shaped]);

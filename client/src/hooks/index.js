@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { writeUnsaved, clearUnsaved } from '../utils/unsavedCopy';
 
 export function useDebounce(value, delay = 500) {
   const [debounced, setDebounced] = useState(value);
@@ -30,6 +31,12 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
     delete pendingRef.current[noteId]; // nothing to save now (an empty draft, a deleted note): an old copy must not be retried or flushed later
   }
 
+  const writeCopy = (id, payload) => {
+    let baseContent = '';
+    try { baseContent = JSON.parse(lastSavedRef.current || '{}').content ?? ''; } catch { /* no base */ }
+    writeUnsaved(id, { content: payload?.content, title: payload?.title, baseContent });
+  };
+
   const persist = useCallback(async (id, payload) => {
     if (!id || !payload) return false;
     const current = JSON.stringify(payload);
@@ -39,6 +46,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
     busyRef.current += 1;
     try {
       await saveFnRef.current(id, payload);
+      clearUnsaved(id, payload?.content); // saved: the local safety copy is not needed any more
       lastSavedRef.current = current;
       delete pendingRef.current[id];
       clearTimeout(retryRef.current.timer); retryRef.current.n = 0;
@@ -97,8 +105,11 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
     timeoutRef.current = setTimeout(() => {
       persist(noteId, data);
     }, delay);
+    // keep a local copy while this is unsaved, so a failed save, a dead connection or a closed window cannot lose it
+    const copyTimer = setTimeout(() => writeCopy(noteId, data), 400);
 
     return () => {
+      clearTimeout(copyTimer);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [data, noteId, delay, persist]);
@@ -110,6 +121,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
       if (current === lastSavedRef.current) return;
       // a normal request is cancelled when the window closes; the unload version is sent with keepalive so it still goes out
       if (unloadFnRef.current && unloadFnRef.current(noteId, data)) return;
+      writeCopy(noteId, data); // too big for the last-chance request (about 55 KB) or none: keep it here; the next open restores it
       persist(noteId, data);
     };
     window.addEventListener('beforeunload', onLeave);

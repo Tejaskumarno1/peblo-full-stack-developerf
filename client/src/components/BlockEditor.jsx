@@ -40,7 +40,8 @@ import FindBar from './FindBar';
 import { NotePreview } from '../soft/Skeletons';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
-import { setNoteLive, peekExternalEdit, clearExternalEdit } from '../utils/noteSync';
+import { setNoteLive, peekExternalEdit, clearExternalEdit, markExternalEdit } from '../utils/noteSync';
+import { readUnsaved, writeUnsaved, clearUnsaved, decideRestore } from '../utils/unsavedCopy';
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
@@ -761,6 +762,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const dbg = (m) => { try { if (localStorage.getItem('peblo-debug') === '1') console.log('[collab]', m); } catch { /* ignore */ } };
     dbg('connect ' + (noteId || collab?.share));
     provider.on('connection-close', (ev) => dbg('close code ' + ev?.code));
+    { const back = pendingRestore(); if (back !== null) markExternalEdit(noteId, back); } // typed here but never saved: put it into the room like an outside edit
     rt.connect();
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloCollab = rt; } catch { /* ignore */ }
     // Could not reach the live server (a firewall, an old server): fall back to ordinary editing after a while.
@@ -785,16 +787,35 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   // 'live' | 'wait' | 'off' for pages that do their own saving (the share page)
   useEffect(() => { onCollabState?.(!rt ? 'off' : live.connected && live.ready ? 'live' : 'wait'); }, [rt, live.connected, live.ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Text kept on this device because it never reached the server (see utils/unsavedCopy.js). Returns the text to put back, or null.
+  // Asked once per editor. When the server's text is still what the copy started from it is restored without asking;
+  // when the server's text changed meanwhile the person decides.
+  const restoredRef = useRef(false);
+  const pendingRestore = () => {
+    if (restoredRef.current || guest || !editable || !noteId || noteId === '__draft__') return null;
+    restoredRef.current = true;
+    const copy = readUnsaved(noteId);
+    const verdict = decideRestore(copy, initialContent || '');
+    if (verdict === 'none') { if (copy) clearUnsaved(noteId); return null; }
+    if (verdict === 'ask' && !window.confirm('This note has text that was typed here but never saved. Restore it? (It replaces the text now shown.)')) { clearUnsaved(noteId); return null; }
+    return copy.content;
+  };
+
   useEffect(() => {
     async function loadContent() {
       if (rt) return; // a live document is filled from the server's copy instead
       if (noteId) clearExternalEdit(noteId); // no room to put outside text into: initialContent already has it
-      if (!initialContent) return;
+      const restored = pendingRestore();
+      const text = restored !== null ? restored : initialContent;
+      if (!text) return;
       try {
         loadingRef.current = true; // reading a note in is not an edit to save
-        const parsed = await parseMd(editor, initialContent, metaStore);
+        const parsed = await parseMd(editor, text, metaStore);
         editor.replaceBlocks(editor.document, parsed);
-        setTimeout(() => { loadingRef.current = false; }, 0);
+        setTimeout(() => {
+          loadingRef.current = false;
+          if (restored !== null && onChange) { dirtyRef.current = true; pendingFnRef.current = onChange; flushRef.current(); } // hand the restored text to the page so it is saved
+        }, 0);
       } catch (err) {
         loadingRef.current = false;
         console.error('Failed to parse markdown:', err);
@@ -829,10 +850,16 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const flushChange = () => {
     if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
     if (!dirtyRef.current) return;
-    dirtyRef.current = false;
     const deliver = pendingFnRef.current;
-    if (!deliver || loadingRef.current || aiBusyRef.current) return;
-    if (rt && !connRef.current) return;
+    if (!deliver || loadingRef.current) { dirtyRef.current = false; return; }
+    // Not able to hand the text over right now (an AI card is running, or the live connection is down): the text stays marked
+    // as changed and is tried again shortly, so it is not forgotten. While the connection is down a copy is also kept on this device.
+    if (aiBusyRef.current || (rt && !connRef.current)) {
+      if (rt && !connRef.current && !aiBusyRef.current) void keepLocalCopy();
+      changeTimerRef.current = setTimeout(() => flushRef.current(), 3000);
+      return;
+    }
+    dirtyRef.current = false;
     const sequence = ++changeSequenceRef.current;
     // take the document now (not after the await) so an edit made while converting is a new change of its own
     const marksCtx = newMarks();
@@ -847,15 +874,24 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     })().catch(() => { /* the next edit converts again */ });
   };
   useEffect(() => metaStore.subscribe((mine) => { if (mine && !loadingRef.current) handleChangeRef.current?.(); }), [metaStore]); // a table setting changed: save it like a typed edit
+  // A copy of what is on screen in localStorage (peblo-unsaved:<id>), for the time the page cannot save it. The page's own
+  // autosave removes it once the note is saved.
+  const keepLocalCopy = async () => {
+    if (!noteId || noteId === '__draft__') return;
+    try {
+      const mc = newMarks();
+      const md = insertMarkers(await editor.blocksToMarkdownLossy(toStorage(editor.document, mc, metaStore)), mc);
+      writeUnsaved(noteId, { content: md, baseContent: initialContent });
+    } catch { /* the page's copy is still there */ }
+  };
   const flushRef = useRef(flushChange);
   flushRef.current = flushChange;
   const handleChangeRef = useRef(null);
   const handleChange = () => {
     checkDoubleBracket();
-    if (!onChange || loadingRef.current || aiBusyRef.current) return;
-    // While a live connection is down, edits stay in the shared document and sync when it returns. Saving the page's own
-    // copy now could overwrite what other people typed meanwhile.
-    if (rt && !connRef.current) return;
+    if (!onChange || loadingRef.current) return;
+    // While a live connection is down or an AI card is running the text is not handed to the page yet (it could overwrite what
+    // other people typed meanwhile), but it is marked as changed: flushChange keeps trying and keeps a local copy.
     dirtyRef.current = true;
     pendingFnRef.current = onChange;
     if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
@@ -915,6 +951,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       setCard({ kind, src, status: 'error', error: e.response?.data?.error || e.message || 'The AI did not answer. Try again.' });
     } finally {
       aiBusyRef.current = false;
+      if (dirtyRef.current) flushRef.current(); // text typed while the AI ran
     }
   };
   // The Ask menu in the selection bar sends its choice here (see AskTool).

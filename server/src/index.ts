@@ -46,6 +46,7 @@ import { apiLimiter } from './middleware/rateLimit.js';
 import { agentNote, origin as reqOrigin } from './services/agentView.js';
 import { protectExistingKeys, migrateLegacyKeys } from './services/profile.js';
 import { initDataCrypto } from './dataCrypto.js';
+import { syncSocketRooms, startRoomRefresh } from './utils/spaceRooms.js';
 import { runStartupEncryption } from './services/encryptExisting.js';
 
 export interface StartOptions {
@@ -232,7 +233,9 @@ export async function startServer({ port = 0, staticDir, host = '127.0.0.1' }: S
   });
   io.on('connection', (socket) => {
     socket.join(socket.data.userId);
+    void syncSocketRooms(socket, socket.data.userId); // team rooms: space:<id> for each space this person can read (R11)
   });
+  startRoomRefresh(io);
   // Used by "sign out everywhere" and password changes to drop sockets that were opened with an old token.
   app.set('disconnectUser', (userId: string) => { io.in(userId).disconnectSockets(true); });
   app.set('io', io);

@@ -1,3 +1,4 @@
+import { notify } from '../utils/notify.js';
 import { syncDoneTag } from '../utils/doneTag.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
@@ -225,8 +226,7 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       todo = await prisma.todo.create({ data: { ...base, deadline: when }, include: { note: { select: { id: true, title: true } } } });
     }
 
-    const io = req.app.get('io');
-    if (io) io.to(userId).emit('todos_changed');
+    notify(req, 'todos_changed');
     await syncDoneTag((todo as any).noteId);
     const allAssigned: string[] = ((cleanMeta as any).assignees as string[] | undefined) || (base.assigneeId ? [base.assigneeId] : []);
     const extra = allAssigned.filter((a) => a !== userId && a !== base.assigneeId);
@@ -395,8 +395,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       await topUpSeries(userId, todo.seriesId);
     }
 
-    const io = req.app.get('io');
-    if (io) io.to(userId).emit('todos_changed');
+    notify(req, 'todos_changed');
     for (const n of new Set([updatedTodo.noteId, todo.noteId])) await syncDoneTag(n);
 
     res.json({ todo: updatedTodo });
@@ -436,8 +435,7 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
       await prisma.todo.delete({ where: { id: id as string, spaceId: todo.spaceId } });
     }
 
-    const io = req.app.get('io');
-    if (io) io.to(userId).emit('todos_changed');
+    notify(req, 'todos_changed');
     await syncDoneTag(todo.noteId);
 
     res.json({ success: true });
@@ -475,8 +473,7 @@ export async function bulkTodos(req: Request, res: Response, next: NextFunction)
       newly[t.id] = u.noteId;
     }
     for (const n of new Set(Object.values(newly))) await syncDoneTag(n as string | null);
-    const io = req.app.get('io');
-    if (io) io.to(userId).emit('todos_changed');
+    notify(req, 'todos_changed');
     res.json({ ok: true, changed });
   } catch (error) { next(error); }
 }

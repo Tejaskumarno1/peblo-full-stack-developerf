@@ -1,4 +1,5 @@
-﻿import crypto from 'crypto';
+﻿import { emitUserAndSpace } from '../utils/notify.js';
+import crypto from 'crypto';
 import prisma from '../db.js';
 import { spaceAccess, can } from '../utils/access.js';
 import { taskVisible, assigneesOf, columnOf } from '../utils/taskAccess.js';
@@ -52,7 +53,7 @@ export async function postComment(req: any, res: any, next: any) {
     const people = [...new Set([t.userId, ...assigneesOf(t), ...watchers])].filter((u) => u !== userId && members.includes(u) && !mentions.includes(u));
     if (mentions.length) await notifyUsers(req.app, mentions, { kind: 'mention', title: t.text, body, from, spaceId: t.spaceId, todoId: t.id });
     if (people.length) await notifyUsers(req.app, people, { kind: 'comment', title: t.text, body, from, spaceId: t.spaceId, todoId: t.id });
-    req.app.get('io')?.to(t.spaceId).emit('todos_changed');
+    emitUserAndSpace(req.app.get('io'), userId, t.spaceId, 'todos_changed');
     res.status(201).json({ ok: true, id });
   } catch (e) { next(e); }
 }
@@ -72,7 +73,7 @@ export async function requestReview(req: any, res: any, next: any) {
     const note = clean(req.body?.note, 300);
     await logActivity(t.id, t.spaceId, userId, 'review', note || 'asked for a review');
     await notifyUsers(req.app, to, { kind: 'review', title: t.text, body: note, from: await nameOf(userId), spaceId: t.spaceId, todoId: t.id });
-    req.app.get('io')?.to(userId).emit('todos_changed');
+    emitUserAndSpace(req.app.get('io'), userId, t.spaceId, 'todos_changed');
     res.json({ ok: true, to });
   } catch (e) { next(e); }
 }
@@ -229,7 +230,7 @@ export async function handover(req: any, res: any, next: any) {
     }
     const note = clean(req.body?.note, 200);
     if (mine.length && to !== userId) await notifyUsers(req.app, [to], { kind: 'assigned', title: `${mine.length} task${mine.length === 1 ? '' : 's'} handed over to you`, body: note || mine.slice(0, 3).map((t) => t.text).join(', '), from: await nameOf(userId), spaceId, todoId: mine[0].id });
-    req.app.get('io')?.to(userId).emit('todos_changed');
+    emitUserAndSpace(req.app.get('io'), userId, spaceId, 'todos_changed');
     res.json({ ok: true, moved: mine.length });
   } catch (e) { next(e); }
 }

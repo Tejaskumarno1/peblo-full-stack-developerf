@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Activity, Check, ChevronDown, FolderKanban, FolderOpen, Plus, User, Users, Building2, X } from 'lucide-react';
 import { workspacesAPI } from '../api';
 import { getSpace, setSpace, SPACE_EVENT } from '../api/space';
+import { flushOpenNote } from '../utils/noteSync';
 import './spaces.css';
 import Toast from '../components/Toast';
 
@@ -55,8 +56,11 @@ export function useSwitchSpace() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  return useCallback((id) => {
+  return useCallback(async (id) => {
     if ((getSpace() || null) === (id || null)) return;
+    // save what is being typed first (it is sent to the space it was opened in), but never make the person wait more than 1.5 s
+    await Promise.race([flushOpenNote(), new Promise((r) => setTimeout(r, 1500))]);
+    if ((getSpace() || null) === (id || null)) return; // another window switched meanwhile
     setSpace(id);
     qc.resetQueries(); // forget what was loaded for the old space and load the new one
     // stay on the same page; an open note belongs to the old space, so go to the list

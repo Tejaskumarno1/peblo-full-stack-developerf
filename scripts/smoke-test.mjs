@@ -35,10 +35,10 @@ const rawFetch = globalThis.fetch;
 globalThis.fetch = (u, o = {}) => (token && String(u).startsWith(base)
   ? rawFetch(u, { ...o, headers: { Authorization: `Bearer ${token}`, ...(o.headers || {}) } })
   : rawFetch(u, o));
-async function call(method, url, body) {
+async function call(method, url, body, extraHeaders) {
   const res = await fetch(base + url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: body || extraHeaders ? { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(extraHeaders || {}) } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -1325,6 +1325,50 @@ async function prismaOffUser() {
     // (needs two users and a team space; reuse the helpers of the team checks above when they exist)
     check('versions of an own note still list', (await call('GET', `/api/notes/${lid}/backups`)).status === 200);
     await call('DELETE', `/api/notes/${lid}?permanent=1`);
+  }
+  // (added UNRUN, R11) live team rooms: a teammate hears team note/task changes, a removed member does not
+  {
+    const { io: ioClient } = await import(pathToFileURL(path.resolve('client/node_modules/socket.io-client/build/esm/index.js')).href);
+    const { default: prismaR } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+    const pw2 = 'correct horse battery';
+    const mkUser = async (tag) => { const e = `smoke-rt-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: pw2, name: 'RT ' + tag }); return { email: e, id: r.json.user.id, token: r.json.token }; };
+    const rtA = await mkUser('a'); const rtB = await mkUser('b');
+    try {
+      token = rtA.token;
+      const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke RT org', start: 'team' });
+      const spaceId = org.json.spaceId;
+      await prismaR.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${org.json.id}, ${rtB.id}, 'member')`;
+      await prismaR.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${spaceId}, ${rtB.id}, 'member', ${rtA.id})`;
+      const open = async (t) => { const sk = ioClient(base, { auth: { token: t }, transports: ['websocket'], reconnection: false }); const got = []; for (const ev of ['notes_changed', 'todos_changed']) sk.on(ev, (p) => got.push({ ev, p })); await new Promise((res, rej) => { sk.on('connect', res); sk.on('connect_error', rej); setTimeout(() => rej(new Error('socket timeout')), 5000); }); await new Promise((r) => setTimeout(r, 400)); return { sk, got }; };
+      const sB = await open(rtB.token);
+      const asA = (m, u, b) => call(m, u, b, { 'x-peblo-space': spaceId });
+      const nn = await asA('POST', '/api/notes', { title: 'team live', content: 'secret words' });
+      await new Promise((r) => setTimeout(r, 600));
+      check('R11: a teammate hears notes_changed for a team note, tagged with the space', sB.got.some((g) => g.ev === 'notes_changed' && g.p?.space === spaceId), sB.got);
+      check('R11: the event carries no note text', !JSON.stringify(sB.got).includes('secret words') && !JSON.stringify(sB.got).includes('team live'));
+      sB.got.length = 0;
+      await asA('POST', '/api/todos', { text: 'team task live' });
+      await new Promise((r) => setTimeout(r, 600));
+      check('R11: a teammate hears todos_changed for a team task', sB.got.some((g) => g.ev === 'todos_changed' && g.p?.space === spaceId), sB.got);
+      sB.got.length = 0;
+      // personal changes of A are not heard by B
+      token = rtA.token; await call('POST', '/api/notes', { title: 'private personal', content: 'x' });
+      await new Promise((r) => setTimeout(r, 600));
+      check('R11: a Personal note of another person is not heard', sB.got.length === 0, sB.got);
+      // removal: B leaves the space (rooms are dropped at once) and hears nothing more
+      token = rtB.token; const left = await call('POST', `/api/spaces/${spaceId}/leave`);
+      token = rtA.token; sB.got.length = 0;
+      await asA('POST', '/api/notes', { title: 'after leaving', content: 'y' });
+      await new Promise((r) => setTimeout(r, 600));
+      check('R11: a member who left the space no longer receives its events', left.status === 200 && !sB.got.some((g) => g.p?.space === spaceId), { left: left.status, got: sB.got });
+      // a socket opened after the removal never joins the room
+      const sB2 = await open(rtB.token); await asA('POST', '/api/notes', { title: 'again', content: 'z' }); await new Promise((r) => setTimeout(r, 600));
+      check('R11: a new connection of a removed member does not join the space room', sB2.got.length === 0, sB2.got);
+      sB.sk.disconnect(); sB2.sk.disconnect();
+      await prismaR.$executeRaw`DELETE FROM organizations WHERE id = ${org.json.id}`;
+    } finally {
+      await prismaR.user.deleteMany({ where: { email: { in: [rtA.email, rtB.email] } } });
+    }
   }
 } catch (err) {
   failures++;

@@ -1,3 +1,4 @@
+import { emitUserAndSpace } from '../utils/notify.js';
 import prisma from '../db.js';
 import { audit, can, spaceAccess } from '../utils/access.js';
 import { isOffice, noteLevel, type Level } from '../utils/noteAccess.js';
@@ -104,7 +105,7 @@ export async function setAccess(req: any, res: any, next: any) {
       const org = (await prisma.$queryRaw<{ org_id: string }[]>`SELECT org_id FROM spaces WHERE id = ${ctx.spaceId}`)[0]?.org_id;
       if (org) await audit(org, req.user.id, 'note.access_changed', ctx.id, { everyone: everyone === undefined ? beforeEveryone : everyone, added: added.length, removed: removed.length });
     }
-    req.app.get('io')?.to(req.user.id).emit('notes_changed');
+    emitUserAndSpace(req.app.get('io'), req.user.id, ctx.spaceId, 'notes_changed');
     res.json(await shape(ctx, req.user.id));
   } catch (error) { next(error); }
 }
