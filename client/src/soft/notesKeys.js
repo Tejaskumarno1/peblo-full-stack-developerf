@@ -25,7 +25,7 @@ export function useNotesKeys({ selectMode, sheetOpen, visibleIds, hasDoc, onPick
       }
       if (!c.selectMode) return;
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (key === 'a' || key === 'A') && !typing(e.target)) { e.preventDefault(); c.onPickAll(c.visibleIds); return; }
-      if (key === 'Escape' && !e.defaultPrevented && !c.sheetOpen && !typing(e.target)) c.onLeaveSelect();
+      if (key === 'Escape' && !e.defaultPrevented && !c.sheetOpen && !typing(e.target) && !e.target?.closest?.('[role="menu"], [role="dialog"]')) c.onLeaveSelect(); // a menu or dialog takes its own Escape first
     };
     window.addEventListener('keydown', k, true); // capture, and registered before FocusMode's own Ctrl+Shift+F handler
     return () => window.removeEventListener('keydown', k, true);

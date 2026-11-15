@@ -377,16 +377,16 @@ export default function SoftNotes() {
     if (found && typeof found.content === 'string') open(found);
     else if (loadingId.current !== routeId) { // a list entry has no text (light list), or the note is not in the list: load it whole
       loadingId.current = routeId;
-      notesAPI.get(routeId, { deleted: !!found?.isDeleted }).then((r) => { if (loadingId.current === routeId) open(r.data.note); }).finally(() => { if (loadingId.current === routeId) loadingId.current = null; }).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else { flash(e.response?.status === 404 ? 'That note is not here. It may be in another space, in the Trash, or deleted.' : 'Could not open that note.'); navigate('/notes', { replace: true }); } });
+      notesAPI.get(routeId, { deleted: !!found?.isDeleted }).then((r) => { if (loadingId.current === routeId) open(r.data.note); }).finally(() => { if (loadingId.current === routeId) loadingId.current = null; }).catch((e) => { if (loadingId.current !== null && loadingId.current !== routeId) return; /* moved on to another note while this one loaded */ if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else { flash(e.response?.status === 404 ? 'That note is not here. It may be in another space, in the Trash, or deleted.' : 'Could not open that note.'); navigate('/notes', { replace: true }); } });
     }
   }, [routeId, allNotes, listed, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- saving ----------
   const saveData = useMemo(() => {
-    if (!doc || doc.isDeleted) return null;
+    if (!doc || doc.isDeleted || viewer) return null; // a view-only note never autosaves
     if (doc.isDraft && !doc.title.trim() && !doc.content.trim()) return null;
     return { title: doc.title, content: doc.content, tags: doc.tags };
-  }, [doc?.title, doc?.content, doc?.tags, doc?.isDraft, doc?.isDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc?.title, doc?.content, doc?.tags, doc?.isDraft, doc?.isDeleted, viewer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {
@@ -592,7 +592,8 @@ export default function SoftNotes() {
 
   const moveTo = async (name, only) => {
     setSheet(null);
-    const ids = only ? [only] : selectMode && picked.length ? picked : doc ? [doc.id] : [];
+    let ids = only ? [only] : selectMode && picked.length ? picked : doc ? [doc.id] : [];
+    if (!(doc?.isDraft && ids.length === 1 && ids[0] === doc.id)) { ids = manageableIds(ids); if (!ids.length) { setPicked([]); setSelectMode(false); return; } }
     if (!only && !selectMode && doc?.isDraft) { // not saved yet: the folder is used when the note is first saved
       patch({ meta: name ? { ...(doc.meta || {}), folder: name } : undefined });
       flash(name ? `Will be saved in ${name}` : 'No folder');
@@ -655,7 +656,7 @@ export default function SoftNotes() {
       const id = e.dataTransfer.getData('application/x-peblo-note');
       const n = allNotes.find((x) => x.id === id);
       if (!id || !n) return;
-      if (n.access && n.access !== 'owner' && !n.canManage) { flash('Only the owner can move this note'); return; }
+      if (!mayManage(n)) { flash('Only the owner or a team lead can move this note'); return; }
       moveTo(d.name, id);
     },
   });
@@ -697,11 +698,19 @@ export default function SoftNotes() {
   const outsideHist = useRef(null);
   useOutside(outsideMenu, menuOpen, () => setMenuOpen(false));
   useOutside(outsideHist, historyOpen, () => setHistoryOpen(false));
+  // Only notes this person may manage (the author or a team lead; nobody in a view-only space) are archived, pinned, moved or trashed in bulk.
+  const mayManage = (n) => spaceRole !== 'viewer' && (!n || !n.access || n.access === 'owner' || n.canManage === true);
+  const manageableIds = (ids) => {
+    const ok = ids.filter((id) => mayManage(id === doc?.id ? doc : allNotes.find((x) => x.id === id)));
+    if (ok.length < ids.length) flash(`${ids.length - ok.length} note${ids.length - ok.length === 1 ? '' : 's'} skipped: only the author or a team lead can change ${ids.length - ok.length === 1 ? 'it' : 'them'}.`);
+    return ok;
+  };
   const bulk = async (kind) => {
     if (!picked.length) return;
-    const ids = [...picked];
+    const ids = manageableIds([...picked]);
+    if (!ids.length) { setPicked([]); setSelectMode(false); return; }
     if (kind === 'pin') {
-      const sel = allNotes.filter((n) => picked.includes(n.id));
+      const sel = allNotes.filter((n) => ids.includes(n.id));
       const unpin = sel.every((n) => n.meta?.pinned);
       const room = 3 - pinnedCount;
       const todo = unpin ? sel : sel.filter((n) => !n.meta?.pinned).slice(0, Math.max(room, 0));
@@ -740,6 +749,7 @@ export default function SoftNotes() {
     forceSave();
     let n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
     if (!n) return;
+    if (!mayManage(n)) { flash('Only the author or a team lead can duplicate this note.'); return; }
     try {
       if (typeof n.content !== 'string') n = (await notesAPI.get(id)).data.note; // the list has no text
       const { data } = await notesAPI.create({ title: `Copy of ${n.title || 'Untitled'}`, content: n.content || '', tags: n.tags || [], ...(n.meta?.folder ? { meta: { folder: n.meta.folder } } : {}) });
@@ -796,8 +806,8 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
-  const visibleList = shownGroups.flatMap((g) => (collapsed[`${group}:${g.key}`] ? [] : g.notes));
-  visibleRef.current = visibleList.map((n) => n.id);
+  const visibleIds = useMemo(() => shownGroups.flatMap((g) => (collapsed[`${group}:${g.key}`] ? [] : g.notes.map((n) => n.id))), [shownGroups, collapsed, group]);
+  visibleRef.current = visibleIds;
   useNotesKeys({ selectMode, sheetOpen: !!sheet, visibleIds: visibleRef.current, hasDoc: !!doc, onPickAll: (ids) => setPicked(ids), onLeaveSelect: () => { setSelectMode(false); setPicked([]); setSheet(null); } });
   useFocusKeys({ enabled: !!doc && !doc.isDeleted, active: focus, toggle: () => setFocus((v) => !v), exit: () => { setFocus(false); } });
   const getFsScroller = useCallback(() => document.querySelector('.s-notes.focus .s-note-main'), []);
@@ -921,7 +931,7 @@ export default function SoftNotes() {
         </div>
       )}
       {rowMenu && (() => {
-        const n = rowMenu.n; const mine = !n.access || n.access === 'owner' || n.canManage === true;
+        const n = rowMenu.n; const mine = mayManage(n);
         return (
           <NavMenu onClose={() => setRowMenu(null)} className="s-tab-menu s-row-menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" role="menuitem" onClick={() => { setRowMenu(null); navigate(`/notes/${n.id}`); }}>Open</button>

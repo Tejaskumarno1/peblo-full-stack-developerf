@@ -8,9 +8,6 @@ import { getLastNoteWrite } from '../api/client';
  * - notes_changed refetches the notes at most once per 5 s (trailing). The echo of this client's own save (the cache was
  *   already patched in place) never refetches at once: it waits for the end of the window, so a change from another
  *   device is late, never lost.
- * - notes_changed refetches the notes at most once per 5 s (trailing). The echo of this client's own save (the cache was
- *   already patched in place) never refetches at once: it waits for the end of the window, so a change from another
- *   device is late, never lost.
  * - After the socket reconnects, whatever was missed meanwhile is refetched: notes, todos, notifications.
  * - A space change in ANOTHER window (storage event on 'peblo-space', see api/space.js) forgets what was loaded
  *   for the old space, so no old-space data stays on screen. A change made in this window is handled by useSwitchSpace.

@@ -18,4 +18,4 @@
 .bf-box li span { color: var(--s-fg2); font-size: 12px; }
 .bf-btns { display: flex; justify-content: flex-end; gap: 8px; }
 .bf-btns button { height: 34px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--s-line); background: transparent; color: var(--s-fg); font: inherit; font-weight: 700; cursor: pointer; }
-.bf-btns button.go { background: var(--s-accent, #E8603C); color: #fff; border-color: transparent; }
+.bf-btns button.go { background: var(--s-accent, #E8603C); color: var(--s-on-accent, #fff); border-color: transparent; }

@@ -13,7 +13,7 @@ export function TagFilterBar({ tags, sel, setSel, match, setMatch }) {
   if (!all.length && !sel.length) return null;
   return (
     <div className="np-tagbar" data-testid="tag-filter">
-      <button type="button" ref={btn} className={`np-tagbtn${sel.length ? ' set' : ''}`} data-testid="tag-filter-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}><TagIcon size={14} strokeWidth={1.9} />Tags{sel.length ? ` (${sel.length})` : ''}</button>
+      <button type="button" ref={btn} className={`np-tagbtn${sel.length ? ' set' : ''}`} data-testid="tag-filter-btn" aria-haspopup="dialog" aria-expanded={open} onMouseDown={(e) => { if (open) e.stopPropagation(); /* the outside-click closer must not close it first, or this click would reopen it */ }} onClick={() => setOpen((v) => !v)}><TagIcon size={14} strokeWidth={1.9} />Tags{sel.length ? ` (${sel.length})` : ''}</button>
       {sel.map((t) => <span key={t} className="np-tagchip" data-testid="tag-chip">#{t}<button type="button" aria-label={`Remove tag ${t}`} onClick={() => toggle(t)}><X size={12} strokeWidth={2.6} /></button></span>)}
       {sel.length > 1 && <span className="np-tagmode" data-testid="tag-mode-note">{match === 'all' ? 'all of these' : 'any of these'}</span>}
       {sel.length > 0 && <button type="button" className="np-tagclear" data-testid="tag-clear" onClick={() => setSel([])}>Clear</button>}

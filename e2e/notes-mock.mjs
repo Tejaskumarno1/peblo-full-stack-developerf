@@ -255,6 +255,9 @@ try {
   check('All: only notes with both tags', (await rowCount()) === 1, await rowCount());
   await page.keyboard.press('Escape'); await wait(200);
   check('Escape closes the tag picker', !(await page.locator('[data-testid="tag-picker"]').count()));
+  await page.locator('[data-testid="tag-filter-btn"]').click(); await wait(200);
+  await page.locator('[data-testid="tag-filter-btn"]').click(); await wait(200);
+  check('clicking Tags again closes the picker (does not reopen it)', !(await page.locator('[data-testid="tag-picker"]').count()));
   await page.locator('[data-testid="tag-chip"]', { hasText: 'beta' }).getByRole('button').click(); await wait(300);
   check('removing a chip widens the list again', (await page.locator('[data-testid="tag-chip"]').count()) === 1 && (await rowCount()) === 2, await rowCount());
   await page.locator('[data-testid="tag-clear"]').click(); await wait(300);
