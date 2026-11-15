@@ -140,7 +140,7 @@ All user-owned tables cascade on user delete.
 | DELETE | `/api/notes/:id` | – | Moves a live note to trash (`isDeleted`, `deletedAt`, `isArchived=false`). If it is already in trash, deletes it permanently. | notes (cascades) | `{message}` / 404 |
 | POST | `/api/notes/:id/restore` | – | `isDeleted=false, deletedAt=null` | notes | `{note}` |
 | POST | `/api/notes/:id/archive` | – | Toggles `isArchived` (works on trashed notes too) | notes | `{note}` |
-| GET | `/api/notes/:id/backups` | – | Backups whose note belongs to the user, newest first, **full content and no limit** | note_backups | `{backups:[{id,content,createdAt}]}` |
+| GET | `/api/notes/:id/backups` | – | Versions of a note the caller can read (`noteScope(req,res,'read')`: own note, or a team/Office note under the usual rules), newest first, max 100, metadata plus a 140-char preview (encrypted ones decrypted in JS). Restore (`POST .../revert`), name (`POST /:id/versions`) and rename (`PATCH .../backups/:backupId`) need `noteScope(...,'write')`: space write rights, `teamViewOnly` and Office author/edit rules apply (403 `view_only` / `no_access`); `GET .../backups/:backupId` needs read. A note outside the caller's scope gives 404. Changed on branch `feat-versions` (R10); never run against a database | note_backups | `{backups:[{id,createdAt,size,preview,label,savedBy}]}` |
 | POST | `/api/notes/:id/backups/:backupId/revert` | – | Overwrites the note content with the backup (does not back up the current content first) | notes, note_backups | `{note}` |
 
 ### 2.5 AI router (`routes/ai.ts`) — mounted at **both** `/api/notes` and `/api/ai`. All routes require auth.
@@ -666,3 +666,8 @@ An unknown or hallucinated `taskId` throws P2025 (404) after the earlier actions
     - `PATCH /notes/:id` returns only a message, while PATCH todo returns the todo.
     - `smart-intake-upload` returns a raw note row (no tags or hasSummary), while `smart-intake` returns a formatted note.
     - `createNote` includes `linkedTodos`; chat-created notes do not.
+
+## Notes list shape and search (branch `feat-versions`, R34/R35; never run against a database)
+- `GET /api/notes?fields=list` returns the light shape: the usual row fields plus `snippet` (first 140 readable characters), `wordCount`, `hasPics`, `light:true`; no `content`, `aiGenerations`, `_count`. `taskCount`, `hasSummary`, tags, meta and Office `owner/access` stay. The server still reads and decrypts each body to make the snippet, so the saving is payload, not CPU. Without `fields` the shape is unchanged (Orbit, River, Home, AI Hub). `?snippet=1` (400-char content) still exists.
+- Search: fewer than 2 characters returns `{notes: []}`. Title (a plain column) and tag names are matched in SQL first; bodies (encrypted, `content` only) are decrypted and scanned in chunks of 300 only for the notes that did not match, and the scan stops at 200 hits. Results are capped at 200; `limit/offset` page that set. Ranking, `matchSnippet` and the fuzzy-title fallback are unchanged.
+- No SQL migration was needed (053 unused).

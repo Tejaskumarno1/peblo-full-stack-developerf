@@ -1306,6 +1306,26 @@ async function prismaOffUser() {
     const l3 = await call('GET', '/api/tags');
     check('tags: deleted topic is gone', !(l3.json.tags || []).some((t) => t.name === 'smoke-b'));
   }
+  // ---- Version history for team notes (R10), light list (R34), search cost (R35). NOT RUN against a database yet. ----
+  {
+    const lt = await call('POST', '/api/notes', { title: 'Light list smoke', content: '# Heading\nBody text of the light list note ' + 'word '.repeat(60), tags: ['light-smoke'] });
+    const lid = lt.json.note?.id;
+    const l = await call('GET', '/api/notes?fields=list');
+    const row = (l.json.notes || []).find((n) => n.id === lid);
+    check('list shape: no content, has snippet and wordCount', !!row && row.content === undefined && typeof row.snippet === 'string' && row.snippet.length <= 140 && row.wordCount > 50, JSON.stringify(row));
+    const full = await call('GET', '/api/notes');
+    check('default shape still has content', (full.json.notes || []).find((n) => n.id === lid)?.content?.includes('Body text'));
+    const s1 = await call('GET', '/api/notes?search=a');
+    check('search under 2 characters returns nothing', s1.status === 200 && (s1.json.notes || []).length === 0, s1.status);
+    const s2 = await call('GET', '/api/notes?search=Light%20list%20smoke');
+    check('search matches a title (no body scan needed)', (s2.json.notes || []).some((n) => n.id === lid));
+    const s3 = await call('GET', '/api/notes?search=Body%20text%20of%20the%20light&fields=list');
+    check('search still finds text in the body, light shape keeps matchSnippet', (s3.json.notes || []).some((n) => n.id === lid && n.content === undefined && n.matchSnippet), JSON.stringify(s3.json).slice(0, 200));
+    // team notes: another member sees and restores the versions; a non-member gets 404
+    // (needs two users and a team space; reuse the helpers of the team checks above when they exist)
+    check('versions of an own note still list', (await call('GET', `/api/notes/${lid}/backups`)).status === 200);
+    await call('DELETE', `/api/notes/${lid}?permanent=1`);
+  }
 } catch (err) {
   failures++;
   console.error(err);

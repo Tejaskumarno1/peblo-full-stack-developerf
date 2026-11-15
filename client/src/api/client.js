@@ -9,9 +9,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 });
 
+// When this client last wrote a note (an autosave, a create, a delete). The live-update listener uses it to avoid refetching the
+// whole library for the echo of its own save.
+let lastNoteWrite = 0;
+export const getLastNoteWrite = () => lastNoteWrite;
+
 // Every request says who it is with the sign-in token.
 api.interceptors.request.use((config) => {
   const token = getToken();
+  if (config.method && config.method !== 'get' && /^\/?notes(\/|\?|$)/.test(config.url || '')) lastNoteWrite = Date.now();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   // Notes and tasks belong to a space: say which one (nothing means Personal).
   const space = 'spaceOverride' in config ? config.spaceOverride : getSpace(); // a save that was started in one space stays in it

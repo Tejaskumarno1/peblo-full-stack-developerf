@@ -5,6 +5,7 @@ import { profileAPI, authAPI } from '../api/index';
 import { VALID_STYLES } from '../utils/weekStart';
 import { getToken, setToken, clearToken } from '../api/token';
 import useAppearanceSync from '../utils/useAppearanceSync';
+import { getLastNoteWrite } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -204,11 +205,19 @@ export function AuthProvider({ children }) {
       window.dispatchEvent(new Event('pb-notifications-changed'));
     });
 
+    // At most one refetch of the notes every 5 s. The echo of this client's own save (the cache was already patched in place)
+    // never refetches at once: it waits for the end of the window, so a change from another device is late, never lost.
+    let lastRefetch = 0; let timer = null;
+    const refetchNotes = () => { timer = null; lastRefetch = Date.now(); queryClient.invalidateQueries({ queryKey: ['notes'] }); };
     socket.on('notes_changed', () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      if (timer) return;
+      const sinceOwn = Date.now() - getLastNoteWrite();
+      const wait = Math.max(5000 - (Date.now() - lastRefetch), sinceOwn < 3000 ? 5000 - sinceOwn : 0, 0);
+      if (wait <= 0) refetchNotes(); else timer = setTimeout(refetchNotes, wait);
     });
 
     return () => {
+      clearTimeout(timer);
       socket.disconnect();
     };
   }, [user, queryClient]);

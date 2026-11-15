@@ -20,7 +20,7 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [~] R7 **(fixed in code 94ced39, NOT yet run against a database)** Guests can list every member's email, role and spaces. `orgs.ts:30-48`.
 - [ ] R8 A leaving member's private Office notes become unreadable to everyone; no note handover (tasks only). `orgs.ts:263-272`.
 - [ ] R9 Org policy "publicShares" is not applied to existing links; per-team public-links toggle is never read; team notes cannot be shared by link yet the UI offers it. `utils/orgPolicy.ts`, `share.ts:288`.
-- [ ] R10 Version history (restore, name) is broken for team notes (queries ignore the space). `notesController.ts:628-770`.
+- [~] R10 **(fixed in code on branch feat-versions, NOT yet run against a database)** Version history (restore, name) is broken for team notes (queries ignore the space). `notesController.ts:628-770`.
 - [ ] R11 Live events only reach the editing user's own room; teammates see nothing until a refetch. `index.ts:234`, `teamTalk.ts:55`.
 - [~] R12 **(fixed in code 94ced39, NOT yet run against a database)** A removed member can still live-edit their own team note. `services/collab.ts:403`.
 - [~] R13 (accept is now atomic, 94ced39; token in notification/URL still open) Invite token stored in plaintext in the notification, sent in a URL query, reminder not throttled, accept not atomic. `orgs.ts:48-150`.
@@ -48,8 +48,8 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [ ] R33 Team notes show no author in the list or "Shared by" strip. `TeamNoteStrip.jsx:37`.
 
 ### Notes: performance and accessibility
-- [ ] R34 The sidebar and the list each fetch every note with full text; every autosave refetches the library. `SoftNotes.jsx:188-197`.
-- [ ] R35 Search decrypts and scans every note per keystroke pause. `notesController.ts:~300-340`.
+- [~] R34 **(done on branch feat-versions: fields=list, in-place cache patch, 5 s socket debounce; server side not run against a database)** The sidebar and the list each fetch every note with full text; every autosave refetches the library. `SoftNotes.jsx:188-197`.
+- [~] R35 **(done on branch feat-versions: title/tag in SQL first, bodies only for the rest, cap 200, min 2 chars; not run against a database)** Search decrypts and scans every note per keystroke pause. `notesController.ts:~300-340`.
 - [x] R36 (`folderCounts.js`, one pass in a useMemo) Folder counts are recomputed per render (folders x notes x folders). `SoftNotes.jsx:226-231`.
 - [x] R37 (`bulkRun.js`: 5 at a time, 429 retried once) Bulk actions send one parallel request per note with no limit. `SoftNotes.jsx:638,649,968`.
 - [~] R38 (done for NotesPanelParts sheets, View popover, smart-folder page, tag picker, failure dialog, row and tab menus; `spaces.jsx` dialogs not touched) Dialogs have no aria-modal or focus trap; menus do not take focus. `NotesPanelParts.jsx`, `spaces.jsx`.

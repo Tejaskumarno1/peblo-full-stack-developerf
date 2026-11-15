@@ -226,6 +226,33 @@ function rankNotes(list: any[], q: string, words: string[], fuzzy: Set<string>) 
   }).sort((a, b) => b.score - a.score);
 }
 
+/** First ~140 characters of readable text: pictures, tags, tables and Markdown marks removed. */
+function snippetText(content: string, max = 140) {
+  return (content || '')
+    .replace(/<figure>[\s\S]*?<\/figure>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/data:[a-z]+\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\|/g, ' ')
+    .replace(/[#*_~`>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+/** The shape of GET /notes?fields=list: everything a list row needs, never the full text. */
+function lightNote(n: any) {
+  const content: string = n.content || '';
+  const { content: _drop, aiGenerations: _ai, _count: _c, truncated: _t, ...rest } = n;
+  return {
+    ...rest,
+    snippet: snippetText(content) || (/!\[[^\]]*\]\(|<figure>|<img /.test(content) ? 'Picture' : ''),
+    wordCount: content.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length,
+    hasPics: /!\[|<figure>/.test(content),
+    light: true,
+  };
+}
+
 export async function getNotes(req: any, res: any, next: any) {
   try {
     const own = await noteScope(req, res, 'read');
@@ -275,31 +302,40 @@ export async function getNotes(req: any, res: any, next: any) {
         orderBy = { updatedAt: 'desc' };
     }
 
+    // fields=list: the light shape for list views (no full text, a server-made snippet instead). The default shape stays for every other screen.
+    const light = req.query.fields === 'list';
+
+    // Search (R35). Title and tags are plain columns, so the database matches them first. Only notes that did not match that way
+    // have their (encrypted) body decrypted and scanned. At least 2 characters are needed and at most 200 notes come back.
     let pageIds: string[] | null = null;
-    const contentById = new Map<string, string>();
+    if (searchQ && searchQ.length < 2) return res.json({ notes: [], ...(limit ? { limit, offset } : {}) });
     if (needles.length) {
-      const tagHits = new Set((await prisma.note.findMany({
-        where: { AND: [where, { tags: { some: { tag: { OR: needles.map((w) => ({ name: { contains: w, mode: 'insensitive' } })) } } } }] },
+      const SEARCH_CAP = 200;
+      const quick = (await prisma.note.findMany({
+        where: { AND: [where, { OR: [
+          ...needles.map((w) => ({ title: { contains: w, mode: 'insensitive' as const } })),
+          { tags: { some: { tag: { OR: needles.map((w) => ({ name: { contains: w, mode: 'insensitive' as const } })) } } } },
+        ] }] },
         select: { id: true },
-      })).map((n) => n.id));
-      // A page is read in chunks of the sorted list and the scan stops once the page is full (a common word ends early);
-      // without a limit every note is looked at.
-      const hit: string[] = [];
-      const want = limit ? offset + limit : Infinity;
+        orderBy,
+        take: SEARCH_CAP,
+      })).map((n) => n.id);
+      const hit = new Set<string>(quick);
+      // Bodies of the remaining candidates, read in chunks of the sorted list; the scan stops once the cap is reached.
       const CHUNK = 300;
-      for (let skip = 0; hit.length < want; skip += CHUNK) {
+      for (let skip = 0; hit.size < SEARCH_CAP; skip += CHUNK) {
         const cands = await prisma.note.findMany({
-          where, select: { id: true, title: true, content: true },
-          ...(limit ? { orderBy: [orderBy, { id: 'asc' }], take: CHUNK, skip } : { orderBy }),
+          where: quick.length ? { AND: [where, { id: { notIn: quick } }] } : where,
+          select: { id: true, content: true },
+          orderBy: [orderBy, { id: 'asc' }], take: CHUNK, skip,
         });
         for (const c of cands) {
-          const title = (c.title || '').toLowerCase();
           const text = (c.content || '').toLowerCase();
-          if (tagHits.has(c.id) || needles.some((w) => title.includes(w) || text.includes(w))) { hit.push(c.id); contentById.set(c.id, c.content); }
+          if (needles.some((w) => text.includes(w))) { hit.add(c.id); if (hit.size >= SEARCH_CAP) break; }
         }
-        if (!limit || cands.length < CHUNK) break;
+        if (cands.length < CHUNK) break;
       }
-      pageIds = limit ? hit.slice(offset, offset + limit) : hit;
+      pageIds = [...hit];
     }
 
     const rows = await prisma.note.findMany({
@@ -307,7 +343,7 @@ export async function getNotes(req: any, res: any, next: any) {
       select: {
         id: true,
         title: true,
-        ...(pageIds ? {} : { content: true }), // Restored to render the sidebar snippet preview correctly
+        content: true, // the list shape drops it again below, after the snippet is made
         category: true,
         isArchived: true,
         isDeleted: true,
@@ -328,7 +364,7 @@ export async function getNotes(req: any, res: any, next: any) {
       // open notes from that full list, so it must stay complete.
       ...(limit && !pageIds ? { take: limit, skip: offset } : {})
     });
-    const notes: any[] = pageIds ? rows.map((r: any) => ({ ...r, content: contentById.get(r.id) ?? '' })) : rows;
+    const notes: any[] = pageIds && limit ? rows.slice(offset, offset + limit) : rows;
 
     let found: any[] = notes;
     const fuzzy = new Set<string>();
@@ -355,6 +391,7 @@ export async function getNotes(req: any, res: any, next: any) {
         truncated: !!n.content && n.content.length > 400,
       }));
     }
+    if (light) out = out.map(lightNote);
     await decorateNotes(userId, 'spaceId' in own ? own.spaceId : null, out);
     res.json({ notes: out, ...(limit ? { limit, offset } : {}) });
   } catch (error) {
@@ -629,12 +666,15 @@ export async function archiveNote(req: any, res: any, next: any) {
 
 export async function getBackups(req: any, res: any, next: any) {
   try {
-    // Metadata only (the text of one version is fetched on demand). If the note is not the user's, the JOIN returns 0 rows.
+    // Same rule as the note itself: anyone who can read the note (own note, or a team/Office note shared with them) sees its versions.
+    const own = await noteScope(req, res, 'read'); if (!own) return;
+    if (!(await prisma.note.findFirst({ where: { id: String(req.params.id), ...own }, select: { id: true } }))) return res.status(404).json({ error: 'Note not found' });
+    // Metadata only (the text of one version is fetched on demand). The note was checked above.
     // Encrypted versions come back whole (size and preview are worked out after decrypting); plain ones keep the cheap SQL preview.
     const rows: any[] = await prisma.$queryRaw`
       SELECT b.id AS id, b.created_at AS "createdAt", CHAR_LENGTH(b.content) AS size, LEFT(b.content, 140) AS preview, CASE WHEN LEFT(b.content, 7) = 'enc:v1:' THEN b.content END AS cipher, b.label AS label, b.saved_by AS "savedBy"
-      FROM note_backups b JOIN notes n ON n.id = b.note_id
-      WHERE b.note_id = ${req.params.id} AND n.user_id = ${req.user.id}
+      FROM note_backups b
+      WHERE b.note_id = ${String(req.params.id)}
       ORDER BY b.created_at DESC LIMIT 100`;
     res.json({ backups: rows.map((r) => {
       let size = Number(r.size); let preview = r.preview;
@@ -653,8 +693,9 @@ export async function getBackups(req: any, res: any, next: any) {
 
 export async function getBackup(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read'); if (!own) return;
     const backup = await prisma.noteBackup.findFirst({
-      where: { id: req.params.backupId, noteId: req.params.id, note: { userId: req.user.id } },
+      where: { id: req.params.backupId, noteId: req.params.id, note: { id: String(req.params.id), ...own } },
       select: { id: true, content: true, createdAt: true },
     });
     if (!backup) return res.status(404).json({ error: 'Backup not found' });
@@ -666,8 +707,10 @@ export async function getBackup(req: any, res: any, next: any) {
 
 export async function revertBackup(req: any, res: any, next: any) {
   try {
+    // Needs write rights on the note itself (so a team member who may only read it, or a private Office note, is refused with the usual 403)
+    const own = await noteScope(req, res, 'write'); if (!own) return;
     const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, ...own }
     });
     if (!existing) return res.status(404).json({ error: 'Note not found' });
 
@@ -681,7 +724,7 @@ export async function revertBackup(req: any, res: any, next: any) {
     // the text being replaced is kept first, so a restore can itself be undone
     await saveVersion(req.params.id, existing.content || '', { force: true });
     const note = await prisma.note.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id, ...own },
       data: { content: backup.content },
       include: noteInclude
     });
@@ -756,7 +799,8 @@ export async function nameVersion(req: any, res: any, next: any) {
   try {
     const label = String(req.body?.label || '').trim().slice(0, 80);
     if (!label) return res.status(400).json({ error: 'Give this version a name.' });
-    const note = await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id, isDeleted: false }, select: { content: true } });
+    const own = await noteScope(req, res, 'write'); if (!own) return;
+    const note = await prisma.note.findFirst({ where: { id: req.params.id, ...own, isDeleted: false }, select: { content: true } });
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const by = await nameOf(req.user.id);
     const latest = await prisma.noteBackup.findFirst({ where: { noteId: req.params.id }, orderBy: { createdAt: 'desc' }, select: { id: true, content: true } });
@@ -776,7 +820,8 @@ export async function nameVersion(req: any, res: any, next: any) {
 export async function renameBackup(req: any, res: any, next: any) {
   try {
     const label = String(req.body?.label ?? '').trim().slice(0, 80);
-    const own = await prisma.noteBackup.findFirst({ where: { id: req.params.backupId, noteId: req.params.id, note: { userId: req.user.id } }, select: { id: true } });
+    const scope = await noteScope(req, res, 'write'); if (!scope) return;
+    const own = await prisma.noteBackup.findFirst({ where: { id: req.params.backupId, noteId: req.params.id, note: { id: String(req.params.id), ...scope } }, select: { id: true } });
     if (!own) return res.status(404).json({ error: 'Backup not found' });
     await prisma.$executeRawUnsafe('UPDATE note_backups SET label = $1 WHERE id = $2', label || null, own.id);
     res.json({ ok: true });
