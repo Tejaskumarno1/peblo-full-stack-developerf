@@ -28,15 +28,21 @@ async function gate(req: any, res: any, manage: boolean) {
 }
 
 router.get('/orgs/:orgId/members', async (req, res) => {
-  if (!(await gate(req, res, false))) return;
+  const caller = await gate(req, res, false); if (!caller) return;
   const orgId = req.params.orgId;
+  const guest = caller.role === 'guest';
+  const me = uid(req);
   const members = await prisma.$queryRaw<any[]>`
     SELECT m.user_id AS "userId", u.name, u.avatar, u.email, m.role, m.status, m.guest_until AS "guestUntil", m.joined_at AS "joinedAt",
            (SELECT count(*)::int FROM todos t WHERE t.assignee_id = m.user_id AND t.is_completed = false AND t.space_id IN (SELECT id FROM spaces WHERE org_id = m.org_id)) AS "openTasks",
            COALESCE((SELECT json_agg(json_build_object('id', s.id, 'name', s.name, 'kind', s.kind, 'role', sm.role) ORDER BY s.created_at)
                      FROM space_members sm JOIN spaces s ON s.id = sm.space_id AND s.org_id = m.org_id AND s.closed_at IS NULL
                      WHERE sm.user_id = m.user_id), '[]'::json) AS spaces
-    FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${orgId} ORDER BY m.joined_at`;
+    FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${orgId}
+      AND (${!guest} OR m.user_id = ${me} OR EXISTS (SELECT 1 FROM space_members a JOIN space_members b ON b.space_id = a.space_id AND b.user_id = ${me} WHERE a.user_id = m.user_id))
+    ORDER BY m.joined_at`;
+  // a guest sees only the people who share a space with them, and only name, picture and role (no email, task counts or other spaces)
+  if (guest) return res.json({ members: members.map((m) => ({ userId: m.userId, name: m.name, avatar: m.avatar, role: m.role, status: m.status })), invites: [] });
   const invites = await prisma.$queryRaw<any[]>`
     SELECT id, email::text AS email, org_role AS "orgRole", space_ids AS "spaceIds", space_role AS "spaceRole", created_at AS "createdAt", expires_at AS "expiresAt"
     FROM org_invites WHERE org_id = ${orgId} AND accepted_at IS NULL AND revoked_at IS NULL ORDER BY created_at DESC`;
@@ -94,7 +100,7 @@ router.delete('/orgs/:orgId/invites/:id', async (req, res) => {
 async function lookup(token: string, userId: string) {
   const rows = await prisma.$queryRaw<any[]>`
     SELECT i.id, i.org_id AS "orgId", i.email::text AS email, i.org_role AS "orgRole", i.space_ids AS "spaceIds", i.space_role AS "spaceRole", i.invited_by AS "invitedBy",
-           i.expires_at AS "expiresAt", i.accepted_at AS "acceptedAt", i.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", (SELECT name FROM users WHERE id = i.invited_by) AS "inviterName"
+           i.expires_at AS "expiresAt", i.accepted_at AS "acceptedAt", i.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", o.status AS "orgStatus", (SELECT name FROM users WHERE id = i.invited_by) AS "inviterName"
     FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${hash(token)}`;
   const inv = rows[0];
   if (!inv) return { state: 'invalid' as const };
@@ -135,11 +141,15 @@ router.post('/invites/accept', async (req, res) => {
   const inv = r.inv;
   const spaceIds: string[] = Array.isArray(inv.spaceIds) ? inv.spaceIds : [];
   const guestUntil = inv.orgRole === 'guest' ? new Date(Date.now() + 30 * 86400000) : null;
-  await prisma.$transaction([
-    prisma.$executeRaw`INSERT INTO org_members (org_id, user_id, role, guest_until) VALUES (${inv.orgId}, ${userId}, ${inv.orgRole}, ${guestUntil}) ON CONFLICT DO NOTHING`,
-    prisma.$executeRaw`UPDATE org_invites SET accepted_at = now() WHERE id = ${inv.id}`,
-    ...spaceIds.map((s) => prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${s}, ${userId}, ${inv.spaceRole}, ${inv.invitedBy ?? null}) ON CONFLICT DO NOTHING`),
-  ]);
+  const accepted = await prisma.$transaction(async (tx) => {
+    // claim the invite first; a second request for the same invite updates nothing and does nothing else
+    const claimed = await tx.$executeRaw`UPDATE org_invites SET accepted_at = now() WHERE id = ${inv.id} AND accepted_at IS NULL AND revoked_at IS NULL`;
+    if (!claimed) return false;
+    await tx.$executeRaw`INSERT INTO org_members (org_id, user_id, role, guest_until) VALUES (${inv.orgId}, ${userId}, ${inv.orgRole}, ${guestUntil}) ON CONFLICT DO NOTHING`;
+    for (const s of spaceIds) await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) SELECT id, ${userId}, ${inv.spaceRole}, ${inv.invitedBy ?? null} FROM spaces WHERE id = ${s} AND org_id = ${inv.orgId} AND closed_at IS NULL ON CONFLICT DO NOTHING`;
+    return true;
+  });
+  if (!accepted) return res.status(409).json({ error: 'This invite cannot be accepted.', state: 'used' });
   await audit(inv.orgId, userId, 'member.joined', userId, { orgRole: inv.orgRole, spaceIds });
   if (inv.invitedBy) await notifyUsers(req.app, [inv.invitedBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${inv.orgName}`, from: await nameOf(userId), spaceId: spaceIds[0] ?? null });
   res.json({ ok: true, orgId: inv.orgId, orgName: inv.orgName });
@@ -205,7 +215,7 @@ async function lookupJoin(token: string, userId: string) {
   const l = rows[0];
   if (!l) return { state: 'invalid' as const };
   const base = { orgName: l.orgName, spaceName: l.spaceName, expiresAt: l.expiresAt };
-  if (l.revokedAt || l.orgClosed || l.spaceClosed) return { state: 'revoked' as const, ...base };
+  if (l.revokedAt || l.orgClosed || l.spaceClosed || l.orgStatus !== 'active') return { state: 'revoked' as const, ...base };
   if (new Date(l.expiresAt) <= new Date()) return { state: 'expired' as const, ...base };
   if (l.maxUses && l.uses >= l.maxUses) return { state: 'full' as const, ...base };
   const already = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM space_members sm JOIN org_members m ON m.org_id = ${l.orgId} AND m.user_id = sm.user_id WHERE sm.space_id = ${l.spaceId} AND sm.user_id = ${userId}`;
@@ -226,13 +236,15 @@ router.post('/join-links/accept', async (req, res) => {
   const r: any = await lookupJoin(String(req.body?.token ?? ''), userId);
   if (r.state !== 'ready') return res.status(409).json({ error: 'This link cannot be used.', state: r.state });
   const l = r.link;
-  // count the use first and only if the link is still good, so two people racing for the last place cannot both get it
-  const took = await prisma.$executeRaw`UPDATE org_join_links SET uses = uses + 1 WHERE id = ${l.id} AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)`;
+  // the use is counted inside the same transaction as the inserts: two people racing for the last place cannot both get it, and a failed join does not burn a use
+  const took = await prisma.$transaction(async (tx) => {
+    const n = await tx.$executeRaw`UPDATE org_join_links SET uses = uses + 1 WHERE id = ${l.id} AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)`;
+    if (!n) return false;
+    await tx.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${l.orgId}, ${userId}, 'member') ON CONFLICT DO NOTHING`;
+    await tx.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${l.spaceId}, ${userId}, ${l.spaceRole}, ${l.createdBy ?? null}) ON CONFLICT DO NOTHING`;
+    return true;
+  });
   if (!took) return res.status(409).json({ error: 'This link cannot be used.', state: 'full' });
-  await prisma.$transaction([
-    prisma.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${l.orgId}, ${userId}, 'member') ON CONFLICT DO NOTHING`,
-    prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${l.spaceId}, ${userId}, ${l.spaceRole}, ${l.createdBy ?? null}) ON CONFLICT DO NOTHING`,
-  ]);
   await audit(l.orgId, userId, 'member.joined_via_link', userId, { linkId: l.id, spaceId: l.spaceId });
   if (l.createdBy && l.createdBy !== userId) await notifyUsers(req.app, [l.createdBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${l.orgName} with your link`, from: await nameOf(userId), spaceId: l.spaceId });
   res.json({ ok: true, orgId: l.orgId, orgName: l.orgName, spaceId: l.spaceId, spaceName: l.spaceName });
@@ -295,8 +307,14 @@ router.put('/spaces/:spaceId/members/:userId', async (req, res) => {
   const mine = await prisma.$queryRaw<{ role: SpaceRole }[]>`SELECT role FROM space_members WHERE space_id = ${req.params.spaceId} AND user_id = ${uid(req)}`;
   if (!org || !(can('space.manage', org, mine[0]?.role ?? null) || can('org.manage', org))) return res.status(403).json({ error: 'Only a team lead or an admin can do that.' });
   const role: SpaceRole = SPACE_ROLES.includes(req.body?.role) ? req.body.role : 'member';
-  const inOrg = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM org_members WHERE org_id = ${sp[0].org_id} AND user_id = ${req.params.userId} AND status = 'active'`;
-  if (!inOrg[0]?.n) return res.status(400).json({ error: 'Invite that person to the organization first.' });
+  const target = await prisma.$queryRaw<{ role: OrgRole }[]>`SELECT role FROM org_members WHERE org_id = ${sp[0].org_id} AND user_id = ${req.params.userId} AND status = 'active'`;
+  if (!target[0]) return res.status(400).json({ error: 'Invite that person to the organization first.' });
+  if (role === 'lead' && target[0].role === 'guest') return res.status(400).json({ error: 'A guest cannot be a team lead.' });
+  const current = await prisma.$queryRaw<{ role: SpaceRole }[]>`SELECT role FROM space_members WHERE space_id = ${req.params.spaceId} AND user_id = ${req.params.userId}`;
+  if (current[0]?.role === 'lead' && role !== 'lead') {
+    const leads = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM space_members WHERE space_id = ${req.params.spaceId} AND role = 'lead'`;
+    if ((leads[0]?.n ?? 0) <= 1) return res.status(409).json({ error: 'This is the only lead. Make someone else a lead first.' });
+  }
   await prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${req.params.spaceId}, ${req.params.userId}, ${role}, ${uid(req)}) ON CONFLICT (space_id, user_id) DO UPDATE SET role = ${role}`;
   await audit(sp[0].org_id, uid(req), 'space.member_set', req.params.userId, { spaceId: req.params.spaceId, role });
   res.json({ ok: true });

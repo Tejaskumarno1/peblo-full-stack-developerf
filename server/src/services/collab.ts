@@ -311,7 +311,7 @@ class Room {
       const live = !note.shareExpiresAt || note.shareExpiresAt.getTime() > Date.now();
       const blocked = new Set((await prisma.$queryRawUnsafe<{ session_id: string }[]>('SELECT session_id FROM share_blocked WHERE kind = \'note\' AND share_token = $1', note.shareToken ?? '')).map((r) => r.session_id));
       for (const c of [...this.conns.values()]) {
-        if (c.userId === note.userId) continue; // the owner
+        if (c.userId === note.userId && !note.spaceId) continue; // the owner of a Personal note
         if (c.userId && note.spaceId) { // a person the author shared this Office note with
           const lv = await liveLevel(c.userId, this.id, note.spaceId);
           if (!lv || (!c.readOnly && lv !== 'edit' && lv !== 'owner')) c.ws.close(CLOSE_GONE, 'access ended');
@@ -400,7 +400,7 @@ async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean;
   if (!userId) return null;
   const note = (await prisma.$queryRaw<{ id: string; userId: string; spaceId: string | null }[]>`SELECT id, user_id AS "userId", space_id AS "spaceId" FROM notes WHERE id = ${noteParam} AND NOT is_deleted`)[0];
   if (!note) return null;
-  if (note.userId === userId) return { noteId: note.id, readOnly: false, userId, share: null, session: null };
+  if (note.userId === userId && !note.spaceId) return { noteId: note.id, readOnly: false, userId, share: null, session: null };
   // A teammate (edit unless a viewer) or someone the author shared an Office note with: edit joins the room, view reads it
   if (note.spaceId) {
     const lv = await liveLevel(userId, note.id, note.spaceId);

@@ -60,6 +60,8 @@ export async function postComment(req: any, res: any, next: any) {
 export async function requestReview(req: any, res: any, next: any) {
   try {
     const t = await taskOf(req, res); if (!t) return;
+    const acc = await spaceAccess(req.user.id, t.spaceId); // a viewer may read and comment but not change a task's status
+    if (!acc || !can('space.write', acc.org, acc.role)) return res.status(403).json({ error: 'You can read this team but not change it.' });
     const userId = req.user.id as string;
     const members = await spaceUserIds(t.spaceId);
     const to: string[] = [...new Set<string>((Array.isArray(req.body?.to) ? req.body.to : []).filter((m: unknown): m is string => typeof m === 'string' && members.includes(m) && m !== userId))];

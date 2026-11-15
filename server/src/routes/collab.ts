@@ -30,7 +30,9 @@ router.post('/ticket', ticketLimit, async (req, res, next) => {
     const noteId = String(req.body?.noteId || '');
     if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId)) return res.status(404).json({ error: 'Note not found' });
     let readOnly = false;
-    if (!(await ownNote(req.user!.id, noteId))) {
+    const owned = await ownNote(req.user!.id, noteId);
+    const ownedSpace = owned ? (await prisma.$queryRaw<{ spaceId: string | null }[]>`SELECT space_id AS "spaceId" FROM notes WHERE id = ${noteId}`)[0]?.spaceId ?? null : null;
+    if (!owned || ownedSpace) { // a note in a space needs current membership even for its author
       // a team note (any member who can write edits live, a viewer reads) or an Office note shared with this person
       const n = (await prisma.$queryRaw<{ spaceId: string | null }[]>`SELECT space_id AS "spaceId" FROM notes WHERE id = ${noteId} AND NOT is_deleted`)[0];
       const lv = n?.spaceId ? await liveLevel(req.user!.id, noteId, n.spaceId) : null;

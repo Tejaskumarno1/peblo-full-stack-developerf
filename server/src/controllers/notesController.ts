@@ -576,7 +576,7 @@ export async function deleteNote(req: any, res: any, next: any) {
 
 export async function restoreNote(req: any, res: any, next: any) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'manage');
     if (!own) return;
     // Single updateMany enforces ownership without a separate findFirst
     const { count } = await prisma.note.updateMany({
@@ -603,7 +603,7 @@ export async function restoreNote(req: any, res: any, next: any) {
 
 export async function archiveNote(req: any, res: any, next: any) {
   try {
-    const own = await noteScope(req, res, 'write');
+    const own = await noteScope(req, res, 'manage');
     if (!own) return;
     const existing = await prisma.note.findFirst({
       where: { id: req.params.id, ...own }

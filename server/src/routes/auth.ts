@@ -14,6 +14,7 @@ import { completeSignup, consumeReset, dropPendingSignup, issueReset, storePendi
  */
 const router = Router();
 
+import { soleOwnerMessage, soleOwnerOrgs } from '../services/accountDeletion.js';
 import { DELETION_GRACE_DAYS, cleanName, passwordProblem, validEmail } from '../utils/account.js';
 const EMAIL_RE = { test: validEmail };
 
@@ -258,6 +259,8 @@ router.post('/schedule-deletion', authenticate, passwordLimit, async (req, res, 
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(403).json({ error: 'That password is not correct.' });
     }
+    const held = await soleOwnerOrgs(user.id);
+    if (held.length) return res.status(409).json({ error: soleOwnerMessage(held) });
     const now = new Date();
     await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: now, tokenVersion: { increment: 1 } } });
     (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
@@ -278,6 +281,8 @@ router.post('/delete-account', authenticate, passwordLimit, async (req, res, nex
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(403).json({ error: 'That password is not correct.' });
     }
+    const held = await soleOwnerOrgs(user.id);
+    if (held.length) return res.status(409).json({ error: soleOwnerMessage(held) });
     await prisma.user.delete({ where: { id: user.id } });
     (req.app.get('disconnectUser') as ((id: string) => void) | undefined)?.(user.id);
     res.json({ message: 'Your account and everything in it was deleted.' });

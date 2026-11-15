@@ -1113,6 +1113,16 @@ token = null;
 rd = await call('POST', '/api/auth/delete-account', { password: pw });
 check('signed out, nobody can delete an account (401)', rd.status === 401 && (await counts(xId)).notes === 2, rd);
 
+// (added unrun) the only owner of an organization cannot delete the account
+token = xToken;
+const soleOrg = await call('POST', '/api/workspaces/orgs', { name: 'Smoke sole owner org' });
+check('sole owner: organization created', soleOrg.status === 201, soleOrg);
+rd = await call('POST', '/api/auth/delete-account', { password: pw });
+check('the only owner of an organization cannot delete the account (409)', rd.status === 409 && !!(await prismaDel.user.findUnique({ where: { id: xId } })), rd);
+rd = await call('POST', '/api/auth/schedule-deletion', { password: pw });
+check('..nor schedule its deletion (409)', rd.status === 409, rd);
+await prismaDel.$executeRaw`DELETE FROM organizations WHERE id = ${soleOrg.json.id}`;
+
 token = xToken;
 rd = await call('POST', '/api/auth/delete-account', { password: pw });
 check('the right password deletes the account (200)', rd.status === 200 && /deleted/i.test(rd.json.message), rd);

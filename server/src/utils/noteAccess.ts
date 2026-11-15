@@ -43,6 +43,7 @@ export async function noteLevel(userId: string, noteId: string, spaceId: string)
  * the author set; in a Team every member who can write edits and a viewer reads. Personal notes are the author's alone.
  */
 export async function liveLevel(userId: string, noteId: string, spaceId: string): Promise<Effective> {
+  if (!(await spaceAccess(userId, spaceId))) return null; // even the author needs current space membership (a removed member stops live-editing)
   if (await isOffice(spaceId)) return (await noteLevel(userId, noteId, spaceId)).level;
   const inSpace = await prisma.$queryRaw<{ user_id: string; level: string | null }[]>`SELECT user_id, meta -> 'teamShare' ->> 'level' AS level FROM notes WHERE id = ${noteId} AND space_id = ${spaceId} AND NOT is_deleted`;
   if (!inSpace[0]) return null;

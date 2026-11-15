@@ -60,6 +60,6 @@ export async function spaceAccess(userId: string, spaceId: string): Promise<{ or
 
 /** User ids of everyone in a space (used to check an assignee). */
 export async function spaceMembers(spaceId: string): Promise<string[]> {
-  const rows = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM space_members WHERE space_id = ${spaceId}`;
+  const rows = await prisma.$queryRaw<{ user_id: string }[]>`SELECT sm.user_id FROM space_members sm JOIN spaces s ON s.id = sm.space_id JOIN org_members m ON m.org_id = s.org_id AND m.user_id = sm.user_id AND m.status = 'active' AND (m.guest_until IS NULL OR m.guest_until > now()) JOIN organizations o ON o.id = s.org_id AND o.closed_at IS NULL WHERE sm.space_id = ${spaceId}`;
   return rows.map((r) => r.user_id);
 }

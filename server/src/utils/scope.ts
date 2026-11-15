@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import prisma from '../db.js';
 import { can, spaceAccess } from './access.js';
 import { hiddenNoteIds, isOffice, noteLevel, teamViewOnly } from './noteAccess.js';
 
@@ -32,7 +33,7 @@ export type NoteScope = { userId: string } | { spaceId: string; AND?: any[] };
 /**
  * In an Office a note is private to its author until opened up (040_office_private_notes.sql), so the returned fragment also hides notes the
  * person may not read (or, for 'write', may not change). A request that names one note (:id) gets a precise 403 instead:
- * code 'no_access' (not shared with you) or 'view_only' (shared, but not for editing). need 'manage' is the author only (delete, move).
+ * code 'no_access' (not shared with you) or 'view_only' (shared, but not for editing). need 'manage' is the author only in an Office (delete, restore, archive, move); in a Team it is the author or a space lead.
  * Tasks share the space but not this privacy, so task routes pass { tasks: true }.
  */
 export async function noteScope(req: Request, res: Response, need: 'read' | 'write' | 'manage', opts: { tasks?: boolean } = {}): Promise<NoteScope | null> {
@@ -48,6 +49,11 @@ export async function noteScope(req: Request, res: Response, need: 'read' | 'wri
   }
   if (opts.tasks || !(await isOffice(raw))) {
     const id = typeof req.params?.id === 'string' ? req.params.id : '';
+    if (!opts.tasks && id && need === 'manage') {
+      // Team space: trash, restore, archive, move and permanent delete belong to the note's author or a space lead.
+      const rows = await prisma.$queryRaw<{ user_id: string }[]>`SELECT user_id FROM notes WHERE id = ${id} AND space_id = ${raw}`;
+      if (rows[0] && rows[0].user_id !== user.id && acc.role !== 'lead') { res.status(403).json({ error: 'Only the author or a space lead can do that.', code: 'owner_only' }); return null; }
+    }
     if (!opts.tasks && id && need === 'write' && (await teamViewOnly(user.id, id, raw))) { res.status(403).json({ error: 'This note is shared with the team to read only.', code: 'view_only' }); return null; }
     return { spaceId: raw };
   }
