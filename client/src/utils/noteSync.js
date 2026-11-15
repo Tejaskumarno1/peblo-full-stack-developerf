@@ -1,6 +1,7 @@
 import { notesAPI } from '../api';
 import api from '../api/client';
 import { authHeaders } from '../api/token';
+import { getSpace } from '../api/space';
 
 /*
  * Safe saving for notes that someone else may be editing too (a shared link, another window).
@@ -68,7 +69,7 @@ export function saveNoteOnUnload(id, payload) {
       : base ? { ...payload, title: payload.title || 'Untitled', baseUpdatedAt: base.updatedAt, baseContent: base.content, keepBoth: true } : { ...payload, title: payload.title || 'Untitled' };
     const text = JSON.stringify(body);
     if (text.length > 55000) return false;
-    fetch(`${api.defaults.baseURL}/notes/${encodeURIComponent(id)}`, { method: 'PATCH', keepalive: true, headers: authHeaders({ 'Content-Type': 'application/json' }), body: text });
+    fetch(`${api.defaults.baseURL}/notes/${encodeURIComponent(id)}`, { method: 'PATCH', keepalive: true, headers: authHeaders({ 'Content-Type': 'application/json', ...(getSpace() ? { 'x-peblo-space': getSpace() } : {}) }), body: text }); // same headers as axios: a team note is saved in its own space
     return true;
   } catch { return false; }
 }

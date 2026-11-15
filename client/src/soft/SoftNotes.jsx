@@ -367,6 +367,7 @@ export default function SoftNotes() {
   useEffect(() => {
     const was = prevSave.current; prevSave.current = saveStatus;
     if (was === 'saving' && saveStatus === 'saved') { setJustSaved(true); const t = setTimeout(() => setJustSaved(false), 2000); return () => clearTimeout(t); }
+    setJustSaved(false); // any other change (typing again, another note) ends the "Saved" message
     return undefined;
   }, [saveStatus]);
   const forceSaveRef = useRef(forceSave);
@@ -406,7 +407,7 @@ export default function SoftNotes() {
     setEditorKey(`remote-${Date.now()}`);
   }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const patch = (p) => setDoc((d) => ({ ...d, ...p }));
+  const patch = (p) => setDoc((d) => (d ? { ...d, ...p } : d));
 
   // ---------- note actions ----------
   const refreshLists = () => {

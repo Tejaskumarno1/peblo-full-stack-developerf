@@ -15,7 +15,7 @@ const loadSession = (key) => { try { return JSON.parse(sessionStorage.getItem(`$
 export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onEmpty, dirty }) {
   const { user } = useAuth();
   const KEY = keyFor(user?.id);
-  const [tabs, setTabs] = useState(() => load(KEY));
+  const [tabs, setTabs] = useState(() => { try { localStorage.removeItem('peblo-note-tabs'); } catch { /* ignore */ } return load(KEY); }); // the old shared key is dropped
   const [closed, setClosed] = useState(() => (loadSession(KEY).closed || []));
   const [menu, setMenu] = useState(null); // { id, x, y }
   const hist = useRef((() => { const t = loadSession(KEY).hist; return t && Array.isArray(t.list) ? { list: t.list, i: Math.min(t.i, t.list.length - 1), skip: false } : { list: [], i: -1, skip: false }; })());
@@ -168,6 +168,7 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onE
           return (
             <div key={t.id} role="tab" aria-selected={on} tabIndex={0} data-testid="note-tab" data-id={t.id} className={`s-tab${on ? ' on' : ''}${t.pinned ? ' pinned' : ''}`}
               onClick={() => !on && go(t.id)} onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return; // keys on the close button belong to the button
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(t.id); }
                 else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                   e.preventDefault();

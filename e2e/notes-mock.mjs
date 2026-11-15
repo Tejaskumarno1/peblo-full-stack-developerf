@@ -99,7 +99,10 @@ try {
   for (const id of ['n1', 'n2', 'n3']) { await page.goto(`${base}/notes/${id}`); await page.locator('[data-testid="note-tabs"]').waitFor(TO); await wait(500); }
   let t = await tabs();
   check('three open notes are three tabs', t.length === 3, t.join('|'));
-  for (let i = 0; i < 3; i++) { await page.locator('[data-testid="tab-close"]').first().click(); await wait(400); }
+  // Enter on a tab's close button closes that tab (it must not be taken as "open this tab")
+  await page.locator('[data-testid="tab-close"]').first().focus(); await page.keyboard.press('Enter'); await wait(400);
+  check('Enter on the close button closes the tab', (await page.locator('[data-testid="note-tab"]').count()) === 2);
+  for (let i = 0; i < 2; i++) { await page.locator('[data-testid="tab-close"]').first().click(); await wait(400); }
   await page.locator('.s-note-empty').waitFor(TO);
   check('closing the last tab shows the empty page', await page.locator('.s-note-empty').isVisible());
   await wait(2500);

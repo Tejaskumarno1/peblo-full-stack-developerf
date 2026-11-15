@@ -18,6 +18,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
   const unloadFnRef = useRef(unloadFn);
   const idRef = useRef(noteId);
   const retryRef = useRef({ timer: null, n: 0 });
+  const busyRef = useRef(0); // saves in flight: a retry must not start a second save (a draft would be created twice)
 
   saveFnRef.current = saveFn;
   unloadFnRef.current = unloadFn;
@@ -25,6 +26,8 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
 
   if (noteId && data) {
     pendingRef.current[noteId] = data;
+  } else if (noteId) {
+    delete pendingRef.current[noteId]; // nothing to save now (an empty draft, a deleted note): an old copy must not be retried or flushed later
   }
 
   const persist = useCallback(async (id, payload) => {
@@ -33,6 +36,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
     if (current === lastSavedRef.current) return true;
 
     setSaveStatus(prev => prev !== 'saving' ? 'saving' : prev);
+    busyRef.current += 1;
     try {
       await saveFnRef.current(id, payload);
       lastSavedRef.current = current;
@@ -46,9 +50,11 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
       // try again by itself (5 s, 10 s, 20 s, then every 30 s) while this note is still the open one
       const r = retryRef.current;
       clearTimeout(r.timer);
-      r.timer = setTimeout(() => { if (idRef.current === id && pendingRef.current[id]) persist(id, pendingRef.current[id]); }, Math.min(30000, 5000 * 2 ** r.n));
+      r.timer = setTimeout(() => { if (idRef.current === id && pendingRef.current[id] && !busyRef.current) persist(id, pendingRef.current[id]); }, Math.min(30000, 5000 * 2 ** r.n));
       r.n += 1;
       return false;
+    } finally {
+      busyRef.current -= 1;
     }
   }, []);
 
