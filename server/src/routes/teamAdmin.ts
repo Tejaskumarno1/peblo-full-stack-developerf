@@ -127,7 +127,7 @@ router.delete('/spaces/:spaceId/members/:userId', async (req, res, next) => {
     ]);
     const notes = (await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM notes WHERE space_id = ${spaceId} AND user_id = ${userId} AND NOT is_deleted`)[0]?.n ?? 0;
     await audit(sp.org_id, uid(req), 'space.member_removed', userId, { spaceId, notes });
-    if (userId !== uid(req)) await notifyUsers(req.app, [userId], { kind: 'member_joined', title: `You were removed from ${sp.name}`, from: await nameOf(uid(req)) });
+    if (userId !== uid(req)) await notifyUsers(req.app, [userId], { kind: 'member_removed', title: `You were removed from ${sp.name}`, from: await nameOf(uid(req)) });
     kickFromSpace(req.app.get('io'), spaceId, userId); // their open windows leave the team's live room at once
     req.app.get('io')?.to(userId).emit('notes_changed');
     res.json({ ok: true, notes }); // notes: how many they wrote there (an owner or admin can hand them over)
@@ -167,7 +167,7 @@ router.post('/spaces/:spaceId/reopen', async (req, res, next) => {
     await prisma.$executeRaw`UPDATE spaces SET closed_at = NULL WHERE id = ${req.params.spaceId} AND closed_at IS NOT NULL`;
     await audit(g.orgId, uid(req), 'space.reopened', req.params.spaceId, { name: g.sp.name });
     const members = (await spaceUserIds(req.params.spaceId)).filter((u) => u !== uid(req));
-    if (members.length) await notifyUsers(req.app, members, { kind: 'status', title: `${g.sp.name} was reopened`, from: await nameOf(uid(req)), spaceId: req.params.spaceId });
+    if (members.length) await notifyUsers(req.app, members, { kind: 'team_reopened', title: `${g.sp.name} was reopened`, from: await nameOf(uid(req)), spaceId: req.params.spaceId });
     void refreshUserRooms(req.app.get('io'), ...members, uid(req)); // members' open windows rejoin the team's live room
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -201,7 +201,7 @@ router.delete('/orgs/:orgId', async (req, res, next) => {
     if (!closed) return res.status(409).json({ error: 'This organization is already closed.' });
     const purge = (await prisma.$queryRaw<{ purge_after: Date }[]>`SELECT purge_after FROM organizations WHERE id = ${orgId}`)[0]?.purge_after;
     await audit(orgId, uid(req), 'org.deleted', orgId, { name: row.name, purgeAfter: purge });
-    if (everyone.length) await notifyUsers(req.app, everyone, { kind: 'member_joined', title: `${row.name} was closed by ${await nameOf(uid(req))}`, from: await nameOf(uid(req)) });
+    if (everyone.length) await notifyUsers(req.app, everyone, { kind: 'org_deleted', title: `${row.name} was closed by ${await nameOf(uid(req))}`, from: await nameOf(uid(req)) });
     void refreshUserRooms(req.app.get('io'), uid(req), ...everyone); // a closed organization's rooms end now, not at the next 5-minute sweep
     req.app.get('io')?.to(uid(req)).emit('notes_changed');
     res.json({ ok: true, purgeAfter: purge });

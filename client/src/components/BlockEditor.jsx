@@ -42,7 +42,8 @@ import FindBar from './FindBar';
 import { NotePreview } from '../soft/Skeletons';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
-import { setNoteLive, peekExternalEdit, clearExternalEdit, markExternalEdit } from '../utils/noteSync';
+import { setNoteLive, peekExternalEdit, clearExternalEdit, markExternalEdit, saveFinalText } from '../utils/noteSync';
+import { confirmDialog } from '../soft/ConfirmDialog';
 import { readUnsaved, writeUnsaved, clearUnsaved, decideRestore } from '../utils/unsavedCopy';
 import Backlinks from './Backlinks';
 const LINK_OK = /^(?:(?:http|https|ftp|ftps|mailto|tel|callto|sms|cid|xmpp|peblo-user):|[^a-z]|[a-z0-9+.\-]+(?:[^a-z+.\-:]|$))/i;
@@ -516,6 +517,14 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return () => clearInterval(timer);
   }, [editor, noteId]);
   const { theme } = useAuth();
+  // 'auto' (by time) and 'system' flip the page's theme-dark class by themselves; follow it so the editor's own colours flip too
+  const [pageDark, setPageDark] = useState(() => document.documentElement.classList.contains('theme-dark'));
+  useEffect(() => {
+    const el = document.documentElement;
+    const mo = new MutationObserver(() => setPageDark(el.classList.contains('theme-dark')));
+    mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    return () => mo.disconnect();
+  }, []);
   const loadingRef = useRef(!!rt); // a live document is not edited until it is in step with the server
   const changeSequenceRef = useRef(0);
   const [card, setCard] = useState(null); // the AI result card
@@ -767,7 +776,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const dbg = (m) => { try { if (localStorage.getItem('peblo-debug') === '1') console.log('[collab]', m); } catch { /* ignore */ } };
     dbg('connect ' + (noteId || collab?.share));
     provider.on('connection-close', (ev) => dbg('close code ' + ev?.code));
-    { const back = pendingRestore(); if (back !== null) markExternalEdit(noteId, back); } // typed here but never saved: put it into the room like an outside edit
+    pendingRestore().then((back) => { if (back !== null) markExternalEdit(noteId, back); }); // typed here but never saved: put it into the room like an outside edit
     rt.connect();
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloCollab = rt; } catch { /* ignore */ }
     // Could not reach the live server (a firewall, an old server): fall back to ordinary editing after a while.
@@ -796,13 +805,13 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   // Asked once per editor. When the server's text is still what the copy started from it is restored without asking;
   // when the server's text changed meanwhile the person decides.
   const restoredRef = useRef(false);
-  const pendingRestore = () => {
+  const pendingRestore = async () => {
     if (restoredRef.current || guest || !editable || !noteId || noteId === '__draft__') return null;
     restoredRef.current = true;
     const copy = readUnsaved(noteId);
     const verdict = decideRestore(copy, initialContent || '');
     if (verdict === 'none') { if (copy) clearUnsaved(noteId); return null; }
-    if (verdict === 'ask' && !window.confirm('This note has text that was typed here but never saved. Restore it? (It replaces the text now shown.)')) { clearUnsaved(noteId); return null; }
+    if (verdict === 'ask' && !(await confirmDialog({ title: 'Restore text that was never saved?', body: 'This note has text that was typed here but never saved. Restoring it replaces the text now shown.', confirmLabel: 'Restore', cancelLabel: 'Discard' }))) { clearUnsaved(noteId); return null; }
     return copy.content;
   };
 
@@ -810,7 +819,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     async function loadContent() {
       if (rt) return; // a live document is filled from the server's copy instead
       if (noteId) clearExternalEdit(noteId); // no room to put outside text into: initialContent already has it
-      const restored = pendingRestore();
+      const restored = await pendingRestore();
       const text = restored !== null ? restored : initialContent;
       if (!text) return;
       try {
@@ -850,6 +859,9 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   // and is run at once (flushChange) when the editor loses focus, the tab is hidden, Ctrl+S is pressed, or something fires
   // the 'peblo-flush-editor' event. What is saved is the same Markdown as before; only the moment it is produced moves.
   const dirtyRef = useRef(false);
+  const goneRef = useRef(false); // the editor has been taken off the screen
+  const noteIdRef = useRef(noteId);
+  noteIdRef.current = noteId;
   const changeTimerRef = useRef(null);
   const pendingFnRef = useRef(null);
   const flushChange = () => {
@@ -865,6 +877,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       return;
     }
     dirtyRef.current = false;
+    const forNote = noteId;
     const sequence = ++changeSequenceRef.current;
     // take the document now (not after the await) so an edit made while converting is a new change of its own
     const marksCtx = newMarks();
@@ -875,6 +888,12 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       // finishes after a newer edit, otherwise autosave can roll content back.
       if (sequence !== changeSequenceRef.current) return;
       if (rt && liveRef.current) rt.announce(markdown); // the server learns this text is ours before it is saved
+      // The person has already moved to another note (a keyboard switch; the conversion above is asynchronous): the page's
+      // onChange would write this text into the note that is open now. Save it straight to the note it was typed in instead.
+      if (goneRef.current || (forNote !== '__draft__' && noteIdRef.current !== forNote)) {
+        if (!rt && forNote && forNote !== '__draft__') void saveFinalText(forNote, markdown).then((ok) => { if (!ok) writeUnsaved(forNote, { content: markdown, baseContent: initialContent }); });
+        return;
+      }
       deliver(markdown);
     })().catch(() => { /* the next edit converts again */ });
   };
@@ -919,11 +938,33 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', flush);
       window.removeEventListener('peblo-flush-editor', flush);
-      // Leaving the editor: the parents' onChange writes into whichever note is current by now, so an edit still waiting is
-      // delivered only by blur (which always comes first when a person clicks elsewhere), never from here.
       if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
     };
   }, []);
+  // Leaving a note (the editor unmounts, or its note id changes) with typing still waiting for the change timer (a keyboard note
+  // switch gives no blur first): the parent's onChange writes into whichever note is current by then, so it is NOT used. The last
+  // text is taken from the editor at once and saved straight to the note it was typed in (after any save already on its way).
+  const finalRef = useRef(null);
+  finalRef.current = (id) => {
+    if (!id || id === '__draft__') return; // a draft gets its id while this editor stays: its timer goes on (the unmount clears it)
+    if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    if (loadingRef.current || rt || !onChange) return; // live rooms keep their own copy
+    try {
+      const mc = newMarks();
+      const blocks = toStorage(editor.document, mc, metaStore);
+      Promise.resolve(editor.blocksToMarkdownLossy(blocks)).then((md) => {
+        const markdown = insertMarkers(md, mc);
+        if (markdown === initialContent) return;
+        return saveFinalText(id, markdown).then((ok) => {
+          if (!ok) { writeUnsaved(id, { content: markdown, baseContent: initialContent }); return; }
+          queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old) ? old.map((n) => (n.id === id && typeof n.content === 'string' ? { ...n, content: markdown } : n)) : old));
+        });
+      }).catch(() => { /* the page's own copy is still there */ });
+    } catch { /* the editor is already gone: the autosave copy stays */ }
+  };
+  useEffect(() => { goneRef.current = false; const id = noteId; return () => { goneRef.current = true; finalRef.current?.(id); }; }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- AI: the result lands in a card; nothing in the note changes until you pick what to do ----------
   const sourceFor = (kind) => {
@@ -1207,7 +1248,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
 
   const title = { todo: 'Action items', improve: card?.command === 'grammar' ? 'Fix grammar' : card?.command === 'shorter' ? 'Make shorter' : card?.command === 'longer' ? 'Make longer' : 'Improve writing', summarize: 'Summary', continue: 'Continue writing', explain: 'Explain', quiz: 'Quiz me' }[card?.kind];
   const target = useMemo(() => (editable !== false ? commentTarget({ noteId, collab }) : null), [noteId, collab?.share, collab?.sid, editable]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'auto' && document.documentElement.classList.contains('theme-dark')) || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const dark = themeOverride ? themeOverride === 'dark' : theme === 'dark' || theme === 'midnight' || (theme === 'auto' && pageDark) || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 
   return (
     <div ref={rootRef} data-live={rt && live.ready && live.connected ? '1' : undefined} className={`block-editor-container${focusMode ? ' pb-focus' : ''}${fullPage ? ' pb-editor-full-page' : ''}`} onClickCapture={onLinkClick} onDoubleClick={(e) => { const pic = e.target?.closest?.('img.bn-visual-media'); if (pic) setLightbox(pic.currentSrc || pic.src); }} style={{ padding: '0 24px', flex: fullPage ? 'none' : 1, height: fullPage ? 'auto' : '100%', overflowY: fullPage ? 'visible' : 'auto', cursor: editable ? 'text' : 'default' }}>

@@ -1,7 +1,7 @@
 // @mentions in notes are stored as a markdown link: [@Name](peblo-user:<userId>).
 // The editor shows a chip; every other reader (preview, shared page, exports) turns the link into a <span class="pb-mention"> first,
 // because the sanitiser would strip a link with an unknown address scheme.
-import { escapeHtml } from './safeHtml';
+import { escapeHtml } from './safeHtml.js';
 
 export const MENTION_MD = /\[@([^\]\n]{1,80})\]\(peblo-user:([\w-]{4,64})\)/g;
 export const MENTION_HREF = /^peblo-user:([\w-]{4,64})$/;
@@ -11,3 +11,9 @@ export const mentionText = (name) => `@${String(name || 'Someone').replace(/[[\]
 
 /** Markdown -> markdown where each mention becomes a span chip (run before marked). */
 export const mentionsToHtml = (md) => String(md ?? '').replace(MENTION_MD, (_m, name, id) => `<span class="pb-mention" data-user="${escapeHtml(id)}">@${escapeHtml(name)}</span>`);
+
+/** Markdown -> markdown where each mention is plain "@Name" (exports and print: no link, no person id). */
+export const mentionsToText = (md) => String(md ?? '').replace(MENTION_MD, (_m, name) => `@${name}`);
+
+/** For the compare view: a chip written as ONE word (no spaces inside, so the word diff keeps it whole and can mark it as added or removed). */
+export const mentionsToChipWord = (md) => String(md ?? '').replace(MENTION_MD, (_m, name) => `<var>@${escapeHtml(name).replace(/\s/g, '&nbsp;')}</var>`);

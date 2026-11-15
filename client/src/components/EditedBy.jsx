@@ -8,6 +8,7 @@ import { notesAPI } from '../api/index';
 import { getToken } from '../api/token';
 import CompareBox from './CompareBox';
 import './editedby.css';
+import { mentionsToHtml, mentionsToChipWord } from '../utils/mentions';
 import Toast from './Toast';
 
 // "Priya updated this note": when someone else's edit lands while I am on the page, say who, show before and now,
@@ -23,7 +24,7 @@ const lineOf = (md, i) => {
   const t = l.replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '[picture]').replace(/^[#>*\-\s\d.]+/, '').trim();
   return t.length > 130 ? `${t.slice(0, 127)}…` : t;
 };
-const html = (md) => DOMPurify.sanitize(marked.parse(String(md || '')));
+const html = (md) => DOMPurify.sanitize(marked.parse(mentionsToHtml(String(md || ''))));
 const firstLine = (md) => (String(md || '').split('\n').map((l) => l.replace(/^#+\s*/, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()).find(Boolean) || 'Untitled').slice(0, 80);
 
 export default function EditedBy({ rt, editor, ready }) {
@@ -59,7 +60,7 @@ export default function EditedBy({ rt, editor, ready }) {
         s.timer = null;
         const base = s.base; const now = await snap();
         if (!alive || base == null || now == null) return;
-        const model = compareModel(base, now);
+        const model = compareModel(mentionsToChipWord(base), mentionsToChipWord(now));
         if (!model.changes.length) { s.prev = now; return; }
         const added = wordsIn(model.now, 'add'); const removed = wordsIn(model.earlier, 'del');
         // who: the last editor named in the shared page after this burst began, else whoever typed most recently

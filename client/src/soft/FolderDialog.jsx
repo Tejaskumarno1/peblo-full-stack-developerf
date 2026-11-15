@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, Folder } from 'lucide-react';
+import { useDialogFocus } from './a11y';
 
 // Pick a folder for one note (or for all the selected notes), or start a new one.
 export default function FolderDialog({ folders, current, count = 1, onPick, onClose }) {
   const [name, setName] = useState('');
+  const dlgRef = useRef(null);
+  useDialogFocus(dlgRef, true);
   const make = (e) => { e.preventDefault(); const n = name.trim().slice(0, 60); if (n) onPick(n); };
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="s-share" role="dialog" aria-label="Move to a folder">
+      <div className="s-share" role="dialog" aria-modal="true" aria-label="Move to a folder" ref={dlgRef} tabIndex={-1}>
         <div className="s-share-head">
           <div><b>Move to a folder</b><small>{count === 1 ? 'This note' : `${count} notes`}</small></div>
           <button type="button" className="s-capture-close" aria-label="Close" onClick={onClose}><X size={16} strokeWidth={2.4} /></button>

@@ -214,8 +214,19 @@ try {
   const tabsBefore = (await tabs()).length;
   await page.keyboard.press('Alt+w'); await wait(700);
   check('Alt+W closes the open tab', (await tabs()).length === tabsBefore - 1, `${tabsBefore} -> ${(await tabs()).length}`);
+  // R24: typing, then at once a keyboard note switch (no blur, no pause): the last word must still be saved to the note it was typed in
+  for (const [keys, label] of [['Alt+w', 'Alt+W'], ['Control+Tab', 'Ctrl+Tab']]) {
+    await page.goto(`${base}/notes/n2`); await page.locator('[data-testid="note-tabs"]').waitFor(TO); await wait(700);
+    await page.goto(`${base}/notes/n1`); await page.locator('[data-testid="note-tabs"]').waitFor(TO); await wait(700);
+    const word = 'zq' + label.replace(/\W/g, '').toLowerCase() + 'end';
+    const reqsBefore = reqs.length;
+    await page.locator('.bn-editor[contenteditable="true"]').first().click(); await page.keyboard.press('End'); await page.keyboard.type(' ' + word);
+    await page.keyboard.press(keys); await wait(2500);
+    const patched = reqs.slice(reqsBefore).filter((r) => r.method === 'PATCH' && r.path === '/notes/n1' && typeof r.body?.content === 'string' && r.body.content.includes(word));
+    check(`${label} right after typing still saves the last word to that note`, patched.length > 0 && notes.find((n) => n.id === 'n1').content.includes(word), notes.find((n) => n.id === 'n1').content);
+  }
   await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO);
-  const bio = page.locator('.s-notes-rows .s-note-row', { hasText: 'Biology revision' }).first();
+  const bio =page.locator('.s-notes-rows .s-note-row', { hasText: 'Biology revision' }).first();
   await bio.waitFor(TO);
   const box = await bio.boundingBox();
   await page.mouse.move(box.x + 30, box.y + 20); await page.mouse.down(); await page.mouse.move(box.x + 60, box.y + 60, { steps: 6 });
@@ -537,6 +548,55 @@ try {
   await page.locator('[data-testid="invite-open-one"]').click(); await page.locator('[data-testid="invite-accept"]').waitFor(TO);
   const byId = reqs.filter((r) => r.path === '/workspaces/invites/lookup').pop();
   check('opening it from the list names the invite by id, not by token', byId?.body?.inviteId === 'inv1' && !byId.body.token, JSON.stringify(byId?.body));
+
+  // 11. R39 folder cards (menu button, Enter, F2), R41 in-app confirm dialog (no native dialogs), R38 dialogs (aria-modal, focus, Escape)
+  notes.push(mk('Gone note', 'to be deleted', { id: 'tr1', isDeleted: true }));
+  dialogs = 0;
+  await page.goto(`${base}/notes?filter=trash`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  await page.locator('button.danger', { hasText: 'Empty' }).click(); await wait(300);
+  const cd = page.locator('[data-testid="confirm-dialog"]');
+  check('Empty Trash opens the in-app confirm dialog (not a native one)', (await cd.isVisible()) && dialogs === 0, dialogs);
+  check('the confirm dialog is modal and has focus inside', (await cd.getAttribute('aria-modal')) === 'true' && await page.evaluate(() => !!document.activeElement?.closest('[data-testid="confirm-dialog"]')));
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  check('Tab stays inside the confirm dialog', await page.evaluate(() => !!document.activeElement?.closest('[data-testid="confirm-dialog"]')));
+  await page.keyboard.press('Escape'); await wait(300);
+  check('Escape cancels: dialog gone, note still in the Trash', !(await cd.count()) && notes.some((n) => n.id === 'tr1'));
+  await page.locator('button.danger', { hasText: 'Empty' }).click(); await wait(300);
+  await page.locator('[data-testid="confirm-ok"]').click(); await wait(900);
+  check('Confirm deletes the note forever', !notes.some((n) => n.id === 'tr1') && dialogs === 0, dialogs);
+
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(400);
+  await page.getByRole('tab', { name: /^Folders/ }).click(); await wait(400);
+  check('each folder card has a visible "..." button', (await page.locator('[data-testid="folder-card-more"]').count()) === (await page.locator('[data-testid="folder-card"]').count()) && (await page.locator('[data-testid="folder-card-more"]').count()) >= 2);
+  await page.locator('[data-testid="folder-card"]', { hasText: 'Ideas' }).focus(); await page.keyboard.press('F2'); await wait(400);
+  check('F2 on a focused folder card opens its editor', (await page.locator('[role="dialog"], .np-sheet').filter({ hasText: /Ideas/ }).count()) > 0 || (await page.locator('input[value="Ideas"]').count()) > 0);
+  await page.keyboard.press('Escape'); await wait(300);
+  await page.locator('[data-testid="folder-card"]', { hasText: 'Ideas' }).focus(); await page.keyboard.press('Enter'); await wait(400);
+  check('Enter on a focused folder card opens the folder', (await page.locator('.np-fhead .s-notes-h1', { hasText: 'Ideas' }).count()) === 1);
+  await page.getByRole('button', { name: 'Back to folders' }).click(); await wait(300);
+  const more = page.locator('[data-testid="folder-card-more"]').nth(0);
+  await more.focus(); await page.keyboard.press('Enter'); await wait(300);
+  const fmenu = (await page.locator('[data-testid="folder-card-menu"]').innerText());
+  check('the "..." menu offers Edit, New subfolder and Delete', ['Edit', 'New subfolder', 'Delete'].every((w) => fmenu.includes(w)), fmenu);
+  await page.locator('[data-testid="fcm-delete"]').click(); await wait(300);
+  check('Delete from the menu asks with the in-app dialog', await cd.isVisible());
+  await page.locator('[data-testid="confirm-cancel"]').click(); await wait(300);
+  const foldersBefore = (user.settings.noteFolders || []).length;
+  check('Cancel keeps the folder', !(await cd.count()) && foldersBefore >= 2, foldersBefore);
+  await page.locator('[data-testid="folder-card-more"]').nth(0).click(); await wait(300);
+  await page.locator('[data-testid="fcm-delete"]').click(); await wait(300);
+  await page.locator('[data-testid="confirm-ok"]').click(); await wait(900);
+  check('Confirm deletes the folder (saved on the account)', (user.settings.noteFolders || []).length === foldersBefore - 1 && dialogs === 0, JSON.stringify(user.settings.noteFolders));
+
+  teamOn = true;
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(800);
+  await page.locator('[data-testid="space-pill"]').click(); await wait(300);
+  await page.getByRole('menuitem', { name: /Create a team|Create a team/ }).or(page.locator('.s-space-row.plain', { hasText: 'Create a team' })).first().click(); await wait(400);
+  const tdlg = page.locator('[role="dialog"][aria-label="Create a team"]');
+  check('the Create a team dialog is aria-modal and has focus inside', (await tdlg.getAttribute('aria-modal')) === 'true' && await page.evaluate(() => !!document.activeElement?.closest('[aria-label="Create a team"]')));
+  await page.keyboard.press('Escape'); await wait(300);
+  check('Escape closes it', !(await tdlg.count()));
+  teamOn = false;
 } catch (e) {
   failures++; console.log('FAIL  test crashed:', e.message.split(String.fromCharCode(10)).slice(0, 5).join(' | '));
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));

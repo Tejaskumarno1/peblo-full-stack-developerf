@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from './a11y';
 import { X } from 'lucide-react';
 import api from '../api/client';
 import './sharelist.css';
@@ -14,6 +15,8 @@ export default function ShareList({ list, open, onClose }) {
   const [comments, setComments] = useState([]);
   const [msg, setMsg] = useState('');
   const [copied, setCopied] = useState('');
+  const dlgRef = useRef(null);
+  useDialogFocus(dlgRef, true);
 
   const load = async () => {
     try {
@@ -43,7 +46,7 @@ export default function ShareList({ list, open, onClose }) {
 
   return (
     <div className="sl-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="sl-dlg" role="dialog" aria-label={`Share the list ${list.name}`}>
+      <div className="sl-dlg" role="dialog" aria-modal="true" aria-label={`Share the list ${list.name}`} ref={dlgRef} tabIndex={-1}>
         <div className="sl-head">
           <div><h2>Share the list {list.name}</h2><small>{open} open task{open === 1 ? '' : 's'}</small></div>
           {info && <span className="sl-live">Link active</span>}

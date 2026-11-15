@@ -24,6 +24,9 @@
   --s-accent-ink: #A8380F;
   --s-accent-soft: #FCE3D8;
   --s-on-accent: #FFFFFF;
+  --s-danger: #B3261E;
+  --s-danger-bg: #B3261E;
+  --s-danger-fg: #FFFFFF;
   --s-local: #1E7A46;
   --s-col: #FAF5EE;
   --s-shadow: 0 10px 24px rgba(70, 45, 20, 0.12);
@@ -62,6 +65,9 @@
   --s-accent-ink: #FFA585;
   --s-accent-soft: #3E2219;
   --s-on-accent: #1A1210;
+  --s-danger: #FF9C94;
+  --s-danger-bg: #B3261E;
+  --s-danger-fg: #FFFFFF;
   --s-local: #6FE0A0;
   --s-col: #1A1621;
   --s-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);

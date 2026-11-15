@@ -14,7 +14,7 @@
 .soft .og-btn.pri { background: var(--s-accent); color: var(--s-on-accent); }
 .soft .og-btn.dark { background: var(--s-fg); color: var(--s-bg); }
 .soft .og-btn.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s-line); }
-.soft .og-btn.rose { background: color-mix(in srgb, #D64545 18%, var(--s-surface)); color: #A3201A; }
+.soft .og-btn.rose { background: color-mix(in srgb, #D64545 18%, var(--s-surface)); color: var(--s-danger, #A3201A); }
 .soft .og-btn.plain { background: transparent; padding-left: 8px; padding-right: 8px; }
 .soft .og-btn.white { background: var(--s-surface); }
 .soft .og-btn:disabled { opacity: .55; cursor: default; }
@@ -40,7 +40,7 @@
 .soft .og-menu { position: absolute; right: 12px; top: 100%; z-index: 20; min-width: 210px; background: var(--s-surface); border-radius: 18px; box-shadow: var(--s-shadow); padding: 6px; display: flex; flex-direction: column; border: 1.5px solid var(--s-line); }
 .soft .og-menu button { border: 0; background: transparent; text-align: left; font: inherit; font-weight: 700; font-size: 13.5px; padding: 9px 12px; border-radius: 12px; cursor: pointer; color: var(--s-fg); }
 .soft .og-menu button:hover { background: var(--s-chip-solid); }
-.soft .og-menu button.bad { color: #A3201A; }
+.soft .og-menu button.bad { color: var(--s-danger, #A3201A); }
 .soft .og-note { font-size: 13px; font-weight: 600; color: var(--s-fg2); line-height: 1.45; margin: 0; }
 .soft .og-role { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; font-size: 13.5px; font-weight: 600; }
 .soft .og-role .og-tag { justify-content: center; width: 100%; }
@@ -78,7 +78,7 @@
 .og-dlg.narrow { width: min(572px, calc(100vw - 32px)); }
 .og-dlg .og-dh { display: flex; align-items: center; gap: 12px; } .og-dlg .og-dh h2 { margin: 0; font-family: var(--s-display, inherit); font-size: 24px; font-weight: 800; }
 .og-dlg .og-btns { display: flex; gap: 10px; flex-wrap: wrap; }
-.og-dlg .og-err { margin: 0; color: #A3201A; font-weight: 700; font-size: 13.5px; }
+.og-dlg .og-err { margin: 0; color: var(--s-danger, #A3201A); font-weight: 700; font-size: 13.5px; }
 .og-dlg .og-start { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .og-dlg .og-start button { border: 3px solid transparent; border-radius: 26px; padding: 16px; text-align: left; font: inherit; color: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .og-dlg .og-start button.on { border-color: var(--s-fg, #241F1A); }
@@ -92,7 +92,7 @@
 .soft-page.s-set .s-set-link.on .ico { box-shadow: none; }
 .og-seg{display:inline-flex;gap:4px;padding:3px;border-radius:999px;background:rgba(0,0,0,.06)}
 .og-seg button{border:0;background:transparent;color:inherit;font:600 13px/1 inherit;padding:7px 14px;border-radius:999px;cursor:pointer}
-.og-seg button.on{background:#fff;color:#1f2937;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.og-seg button.on{background:var(--s-surface, #fff);color:var(--s-fg, #1f2937);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .og-links{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .og-link{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(0,0,0,.04)}
 .og-link.expired,.og-link.full{opacity:.6}

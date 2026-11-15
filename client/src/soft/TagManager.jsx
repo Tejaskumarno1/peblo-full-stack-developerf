@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from './a11y';
 import { X, Pencil, Trash2, Check } from 'lucide-react';
 import { tagsAPI } from '../api/index';
 import { TONES, toneOf, toneVar, setTagTone } from './softUtils';
@@ -10,6 +11,8 @@ export default function TagManager({ onClose, onChanged }) {
   const [confirm, setConfirm] = useState(null); // tag name waiting for "Remove"
   const [msg, setMsg] = useState('');
   const [, bump] = useState(0);
+  const dlgRef = useRef(null);
+  useDialogFocus(dlgRef, true);
 
   const load = () => tagsAPI.list().then((r) => setTags((r.data.tags || []).filter((t) => t.name !== 'inbox' && t.name !== 'private'))).catch(() => setMsg('Could not load your tags.'));
   useEffect(() => { load(); }, []);
@@ -32,7 +35,7 @@ export default function TagManager({ onClose, onChanged }) {
 
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="s-share s-tm" role="dialog" aria-label="Manage tags">
+      <div className="s-share s-tm" role="dialog" aria-modal="true" aria-label="Manage tags" ref={dlgRef} tabIndex={-1}>
         <div className="s-share-head">
           <div><b>Manage tags</b><small>Rename, merge, recolor or remove. Renaming to a name that exists merges them.</small></div>
           <button type="button" className="s-capture-close" aria-label="Close" onClick={onClose}><X size={16} strokeWidth={2.4} /></button>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDialogFocus } from '../a11y';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Link2, Building2, Users, User, UserPlus, MoreHorizontal, Shield, KeyRound, AlignLeft, Download, Mail, LogOut, X, Lock, Info, Plus, TriangleAlert } from 'lucide-react';
@@ -29,6 +30,8 @@ export function useActiveOrg() {
 }
 
 function Dialog({ icon: Icon, tone = 'mint', title, onClose, children, narrow }) {
+  const ref = useRef(null);
+  useDialogFocus(ref, true);
   useEffect(() => {
     const k = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', k);
@@ -36,7 +39,7 @@ function Dialog({ icon: Icon, tone = 'mint', title, onClose, children, narrow })
   }, [onClose]);
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`og-dlg${narrow ? ' narrow' : ''}`} role="dialog" aria-label={title}>
+      <div className={`og-dlg${narrow ? ' narrow' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref} tabIndex={-1}>
         <div className="og-dh"><span className="og-ico lg" style={{ background: `var(--s-${tone})` }}><Icon size={20} /></span><h2>{title}</h2></div>
         {children}
       </div>

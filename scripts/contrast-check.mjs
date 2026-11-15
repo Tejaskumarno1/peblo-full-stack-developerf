@@ -50,6 +50,10 @@ PAIRS.push(['--s-dock-fg', '--s-dock', 'dock icons', false]);
 PAIRS.push(['--s-dock-on-fg', '--s-dock-on', 'active dock item', false]);
 PAIRS.push(['--s-bg', '--s-fg', 'inverted pill (View when set, hover chips)', false]);
 PAIRS.push(['--s-local', '--s-bg', 'local / saved badge', false]);
+PAIRS.push(['--s-danger', '--s-bg', 'danger text on the page', false]);
+PAIRS.push(['--s-danger', '--s-surface', 'danger text on a card or dialog', false]);
+PAIRS.push(['--s-danger-fg', '--s-danger-bg', 'text on a danger button', false]);
+PAIRS.push(['--s-fg', '--s-butter', 'warning note text', false]);
 
 let failed = 0, checked = 0;
 for (const [mode, vars] of Object.entries(MODES)) {

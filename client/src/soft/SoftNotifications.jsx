@@ -2,7 +2,7 @@ import { useWorkspaces } from './spaces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, CheckSquare, FileText, AtSign, Bell, Check, Megaphone, UserPlus } from 'lucide-react';
+import { Calendar, CheckSquare, FileText, AtSign, Bell, Check, Megaphone, UserPlus, UserMinus, RotateCcw, Building2 } from 'lucide-react';
 import api from '../api/client';
 import { todosAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -12,8 +12,8 @@ import { useSpaceMuted } from './spacePrefs';
 import { buildNotifications, applyFilter, FILTERS, readDerived, saveDerived, whenLabel, groupOf } from './notifUtils';
 import './notifications.css';
 
-const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, comment: AtSign, review: CheckSquare, status: CheckSquare, done: CheckSquare, member_joined: UserPlus, org_invite: UserPlus };
-const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', comment: 'lilac', review: 'butter', status: 'sky', done: 'mint', member_joined: 'mint', org_invite: 'mint' };
+const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: FileText, office_post: Megaphone, office_suggestion: Megaphone, assigned: CheckSquare, comment: AtSign, review: CheckSquare, status: CheckSquare, done: CheckSquare, member_joined: UserPlus, member_removed: UserMinus, team_reopened: RotateCcw, org_deleted: Building2, org_invite: UserPlus };
+const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', comment: 'lilac', review: 'butter', status: 'sky', done: 'mint', member_joined: 'mint', member_removed: 'peach', team_reopened: 'mint', org_deleted: 'butter', org_invite: 'mint' };
 
 /** Soft Studio · Notification centre (mockup: NotifCentre). One list: mentions, meetings and tasks that need you. */
 /** One team's switch in Settings > Notifications: on = you hear from it, off = muted (kept on the server, so it also stops stored notifications). */
@@ -46,11 +46,12 @@ export default function SoftNotifications() {
   const open = (n) => {
     void markRead([n]);
     if (n.kind === 'org_invite') { navigate(n.path || '/settings/organizations'); return; }
-    if (n.kind === 'member_joined') { navigate('/settings/organizations'); return; }
+    if (n.kind === 'member_joined' || n.kind === 'member_removed' || n.kind === 'org_deleted') { navigate('/settings/organizations'); return; }
     if (n.spaceId && n.kind !== 'note') { switchTo(n.spaceId); navigate(n.todoId ? '/tasks?task=' + n.todoId : '/notes'); return; }
     if (n.noteId) navigate('/notes/' + n.noteId);
     else if (n.kind === 'meeting') navigate('/calendar');
-    else navigate('/tasks?task=' + n.todoId);
+    else if (n.todoId) navigate('/tasks?task=' + n.todoId);
+    else navigate('/settings/organizations'); // a kind this version does not know: the team page is the nearest place
   };
   const act = (n) => (n.kind === 'meeting' && /^https?:\/\//i.test(n.link || '') ? ['Join', () => { void markRead([n]); window.open(n.link, '_blank', 'noopener'); }] : [n.kind === 'mention' ? 'View' : 'Open', () => open(n)]);
 
@@ -80,7 +81,7 @@ export default function SoftNotifications() {
                 const Icon = ICON[n.kind] || Bell; const [label, run] = act(n);
                 return (
                   <div key={n.id} className={`s-notif-row${n.read ? '' : ' unread'}`} data-testid="notif-row" data-kind={n.kind}>
-                    <span className="ic" style={{ background: `var(--s-${TONE[n.kind]})` }}><Icon size={18} /></span>
+                    <span className="ic" style={{ background: `var(--s-${TONE[n.kind] || 'sky'})` }}><Icon size={18} /></span>
                     <button type="button" className="txt" onClick={() => open(n)}><b>{n.title}</b><small>{n.sub}</small></button>
                     <button type="button" className={`s-notif-btn${n.kind === 'meeting' && n.link ? ' dark' : ''}`} onClick={run}>{label}</button>
                     <time>{whenLabel(n.at)}</time>

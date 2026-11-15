@@ -1,18 +1,19 @@
 // Notes to Markdown, PDF, Word (.doc) or the printer. Runs in the browser; nothing is sent to a server.
 import { marked } from 'marked';
+import { mentionsToText } from './mentions';
 import DOMPurify from 'dompurify';
 import { downloadBlob, downloadText, safeFileName } from './download';
 import { inlineMedia } from './imageData';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export const mdToHtml = (md) => DOMPurify.sanitize(marked.parse(md || '', { async: false }));
+export const mdToHtml = (md) => DOMPurify.sanitize(marked.parse(mentionsToText(md || ''), { async: false })); // a mention is plain "@Name" in a file
 
 /** docs: [{ title, content, tags }] */
 export function docsToMarkdown(docs) {
   return docs.map((d) => {
     const tags = (d.tags || []).filter((t) => t !== 'inbox');
-    return `# ${d.title || 'Untitled'}\n\n${tags.length ? `Topics: ${tags.map((t) => `#${t}`).join(' ')}\n\n` : ''}${d.content || ''}\n`;
+    return `# ${d.title || 'Untitled'}\n\n${tags.length ? `Topics: ${tags.map((t) => `#${t}`).join(' ')}\n\n` : ''}${mentionsToText(d.content || '')}\n`;
   }).join('\n---\n\n');
 }
 

@@ -91,8 +91,8 @@ export function buildAccentCss(hex) {
   const build = (scope, mode) => {
     const a = deriveAccent(base, mode);
     return `${scope} .soft{--s-accent:${a.solid};--s-accent-ink:${a.ink};--s-accent-soft:${a.soft};--s-on-accent:${a.on};--s-dock-on:${a.solid};--s-dock-on-fg:${a.on}}`
-      + `${scope} .river{--r-now:${a.solid};--r-now-ink:${a.ink}}`
-      + `${scope} .orbit{--o-path:${a.solid};--o-path-ink:${a.ink};--o-path-soft:${a.soft}}`
+      + `${scope} .river{--r-now:${a.solid};--r-now-ink:${a.ink};--r-on-now:${a.on}}`
+      + `${scope} .orbit{--o-path:${a.solid};--o-path-ink:${a.ink};--o-path-soft:${a.soft};--o-on-path:${a.on}}`
       + `${scope}[data-style]{--pb-accent:${a.ink};--pb-solid:${a.solid};--pb-on-solid:${a.on};--pb-soft:${a.soft};--pb-ring:${a.solid}}`;
   };
   return [build('html:root', 'light'), build('html:root.theme-dark', 'dark'), build('html:root.theme-dark.theme-midnight', 'midnight')].join('\n');

@@ -8,6 +8,7 @@ import { flushOpenNote } from '../utils/noteSync';
 import './spaces.css';
 import Toast from '../components/Toast';
 import { MuteMenuItem } from './spacePrefs';
+import { useDialogFocus } from './a11y';
 
 /** The person's spaces: Personal always, plus the teams and Office of every organization they belong to. */
 export function useWorkspaces() {
@@ -140,9 +141,11 @@ export function SpacePill() {
 }
 
 export function Backdrop({ onClose, label, children }) {
+  const ref = useRef(null);
+  useDialogFocus(ref, true); // focus moves in, Tab stays inside, focus goes back on close
   return (
     <div className="s-share-back" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
-      <div className="s-share" role="dialog" aria-label={label}>{children}</div>
+      <div className="s-share" role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1}>{children}</div>
     </div>
   );
 }

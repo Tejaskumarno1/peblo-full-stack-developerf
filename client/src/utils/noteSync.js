@@ -42,7 +42,30 @@ async function whileWaiting(id) {
   for (let i = 0; i < 130 && live.get(id) === 'wait'; i++) await new Promise((r) => setTimeout(r, 150));
 }
 
-export async function saveNoteSafe(id, payload) {
+// Saves of one note run one after another: a last save sent while an earlier one is still on its way (the editor leaving a
+// note) must be built from the base that earlier save leaves, and must reach the server after it.
+const chains = new Map();
+export function saveNoteSafe(id, payload) {
+  const prev = chains.get(id) || Promise.resolve();
+  const run = prev.then(() => saveNoteSafeNow(id, payload));
+  const mine = run.catch(() => {});
+  chains.set(id, mine);
+  mine.then(() => { if (chains.get(id) === mine) chains.delete(id); });
+  return run;
+}
+
+/** The text typed in the last moments before the editor left a note (its change timer never ran). Saved in that note's own space
+ * and the cached lists are told, so reopening the note at once shows it. Content only: the title and tags are left alone. */
+export async function saveFinalText(id, content) {
+  if (!id || id === '__draft__' || typeof content !== 'string') return false;
+  try {
+    const data = await saveNoteSafe(id, { content });
+    window.dispatchEvent(new CustomEvent('pb-note-final', { detail: { id, content, updatedAt: data?.updatedAt } }));
+    return true;
+  } catch { return false; }
+}
+
+async function saveNoteSafeNow(id, payload) {
   if (typeof payload.content === 'string') await whileWaiting(id);
   const base = bases.get(id);
   const hasText = typeof payload.content === 'string';

@@ -5,6 +5,7 @@ import { X, SlidersHorizontal, ChevronDown, ChevronLeft, ChevronRight, History, 
 import { compareModel, wordsOf } from '../utils/compare';
 import { peerColor } from '../utils/peerCursors';
 import './compare.css';
+import { mentionsToChipWord } from '../utils/mentions';
 
 const clock = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP]M)$/i, (m, x) => ` ${x.toLowerCase()}`);
 /** "3 h ago", "Yesterday 6:12 pm", "Sat 4:02 pm", "12 Oct" */
@@ -26,7 +27,7 @@ const loadView = () => { try { return { show: 'pages', pics: 'low', ...(JSON.par
 
 const pageHtml = (md, show) => {
   if (show === 'text') {
-    const lines = String(md || '').split('\n').map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '[picture]').replace(/^(\s*)(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+\.\s+|>\s+)/, '$1'));
+    const lines = String(md || '').replace(/<var>([^<]*)<\/var>/g, '$1').replace(/&nbsp;/g, ' ').split('\n').map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '[picture]').replace(/^(\s*)(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+\.\s+|>\s+)/, '$1'));
     return DOMPurify.sanitize(lines.map((l) => `<div class="cb-line">${l || '&nbsp;'}</div>`).join(''), { ADD_ATTR: ['data-chg'] });
   }
   return DOMPurify.sanitize(marked.parse(String(md || '')), { ADD_ATTR: ['data-chg'] });
@@ -60,7 +61,7 @@ export default function CompareBox({ title = 'Note', now, versions, loadVersion,
   const earlier = chrono.find((v) => v.id === earlierId) || chrono[chrono.length - 1];
   const oldMd = earlier ? texts[earlier.id] : null;
   const preview = vmode === 'preview';
-  const model = useMemo(() => (oldMd == null ? null : compareModel(oldMd, now.content || '', whoNow)), [oldMd, now.content, whoNow]);
+  const model = useMemo(() => (oldMd == null ? null : compareModel(mentionsToChipWord(oldMd), mentionsToChipWord(now.content || ''), whoNow)), [oldMd, now.content, whoNow]);
   const changes = model?.changes || [];
   const total = changes.length;
   useEffect(() => { setCur(0); }, [earlierId]);

@@ -195,3 +195,9 @@
 .soft .np-droptray .lab { flex: 1 0 100%; font-size: 12px; font-weight: 700; color: var(--s-fg3); }
 .soft .np-drop { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; border: 1.5px dashed var(--s-dash); font-size: 13px; font-weight: 700; color: var(--s-fg); }
 .soft .np-drop.drop { outline: 2px solid var(--s-accent); background: var(--s-accent-soft); }
+
+/* folder cards: the card plus a separate "..." button (a button inside a button is not allowed) */
+.np-cardw { position: relative; display: flex; min-width: 0; }
+.np-cardw > .np-card { flex: 1; min-width: 0; }
+.np-card-more { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; opacity: .6; cursor: pointer; }
+.np-card-more:hover, .np-card-more:focus-visible { opacity: 1; background: var(--s-chip-solid, rgba(120,120,140,.18)); outline: none; box-shadow: 0 0 0 2px var(--s-fg, currentColor); }

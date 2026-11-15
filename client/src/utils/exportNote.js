@@ -2,6 +2,7 @@
 import { marked } from 'marked';
 import { inlineMedia } from './imageData';
 import { sanitizeHtml } from './safeHtml';
+import { mentionsToText } from './mentions';
 
 const baseName = (n) => (n.title || 'Untitled').replace(/[^\p{L}\p{N}_\s-]/gu, '').trim().replace(/\s+/g, '_') || 'note';
 
@@ -15,8 +16,8 @@ function save(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-const md = async (n) => `# ${n.title || 'Untitled'}\n\n${await inlineMedia(n.content || '')}`;
-const html = async (n) => sanitizeHtml(`<h1>${(n.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(n.content || ''))}`);
+const md = async (n) => `# ${n.title || 'Untitled'}\n\n${await inlineMedia(mentionsToText(n.content || ''))}`;
+const html = async (n) => sanitizeHtml(`<h1>${(n.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(mentionsToText(n.content || '')))}`);
 
 export async function exportMarkdown(n) {
   save(new Blob([await md(n)], { type: 'text/markdown' }), `${baseName(n)}.md`);

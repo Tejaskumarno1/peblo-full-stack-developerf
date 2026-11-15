@@ -29,7 +29,7 @@ test('dark and midnight variants are lighter than a dark choice', () => {
 });
 test('generated css re-colours Soft, River, Orbit and Studio/Console in every mode', () => {
   const css = buildAccentCss('#0F766E');
-  for (const needle of ['--s-accent:', '--s-accent-ink:', '--s-accent-soft:', '--s-on-accent:', '--r-now:', '--r-now-ink:', '--o-path:', '--o-path-soft:', '--pb-solid:', 'theme-midnight']) assert.ok(css.includes(needle), needle);
+  for (const needle of ['--s-accent:', '--s-accent-ink:', '--s-accent-soft:', '--s-on-accent:', '--r-now:', '--r-now-ink:', '--r-on-now:', '--o-path:', '--o-path-soft:', '--o-on-path:', '--pb-solid:', 'theme-midnight']) assert.ok(css.includes(needle), needle);
   assert.equal(buildAccentCss('nope'), '');
 });
 test('accent storage keeps the colour and the css for the pre-paint script', () => {

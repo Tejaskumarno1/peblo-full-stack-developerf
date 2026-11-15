@@ -32,6 +32,8 @@ import { usePublicUrl } from '../api/publicUrl';
 import { useAutoSave } from '../hooks';
 import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive, rememberNoteSpace, noteSpaceCfg, setNoteFlusher } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
+import { confirmDialog } from './ConfirmDialog';
+import { mentionsToText } from '../utils/mentions';
 import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
 import ShareChips, { useShareParts } from '../components/ShareChips';
 import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/presencePref';
@@ -188,6 +190,7 @@ export default function SoftNotes() {
   const [cards, setCards] = useState(false); // the folder cards view
   const [gSel, setGSel] = useState(null); // the date or tag card that is open
   const [sheet, setSheet] = useState(null); // 'move' | 'tag' | 'folder'
+  const [cardMenu, setCardMenu] = useState(null); // the "..." menu of a folder card: { d, x, y }
   const [folderEdit, setFolderEdit] = useState(null); // the folder being edited (or {} for a new one)
   const [smartPage, setSmartPage] = useState(null); // { initial, startName }
   const [moveAfter, setMoveAfter] = useState(false);
@@ -500,7 +503,7 @@ export default function SoftNotes() {
   const trash = async () => {
     setMenuOpen(false);
     const perm = !!doc.isDeleted;
-    if (perm && !window.confirm('Delete this note forever? This cannot be undone.')) return; // only the final delete asks; the Trash can be undone
+    if (perm && !(await confirmDialog({ title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return; // only the final delete asks; the Trash can be undone
     const id = doc.id;
     await notesAPI.delete(id, { permanent: perm });
     refreshLists();
@@ -523,7 +526,7 @@ export default function SoftNotes() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const fileBase = () => (doc.title || 'Untitled').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'note';
-  const noteHtml = async () => sanitizeHtml(`<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(doc.content || ''))}`);
+  const noteHtml = async () => sanitizeHtml(`<h1>${(doc.title || 'Untitled').replace(/</g, '&lt;')}</h1>${marked.parse(await inlineMedia(mentionsToText(doc.content || '')))}`);
   const exportWord = async () => {
     setMenuOpen(false);
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${fileBase()}</title></head><body style="font-family:Calibri,Arial,sans-serif">${await noteHtml()}</body></html>`;
@@ -643,7 +646,7 @@ export default function SoftNotes() {
   }, 'Could not delete the note');
   const rowRestore = (n) => rowAct(async () => { await notesAPI.restore(n.id); refreshLists(); flash('Restored'); }, 'Could not restore the note');
   const rowDeleteForever = (n) => rowAct(async () => {
-    if (!window.confirm('Delete this note forever? This cannot be undone.')) return;
+    if (!(await confirmDialog({ title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return;
     await notesAPI.delete(n.id, { permanent: true }); refreshLists(); if (doc?.id === n.id) closeDoc();
   }, 'Could not delete the note');
   const rowMove = (n) => { setRowMenu(null); setSelectMode(true); setPicked([n.id]); setSheet('move'); };
@@ -681,7 +684,7 @@ export default function SoftNotes() {
   };
   const deleteFolder = async (def) => {
     const count = def.smart ? 0 : allNotes.filter((n) => n.meta?.folder === def.name).length;
-    if (!window.confirm(def.smart ? `Delete the smart folder "${def.name}"? Your notes are not touched.` : `Delete the folder "${def.name}"?${count ? ` Its ${count} note${count === 1 ? '' : 's'} stay, just out of the folder.` : ''}`)) return;
+    if (!(await confirmDialog({ title: def.smart ? `Delete the smart folder "${def.name}"?` : `Delete the folder "${def.name}"?`, body: def.smart ? 'Your notes are not touched.' : count ? `Its ${count} note${count === 1 ? '' : 's'} stay, just out of the folder.` : '', confirmLabel: 'Delete folder', danger: true }))) return;
     setSheet(null); setFolderEdit(null); setSmartPage(null);
     if ((await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)))) === false) { flash('Could not delete the folder. Nothing was changed.'); return; }
     if (count) {
@@ -739,7 +742,7 @@ export default function SoftNotes() {
     setPicked([]); setSelectMode(false);
   };
   const emptyTrash = async () => {
-    if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: `Delete all ${shownList.length} notes in the Trash forever?`, body: 'This cannot be undone.', confirmLabel: 'Empty Trash', danger: true }))) return;
     const res = await runBulk(shownList.map((n) => n.id), (id) => notesAPI.delete(id, { permanent: true }));
     refreshLists();
     if (bulkReport(res, shownList.length, { oneFail: 'Could not empty the Trash' })) flash('Trash emptied');
@@ -930,6 +933,16 @@ export default function SoftNotes() {
           <span className="np-drop none" data-testid="drop-none" {...dropProps({ name: '' })}>No folder</span>
         </div>
       )}
+      {cardMenu && (() => {
+        const d = cardMenu.d;
+        return (
+          <NavMenu onClose={() => setCardMenu(null)} className="s-tab-menu s-row-menu" data-testid="folder-card-menu" style={{ left: Math.min(cardMenu.x, window.innerWidth - 260), top: Math.min(cardMenu.y, window.innerHeight - 200) }} onPointerDown={(e) => e.stopPropagation()}>
+            <button type="button" role="menuitem" data-testid="fcm-edit" onClick={() => { setCardMenu(null); openEdit(d); }}>Edit</button>
+            {!d.smart && !d.parent && <button type="button" role="menuitem" data-testid="fcm-sub" onClick={() => { setCardMenu(null); setMoveAfter(false); setFolderEdit({ parent: d.id }); setSheet('folder'); }}>New subfolder</button>}
+            <button type="button" role="menuitem" className="danger" data-testid="fcm-delete" onClick={() => { setCardMenu(null); deleteFolder(d); }}>Delete</button>
+          </NavMenu>
+        );
+      })()}
       {rowMenu && (() => {
         const n = rowMenu.n; const mine = mayManage(n);
         return (
@@ -996,11 +1009,15 @@ export default function SoftNotes() {
           const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
           const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
           const list = fSel ? (parent ? normalDefs.filter((k) => k.parent === parent.id) : []) : [...normalDefs.filter((d) => !d.parent), ...smartDefs];
+          const openCardMenu = (d, el) => { const b = el.getBoundingClientRect(); setCardMenu({ d, x: b.left, y: b.bottom + 4 }); };
           const card = (d) => (
-            <button key={d.id} type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} {...dropProps(d)} title="Click to open, double-click to edit">
-              <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
-              <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
-            </button>
+            <div key={d.id} role="listitem" className="np-cardw">
+              <button type="button" className={`np-card${d.smart ? ' sm' : ''}`} data-testid="folder-card" onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} onKeyDown={(e) => { if (e.key === 'F2') { e.preventDefault(); openEdit(d); } }} {...dropProps(d)} title="Click or press Enter to open, double-click or F2 to edit" aria-keyshortcuts="F2">
+                <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
+                <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
+              </button>
+              <button type="button" className="np-card-more" data-testid="folder-card-more" aria-label={`Folder options for ${d.name}`} aria-haspopup="menu" onClick={(e) => openCardMenu(d, e.currentTarget)}><MoreHorizontal size={16} strokeWidth={2} /></button>
+            </div>
           );
           return (
             <div className="np-cards-wrap">
@@ -1013,7 +1030,7 @@ export default function SoftNotes() {
                   <button type="button" className="np-crumb-all" aria-label="Show all notes" title="Show all notes" onClick={() => { setFSel(null); setCards(false); if (folderMode) setView({ ...view, group: 'date' }); }}><X size={14} strokeWidth={2} /></button>
                 </nav>
               )}
-              {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => card(d))}</div>}
+              {list.length > 0 && <div className="np-cards cards-w" role="list" aria-label="Folders">{list.map((d) => card(d))}</div>}
               {!fSel && list.length === 0 && (
                 <div className="np-empty"><span className="np-empty-ic"><Folder size={22} strokeWidth={1.8} /></span><b>No folders yet</b><small>Folders keep related notes together. Smart folders fill themselves from a rule.</small><button type="button" className="np-empty-btn" onClick={() => openNew(false)}><Plus size={15} strokeWidth={2.2} />New folder</button></div>
               )}

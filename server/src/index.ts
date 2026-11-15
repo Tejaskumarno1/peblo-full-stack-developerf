@@ -17,6 +17,7 @@ import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
 import { purgeExpiredTrash } from './controllers/notesController.js';
 import { purgeScheduledDeletions } from './services/accountDeletion.js';
+import { purgeClosedOrgs } from './services/orgPurge.js';
 import tagsRoutes from './routes/tags.js';
 import tokensRoutes from './routes/tokens.js';
 import aiRoutes, { noteAiRoutes } from './routes/ai.js';
@@ -284,6 +285,11 @@ if (isDirectRun) {
     const accountSweep = process.env.PEBLO_ACCOUNT_PURGE === '0' ? null : setInterval(sweepAccounts, 60 * 60 * 1000);
     accountSweep?.unref?.();
     if (accountSweep) setTimeout(sweepAccounts, 45_000).unref();
+    // Deleted organizations past their 30-day purge_after are removed for good. OFF unless PEBLO_PURGE_ORGS=1 (docs/SERVER-TESTS-TO-RUN.md).
+    const sweepOrgs = () => { purgeClosedOrgs().catch((e) => console.error('[orgs] purge:', e)); };
+    const orgSweep = process.env.PEBLO_PURGE_ORGS === '1' ? setInterval(sweepOrgs, 6 * 60 * 60 * 1000) : null;
+    orgSweep?.unref?.();
+    if (orgSweep) setTimeout(sweepOrgs, 60_000).unref();
     // Hosting platforms stop the app with SIGTERM: save the open live documents and let the database connections go first.
     let stopping = false;
     const stop = (signal: string) => {
@@ -292,6 +298,7 @@ if (isDirectRun) {
       console.log(`${signal} received, shutting down`);
       if (trashSweep) clearInterval(trashSweep);
       if (accountSweep) clearInterval(accountSweep);
+      if (orgSweep) clearInterval(orgSweep);
       setTimeout(() => process.exit(0), 10_000).unref();
       closeCollab()
         .catch((e) => console.error('[collab] shutdown:', e))
