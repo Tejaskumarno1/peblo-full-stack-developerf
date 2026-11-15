@@ -1,3 +1,4 @@
+import { emitUserAndSpace } from '../utils/notify.js';
 import prisma from '../db.js';
 import { audit, can, spaceAccess } from '../utils/access.js';
 import { isOffice } from '../utils/noteAccess.js';
@@ -40,7 +41,8 @@ export async function shareToTeam(req: any, res: any, next: any) {
     if (others.length) await notifyUsers(req.app, others, { kind: 'note_shared', title: copy.title || 'Untitled', body: `Shared with ${team}${tasks.length ? ` with ${tasks.length} task${tasks.length === 1 ? '' : 's'}` : ''}`, from: await nameOf(userId), spaceId, noteId: copy.id });
     await audit(acc.org.orgId, userId, 'note.shared_to_team', copy.id, { level, tasks: tasks.length });
     const io = req.app.get('io');
-    if (io) { io.to(userId).emit('notes_changed'); if (tasks.length) io.to(userId).emit('todos_changed'); }
+    emitUserAndSpace(io, userId, spaceId, 'notes_changed');
+    if (tasks.length) emitUserAndSpace(io, userId, spaceId, 'todos_changed');
     res.status(201).json({ ok: true, note: copy, tasks: tasks.length, level });
   } catch (error) { next(error); }
 }

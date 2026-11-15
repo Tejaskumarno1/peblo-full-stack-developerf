@@ -1,3 +1,4 @@
+import { refreshUserRooms } from '../utils/spaceRooms.js';
 import { Router } from 'express';
 import crypto from 'crypto';
 import prisma from '../db.js';
@@ -100,6 +101,7 @@ router.post('/orgs', async (req, res) => {
     prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${spaceId}, ${userId}, 'lead', ${userId})`,
   ]);
   await audit(orgId, userId, 'org.created', orgId, { name });
+  void refreshUserRooms(req.app.get('io'), userId);
   res.status(201).json({ id: orgId, spaceId });
 });
 
@@ -119,6 +121,7 @@ router.post('/orgs/:orgId/spaces', async (req, res) => {
     prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${spaceId}, ${userId}, 'lead', ${userId})`,
   ]);
   await audit(req.params.orgId, userId, 'space.created', spaceId, { name, kind });
+  void refreshUserRooms(req.app.get('io'), userId);
   res.status(201).json({ id: spaceId });
 });
 

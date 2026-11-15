@@ -263,6 +263,7 @@ All of these read and write the `todos` table (and read `notes` when a `noteId` 
   - Prisma 6 extended unique `update({where:{id,userId}})` in the voice actions
 - Tags are per user.
 - Sockets join a per-user room.
+- **Team rooms (R11, feat-realtime, never run against a DB):** on connect a socket also joins `space:<id>` for every space its person can read (`utils/spaceRooms.ts` `syncSocketRooms`, same SQL conditions as `spaceRole`/`orgAccess`: space member, active org member, guest not expired, nothing closed). Rooms are re-synced after membership changes (invite/join-link accept, org member patch/remove/leave, `PUT /spaces/:id/members/:userId`, org/space create via `refreshUserRooms`; space leave via `kickFromSpace`; space close via `refreshSpaceRoom`) and every 5 minutes (`startRoomRefresh`). `utils/notify.ts` has `emitSpace` and `emitUserAndSpace`; `notify(req, ...)` also reaches the space room when `noteScope()` verified a space for the request (it sets `req.peerSpace`). Payload is `{ space }` (null = Personal), never text. Write paths covered: notesController, notesAccess, notesMove, teamShare, teamTalk, todosController. Not covered: share.ts and transfer.ts (Personal only).
 - Two weak spots:
   - `revertBackup` checks note ownership first, then compares the backup's `noteId`, so it is safe.
   - `toggleTask` with a missing `id` matches **all of the user's todos** (bug B3), but only that user's own data.

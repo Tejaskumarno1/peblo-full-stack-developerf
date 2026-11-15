@@ -4,6 +4,7 @@ import prisma from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
+import { refreshUserRooms, kickFromSpace, refreshSpaceRoom } from '../utils/spaceRooms.js';
 import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
 import { decryptSecret, encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
@@ -134,6 +135,7 @@ router.post('/invites/remind', async (req, res) => {
   res.json({ ok: true });
 });
 
+const rooms = (req: any, ...u: string[]) => void refreshUserRooms(req.app.get('io'), ...u); // live team rooms follow membership (R11)
 router.post('/invites/accept', async (req, res) => {
   const userId = uid(req);
   const r: any = await lookup(String(req.body?.token ?? ''), userId);
@@ -151,6 +153,7 @@ router.post('/invites/accept', async (req, res) => {
   });
   if (!accepted) return res.status(409).json({ error: 'This invite cannot be accepted.', state: 'used' });
   await audit(inv.orgId, userId, 'member.joined', userId, { orgRole: inv.orgRole, spaceIds });
+  rooms(req, userId);
   if (inv.invitedBy) await notifyUsers(req.app, [inv.invitedBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${inv.orgName}`, from: await nameOf(userId), spaceId: spaceIds[0] ?? null });
   res.json({ ok: true, orgId: inv.orgId, orgName: inv.orgName });
 });
@@ -246,6 +249,7 @@ router.post('/join-links/accept', async (req, res) => {
   });
   if (!took) return res.status(409).json({ error: 'This link cannot be used.', state: 'full' });
   await audit(l.orgId, userId, 'member.joined_via_link', userId, { linkId: l.id, spaceId: l.spaceId });
+  rooms(req, userId);
   if (l.createdBy && l.createdBy !== userId) await notifyUsers(req.app, [l.createdBy], { kind: 'member_joined', title: `${await nameOf(userId)} joined ${l.orgName} with your link`, from: await nameOf(userId), spaceId: l.spaceId });
   res.json({ ok: true, orgId: l.orgId, orgName: l.orgName, spaceId: l.spaceId, spaceName: l.spaceName });
 });
@@ -268,6 +272,7 @@ router.patch('/orgs/:orgId/members/:userId', async (req, res) => {
   if (role) await prisma.$executeRaw`UPDATE org_members SET role = ${role} WHERE org_id = ${orgId} AND user_id = ${userId}`;
   if (status) await prisma.$executeRaw`UPDATE org_members SET status = ${status} WHERE org_id = ${orgId} AND user_id = ${userId}`;
   await audit(orgId, uid(req), 'member.updated', userId, { role, status });
+  rooms(req, userId);
   res.json({ ok: true });
 });
 
@@ -289,6 +294,7 @@ router.delete('/orgs/:orgId/members/:userId', async (req, res) => {
   if (target[0].role === 'owner' && (org.role !== 'owner' || (await ownerCount(orgId)) <= 1)) return res.status(409).json({ error: 'An owner cannot be removed. Transfer ownership first.' });
   const to = typeof req.query.reassignTo === 'string' && req.query.reassignTo === uid(req) ? uid(req) : null; // tasks can only be handed to the person removing
   await removeMember(orgId, userId, uid(req), to);
+  rooms(req, userId);
   res.json({ ok: true });
 });
 
@@ -296,6 +302,7 @@ router.post('/orgs/:orgId/leave', async (req, res) => {
   const org = await gate(req, res, false); if (!org) return;
   if (org.role === 'owner' && (await ownerCount(req.params.orgId)) <= 1) return res.status(409).json({ error: 'You are the only owner. Make someone else an owner before you leave.' });
   await removeMember(req.params.orgId, uid(req), uid(req));
+  rooms(req, uid(req));
   res.json({ ok: true });
 });
 
@@ -317,6 +324,7 @@ router.put('/spaces/:spaceId/members/:userId', async (req, res) => {
   }
   await prisma.$executeRaw`INSERT INTO space_members (space_id, user_id, role, added_by) VALUES (${req.params.spaceId}, ${req.params.userId}, ${role}, ${uid(req)}) ON CONFLICT (space_id, user_id) DO UPDATE SET role = ${role}`;
   await audit(sp[0].org_id, uid(req), 'space.member_set', req.params.userId, { spaceId: req.params.spaceId, role });
+  rooms(req, req.params.userId);
   res.json({ ok: true });
 });
 
@@ -402,6 +410,7 @@ router.post('/spaces/:spaceId/leave', async (req, res) => {
     prisma.$executeRaw`DELETE FROM space_members WHERE space_id = ${req.params.spaceId} AND user_id = ${uid(req)}`,
   ]);
   await audit(g.orgId, uid(req), 'space.left', req.params.spaceId);
+  kickFromSpace(req.app.get('io'), req.params.spaceId, uid(req));
   res.json({ ok: true });
 });
 /** Close a team. Nothing is deleted: the notes stay in the database and in the organization export. */
@@ -410,6 +419,7 @@ router.post('/spaces/:spaceId/close', async (req, res) => {
   if (!g.manage) return res.status(403).json({ error: 'Only a team lead or an admin can close a team.' });
   await prisma.$executeRaw`UPDATE spaces SET closed_at = now() WHERE id = ${req.params.spaceId}`;
   await audit(g.orgId, uid(req), 'space.closed', req.params.spaceId);
+  void refreshSpaceRoom(req.app.get('io'), req.params.spaceId);
   res.json({ ok: true });
 });
 

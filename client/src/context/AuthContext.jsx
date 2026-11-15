@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { profileAPI, authAPI } from '../api/index';
 import { VALID_STYLES } from '../utils/weekStart';
 import { getToken, setToken, clearToken } from '../api/token';
+import { attachSocketSync } from '../utils/socketSync';
 
 const AuthContext = createContext(null);
 
@@ -213,20 +214,14 @@ export function AuthProvider({ children }) {
     // The server reads who we are from the token and puts us in our own room.
     const socket = io(socketURL, { auth: (cb) => cb({ token: getToken() }) });
 
-    socket.on('todos_changed', () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] });
-      window.dispatchEvent(new Event('todo-updated'));
-    });
+    const detachSync = attachSocketSync(socket, queryClient); // space-aware refresh, refetch after a reconnect, cross-window space change
 
     socket.on('notifications_changed', () => {
       window.dispatchEvent(new Event('pb-notifications-changed'));
     });
 
-    socket.on('notes_changed', () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-    });
-
     return () => {
+      detachSync();
       socket.disconnect();
     };
   }, [user, queryClient]);

@@ -12,3 +12,16 @@ Commits `94ced39` and `c3f01da` (team authorization fixes) compile (`npm run bui
 8. **`spaceMembers()`.** Assign a task to an expired guest, a paused member and a member of a closed org: expect the "not in this space" 400.
 
 Known gaps left on purpose: an invite to a `read_only` org still reads as `ready`; the guest member list does not exclude people who share only a closed space; check that a last owner can actually leave (the deletion message tells them to).
+
+## Live team rooms (branch feat-realtime, R11): compiled only, never run
+
+Test cases were added to `scripts/smoke-test.mjs` (block "added UNRUN, R11") and have not been executed. Run them against a local `peblo_test` database, plus by hand:
+
+1. **Join on connect.** User A leads a team, B is a member. B opens a socket: B's socket is in `space:<id>` (check with `io.in('space:<id>').fetchSockets()` or by A's note create reaching B).
+2. **Team events.** A creates, updates, trashes, restores, archives, moves and shares a team note, and creates, updates, deletes and bulk-edits a team task (with `x-peblo-space`): B receives `notes_changed` / `todos_changed` with `{ space }`. The payload holds no text. A's own windows receive it once (not twice).
+3. **Personal stays private.** A Personal note or task of A: B receives nothing. Moving a note Personal to team and team to Personal: the source and destination windows both refresh.
+4. **Removal.** B leaves a team (`POST /spaces/:id/leave`), is removed from the org (`DELETE /orgs/:id/members/:userId`), is paused (`PATCH ... {status:'paused'}`), or the team is closed: B's open socket stops receiving that space's events at once; a new socket does not join the room.
+5. **Joining.** B accepts an invite or join link, or is added by `PUT /spaces/:id/members/:userId`: B's already-open socket starts receiving without reconnecting.
+6. **Safety net.** Guest expiry (`guest_until` in the past) drops the room within 5 minutes (`startRoomRefresh`).
+7. **Spoofed header.** A request with an `x-peblo-space` of a space the caller is not in answers 404 from `noteScope` and emits nothing (`req.peerSpace` is only set after the access check).
+

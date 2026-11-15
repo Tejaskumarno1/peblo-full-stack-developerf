@@ -1,3 +1,4 @@
+import { emitUserAndSpace } from '../utils/notify.js';
 import prisma from '../db.js';
 import { can, spaceAccess } from '../utils/access.js';
 import { noteScope } from '../utils/scope.js';
@@ -39,7 +40,8 @@ export async function moveNote(req: any, res: any, next: any) {
         WHERE linked_note_id = ${id} AND (${dest}::text IS NOT NULL OR user_id = ${req.user.id})`,
     ]);
     const io = req.app.get('io');
-    if (io) io.to(req.user.id).emit('notes_changed');
+    emitUserAndSpace(io, req.user.id, dest, 'notes_changed');
+    emitUserAndSpace(io, req.user.id, note.spaceId ?? null, 'notes_changed'); // the space it left (Personal reaches only this person)
     res.json({ ok: true, from: note.spaceId ?? null, to: dest, tasksMoved: Number(tasks) });
   } catch (error) { next(error); }
 }
@@ -58,8 +60,7 @@ export async function copyNote(req: any, res: any, next: any) {
       data: { userId: req.user.id, spaceId: to.spaceId, title: note.title, content: note.content, category: note.category },
       select: { id: true, title: true },
     });
-    const io = req.app.get('io');
-    if (io) io.to(req.user.id).emit('notes_changed');
+    emitUserAndSpace(req.app.get('io'), req.user.id, to.spaceId, 'notes_changed');
     res.status(201).json({ ok: true, note: copy });
   } catch (error) { next(error); }
 }

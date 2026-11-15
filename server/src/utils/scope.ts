@@ -55,6 +55,7 @@ export async function noteScope(req: Request, res: Response, need: 'read' | 'wri
       if (rows[0] && rows[0].user_id !== user.id && acc.role !== 'lead') { res.status(403).json({ error: 'Only the author or a space lead can do that.', code: 'owner_only' }); return null; }
     }
     if (!opts.tasks && id && need === 'write' && (await teamViewOnly(user.id, id, raw))) { res.status(403).json({ error: 'This note is shared with the team to read only.', code: 'view_only' }); return null; }
+    (req as any).peerSpace = raw; // verified above: notify() may tell this space's room
     return { spaceId: raw };
   }
   const noteId = typeof req.params?.id === 'string' ? req.params.id : '';
@@ -68,5 +69,6 @@ export async function noteScope(req: Request, res: Response, need: 'read' | 'wri
     }
   }
   const hidden = await hiddenNoteIds(user.id, raw, need === 'read' ? 'read' : 'write');
+  (req as any).peerSpace = raw;
   return hidden.length ? { spaceId: raw, AND: [{ id: { notIn: hidden } }] } : { spaceId: raw };
 }

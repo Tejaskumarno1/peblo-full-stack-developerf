@@ -21,7 +21,7 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [ ] R8 A leaving member's private Office notes become unreadable to everyone; no note handover (tasks only). `orgs.ts:263-272`.
 - [ ] R9 Org policy "publicShares" is not applied to existing links; per-team public-links toggle is never read; team notes cannot be shared by link yet the UI offers it. `utils/orgPolicy.ts`, `share.ts:288`.
 - [ ] R10 Version history (restore, name) is broken for team notes (queries ignore the space). `notesController.ts:628-770`.
-- [ ] R11 Live events only reach the editing user's own room; teammates see nothing until a refetch. `index.ts:234`, `teamTalk.ts:55`.
+- [~] **(built in code on feat-realtime, NOT run against a database)** R11 Live events only reach the editing user's own room; teammates see nothing until a refetch. `index.ts:234`, `teamTalk.ts:55`.
 - [~] R12 **(fixed in code 94ced39, NOT yet run against a database)** A removed member can still live-edit their own team note. `services/collab.ts:403`.
 - [~] R13 (accept is now atomic, 94ced39; token in notification/URL still open) Invite token stored in plaintext in the notification, sent in a URL query, reminder not throttled, accept not atomic. `orgs.ts:48-150`.
 - [~] R14 **(fixed in code 94ced39, NOT yet run against a database)** Join-link use is counted before the inserts and the org status is not checked. `orgs.ts:200-247`.
@@ -35,9 +35,9 @@ Read-only audit of branch `notes-ux-fixes` (remote `supabase` work + the notes f
 - [x] R20 **HIGH** Switching space sends the old note's last save with the NEW space header; the save 404s and the text is lost. `soft/spaces.jsx:57-65`, `api/client.js`, `hooks/index.js`.
 - [x] R21 **HIGH** "Move to team" does not flush the editor first. `soft/MoveNote.jsx:30-45`.
 - [x] R22 The flush on note switch is fire-and-forget with no retry. `hooks/index.js:68-82`.
-- [ ] R23 While a live connection is down typed text is neither sent nor kept; text typed during an AI request is not marked dirty. `components/BlockEditor.jsx:831-858`.
+- [x] R23 (client; fixed, browser-checked) While a live connection is down typed text is neither sent nor kept; text typed during an AI request is not marked dirty. `components/BlockEditor.jsx:831-858`.
 - [ ] R24 Switching notes by keyboard may drop the last 200 ms of typing *(unverified)*. `BlockEditor.jsx:881`.
-- [ ] R25 Notes over about 55 KB lose their last edits when the window closes. `utils/noteSync.js:144`.
+- [x] R25 (client; fixed, browser-checked) Notes over about 55 KB lose their last edits when the window closes. `utils/noteSync.js:144`.
 - [ ] R26 A team note shared "can view" opens editable for non-authors (the list has no userId), so saves fail forever. `SoftNotes.jsx:148,1069`.
 - [ ] R27 Archive, Pin, Move, Trash, Duplicate and Share are shown to read-only viewers. `SoftNotes.jsx:779-800`.
 - [~] R28 (partly: no more silent folder divergence; bulk still one Promise.all) Bulk actions use one `Promise.all` and report one generic error. `SoftNotes.jsx:638,649`.

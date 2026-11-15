@@ -4,6 +4,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright-core';
+import { hashText } from '../client/src/utils/unsavedCopy.js';
 
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
 const DIST = path.join(REPO, 'client', 'dist');
@@ -205,6 +206,31 @@ try {
   await page.screenshot({ path: 'e2e/notes-mock-dark.png' });
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // midnight
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // back to light
+
+  // 7e. text that never reached the server is kept in localStorage and put back (and saved) on the next open
+  const n3 = notes.find((n) => n.id === 'n3');
+  const copyKey = 'peblo-unsaved:n3';
+  const copy = { content: n3.content + ' Typed while offline', title: null, base: hashText(n3.content), at: Date.now() };
+  await page.goto(`${base}/notes`); await page.evaluate(([k, v]) => localStorage.setItem(k, v), [copyKey, JSON.stringify(copy)]);
+  await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(3500);
+  check('an unsaved local copy is restored and saved on open', n3.content.includes('Typed while offline'), n3.content);
+  check('and the local copy is removed once saved', (await page.evaluate((k) => localStorage.getItem(k), copyKey)) === null);
+  // a copy that equals the server text is just dropped
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [copyKey, JSON.stringify({ content: n3.content, base: hashText('x'), at: Date.now() })]);
+  await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(800);
+  check('a copy the server already has is dropped without a prompt', (await page.evaluate((k) => localStorage.getItem(k), copyKey)) === null && dialogs === 0, 'dialogs ' + dialogs);
+
+  // 7f. a space changed in another window reaches this one (storage event), without loops
+  const page2 = await ctx.newPage(); await page2.route('**/api/**', handle);
+  await page2.goto(`${base}/notes`); await page2.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  const mark = reqs.length;
+  await page.evaluate(() => localStorage.setItem('peblo-space', 'team-y')); await wait(1500);
+  const after = reqs.slice(mark).filter((r) => r.path === '/notes' && r.method === 'GET');
+  check('a space change in another window reloads the lists in the space that was chosen', after.some((r) => r.space === 'team-y'), JSON.stringify(after.map((r) => r.space)));
+  const settled = reqs.length; await wait(1500);
+  check('and it does not loop', reqs.length - settled <= 2, 'extra requests: ' + (reqs.length - settled));
+  await page.evaluate(() => localStorage.removeItem('peblo-space')); await wait(500);
+  await page2.close();
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);
