@@ -13,6 +13,7 @@ export default function TagManager({ onClose, onChanged }) {
 
   const load = () => tagsAPI.list().then((r) => setTags((r.data.tags || []).filter((t) => t.name !== 'inbox' && t.name !== 'private'))).catch(() => setMsg('Could not load your tags.'));
   useEffect(() => { load(); }, []);
+  useEffect(() => { const k = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k); }, [onClose]); // Escape closes even when focus is on the page
 
   const rename = async () => {
     const to = editing.to.trim().replace(/^#/, '').toLowerCase();

@@ -1,0 +1,34 @@
+/* Loading placeholders (mockups WsD03 to WsD05). The shimmer stops for people who ask for less motion. */
+.s-sk { display: block; max-width: 100%; background: var(--s-line, rgba(36, 31, 26, .1)); position: relative; overflow: hidden; }
+.s-sk::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent); animation: s-sk-slide 1.4s ease-in-out infinite; }
+@keyframes s-sk-slide { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .s-sk::after { animation: none; } }
+.s-sk-editor { display: flex; flex-direction: column; gap: 14px; padding: 6px 4px; min-width: 0; }
+.s-sk-title { margin: 0; font: 800 34px/1.1 var(--s-display, inherit); letter-spacing: -.03em; color: var(--s-fg); }
+.s-sk-chips { display: flex; gap: 8px; }
+.s-sk-lines { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.s-sk-rail { display: flex; flex-direction: column; gap: 12px; }
+.s-sk-card { border-radius: 28px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+.s-sk-notes { display: grid; grid-template-columns: 380px minmax(0, 1fr) 300px; gap: 16px; padding: 4px 0; width: 100%; }
+.s-sk-list { background: var(--s-surface, #fff); border-radius: 30px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.s-sk-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 22px; background: var(--s-item, rgba(36, 31, 26, .05)); }
+.s-sk-notes > .s-sk-editor { background: var(--s-surface, #fff); border-radius: 30px; padding: 26px 36px; }
+@media (max-width: 1100px) { .s-sk-notes { grid-template-columns: minmax(0, 1fr); } .s-sk-notes > .s-sk-list, .s-sk-notes > .s-sk-rail { display: none; } }
+/* what the editor shows for the first moments while the live copy connects */
+.block-editor-container { position: relative; }
+.s-sk-preview { position: absolute; left: 0; right: 0; top: 0; z-index: 3; pointer-events: none; background: var(--s-surface, var(--s-bg, #fff)); font-size: 16px; line-height: 1.6; color: var(--s-fg); padding: 6px 0 24px; min-height: 100%; overflow: hidden; word-break: break-word; }
+.s-sk-preview .h { font-weight: 800; margin-top: 10px; }
+.s-sk-preview .h1 { font-size: 28px; } .s-sk-preview .h2 { font-size: 22px; } .s-sk-preview .h3 { font-size: 18px; }
+.s-sk-preview .gap { height: 10px; }
+.s-sk-preview .li { display: flex; gap: 10px; }
+.s-sk-preview .li span { width: 16px; flex: none; }
+
+/* pictures in the first-paint preview: the picture itself, with a soft block until it arrives (never the Markdown text) */
+.s-sk-preview .pic { position: relative; margin: 8px 0; border-radius: 12px; overflow: hidden; min-height: 96px; background: var(--s-chip, rgba(128,128,128,.14)); }
+.s-sk-preview .pic.ok { min-height: 0; background: none; }
+.s-sk-preview .pic img { display: block; width: 100%; height: auto; opacity: 0; transition: opacity .18s ease; }
+.s-sk-preview .pic.ok img { opacity: 1; }
+.s-sk-preview .pic.wait::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.35) 50%, transparent 80%); animation: s-sk-sweep 1.2s linear infinite; }
+.s-sk-preview .pic.bad { display: flex; align-items: center; padding: 0 14px; font-size: 13px; font-weight: 700; color: var(--s-fg-2, inherit); min-height: 44px; }
+@keyframes s-sk-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .s-sk-preview .pic.wait::after { animation: none; } }

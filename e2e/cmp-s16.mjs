@@ -1,0 +1,17 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: 'Three themes.\n\n## 1. What we heard\n\nClients praise the team.', tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
+const mk = async (w, h) => { const c = await ctx.browser().newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true }); await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); } catch {} }); return c.newPage(); };
+let g = await mk(390, 844);
+await g.goto(`${base}/s/note/${tok}`);
+await g.locator('[data-testid="join-card"]').waitFor({ timeout: 20000 });
+await g.locator('[data-testid="join-card"]').getByLabel('Your name').fill('Tejas');
+await g.waitForTimeout(600);
+await g.screenshot({ path: 'D:/Peblo/_shots/real-S16-join.png' });
+g = await mk(390, 844);
+await g.route('**/api/public/note/**', (r) => r.fulfill({ status: 404, contentType: 'application/json', body: '{}' }));
+await g.goto(`${base}/s/note/${tok}`);
+await g.waitForTimeout(2500);
+await g.screenshot({ path: 'D:/Peblo/_shots/real-S16-expired.png' });
+await finish();

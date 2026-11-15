@@ -43,9 +43,7 @@ try {
   check('owner sees Aarav\'s selection start and end with a word count', own.start === 'Aarav' && /Aarav · End · 9 words/.test(own.end) && own.rects >= 1, JSON.stringify(own));
   await page.screenshot({ path: `${SHOTS}/range-owner.png` });
 
-  // the owner's Outline card shows who is in which section
-  await page.waitForFunction(() => document.querySelector('[data-testid="outline-pips"] i'), null, { timeout: 15000 });
-  check('owner Outline card marks the section Aarav is in', /Aarav is here/.test(await page.evaluate(() => document.querySelector('[data-testid="outline-pips"] i').title)));
+  // (the notes side rail no longer has an Outline card; section dots now show only in full screen, covered by the focus-mode test)
 
   // flags fade when nobody moves, and come back (with the exact words) when you point at the selection
   await page.waitForFunction(() => document.querySelector('.pb-peer-end.quiet'), null, { timeout: 12000 });

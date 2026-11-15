@@ -19,12 +19,15 @@ router.get('/', async (req, res, next) => {
     const userId = req.user!.id;
     const tags = await prisma.tag.findMany({
       where: { userId },
-      select: { name: true, notes: { select: { note: { select: { isDeleted: true } } } } },
+      select: { name: true, notes: { select: { noteId: true, note: { select: { isDeleted: true } } } } },
     });
+    // An access token (an AI client over MCP) does not learn about #private notes, not even through the counts
+    const hidden = new Set<string>();
+    if (req.user!.viaToken) for (const t of tags) if (t.name === 'private') t.notes.forEach((n) => hidden.add(n.noteId));
     const todos = await prisma.todo.findMany({ where: { userId }, select: { todoTags: true } });
     const todoCount = new Map<string, number>();
     for (const t of todos) for (const n of new Set(tagList(t.todoTags))) todoCount.set(n, (todoCount.get(n) || 0) + 1);
-    const out = tags.map((t) => ({ name: t.name, notes: t.notes.filter((x) => !x.note.isDeleted).length, todos: todoCount.get(t.name) || 0 }));
+    const out = tags.filter((t) => !(req.user!.viaToken && t.name === 'private')).map((t) => ({ name: t.name, notes: t.notes.filter((x) => !x.note.isDeleted && !hidden.has(x.noteId)).length, todos: todoCount.get(t.name) || 0 }));
     for (const [name, n] of todoCount) if (!out.some((o) => o.name === name)) out.push({ name, notes: 0, todos: n });
     res.json({ tags: out.sort((a, b) => a.name.localeCompare(b.name)) });
   } catch (error) {

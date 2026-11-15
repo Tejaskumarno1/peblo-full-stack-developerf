@@ -13,7 +13,7 @@ try {
   check('avatar opens the Settings page', page.url().endsWith('/settings/profile'), page.url());
 
   const navNames = await page.locator('.s-set-link').allInnerTexts();
-  check('seven groups of sections in the menu', navNames.length === 11 && (await page.locator('.s-set-group').count()) === 7, navNames.join('|'));
+  check('seven groups of sections in the menu (Organizations sits under You)', navNames.length === 13 && (await page.locator('.s-set-group').count()) === 7, navNames.join('|'));
 
   // search
   await page.getByLabel('Find a setting').fill('dark');
@@ -32,7 +32,7 @@ try {
 
   // profile name saves on blur
   await page.goto(base + '/settings/profile');
-  const name = page.getByLabel('Name', { exact: true });
+  const name = page.getByLabel('Display name', { exact: true });
   await name.fill('Renamed Person');
   await name.blur();
   await page.getByText('Saved', { exact: false }).first().waitFor({ timeout: 5000 }).catch(() => {});

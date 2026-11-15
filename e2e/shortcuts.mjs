@@ -4,7 +4,7 @@ try {
   await api('POST', '/api/notes', { title: 'Shortcut note', content: 'x' });
   await page.goto(base + '/notes');
   await page.locator('.nl-row', { hasText: 'Shortcut note' }).first().waitFor({ timeout: 15000 });
-  const palette = page.getByPlaceholder('Search notes or type a command...');
+  const palette = page.getByPlaceholder('Search notes and tasks, or type a command...');
 
   // PEB-78: Ctrl+K opens the command palette on the Notes screen
   await page.keyboard.press('Control+k');

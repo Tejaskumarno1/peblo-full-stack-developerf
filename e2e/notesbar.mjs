@@ -30,6 +30,7 @@ try {
   // link-a-task card
   await page.goto(base + `/notes/${a.id}`);
   await page.locator('#s-note-title').waitFor();
+  await page.locator('.s-side-card.rl-tasks.min').click().catch(() => {}); // an empty Linked tasks card starts collapsed
   await page.getByRole('button', { name: 'Link existing' }).click();
   const card = page.getByRole('dialog', { name: 'Link a task' });
   check('the link card has its own title', await card.isVisible() && /Link a task/.test(await card.textContent()));
@@ -43,8 +44,8 @@ try {
   await page.getByRole('button', { name: /Full screen/ }).click();
   await page.waitForTimeout(400);
   check('full screen hides the notes list and side rail', !(await page.locator('.s-notes-list').isVisible()) && !(await page.locator('.s-note-side').isVisible()));
-  const outline = await page.locator('.s-focus-outline button').allTextContents();
-  check('full screen shows the outline', outline.includes('Intro') && outline.includes('Part two'), outline.join('|'));
+  const outline = await page.locator('[data-testid="fs-outline"] button').allTextContents();
+  check('full screen shows the outline', outline.some((x) => x.startsWith('Intro')) && outline.some((x) => x.startsWith('Part two')), outline.join('|'));
   await page.screenshot({ path: 'C:/Users/tejas/peblo-e2e/focus.png' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);

@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const f = 'client/src/soft/SoftTasks.jsx';
+let s = fs.readFileSync(f, 'utf8');
+const crlf = s.includes('\r\n');
+s = s.replace(/\r\n/g, '\n');
+const rep = (a, b) => { if (!s.includes(a)) throw new Error('missing: ' + a.slice(0, 60)); s = s.replace(a, () => b); };
+rep("const d = t.deadline ? new Date(t.deadline) : null;\n  if (r === 'daily')", "const d = t._ref || t.deadline ? new Date(t._ref || t.deadline) : null; // _ref: a later occurrence, so moving one date does not rename the rule\n  if (r === 'daily')");
+rep("{ ...t, _later: open.get(t.seriesId).length - 1 }", "{ ...t, _later: open.get(t.seriesId).length - 1, _ref: open.get(t.seriesId).at(-1).deadline }");
+if (crlf) s = s.replace(/\n/g, '\r\n');
+fs.writeFileSync(f, s);
+console.log('ok');

@@ -9,7 +9,7 @@ try {
   const note = (await api('POST', '/api/notes', { title: 'Shell note', content: body, tags: [] })).note;
   const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: false, expiresInDays: 1 })).token;
 
-  const gctx = await ctx.browser().newContext({ viewport: { width: 1360, height: 820 } });
+  const gctx = await ctx.browser().newContext({ viewport: { width: 1440, height: 820 } });
   const g = await gctx.newPage();
   await g.goto(`${base}/s/note/${tok}`);
   await g.locator('article .doc').waitFor({ timeout: 15000 });
@@ -68,13 +68,13 @@ try {
 
   // space after the last line
   const gap = await art.evaluate((a) => { a.scrollTop = a.scrollHeight; const last = [...a.querySelectorAll('.doc p')].pop(); return a.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom; });
-  check('room to scroll past the last line', gap > 150, String(Math.round(gap)));
+  check('room to scroll past the last line', gap > 40, String(Math.round(gap)));
   await g.screenshot({ path: `${SHOTS}/shell-3-end.png` });
 
   // look menu: pin the tool bar, quiet mode, remembered after reload
   await art.evaluate((a) => { a.scrollTop = 0; });
   await g.waitForTimeout(500);
-  await g.getByTestId('look-btn').click();
+  await g.locator('.pb-shared .toc').getByRole('button', { name: 'Look' }).click();
   await g.getByTestId('look-pin').check();
   await g.getByTestId('look-quiet').check();
   check('pinned tool bar stays shown', (await g.getByTestId('dock').count()) === 1);

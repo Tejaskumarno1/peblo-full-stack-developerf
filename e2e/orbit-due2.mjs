@@ -109,9 +109,9 @@ try {
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const pad = (n) => String(n).padStart(2, '0');
   const tKey = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
-  const dayEl = page.locator(`.o-week-day[data-day="${tKey}"]`);
+  const dayEl = page.locator(`.tg-day[data-day="${tKey}"]`); // the drop target is the day header (the column is 24 hours tall)
   if (await dayEl.count()) {
-    await page.locator('.o-week-item', { hasText: 'Due today Y renamed' }).first().dragTo(dayEl);
+    await page.locator('.tg-ev, .tg-chip', { hasText: 'Due today Y renamed' }).first().dragTo(dayEl);
     await page.waitForTimeout(1000);
     check('dragging a task to another day moves it', new Date((await byText('Due today Y renamed')).deadline).getDate() === tomorrow.getDate());
   } else {

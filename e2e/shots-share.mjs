@@ -20,7 +20,6 @@ const g = await (await ctx.browser().newContext({ viewport: { width: 1366, heigh
 await g.goto(`${base}/s/note/${tok}`); await ready(g);
 await g.screenshot({ path: OUT + 'orig-share-welcome.png' });
 await g.getByLabel('Your name').fill('Aarav'); await g.getByLabel('Your name').press('Enter');
-await g.locator('[data-testid="guest-color"]').nth(5).click();
 const b = await g.locator('.bn-editor .bn-block-content', { hasText: 'Normalization removes' }).first().boundingBox();
 await g.mouse.move(b.x + 120, b.y + 12); await g.mouse.move(b.x + 200, b.y + 14);
 await page.mouse.move(500, 300); await wait(1500);

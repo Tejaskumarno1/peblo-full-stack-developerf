@@ -58,6 +58,7 @@ try {
   check('reactions are on the phone', await until(async () => (await react.count()) === 1));
   const rb = await react.boundingBox();
   check('and big enough to tap', !!rb && rb.width >= 28 && rb.height >= 28, JSON.stringify(rb));
+  await until(async () => (await ph.locator('.cp-toast').count()) === 0, 9000); // a transient 'joined' notice may pass over the corner for a few seconds
   const hit = await ph.evaluate(() => { const b = document.querySelector('[data-testid=react-up]'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return { r: [r.x, r.y, r.width, r.height].map(Math.round), top: e ? (e.closest('[data-testid]')?.getAttribute('data-testid') || e.tagName) : null, vis: getComputedStyle(b).visibility, vh: innerHeight }; });
   check('nothing covers the reaction button', hit.top === 'react-up', JSON.stringify(hit));
   await react.click({ timeout: 8000 });

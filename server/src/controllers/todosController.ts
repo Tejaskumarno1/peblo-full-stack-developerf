@@ -1,14 +1,23 @@
+import { syncDoneTag } from '../utils/doneTag.js';
+import { notifyUsers, nameOf } from '../services/notify.js';
 import { Request, Response, NextFunction } from 'express';
+import { seeable } from '../utils/noteAccess.js';
+import { noteScope } from '../utils/scope.js';
+import { spaceMembers } from '../utils/access.js';
 import prisma from '../db.js';
-import { tzOf, dayBounds, dayBoundsOf } from '../utils/userTime.js';
-import { RECURRENCES, isRepeating, topUpSeries } from '../services/todoSeries.js';
+import { tzOf, dayBounds, dayBoundsOf, zoneParts, zonedTime } from '../utils/userTime.js';
+import { isValidRecurrence, isRepeating, topUpSeries } from '../services/todoSeries.js';
 import { cleanTodoMeta } from '../utils/meta.js';
+import { taskVisible, assigneesOf, moveToColumn, columnOf, COLUMN_KEY } from '../utils/taskAccess.js';
+import { logActivity } from './teamTalk.js';
 
 export async function getTodos(req: Request, res: Response, next: NextFunction) {
   try {
+    const own = await noteScope(req, res, 'read', { tasks: true });
+    if (!own) return;
     const { date, from, to, priority, completed, noteId, limit } = req.query;
     await topUpSeries(req.user!.id); // repeating tasks never run out
-    const where: any = { userId: req.user!.id };
+    const where: any = { ...own };
     if (typeof noteId === 'string' && noteId) where.noteId = noteId;
 
     // Filter by single date
@@ -55,7 +64,11 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
       ],
       take: Math.min(Math.max(parseInt(String(limit), 10) || 1000, 1), 2000), // paging cap: open tasks come first, old finished ones are what gets cut
     });
-    res.json({ todos });
+    // Tasks that Claude or a guest only proposed wait in the approval inbox: ?proposals=only shows just those, ?proposals=all both.
+    const prop = (t: any) => !!(t.meta as any)?.proposal;
+    const mode = String(req.query.proposals || '');
+    const seen = todos.filter((t) => taskVisible(t as any, req.user!.id));
+    res.json({ todos: mode === 'only' ? seen.filter(prop) : mode === 'all' ? seen : seen.filter((t) => !prop(t)) });
   } catch (error) {
     next(error);
   }
@@ -79,6 +92,8 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
       orderBy: { deadline: 'asc' },
       take: 1000,
     }) as any[];
+    const allTasksAll = allTasks;
+    allTasks.splice(0, allTasks.length, ...allTasksAll.filter((t) => !(t.meta as any)?.proposal));
 
     const todayStartDate = new Date(todayStart);
     const todayEndDate = new Date(todayEnd);
@@ -108,6 +123,8 @@ export async function getTodayTodos(req: Request, res: Response, next: NextFunct
 // GET /todos/range?from=...&to=... — Tasks in a date range (for Calendar)
 export async function getTodosRange(req: Request, res: Response, next: NextFunction) {
   try {
+    const own = await noteScope(req, res, 'read', { tasks: true });
+    if (!own) return;
     const { from, to } = req.query;
     if (!from || !to) {
       return res.status(400).json({ error: 'from and to query params are required' });
@@ -118,7 +135,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
 
     const todos = await prisma.todo.findMany({
       where: {
-        userId: req.user!.id,
+        ...own,
         deadline: { gte: rf, lte: rt }
       },
       include: { note: { select: { id: true, title: true } } },
@@ -126,7 +143,7 @@ export async function getTodosRange(req: Request, res: Response, next: NextFunct
       take: 2000,
     });
 
-    res.json({ todos });
+    res.json({ todos: todos.filter((t) => !(t.meta as any)?.proposal && taskVisible(t as any, req.user!.id)) });
   } catch (error) {
     next(error);
   }
@@ -138,6 +155,8 @@ const scopeOf = (v: unknown) => (typeof v === 'string' && SCOPES.includes(v) ? v
 
 export async function createTodo(req: Request, res: Response, next: NextFunction) {
   try {
+    const own = await noteScope(req, res, 'write', { tasks: true });
+    if (!own) return;
     const { text, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     if (typeof text !== 'string' || text.trim() === '') {
       return res.status(400).json({ error: 'Text is required' });
@@ -146,11 +165,11 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const validPriorities = ['high', 'medium', 'low'];
     const safePriority = validPriorities.includes(priority) ? priority : 'medium';
-    const safeRecurrence = (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : 'none';
+    const safeRecurrence = 'spaceId' in own ? 'none' : (isValidRecurrence(recurrence) ? recurrence : 'none'); // repeating tasks stay Personal for now
 
     if (noteId) {
       const note = await prisma.note.findFirst({
-        where: { id: noteId as string, userId: req.user!.id }
+        where: { id: noteId as string, ...own, ...(await seeable(req.user!.id, own)) }
       });
       if (!note) {
         return res.status(400).json({ error: 'Invalid note ID' });
@@ -163,8 +182,32 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
     const base = {
       text: text.trim(), priority: safePriority, startTime: startTime || null, endTime: endTime || null,
       recurrence: safeRecurrence, todoTags: cleanTags, noteId: noteId || null, userId,
+      ...('spaceId' in own ? { spaceId: own.spaceId } : {}),
     } as any;
-    const cleanMeta = cleanTodoMeta(meta);
+    if ('spaceId' in own && typeof req.body.assigneeId === 'string' && req.body.assigneeId) {
+      if (!(await spaceMembers(own.spaceId)).includes(req.body.assigneeId)) return res.status(400).json({ error: 'That person is not in this space.' });
+      base.assigneeId = req.body.assigneeId;
+    }
+    const cleanMeta: any = cleanTodoMeta(meta);
+    if ('spaceId' in own) {
+      const members = await spaceMembers(own.spaceId);
+      const wanted: string[] = Array.isArray(req.body.assignees) ? req.body.assignees.filter((x: any) => typeof x === 'string') : (Array.isArray(cleanMeta.assignees) ? cleanMeta.assignees : []);
+      if (wanted.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+      if (wanted.length) { cleanMeta.assignees = [...new Set(wanted)].slice(0, 10); base.assigneeId = cleanMeta.assignees[0]; } else delete cleanMeta.assignees;
+      if (Array.isArray(cleanMeta.viewers)) cleanMeta.viewers = cleanMeta.viewers.filter((v: string) => members.includes(v));
+      if (typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column)) {
+        const mv = moveToColumn(req.body.column, cleanMeta);
+        base.completed = mv.completed;
+        for (const k of Object.keys(cleanMeta)) delete cleanMeta[k];
+        Object.assign(cleanMeta, mv.meta);
+      }
+    }
+    // "Ask me before Claude adds tasks" (Plan my day): a task added through an access token / MCP waits in the approval inbox.
+    // Decided here, on the server, because an access token may not read account settings.
+    if (req.user!.viaToken && !(cleanMeta as any).proposal) {
+      const me = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+      if ((me?.settings as any)?.aiApproval === true) (cleanMeta as any).proposal = { by: 'Claude' };
+    }
     if (Object.keys(cleanMeta).length) base.meta = cleanMeta;
 
     let todo;
@@ -184,6 +227,11 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    await syncDoneTag((todo as any).noteId);
+    const allAssigned: string[] = ((cleanMeta as any).assignees as string[] | undefined) || (base.assigneeId ? [base.assigneeId] : []);
+    const extra = allAssigned.filter((a) => a !== userId && a !== base.assigneeId);
+    if (extra.length) await notifyUsers(req.app, extra, { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
+    if (base.assigneeId && base.assigneeId !== userId) await notifyUsers(req.app, [base.assigneeId], { kind: 'assigned', title: todo.text, from: await nameOf(userId), spaceId: base.spaceId, todoId: todo.id });
 
     res.status(201).json({ todo });
   } catch (error) {
@@ -193,16 +241,18 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
 
 export async function updateTodo(req: Request, res: Response, next: NextFunction) {
   try {
+    const own = await noteScope(req, res, 'write', { tasks: true });
+    if (!own) return;
     const { id } = req.params;
     const userId = req.user!.id;
     const { text, completed, priority, deadline, tags, noteId, startTime, endTime, recurrence, meta } = req.body;
     const scope = scopeOf(req.body.scope);
 
     const todo = await prisma.todo.findFirst({
-      where: { id: id as string, userId }
+      where: { id: id as string, ...own }
     });
 
-    if (!todo) {
+    if (!todo || !taskVisible(todo as any, userId)) {
       return res.status(404).json({ error: 'Todo not found' });
     }
 
@@ -220,6 +270,11 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     if (deadline !== undefined) {
       if (deadline && Number.isNaN(new Date(deadline).getTime())) return res.status(400).json({ error: 'Invalid date' });
       data.deadline = deadline ? new Date(deadline) : null;
+      // Pushing a task to a later day counts, so Plan my day can ask "still want it?" after three moves.
+      if (data.deadline && todo.deadline && data.deadline.getTime() - todo.deadline.getTime() > 12 * 3600e3 && !(meta && typeof meta === 'object' && 'moves' in meta)) {
+        const cur = ((data.meta ?? todo.meta) || {}) as any;
+        data.meta = { ...cur, moves: Math.min(99, (Number(cur.moves) || 0) + 1) };
+      }
     }
     if (startTime !== undefined) data.startTime = startTime || null;
     if (endTime !== undefined) data.endTime = endTime || null;
@@ -227,7 +282,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     if (noteId !== undefined) {
       if (noteId) {
         const note = await prisma.note.findFirst({
-          where: { id: noteId as string, userId }
+          where: { id: noteId as string, ...own, ...(await seeable(req.user!.id, own)) }
         });
         if (!note) {
           return res.status(400).json({ error: 'Invalid note ID' });
@@ -237,7 +292,7 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
     }
 
     // Changing "repeat" ends the old series after this task and starts a new one from it (or none).
-    const newRule = recurrence !== undefined && (RECURRENCES as readonly string[]).includes(recurrence) ? recurrence : undefined;
+    const newRule = recurrence !== undefined && isValidRecurrence(recurrence) ? recurrence : undefined;
     const ruleChanged = newRule !== undefined && newRule !== (todo.recurrence || 'none');
     let startSeries = false;
     if (ruleChanged) {
@@ -250,11 +305,60 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       startSeries = isRepeating(newRule) && !!(data.deadline ?? todo.deadline);
     }
 
+    if ('spaceId' in own && req.body.assigneeId !== undefined) {
+      const a = req.body.assigneeId;
+      if (a && !(await spaceMembers(own.spaceId)).includes(a)) return res.status(400).json({ error: 'That person is not in this space.' });
+      (data as any).assigneeId = a || null;
+    }
+    if ('spaceId' in own && Array.isArray(req.body.assignees)) {
+      const members = await spaceMembers(own.spaceId);
+      const list = [...new Set(req.body.assignees.filter((x: any) => typeof x === 'string'))] as string[];
+      if (list.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+      const m: any = { ...(((data.meta ?? todo.meta) || {}) as any) };
+      if (list.length) m.assignees = list.slice(0, 10); else delete m.assignees;
+      data.meta = m; data.assigneeId = list[0] || null;
+    }
+    if ('spaceId' in own && data.meta && Array.isArray((data.meta as any).viewers)) {
+      const members = await spaceMembers(own.spaceId);
+      (data.meta as any).viewers = (data.meta as any).viewers.filter((v: string) => members.includes(v));
+    }
+    {
+      // board columns: Done is the completed flag, In progress and In review are meta.status; the two stay in step
+      const m: any = { ...(((data.meta ?? todo.meta) || {}) as any) };
+      const col = typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column) ? req.body.column : null;
+      if (col) { const mv = moveToColumn(col, m); data.completed = mv.completed; data.meta = mv.meta; }
+      else if (data.completed === true && m.status) { delete m.status; data.meta = m; }
+      else if (data.completed === undefined && (data.meta as any)?.status && todo.completed) data.completed = false;
+    }
+    const newAssignee: string | null = 'spaceId' in own && typeof req.body.assigneeId === 'string' && req.body.assigneeId ? req.body.assigneeId : null;
     const updatedTodo = await prisma.todo.update({
-      where: { id: id as string },
+      where: { id: id as string, spaceId: todo.spaceId },
       data,
       include: { note: { select: { id: true, title: true } } }
     });
+
+    if (newAssignee && newAssignee !== userId && newAssignee !== (todo as any).assigneeId) await notifyUsers(req.app, [newAssignee], { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
+
+    {
+      const before = assigneesOf(todo as any); const after = assigneesOf(updatedTodo as any);
+      const added = after.filter((a) => !before.includes(a) && a !== userId && a !== newAssignee);
+      if (added.length) await notifyUsers(req.app, added, { kind: 'assigned', title: updatedTodo.text, from: await nameOf(userId), spaceId: (todo as any).spaceId, todoId: updatedTodo.id });
+    }
+
+    if ((todo as any).spaceId) {
+      try {
+        const sp = (todo as any).spaceId as string;
+        const colBefore = columnOf(todo as any); const colAfter = columnOf(updatedTodo as any);
+        if (colBefore !== colAfter) {
+          await logActivity(updatedTodo.id, sp, userId, colAfter === 'done' ? 'done' : 'status', colAfter);
+          const w: string[] = Array.isArray((updatedTodo.meta as any)?.watchers) ? (updatedTodo.meta as any).watchers : [];
+          const others = [...new Set([todo.userId, ...w])].filter((u) => u !== userId);
+          if (others.length) await notifyUsers(req.app, others, { kind: colAfter === 'done' ? 'done' : 'status', title: updatedTodo.text, body: colAfter === 'done' ? 'Marked done' : colAfter === 'doing' ? 'Now in progress' : colAfter === 'review' ? 'Now in review' : colAfter === 'todo' ? 'Back to To do' : 'Moved to another column', from: await nameOf(userId), spaceId: sp, todoId: updatedTodo.id });
+        }
+        const aBefore = assigneesOf(todo as any); const aAfter = assigneesOf(updatedTodo as any);
+        if (aAfter.some((a) => !aBefore.includes(a))) await logActivity(updatedTodo.id, sp, userId, 'assign', aAfter.join(','));
+      } catch { /* activity is best effort */ }
+    }
 
     if (startSeries && updatedTodo.deadline) {
       const series = await prisma.todoSeries.create({
@@ -280,8 +384,20 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
       }
     }
 
+    // "Repeat from the date I finish it": finishing moves the next date to one period after today, not after the old due date.
+    if (data.completed === true && !todo.completed && todo.seriesId && (todo.meta as any)?.repeatFromDone && todo.deadline) {
+      const tz = tzOf(req);
+      const old = zoneParts(todo.deadline, tz);
+      const now = zoneParts(new Date(), tz);
+      const anchor = zonedTime(now.y, now.m, now.d, old.h, old.mi, old.s, 0, tz);
+      await prisma.todo.deleteMany({ where: { seriesId: todo.seriesId, id: { not: todo.id }, completed: false, deadline: { gt: todo.deadline } } });
+      await prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { anchor, lastGenerated: anchor } });
+      await topUpSeries(userId, todo.seriesId);
+    }
+
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    for (const n of new Set([updatedTodo.noteId, todo.noteId])) await syncDoneTag(n);
 
     res.json({ todo: updatedTodo });
   } catch (error) {
@@ -291,15 +407,17 @@ export async function updateTodo(req: Request, res: Response, next: NextFunction
 
 export async function deleteTodo(req: Request, res: Response, next: NextFunction) {
   try {
+    const own = await noteScope(req, res, 'write', { tasks: true });
+    if (!own) return;
     const { id } = req.params;
     const userId = req.user!.id;
     const scope = scopeOf(req.query.scope);
 
     const todo = await prisma.todo.findFirst({
-      where: { id: id as string, userId }
+      where: { id: id as string, ...own }
     });
 
-    if (!todo) {
+    if (!todo || !taskVisible(todo as any, userId)) {
       return res.status(404).json({ error: 'Todo not found' });
     }
 
@@ -315,14 +433,50 @@ export async function deleteTodo(req: Request, res: Response, next: NextFunction
         prisma.todoSeries.update({ where: { id: todo.seriesId }, data: { endedAt: new Date() } }),
       ]);
     } else {
-      await prisma.todo.delete({ where: { id: id as string } });
+      await prisma.todo.delete({ where: { id: id as string, spaceId: todo.spaceId } });
     }
 
     const io = req.app.get('io');
     if (io) io.to(userId).emit('todos_changed');
+    await syncDoneTag(todo.noteId);
 
     res.json({ success: true });
   } catch (error) {
     next(error);
   }
+}
+
+/** POST /todos/bulk { ids, set: { column?, assignees?, priority?, label?, visibility? } }: the same change for many tasks of the open space. */
+export async function bulkTodos(req: Request, res: Response, next: NextFunction) {
+  try {
+    const own = await noteScope(req, res, 'write', { tasks: true });
+    if (!own) return;
+    const userId = req.user!.id;
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: unknown) => typeof x === 'string').slice(0, 200) : [];
+    const set = (req.body?.set && typeof req.body.set === 'object') ? req.body.set : {};
+    if (!ids.length) return res.status(400).json({ error: 'Choose some tasks.' });
+    const members = 'spaceId' in own ? await spaceMembers(own.spaceId) : [];
+    const list: string[] | null = Array.isArray(set.assignees) ? [...new Set(set.assignees.filter((x: unknown) => typeof x === 'string'))] as string[] : null;
+    if (list && list.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
+    const todos = await prisma.todo.findMany({ where: { id: { in: ids }, ...own } });
+    let changed = 0; const newly: Record<string, any> = {};
+    for (const t of todos) {
+      if (!taskVisible(t as any, userId)) continue;
+      const data: any = {}; let m: any = { ...((t.meta as any) || {}) };
+      if (typeof set.column === 'string' && COLUMN_KEY.test(set.column)) { const mv = moveToColumn(set.column, m); data.completed = mv.completed; m = mv.meta; }
+      if (list) { if (list.length) m.assignees = list.slice(0, 10); else delete m.assignees; data.assigneeId = list[0] || null; }
+      if (['low', 'medium', 'high'].includes(set.priority)) data.priority = set.priority;
+      if (set.visibility === 'me' || set.visibility === 'people' || set.visibility === 'team') { if (set.visibility === 'team') { delete m.visibility; delete m.viewers; } else m.visibility = set.visibility; }
+      if (typeof set.label === 'string' || set.label === null) m = cleanTodoMeta({ label: set.label }, m);
+      data.meta = m;
+      const u = await prisma.todo.update({ where: { id: t.id, spaceId: t.spaceId }, data });
+      changed++;
+      if (list) { const added = assigneesOf(u as any).filter((a) => !assigneesOf(t as any).includes(a) && a !== userId); if (added.length) await notifyUsers(req.app, added, { kind: 'assigned', title: u.text, from: await nameOf(userId), spaceId: (t as any).spaceId, todoId: u.id }); }
+      newly[t.id] = u.noteId;
+    }
+    for (const n of new Set(Object.values(newly))) await syncDoneTag(n as string | null);
+    const io = req.app.get('io');
+    if (io) io.to(userId).emit('todos_changed');
+    res.json({ ok: true, changed });
+  } catch (error) { next(error); }
 }

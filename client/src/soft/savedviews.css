@@ -1,0 +1,35 @@
+.soft .s-views { position: relative; display: flex; flex-direction: column; gap: 8px; margin: 2px 0 6px; }
+.soft .s-views-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.soft .s-vchip { height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s-chip-solid, var(--s-surface)); color: var(--s-fg2); font: 600 13px var(--s-body); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.soft .s-vchip:hover { color: var(--s-fg); }
+.soft .s-vchip.on { background: var(--s-accent); color: var(--s-on-accent); }
+.soft .s-vchip.ghost { background: transparent; border: 1px dashed var(--s-dash, var(--s-line)); }
+.soft .s-vchip:focus-visible, .soft .s-vmore:focus-visible, .soft .s-vpop button:focus-visible, .soft .s-vmenu button:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+.soft .s-vactive { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 18px; background: var(--s-lilac); }
+.soft .s-vinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.soft .s-vinfo b { color: var(--s-fg); font-size: 14px; }
+.soft .s-vinfo span { color: var(--s-fg2); font-size: 12px; }
+.soft .s-vinfo input { height: 32px; border-radius: 999px; border: 0; padding: 0 12px; background: var(--s-surface); color: var(--s-fg); caret-color: var(--s-accent); font: 600 14px var(--s-body); outline: 2px solid var(--s-accent); }
+.soft .s-vupd { height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--s-surface); color: var(--s-fg); font: 600 12px var(--s-body); cursor: pointer; }
+.soft .s-vmore { width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--s-fg2); cursor: pointer; display: grid; place-items: center; }
+.soft .s-vmore:hover { background: var(--s-surface); }
+.soft .s-vmenu { position: absolute; right: 8px; top: 48px; z-index: 30; min-width: 220px; padding: 8px; border-radius: 20px; background: var(--s-surface); box-shadow: var(--s-card-shadow); display: flex; flex-direction: column; gap: 2px; }
+.soft .s-vmenu button { height: 38px; border: 0; border-radius: 14px; padding: 0 12px; background: transparent; color: var(--s-fg); text-align: left; font: 500 13px var(--s-body); cursor: pointer; }
+.soft .s-vmenu button:hover:not(:disabled) { background: var(--s-bg); }
+.soft .s-vmenu button:disabled { color: var(--s-fg3); cursor: default; }
+.soft .s-vmenu .danger, .soft .s-vconfirm .danger { color: #B3261E; }
+.soft .s-vpop, .soft .s-vconfirm { max-width: 360px; padding: 18px; border-radius: 26px; background: var(--s-surface); box-shadow: var(--s-card-shadow); display: flex; flex-direction: column; gap: 8px; color: var(--s-fg); }
+.soft .s-vpop p, .soft .s-vconfirm p { margin: 0; color: var(--s-fg2); font-size: 13px; }
+.soft .s-vpop label, .soft .s-vcap { font: 700 11px var(--s-body); letter-spacing: .06em; text-transform: uppercase; color: var(--s-fg3); }
+.soft .s-vpop input { height: 44px; border: 0; border-radius: 999px; padding: 0 16px; background: var(--s-bg); color: var(--s-fg); caret-color: var(--s-accent); font: 500 14px var(--s-body); }
+.soft .s-vpop input:focus { outline: 2px solid var(--s-accent); }
+.soft .s-vtags { display: flex; flex-wrap: wrap; gap: 6px; }
+.soft .s-vtags span { padding: 4px 10px; border-radius: 999px; background: var(--s-bg); color: var(--s-fg2); font-size: 12px; font-weight: 600; }
+.soft .s-vbtns { display: flex; gap: 8px; }
+.soft .s-vbtns button { height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--s-bg); color: var(--s-fg); font: 600 13px var(--s-body); cursor: pointer; }
+.soft .s-vbtns .pri { background: var(--s-accent); color: var(--s-on-accent); }
+.soft .s-vconfirm { background: color-mix(in srgb, #B3261E 10%, var(--s-surface)); }
+.soft .s-vempty { margin: 0; color: var(--s-fg3); font-size: 12.5px; }
+.soft .s-vdesc { display: flex; flex-wrap: wrap; }
+.soft .s-vdesc i { font-style: normal; }
+.soft .s-vdesc i + i::before { content: '\00b7'; margin: 0 6px; }

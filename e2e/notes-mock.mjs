@@ -30,7 +30,7 @@ const notes = [
   mk('Biology revision', 'Cell structure', {}),
   mk('', '# Plan for Monday\nbuy milk', {}),
 ];
-const user = { id: 'u1', email: 'tester@peblo.test', name: 'Tester', settings: { uiStyle: 'soft', noteFolders: [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }] } };
+const user = { id: 'u1', email: 'tester@peblo.test', name: 'Tester', settings: { uiStyle: 'soft', noteLayout: 'classic', noteFolders: [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }] } };
 const reqs = [];
 let failPatches = 0;
 
@@ -45,6 +45,7 @@ async function handle(route) {
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
+  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: [], invites: [] });
   if (p === '/notes' && method === 'GET') {
     const q = Object.fromEntries(url.searchParams);
     let list = notes.filter((n) => (q.deleted ? n.isDeleted : !n.isDeleted) && (q.archived ? n.isArchived : !n.isArchived));
@@ -107,8 +108,9 @@ try {
   check('the tab strip stays so + still works', await page.locator('[data-testid="tab-new"]').isVisible());
 
   // 2. a folder: bar, new note lands in it
-  await page.locator('.np-chip', { hasText: 'Project Alpha' }).first().click(); await wait(500);
-  check('opening a folder shows the folder bar', await page.locator('[data-testid="folder-bar"]').isVisible());
+  await page.locator('.np-chip.fold').first().click(); await wait(400);
+  await page.locator('.np-card', { hasText: 'Project Alpha' }).first().click(); await wait(500);
+  check('opening a folder shows the folder header with New note', await page.locator('.np-fhead [data-testid="folder-new-note"]').isVisible());
   check('the folder lists only its own notes', (await page.locator('.s-note-row').count()) === 2, await page.locator('.s-note-row').count());
   await page.screenshot({ path: 'e2e/notes-mock-folder.png' });
   await page.locator('[data-testid="folder-new-note"]').click(); await wait(500);
@@ -122,11 +124,13 @@ try {
   check('the open note shows its folder', (await page.locator('.s-crumb').innerText()).includes('Project Alpha'));
 
   // 3. empty folder gets a New note button
-  await page.locator('.np-chip', { hasText: 'Ideas' }).first().click(); await wait(500);
+  await page.getByRole('button', { name: 'Back to folders' }).click(); await wait(400);
+  await page.locator('.np-card', { hasText: 'Ideas' }).first().click(); await wait(500);
   check('an empty folder offers "New note in Ideas"', (await page.locator('[data-testid="empty-new-note"]').innerText()).includes('Ideas'));
 
   // 4. the "..." menu works on a new note
-  await page.locator('.np-chip', { hasText: 'All' }).first().click(); await wait(300);
+  await page.getByRole('button', { name: 'Show all notes' }).click(); await wait(300);
+  if (!(await page.locator('[data-testid="tab-new"]').count())) throw new Error('tab strip missing after leaving the folder');
   await page.locator('[data-testid="tab-new"]').click(); await wait(500);
   await page.getByRole('button', { name: 'More' }).click(); await wait(300);
   check('the menu opens on a new unsaved note', await page.locator('.s-menu').getByText('Move to folder').isVisible());
@@ -158,9 +162,10 @@ try {
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);
-  check('going offline shows a banner', await page.locator('[data-testid="offline-banner"]').isVisible());
+  check('going offline shows the offline bar', await page.locator('[data-testid="offline-bar"]').isVisible());
   await ctx.setOffline(false); await wait(500);
-  check('coming back removes it', !(await page.locator('[data-testid="offline-banner"]').count()));
+  await wait(3500);
+  check('coming back clears the offline bar', !(await page.locator('[data-testid="offline-bar"]').count()));
 } catch (e) {
   failures++; console.log('FAIL  test crashed:', e.message.split('\n')[0]);
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));

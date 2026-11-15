@@ -69,11 +69,11 @@ try {
   check('moving a note to a folder saves it', meta.folder === 'Work', JSON.stringify(meta));
   await page.reload();
   await page.locator('.s-note-row').first().waitFor({ timeout: 12000 });
-  await page.getByRole('tab', { name: /^Work/ }).click(); // folder chips replaced the old filter selects
+  await page.getByRole('tab', { name: /^Folders/ }).click(); await page.locator('.np-card', { hasText: 'Work' }).first().click(); // folder cards replaced the folder chips
   await page.waitForTimeout(400);
   const rows = await page.locator('.s-note-row .t').allTextContents();
   check('the folder filter shows only that folder', rows.length === 1 && /Zebra/.test(rows[0]), rows.join('|'));
-  await page.getByRole('tab', { name: /^All/ }).click();
+  await page.getByRole('button', { name: 'Show all notes' }).click();
   await page.locator('.s-notes-foot').getByRole('button', { name: 'Pictures' }).click(); // the pictures gallery replaced the With pictures filter
   check('the pictures view shows only notes with pictures (none here)', await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByText(/No pictures yet/).waitFor({ timeout: 4000 }).then(() => true, () => false));
   await page.getByRole('dialog', { name: 'Pictures in your notes' }).getByRole('button', { name: 'Close' }).click();

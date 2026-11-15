@@ -427,7 +427,7 @@ Hints shown in UI: "New note (Ctrl+Alt+N)" tooltip (`NotesSidebar.jsx:85`, wrong
 
 ## Soft notes page: folders, tabs, saving (round: ISSUES-AND-FEATURES N1, N2, N8-N10, N15, N22, N23, N29)
 - **Folder membership** (`soft/folders.js` `inFolder`): a note with `meta.folder` belongs to that folder only. A folder's collecting tag (`def.tag`) pulls in only notes with no folder of their own. New folders no longer collect by tag unless "Also collect notes tagged #x" is switched on. Taking a note out of a folder (`moveTo('')` in `SoftNotes.jsx`) also removes any tag that would collect it again, and the toast names the removed tags.
-- **Open folder**: a folder bar (New note, New subfolder, Edit, Close) shows above the list; a note started while a folder is open is created with `meta.folder`. Archive / Trash clear the folder filter.
+- **Open folder**: the open-folder header (`np-fhead`: Back, title, **New note** `data-testid=folder-new-note`, Edit, Close) comes from the folder-cards UI; a note started while a folder is open is created with `meta.folder`. Archive / Trash clear the folder filter.
 - **Tabs** (`NoteTabs.jsx`): always mounted. Closing the last tab calls `onEmpty` (`closeDoc`), which clears the open note and sets `noAuto` so the list does not open one by itself. Tabs of notes missing from the notes list are dropped.
 - **Saving** (`hooks/index.js` `useAutoSave`): a failed save retries by itself after 5 s, 10 s, 20 s, then every 30 s while that note is open; the "Couldn't save" status has a Retry button. On `beforeunload` the 5th argument `unloadFn` (`saveNoteOnUnload` in `utils/noteSync.js`) sends the save with `fetch(..., { keepalive: true })`; bodies over about 55 KB fall back to the normal save.
 - **Drafts**: the "···" menu works on an unsaved note (folder, text size, page width, typewriter). A folder picked there is stored in the draft's `meta` and sent when the note is first created.
@@ -440,9 +440,13 @@ Hints shown in UI: "New note (Ctrl+Alt+N)" tooltip (`NotesSidebar.jsx:85`, wrong
 
 ### Soft notes page: tabs, offline, outline, dates, theme (round 3: N16-N18, N20, N21, N25, N26, N33, N36, N41, T1, T3, FT1, FT2)
 - **Tabs** (`NoteTabs.jsx`): stored per account (`peblo-note-tabs:<userId>`); the back / forward trail and the closed-tab list are kept in `sessionStorage` so a refresh keeps them. An unsaved note has its own "draft" tab. Tab menu adds "Close tabs to the right" and "Close all tabs"; Left/Right arrows move between tabs, Delete closes one.
-- **Offline**: a banner shows while `navigator.onLine` is false; autosave delay is 1 s.
+- **Offline**: the shell's `OfflineBar` (SoftShell) says so; the notes page has no banner of its own. Autosave delay is 1 s. An empty folder shows a "New note in <folder>" button (`data-testid=empty-new-note`).
 - **Outline** ignores `#` lines inside code fences. **Date groups**: Today, This week, then one group per month (with the year for earlier years).
 - **"···" menu** has separators. **Linked tasks** show 8, with "Show all N". The "Mentioned in" scan uses `useDeferredValue` for the title and must tolerate `doc === null`.
 - **Theme**: first run follows the system theme; the choice is saved on the account (`settings.theme`) and the account value wins on sign-in, like `uiStyle`.
 - **Toast** is drawn outside the "a note is open" branch, so messages (and Undo) show when no note is open.
 - **Tests**: `client/src/soft/folders.test.mjs` (folder rules) and `e2e/notes-mock.mjs` (real build in Chrome against a fake in-memory API, no database: tabs, folders, drafts, retry, trash + undo, offline). Run `npm run build:client` first.
+
+### Merge note (notes-ux-fixes + supabase)
+- Tabs are stored per account and per space: `peblo-note-tabs:<userId>[:<spaceId>]`; `MAX_TABS` (8) still applies. `NoteTabs` is mounted above the empty / denied / loading / note states, with `onEmpty` (`closeDoc`).
+- `e2e/notes-mock.mjs` fakes `/workspaces` (`{ me, orgs: [], invites: [] }`) and sets `noteLayout: 'classic'`; the default layout (`cards`) shows only 3 recent rows. Needs `playwright-core` (in `e2e/node_modules`) and `client/dist` built.

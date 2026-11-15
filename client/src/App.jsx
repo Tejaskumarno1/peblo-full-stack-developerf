@@ -1,15 +1,20 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth, getSavedAccounts } from './context/AuthContext';
 import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
 import HelpDialog from './components/HelpDialog';
+import TaskReminders from './components/TaskReminders';
+import { NotesSkeleton } from './soft/Skeletons';
 
 // Pages load on demand
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SharedPage = lazy(() => import('./pages/SharedPage'));
+const SharedList = lazy(() => import('./soft/SharedList'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const InvitePage = lazy(() => import('./pages/InvitePage'));
+const JoinPage = lazy(() => import('./pages/JoinPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const OAuthConsent = lazy(() => import('./pages/OAuthConsent'));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage'));
@@ -21,11 +26,18 @@ const QuickCapturePage = lazy(() => import('./pages/QuickCapturePage'));
 
 // Soft Studio has its own screens (only used when Settings > Style is Soft Studio)
 const SoftHome = lazy(() => import('./soft/SoftHome'));
-const SoftNotes = lazy(() => import('./soft/SoftNotes'));
+const SoftNotes = lazy(() => import('./soft/SoftNotesGate'));
 const SoftTasks = lazy(() => import('./soft/SoftTasks'));
+const SoftPlan = lazy(() => import('./soft/SoftPlan'));
+const SoftFocus = lazy(() => import('./soft/SoftFocus'));
 const SoftCalendar = lazy(() => import('./soft/SoftCalendar'));
+const SoftCalendarSync = lazy(() => import('./soft/SoftCalendarSync'));
 const SoftAI = lazy(() => import('./soft/SoftAI'));
 const SoftConnections = lazy(() => import('./soft/SoftConnections'));
+const SoftNotifications = lazy(() => import('./soft/SoftNotifications'));
+const TeamShared = lazy(() => import('./soft/TeamShared'));
+const TeamActivity = lazy(() => import('./soft/TeamActivity'));
+const TeamProjects = lazy(() => import('./soft/TeamProjects'));
 const SoftSettings = lazy(() => import('./soft/SoftSettings'));
 
 // River: one timeline. Tasks and Calendar are the river itself, at Day and Week zoom.
@@ -50,8 +62,14 @@ const GoHome = () => <Navigate to="/" replace />;
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const LiveEditors = lazy(() => import('./components/LiveEditors'));
 const NotificationPill = lazy(() => import('./components/NotificationPill'));
+const AppMenu = lazy(() => import('./components/AppMenu'));
 
 const Loader = () => <div className="page-loader"><div className="spinner" /></div>;
+/** While a page's code downloads: the Notes screen shows its own outline instead of a spinner. */
+function RouteLoader() {
+  const { pathname } = useLocation();
+  return pathname.startsWith('/notes') ? <NotesSkeleton /> : <Loader />;
+}
 
 /** Picks the screen for the current style (Soft, River or Orbit each have their own). */
 function Styled({ other: Other, ...byStyle }) {
@@ -76,6 +94,15 @@ function SettingsRoute() {
 /** Wait for the account to load, then show the app shell (or the sign-in screen when nobody is signed in). */
 function ShellLayout() {
   const { loading, user } = useAuth();
+  // Once signed in, fetch the Notes screen and its editor in the background so the first note opens without waiting for the download.
+  const signedIn = !!user;
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    const warm = () => { import('./soft/SoftNotesGate').catch(() => {}); };
+    const ric = window.requestIdleCallback;
+    if (ric) { const id = ric(warm, { timeout: 4000 }); return () => window.cancelIdleCallback?.(id); }
+    const t = setTimeout(warm, 1500); return () => clearTimeout(t);
+  }, [signedIn]);
   if (loading) return <Loader />;
   if (!user) return <AuthScreen />;
   // Several profiles on this computer: ask who is using Peblo, once each time it starts (like Chrome).
@@ -84,13 +111,15 @@ function ShellLayout() {
   } catch { /* storage blocked */ }
   return (
     <AppShell>
-      <Suspense fallback={<Loader />}><Outlet /></Suspense>
+      <Suspense fallback={<RouteLoader />}><Outlet /></Suspense>
       <Suspense fallback={null}>
         <SeriesScopeDialog />
         <CommandPalette />
         <HelpDialog />
         <LiveEditors />
         <NotificationPill />
+        <TaskReminders />
+        <AppMenu />
       </Suspense>
     </AppShell>
   );
@@ -120,7 +149,14 @@ export default function App() {
           <Route path="/" element={<Styled soft={SoftHome} river={RiverHome} orbit={OrbitHome} other={HomePage} />} />
           <Route path="/notes" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
           <Route path="/notes/:id" element={<Styled soft={SoftNotes} river={RiverNotes} orbit={OrbitNotes} other={WorkspacePage} />} />
-          <Route path="/tasks" element={<Styled soft={SoftTasks} river={RiverTasks} orbit={OrbitTasks} other={TasksPage} />} />
+          <Route path="/tasks/focus/:id" element={<SoftFocus />} />
+          <Route path="/tasks/plan" element={<SoftPlan />} />
+<Route path="/tasks" element={<Styled soft={SoftTasks} river={RiverTasks} orbit={OrbitTasks} other={TasksPage} />} />
+          <Route path="/notifications" element={<SoftNotifications />} />
+          <Route path="/team-shared" element={<Suspense fallback={<Loader />}><TeamShared /></Suspense>} />
+        <Route path="/team-activity" element={<Suspense fallback={<Loader />}><TeamActivity /></Suspense>} />
+        <Route path="/team-projects" element={<Suspense fallback={<Loader />}><TeamProjects /></Suspense>} />
+          <Route path="/calendar/sync" element={<SoftCalendarSync />} />
           <Route path="/calendar" element={<Styled soft={SoftCalendar} river={RiverCalendar} orbit={OrbitCalendar} other={CalendarPage} />} />
           <Route path="/quiz/:topic" element={<Styled orbit={OrbitQuiz} other={GoHome} />} />
           <Route path="/ai" element={<Styled soft={SoftAI} river={RiverAI} orbit={OrbitAI} other={AIHubPage} />} />
@@ -129,8 +165,11 @@ export default function App() {
         <Route path="/ai/connections" element={<Styled soft={SoftConnections} river={RiverConnections} orbit={OrbitConnections} other={ConnectionsPage} />} />
         </Route>
         <Route path="/quick-capture" element={<CaptureGate />} />
+        <Route path="/s/list/:token" element={<SharedList />} />
         <Route path="/s/:kind/:token" element={<SharedPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/invite" element={<InvitePage />} />
+        <Route path="/join" element={<JoinPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth/consent" element={<OAuthConsent />} />
         <Route path="/workspace" element={<Navigate to="/notes" replace />} />

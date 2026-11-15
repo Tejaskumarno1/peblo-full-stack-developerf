@@ -1,0 +1,40 @@
+// Plan my day: plan tomorrow. The day switcher plans another day with its own meetings, picks, hours and no today-only tools.
+import { boot } from './lib.mjs';
+import fs from 'node:fs';
+const { base, api, page, check, finish } = await boot();
+const shots = 'D:/Peblo/_shots'; fs.mkdirSync(shots, { recursive: true });
+const at = (off, h) => { const d = new Date(); d.setDate(d.getDate() + off); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+const find = async (text) => (await api('GET', '/api/todos')).todos.find((t) => t.text === text);
+try {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await api('POST', '/api/todos', { text: 'Tomorrow standup', deadline: at(1, 10), startTime: '10:00', endTime: '11:00' });
+  await api('POST', '/api/todos', { text: 'Backlog task', deadline: at(0, 15), meta: { estimateMin: 60 } });
+  await api('POST', '/api/todos', { text: 'Due in three days', deadline: at(3, 12) });
+  await page.goto(base + '/tasks/plan');
+  await page.getByRole('heading', { name: 'Plan my day' }).waitFor({ timeout: 15000 });
+  check('starts on today with the review button', (await page.getByTestId('plan-review-open').count()) === 1);
+  check('previous day is disabled on today', await page.getByTestId('plan-prev').isDisabled());
+  await page.getByTestId('plan-tomorrow').click();
+  await page.waitForTimeout(500);
+  check('tomorrow shows its meeting', (await page.getByTestId('plan-meeting').filter({ hasText: 'Tomorrow standup' }).count()) === 1);
+  check('today-only tools are hidden on tomorrow', (await page.getByTestId('plan-review-open').count()) === 0);
+  check('later tasks are not offered', (await page.getByTestId('plan-pick').filter({ hasText: 'Due in three days' }).count()) === 0);
+  check('the backlog task is offered', (await page.getByTestId('plan-pick').filter({ hasText: 'Backlog task' }).count()) === 1);
+  await page.screenshot({ path: `${shots}/plan-tomorrow.png` });
+  await page.getByRole('button', { name: /Put "Backlog task" in my day/ }).click();
+  await page.waitForTimeout(1500);
+  const t = await find('Backlog task');
+  const want = new Date(at(1, 9)).getDate();
+  check('the task is planned on tomorrow, not today', new Date(t.deadline).getDate() === want && !!t.startTime && t.meta?.planned === true, JSON.stringify(t));
+  check('it starts at the first free minute of the day (8:00), not "now"', t.startTime === '08:00', t.startTime);
+  check('it shows as a block', (await page.getByTestId('plan-block').filter({ hasText: 'Backlog task' }).count()) === 1);
+  await page.getByTestId('plan-today').click();
+  await page.waitForTimeout(500);
+  check('back on today the tomorrow block is gone', (await page.getByTestId('plan-block').count()) === 0);
+  check('today shows the review button again', (await page.getByTestId('plan-review-open').count()) === 1);
+  await page.reload();
+  await page.getByTestId('plan-tomorrow').click();
+  await page.waitForTimeout(800);
+  check('after reload tomorrow still has the block', (await page.getByTestId('plan-block').filter({ hasText: 'Backlog task' }).count()) === 1);
+} catch (e) { check(false, 'plan-tomorrow ran without crashing', e?.stack || e); }
+await finish();

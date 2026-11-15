@@ -78,7 +78,7 @@ export default function LiveEditors() {
     const { data } = await api.get(`/share/note/${id}/live`, { params });
     if (isStale?.()) return; // the person moved to another note while this was in flight
     sharedRef.current = !!data.shared;
-    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [], extendRequest: data.extendRequest || null });
+    setLive({ noteId: id, shared: !!data.shared, token: data.token || null, canEdit: !!data.canEdit, expiresAt: data.expiresAt || null, viewers: data.viewers || [], approval: !!data.approval, waiting: data.waiting || [], extendRequest: data.extendRequest || null, editRequest: data.editRequest || null });
     const exAt = data.extendRequest?.at || null;
     if (exAt && askedExt.current !== exAt) { if (askedExt.current !== null) noteRef.current('extend', data.extendRequest.by); askedExt.current = exAt; } else if (!exAt) askedExt.current = '';
     // someone new at the door: say so once
@@ -186,7 +186,7 @@ export default function LiveEditors() {
           onRemove={removeViewer} onExtend={extend} onTurnOff={turnOff} onCopy={copy} busy={busy}
           waiting={live.waiting} approval={live.approval} onApproval={setApproval} onAdmit={admit} onDecline={decline} onRole={setRole}
           followId={followId} onFollow={setFollowId} link={live.token ? `${window.location.origin}/s/note/${live.token}` : ''}
-          shortLink={live.short ? `${window.location.origin}/l/${live.short}` : ''} noteId={noteId} extendRequest={live.extendRequest}
+          shortLink={live.short ? `${window.location.origin}/l/${live.short}` : ''} noteId={noteId} extendRequest={live.extendRequest} editRequest={live.editRequest} onAllowEdit={() => guarded(() => api.post(`/share/note/${noteId}`, { edit: true }))}
           onClose={() => setLive({ open: false })}
         />
       </div>}

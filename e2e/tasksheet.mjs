@@ -8,6 +8,7 @@ try {
   await page.locator('#task-add').waitFor({ timeout: 15000 });
   await page.locator('#task-add').fill('Read about scheduling');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByTestId('just-added').getByRole('button', { name: 'Add details' }).click();
   const dlg = page.getByRole('dialog');
   await dlg.waitFor({ timeout: 6000 }).catch(() => {});
   check('adding a task opens the set-up sheet', await dlg.isVisible().catch(() => false));

@@ -37,8 +37,6 @@ try {
 
   // poll
   await pres.getByTestId('dock-poll').click();
-  for (let k = 0; k < 6; k++) { console.log('DBG', k, await pres.getByTestId('dock-poll').getAttribute('aria-pressed'), await pres.locator('[data-testid=poll-q]').count()); await new Promise((r) => setTimeout(r, 250)); }
-  await pres.getByTestId('dock-poll').click(); await new Promise((r) => setTimeout(r, 400)); console.log('DBG after second click', await pres.getByTestId('dock-poll').getAttribute('aria-pressed'), await pres.locator('[data-testid=poll-q]').count());
   await pres.getByTestId('poll-q').fill('Which normal form next?');
   await pres.getByTestId('poll-in-0').fill('3NF');
   await pres.getByTestId('poll-in-1').fill('BCNF');

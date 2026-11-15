@@ -1,80 +1,51 @@
-// Block menu (B5), keyboard shortcuts list in Settings (B2), Alt Up / Alt Down move a block.
+// Toolbar block menu: grouped icon grid with filter, direct list buttons on the bar, More for H4 to H6 and toggle headings.
+// Every scenario starts on a fresh note so one change cannot disturb the next.
 import { boot } from './lib.mjs';
-const { base, api, page, check, finish } = await boot();
+const { base, api, page, check, finish } = await boot({ freshPresence: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const order = () => page.locator('.bn-block-content[data-content-type="paragraph"], .bn-block-content[data-content-type="heading"]').allInnerTexts().then((a) => a.map((s) => s.trim()).filter(Boolean));
-async function openMenu(n) {
-  const blk = page.locator('.bn-block-content').nth(n);
-  await blk.hover();
-  await page.locator('.bn-side-menu .bn-button, .bn-side-menu button').last().waitFor({ timeout: 5000 });
-  const handle = page.locator('[data-test="dragHandle"]');
-  await handle.click();
-  await page.locator('.pb-block-menu').waitFor({ timeout: 4000 });
-}
+const typeOf = () => page.evaluate(() => { const b = document.querySelector('.bn-editor .bn-block-content[data-content-type]'); return b ? b.getAttribute('data-content-type') + (b.getAttribute('data-level') ? ':' + b.getAttribute('data-level') : '') : ''; });
+const fresh = async () => {
+  const n = (await api('POST', '/api/notes', { title: 'Menu', content: 'Pick a type for this line.\n', tags: [] })).note;
+  await page.goto(`${base}/notes/${n.id}`);
+  await page.locator('.bn-editor').waitFor({ timeout: 25000 });
+  await wait(1500);
+  await page.locator('.bn-editor .bn-inline-content').first().click({ clickCount: 3, timeout: 8000, force: true }); await wait(900);
+};
+const open = async () => { await page.locator('[data-testid="bm-open"]').click(); await wait(300); };
 try {
-  const n = (await api('POST', '/api/notes', { title: 'Block menu probe', content: 'First block.\n\nSecond block with the handle.\n\nThird block.' })).note;
-  await page.goto(base + '/notes/' + n.id);
-  await page.locator('.bn-editor').waitFor({ timeout: 20000 });
-  await wait(1800);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await fresh();
+  check('1 selecting text shows the block type button', (await page.locator('[data-testid="bm-open"]').count()) === 1);
+  await open();
+  const groups = await page.locator('.pb-bm-lab').allInnerTexts();
+  check('2 the menu has Text, Lists and Blocks groups', groups.join(',').toLowerCase() === 'text,lists,blocks', groups.join(','));
+  check('3 the current type (Text) is highlighted', (await page.locator('[data-testid="bm-paragraph"].on').count()) === 1);
+  const box = await page.locator('[data-testid="bm-pop"]').boundingBox();
+  check('4 the menu stays inside the window', box && box.x >= 0 && box.x + box.width <= 1280 && box.y + box.height <= 800, JSON.stringify(box));
+  await page.locator('[data-testid="bm-check"]').click(); await wait(900);
+  check('5 Check list turns the line into a check list', (await typeOf()).startsWith('checkListItem'), await typeOf());
 
-  await openMenu(1);
-  const txt = (await page.locator('.pb-block-menu').innerText()).replace(/\s+/g, ' ');
-  for (const w of ['Turn into', 'Colour', 'Highlight', 'Align', 'Duplicate', 'Move up or down', 'Delete']) check(`Menu has "${w}"`, txt.includes(w), txt);
-  check('Menu: six text colours', (await page.locator('[data-testid="bm-colour-row"] .sw').count()) === 6);
-  check('Menu: five highlight colours', (await page.locator('[data-testid="bm-highlight-row"] .sw').count()) === 5);
-  check('Menu: no separate colour panel (colours sit inside the menu)', (await page.locator('.bn-color-picker-dropdown').count()) === 0);
-  await page.screenshot({ path: 'e2e/block-menu.png' });
+  await fresh(); await open();
+  await page.locator('[data-testid="bm-filter"]').fill('quote'); await page.keyboard.press('Enter'); await wait(900);
+  check('6 typing in the filter and pressing Enter applies the first match', (await typeOf()).startsWith('quote'), await typeOf());
 
-  await page.locator('[data-testid="bm-red"]').click(); await wait(300);
-  check('Colour: the block turns red', (await page.locator('.bn-block-outer').nth(1).locator('.bn-block').first().getAttribute('data-text-color')) === 'red' || (await page.locator('.bn-block-content').nth(1).getAttribute('data-text-color')) === 'red');
-  await page.keyboard.press('Escape'); await openMenu(1);
-  await page.locator('[data-testid="bm-mint"]').click(); await wait(300);
-  check('Highlight: the block gets a green background', (await page.locator('.bn-block-content').nth(1).getAttribute('data-background-color')) === 'green' || (await page.locator('.bn-block').nth(1).getAttribute('data-background-color')) === 'green');
-  await page.keyboard.press('Escape'); await openMenu(1);
-  await page.locator('[data-testid="bm-align-center"]').click(); await wait(300);
-  check('Align: centre', (await page.locator('.bn-block-content').nth(1).getAttribute('data-text-alignment')) === 'center');
-  await page.keyboard.press('Escape'); await openMenu(1);
-  await page.locator('.pb-block-menu >> text=Duplicate').click(); await wait(400);
-  let o = await order();
-  check('Duplicate: a second copy follows', o.filter((s) => s === 'Second block with the handle.').length === 2, o.join(' | '));
-  await page.keyboard.press('Escape'); await wait(200);
+  await fresh(); await open();
+  await page.locator('[data-testid="bm-more"]').click(); await wait(200);
+  await page.locator('[data-testid="bm-h4"]').click(); await wait(900);
+  check('7 More reveals Heading 4 and it works', (await typeOf()) === 'heading:4', await typeOf());
 
-  await openMenu(0);
-  await page.locator('[data-testid="bm-down"]').click(); await wait(400);
-  o = await order();
-  check('Move down: first block went one place down', o[0] !== 'First block.' && o[1] === 'First block.', o.join(' | '));
-  await page.keyboard.press('Escape'); await wait(200);
+  await fresh();
+  await page.locator('[data-testid="bm-direct-bullet"]').click(); await wait(900);
+  check('8 the Bullet button on the bar makes a bullet list', (await typeOf()).startsWith('bulletListItem'), await typeOf());
+  await page.locator('[data-testid="bm-direct-bullet"]').click({ force: true }); await wait(900);
+  check('9 clicking it again goes back to text', (await typeOf()).startsWith('paragraph'), await typeOf());
 
-  await openMenu(0);
-  await page.locator('.pb-block-menu >> text=Turn into').hover();
-  await page.locator('.bn-menu-dropdown >> text=Heading 2').click(); await wait(400);
-  check('Turn into: the block became a heading', (await page.locator('.bn-block-content[data-content-type="heading"]').count()) === 1);
-  await page.keyboard.press('Escape'); await wait(200);
+  await fresh();
+  await page.locator('[data-testid="bm-direct-check"]').click(); await wait(900);
+  check('10 the Check list button on the bar makes a check list', (await typeOf()).startsWith('checkListItem'), await typeOf());
 
-  await openMenu(0);
-  const before = (await order()).length;
-  await page.locator('.pb-block-menu >> text=Delete').click(); await wait(400);
-  check('Delete: the block is gone', (await order()).length === before - 1);
-
-  // Alt Up / Alt Down
-  await page.locator('.bn-block-content').nth(1).click();
-  const was = await order();
-  await page.keyboard.press('Alt+ArrowUp'); await wait(400);
-  const now = await order();
-  check('Alt Up moves the block up', now[0] === was[1] && now[1] === was[0], now.join(' | '));
-  await page.keyboard.press('Alt+ArrowDown'); await wait(400);
-  check('Alt Down moves it back', (await order()).join('|') === was.join('|'));
-
-  // ---- Settings: keyboard shortcuts
-  await page.goto(base + '/settings/shortcuts');
-  await page.locator('.s-keys').waitFor({ timeout: 15000 });
-  const groups = await page.locator('[data-testid="keys-group"] .s-keys-title').allInnerTexts();
-  check('Shortcuts list: Edit, Text, Blocks and Find and move are there', ['edit', 'text', 'blocks', 'find and move'].every((g) => groups.map((x) => x.toLowerCase()).includes(g)), groups.join(','));
-  const body = (await page.locator('.s-keys').innerText()).replace(/\s+/g, ' ');
-  check('Shortcuts list: Undo Ctrl Z, Redo Ctrl Y and Ctrl Shift Z', /Undo Ctrl Z/.test(body) && /Redo Ctrl Y/.test(body) && /Redo Ctrl Shift Z/.test(body), body.slice(0, 300));
-  check('Shortcuts list: Find Ctrl F and Replace Ctrl H', /Find Ctrl F/.test(body) && /Replace Ctrl H/.test(body));
-  await page.locator('.s-keys-search input').fill('undo'); await wait(200);
-  check('Shortcuts list: search narrows it', (await page.locator('.s-keys-row').count()) === 1);
-  await page.screenshot({ path: 'e2e/shortcuts.png' });
-} catch (e) { check('no exception: ' + e.message, false); console.log(e.stack); }
+  await fresh(); await open();
+  await page.keyboard.press('Escape'); await wait(300);
+  check('11 Escape closes the menu', (await page.locator('[data-testid="bm-pop"]').count()) === 0);
+} catch (e) { check('crash: ' + e.message, false); }
 await finish();

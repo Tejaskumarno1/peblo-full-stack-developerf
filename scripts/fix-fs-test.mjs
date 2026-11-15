@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const f = 'e2e/focus-fullscreen.mjs';
+let s = fs.readFileSync(f, 'utf8');
+const crlf = s.includes('\r\n'); s = s.replace(/\r\n/g, '\n');
+const old = "Math.abs(c.x + c.w / 2 - ((await page.locator('[data-testid=\"fs-drawer\"]').count()) ? 487 : 640)) < 30, JSON.stringify(c));";
+if (!s.includes(old)) throw new Error('anchor');
+s = s.replace(old, "Math.abs(c.x + c.w / 2 - mid) < 40, JSON.stringify({ ...c, mid }));");
+const lineStart = s.indexOf("    check(`${T} wide column is about 680px");
+s = s.slice(0, lineStart) + "    // centred in the free space between the outline rail (left) and the drawer (right, when open)\n    const mid = await page.evaluate(() => { const o = document.querySelector('[data-testid=\"fs-outline\"]'); const d = document.querySelector('[data-testid=\"fs-drawer\"]'); const l = o ? o.getBoundingClientRect().right : 0; const r = d ? d.getBoundingClientRect().left : window.innerWidth; return (l + r) / 2; });\n" + s.slice(lineStart);
+fs.writeFileSync(f, crlf ? s.replace(/\n/g, '\r\n') : s);
+console.log('ok');

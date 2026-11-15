@@ -11,6 +11,8 @@ try {
 
   await page.locator('.bn-inline-content', { hasText: 'Call the vet' }).click();
   await page.waitForTimeout(500);
+  await page.waitForFunction(() => document.activeElement && document.activeElement.closest('.bn-editor'), null, { timeout: 5000 });
+  await page.keyboard.press('Control+End'); await page.waitForTimeout(300);
   await page.keyboard.press('Control+End');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);

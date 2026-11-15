@@ -23,7 +23,7 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [ ] N5. Subfolders go one level deep; "Include sub-folders" is off by default so a parent does not show its children's notes.
 - [ ] N6. Folder row is one sideways-scrolling strip of chips; no search, collapse or reorder; breaks down past about 8 folders.
 - [ ] N7. No drag-and-drop of a note onto a folder; only menu "Move to folder" or select mode.
-- [x] N8. Folder rename/delete had no visible control (double-click or right-click only). Fixed: folder bar with Edit.
+- [x] N8. Folder rename/delete had no visible control (double-click or right-click only). Fixed: the open-folder header has Edit (and a New note button).
 - [x] N9. Opening a folder gave no way to create a note in it, and new notes did not land in it. Fixed.
 - [x] N10. Archive and Trash stayed filtered by the last open folder and looked empty. Fixed.
 - [ ] N11. The open folder is not in the URL; refresh or Back loses it; cannot link to a folder.

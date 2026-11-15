@@ -1,10 +1,17 @@
+import FocusChrome, { useFocusPrefs } from '../components/FocusMode';
 import PagePolls from '../components/PagePolls';
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon } from 'lucide-react';
+import { Sparkles, ArrowUp, Check, ChevronRight, Clipboard, Clock, List, Users, Download, Eye, FileText, Link2, LoaderCircle, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRight, Bookmark, History, Maximize2, Minimize2, Keyboard, Wrench, Pencil, Printer, Sun, Type, X, Pin, Lock, MessageSquare, File as FileIcon, Search as SearchIcon, Volume2, Ban, WifiOff, User, RotateCcw, LogOut, Share2, ArrowDown, Languages, AlertTriangle } from 'lucide-react';
 import GuestTour from '../components/GuestTour';
+import SharePalette from './SharePalette';
+import SharePanel from './SharePanel';
+import { ShareTrack, FollowBanner } from './ShareTrack';
+import { ListenBar, TranslateMenu, LANGUAGES } from './ListenTranslate';
+import ShareVersions from './ShareVersions';
+import ShareCards, { EndOfPage, TodoAbout, TodoCards } from './ShareCards';
 import FindBar from '../components/FindBar';
 import { useAuth } from '../context/AuthContext';
 import { notesAPI, publicShareAPI, todosAPI } from '../api';
@@ -15,14 +22,63 @@ import { presenceOn } from '../utils/presencePref';
 import { CollabBar, CollabPanel, useCollabEvents } from '../components/CollabPanel';
 import useShareReader from './useShareReader';
 import useFileFrames from '../components/useFileFrames';
+import { splitMarkers, applyMarksToHtml } from '../utils/tableMeta';
+import '../components/tableMeta.css';
 import './shared-page.css';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
+const PictureView = lazy(() => import('../components/PictureView'));
 
 // The note's HTML is written once per change (a fresh object each render would write it again and undo the file frames drawn into it).
 const DocHtml = memo(function DocHtml({ innerRef, html }) { return <div className="doc" ref={innerRef} dangerouslySetInnerHTML={{ __html: html }} />; });
 
-const toHtml = (md) => {
+// Content blocks as drawn on S37: code with a Copy button, callouts (a quote that starts with a symbol, as the editor writes them)
+// and a link on its own line shown as a card. Plain markup only, the Copy button is wired by the document's click listener.
+const CALLOUT_MARKS = [['\u{1F4A1}', 'tip'], ['⚠️', 'warn'], ['⚠', 'warn'], ['✅', 'ok'], ['ℹ️', 'info'], ['ℹ', 'info']];
+const svgIcon = (d, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const CALLOUT_ICON_SVG = {
+  info: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+  tip: svgIcon('<path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>'),
+  warn: svgIcon('<path d="M12 3l10 18H2zM12 10v5M12 18h.01"/>'),
+  ok: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),
+};
+const LINK_ICON_SVG = svgIcon('<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/>', 17);
+const ARROW_SVG = svgIcon('<path d="M5 12h14M13 6l6 6-6 6"/>', 16);
+function decorateBlocks(parsed) {
+  const doc = parsed;
+  doc.body.querySelectorAll('pre').forEach((pre) => {
+    if (pre.querySelector('.code-copy')) return;
+    const b = doc.createElement('button'); b.type = 'button'; b.className = 'code-copy'; b.setAttribute('data-code-copy', '1'); b.setAttribute('aria-label', 'Copy code'); b.setAttribute('data-testid', 'code-copy'); b.textContent = 'Copy';
+    pre.appendChild(b);
+  });
+  doc.body.querySelectorAll('blockquote').forEach((q) => {
+    const first = q.querySelector('p') || q;
+    const text = (first.textContent || '').trimStart();
+    const hit = CALLOUT_MARKS.find(([mark]) => text.startsWith(mark));
+    if (!hit) return;
+    const first1 = first.firstChild;
+    if (first1 && first1.nodeType === 3) first1.textContent = first1.textContent.replace(/^\s*(\u{1F4A1}|⚠️?|✅|ℹ️?)\s*/u, '');
+    const box = doc.createElement('aside'); box.className = 'callout'; box.setAttribute('data-callout', hit[1]); box.setAttribute('role', 'note'); box.setAttribute('data-testid', 'callout');
+    box.innerHTML = `<span class="callout-ic">${CALLOUT_ICON_SVG[hit[1]]}</span><div class="callout-tx">${q.innerHTML}</div>`;
+    q.replaceWith(box);
+  });
+  doc.body.querySelectorAll('p').forEach((p) => {
+    const kids = [...p.childNodes].filter((n) => !(n.nodeType === 3 && !n.textContent.trim()));
+    if (kids.length !== 1 || kids[0].nodeName !== 'A') return;
+    const a = kids[0]; const href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href) || p.closest('li, blockquote, aside, table')) return;
+    let host = href; try { const u = new URL(href); host = u.host + (u.pathname === '/' ? '' : u.pathname); } catch { /* keep the raw address */ }
+    const bare = a.textContent.trim() === href;
+    const card = doc.createElement('a'); card.className = 'link-card'; card.href = href; card.target = '_blank'; card.rel = 'noopener noreferrer'; card.setAttribute('data-testid', 'link-card');
+    const title = bare ? host.replace(/^www\./, '') : a.textContent.trim();
+    card.innerHTML = `<span class="lc-ic">${LINK_ICON_SVG}</span><span class="lc-tx"><b></b><small></small></span>${ARROW_SVG}`;
+    card.querySelector('b').textContent = title; card.querySelector('small').textContent = host;
+    p.replaceWith(card);
+  });
+}
+
+const toHtml = (md0) => {
+  const { text: md, marks } = splitMarkers(md0); // the table settings Markdown cannot hold (widths, colours, merged cells) ride in hidden comment lines
   let html = marked.parse(md || '');
   html = html.replace(/<figure>\s*<img src="(data:(video|audio)\/[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, kind, cap) => `<figure><${kind} controls src="${src}"></${kind}>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`);
   html = html.replace(/<figure>\s*<img src="(data:(?!image\/)[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, cap) => `<p><a href="${src}" download="${(cap || 'file').replace(/"/g, '')}">${cap || 'Download file'}</a></p>`);
@@ -36,8 +92,45 @@ const toHtml = (md) => {
     heading.id = count ? `${base}-${count + 1}` : base;
   });
   groupPictures(parsed);
+  addPicturePills(parsed);
+  decorateBlocks(parsed);
+  applyMarksToHtml(parsed.body, marks);
   return parsed.body.innerHTML;
 };
+
+// Under every picture a small pill carries the picture's full address as real text and a real link, so a person, a script or any AI
+// that reads this page as text can find and open each picture. The pill is plain markup (no script), the Copy button is wired by one listener.
+const PILL_LINK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 005.6 0l3-3a4 4 0 00-5.6-5.6l-1 1M14 10a4 4 0 00-5.6 0l-3 3a4 4 0 005.6 5.6l1-1"/></svg>';
+const absPicture = (src) => { try { const u = new URL(src, window.location.origin); u.hash = ''; return /^https?:$/.test(u.protocol) ? u.href : ''; } catch { return ''; } };
+function addPicturePills(parsed) {
+  const doc = parsed;
+  const seen = [];
+  [...doc.body.querySelectorAll('img')].forEach((img) => {
+    if (img.closest('a, button')) return;
+    const href = absPicture(img.getAttribute('src') || ''); if (!href) return;
+    seen.push(href);
+    const n = seen.length;
+    const pill = doc.createElement('span'); pill.className = 'pic-pill'; pill.setAttribute('data-testid', 'pic-pill');
+    pill.innerHTML = `${PILL_LINK}<span class="pic-n">Image ${n}</span>`;
+    const a = doc.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = href; a.setAttribute('data-testid', 'pic-pill-link');
+    const b = doc.createElement('button'); b.type = 'button'; b.setAttribute('data-pill-copy', href); b.textContent = 'Copy';
+    pill.append(a, b);
+    const parent = img.parentElement;
+    const group = parent && parent.querySelectorAll('img').length > 1;
+    const after = group ? parent : img;
+    // alt text rides along as data too: a text-only reader gets the name of the picture next to its address
+    const alt = img.getAttribute('alt'); if (alt) pill.setAttribute('title', alt);
+    after.insertAdjacentElement('afterend', pill);
+  });
+  if (seen.length) {
+    const all = doc.createElement('div'); all.className = 'pic-all'; all.setAttribute('data-testid', 'pic-all');
+    all.innerHTML = `${PILL_LINK}<span>${seen.length} picture${seen.length > 1 ? 's' : ''} on this page</span>`;
+    const b = doc.createElement('button'); b.type = 'button'; b.setAttribute('data-pill-copy', seen.join('\n')); b.setAttribute('data-testid', 'pic-all-copy'); b.textContent = 'Copy all picture links';
+    all.append(b);
+    const first = doc.body.firstElementChild;
+    if (first && /^H[1-3]$/.test(first.tagName)) first.insertAdjacentElement('afterend', all); else doc.body.insertAdjacentElement('afterbegin', all);
+  }
+}
 
 // Pictures the owner laid out as a grid or a row are kept in the picture address ("#gl=grid&gc=3"); show them that way here too.
 const layoutOf = (img) => {
@@ -145,6 +238,12 @@ export default function SharedPage() {
   const [authError, setAuthError] = useState('');
   const draft = useRef({ title: '', content: '', base: null });
   const typedAt = useRef(0);
+  // In a live room the editor's change event is handled by the room, so also count real key presses in the editor as typing.
+  useEffect(() => {
+    const onKey = (event) => { if (event.ctrlKey || event.metaKey || event.altKey || ['Shift', 'Control', 'Alt', 'Meta', 'Escape', 'Tab', 'CapsLock'].includes(event.key)) return; if (event.target?.closest?.('.bn-editor')) typedAt.current = Date.now(); };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
   const cursorRef = useRef(null);
   const selRef = useRef(null);
   const [guestName, setGuestName] = useState(() => { try { return localStorage.getItem('peblo-guest-name') || ''; } catch { return ''; } });
@@ -157,18 +256,13 @@ export default function SharedPage() {
     if (clean) { markJoined(); window.dispatchEvent(new CustomEvent('pb-identity', { detail: { name: clean } })); }
   };
   // how I show up for the others: a colour next to the name (kept in this browser, applied live)
-  const GUEST_COLORS = ['#e11d48', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777'];
-  const [guestColor, setGuestColor] = useState(() => { try { return localStorage.getItem('peblo-guest-color') || ''; } catch { return ''; } });
-  const colorRef = useRef(guestColor);
-  colorRef.current = guestColor;
+  // Colours are never chosen: every person gets their own from the viewer id (same one on cursor, outline dot and comments).
+  const colorRef = useRef('');
   const [joined, setJoined] = useState(() => { try { return localStorage.getItem('peblo-guest-joined') === '1' || !!localStorage.getItem('peblo-guest-name'); } catch { return false; } });
+  const holdRef = useRef(false); // while the join card is open the person is not counted as being on the page yet (the page only looks at who is here: nobody sees "Guest joined" and then a rename)
   const markJoined = () => { setJoined(true); try { localStorage.setItem('peblo-guest-joined', '1'); } catch { /* not remembered */ } };
-  const pickColor = (color) => {
-    setGuestColor(color); markJoined();
-    try { localStorage.setItem('peblo-guest-color', color); } catch { /* not remembered */ }
-    window.dispatchEvent(new CustomEvent('pb-identity', { detail: { color } }));
-  };
   const [tocSheet, setTocSheet] = useState(false);
+  const [cardsSheet, setCardsSheet] = useState(false);
   const taskSavedText = useRef(null);
   const timer = useRef(null);
   const toastTimer = useRef(null);
@@ -204,25 +298,44 @@ export default function SharedPage() {
   const articleRef = useRef(null);
   // full screen, hidden tool bar, tucked-away top bar, shortcuts
   const [fullscreen, setFullscreen] = useState(false);
+  const [fsp, setFsp] = useFocusPrefs();
   const [barShown, setBarShown] = useState(false);
   const [topHidden, setTopHidden] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const on = (event) => { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); setPaletteOpen((open) => !open); } };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
   const rootRef = useRef(null);
   const barTimer = useRef(null);
+  const fsRef = useRef(false);
+  useEffect(() => { fsRef.current = fullscreen; }, [fullscreen]);
+  // Full screen asks the browser for real full screen (the same as F11) straight from the click, so the browser allows it.
   const toggleFullscreen = useCallback(() => {
-    setFullscreen((on) => {
-      const next = !on;
-      try {
-        if (next && rootRef.current?.requestFullscreen && !document.fullscreenElement) rootRef.current.requestFullscreen().catch(() => {});
-        if (!next && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      } catch { /* the page still goes full screen without the browser API */ }
-      return next;
-    });
-  }, []);
+    const next = !fsRef.current;
+    fsRef.current = next;
+    setFullscreen(next);
+    try {
+      const el = document.documentElement;
+      if (next && !document.fullscreenElement) {
+        const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (ask) { const p = ask.call(el, { navigationUI: 'hide' }); p?.catch?.(() => showToast('Your browser blocked full screen. Press F11 instead.')); }
+        else showToast('This browser has no full screen. Press F11 instead.');
+      } else if (!next && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch { /* the page still goes full screen without the browser API */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const onFs = () => { if (!document.fullscreenElement) setFullscreen(false); };
+    const onFs = () => { if (!document.fullscreenElement && fsRef.current && !browserFullscreen()) setFullscreen(false); };
+    // F11 is handled by the browser itself, so the page follows it: the window fills the whole screen
+    const browserFullscreen = () => !navigator.webdriver && window.matchMedia?.('(hover: hover)').matches && window.innerHeight >= screen.height - 1 && window.innerWidth >= screen.width - 1;
+    const onSize = () => { const f = !!document.fullscreenElement || browserFullscreen(); if (f !== fsRef.current) { fsRef.current = f; setFullscreen(f); } };
     document.addEventListener('fullscreenchange', onFs);
-    return () => document.removeEventListener('fullscreenchange', onFs);
+    window.addEventListener('resize', onSize);
+    return () => { document.removeEventListener('fullscreenchange', onFs); window.removeEventListener('resize', onSize); };
   }, []);
   // Ctrl F on a page that is only read: the same find card the editor has (Find only, no Replace)
   useEffect(() => {
@@ -239,6 +352,20 @@ export default function SharedPage() {
   const showBar = () => { clearTimeout(barTimer.current); setBarShown(true); };
   const hideBarSoon = () => { clearTimeout(barTimer.current); barTimer.current = setTimeout(() => setBarShown(false), 1400); };
   useEffect(() => () => clearTimeout(barTimer.current), []);
+  const kbRef = useRef({});
+  const gPending = useRef(0);
+  useEffect(() => {
+    const onCtrl = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      const k = event.key.toLowerCase();
+      const kb = kbRef.current;
+      if (k === 'b' && kb.jumpPlace) { event.preventDefault(); kb.jumpPlace(); }
+      else if (k === 'j' && kb.toggleTheme) { event.preventDefault(); kb.toggleTheme(); }
+      else if (k === 'l' && kb.copyLink) { event.preventDefault(); kb.copyLink(); }
+    };
+    document.addEventListener('keydown', onCtrl);
+    return () => document.removeEventListener('keydown', onCtrl);
+  }, []);
   useEffect(() => {
     const onKey = (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -251,6 +378,11 @@ export default function SharedPage() {
       else if (event.key === '?') { event.preventDefault(); setKeysOpen((o) => !o); }
       else if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleFullscreen(); }
       else if (event.key === '\\') { event.preventDefault(); toggleToc(); setPanelOpen((o) => !o); }
+      else if (event.key === 'j' || event.key === 'J' || event.key === 'k' || event.key === 'K') { event.preventDefault(); kbRef.current.stepHeading?.(event.key.toLowerCase() === 'j' ? 1 : -1); }
+      else if (event.key === 'l' || event.key === 'L') { event.preventDefault(); kbRef.current.toggleListen?.(); }
+      else if (event.key === 't' || event.key === 'T') { event.preventDefault(); kbRef.current.toggleTranslate?.(); }
+      else if (event.key === 'c' || event.key === 'C') { event.preventDefault(); kbRef.current.openComments?.(); }
+      else if (event.key === 'g' || event.key === 'G') { event.preventDefault(); if (Date.now() - gPending.current < 800) { gPending.current = 0; kbRef.current.toTop?.(); } else gPending.current = Date.now(); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -260,6 +392,25 @@ export default function SharedPage() {
   const kindPath = kind === 'task' || kind === 'todo' ? 'todo' : 'note';
   const url = `/api/public/${kindPath}/${encodeURIComponent(token)}`;
   const readUrl = `${url}?sid=${encodeURIComponent(viewerSid(kindPath, token))}`;
+  // S27: a link with a password. The unlock value is kept for this tab only and goes with every request.
+  const unlockKey = `peblo-unlock:${kindPath}:${token}`;
+  const getUnlock = () => { try { return sessionStorage.getItem(unlockKey) || ''; } catch { return ''; } };
+  const [locked, setLocked] = useState(null);
+  const [lockPw, setLockPw] = useState('');
+  const [lockErr, setLockErr] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  const submitLock = async (event) => {
+    event.preventDefault();
+    if (!lockPw || lockBusy) return;
+    setLockBusy(true); setLockErr('');
+    try {
+      const r = await fetch(`${url}/unlock`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: lockPw }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'That password is not right.');
+      try { sessionStorage.setItem(unlockKey, j.unlock || ''); } catch { /* kept in memory only */ }
+      setLockPw(''); setLocked(null); setRev((n) => n + 1);
+    } catch (cause) { setLockErr(cause.message); } finally { setLockBusy(false); }
+  };
 
   useLayoutEffect(() => {
     document.documentElement.classList.add('pb-public-share');
@@ -305,10 +456,13 @@ export default function SharedPage() {
 
   useEffect(() => {
     let live = true;
-    fetch(readUrl, { headers: authHeaders() })
+    fetch(readUrl, { headers: { ...authHeaders(), ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) } })
       .then(async (response) => { const json = await response.json().catch(() => ({})); if (!response.ok) throw new Error(json.error || 'This link is not shared any more.'); return json; })
       .then((json) => {
         if (!live) return;
+        if (json.locked) { setLocked(json); setWait(null); setData(null); return; }
+        setLocked(null);
+        if (json.unlock) { try { sessionStorage.setItem(unlockKey, json.unlock); } catch { /* none */ } }
         if (json.waiting) { setWait(json.waiting); setData(null); return; }
         setWait(null);
         draft.current = { title: json.title || '', content: json.content || '', base: json.updatedAt, baseContent: json.content || '' };
@@ -369,7 +523,7 @@ export default function SharedPage() {
   }, [data?.kind, shareOff, readUrl]);
 
   const put = useCallback(async (payload) => {
-    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), ...payload }) });
+    const response = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), ...payload }) });
     return { status: response.status, body: await response.json().catch(() => ({})) };
   }, [url]);
 
@@ -447,6 +601,19 @@ export default function SharedPage() {
     return data?.kind === 'note' ? withoutTitleHeading(html, data.title) : html;
   }, [data]);
   useFileFrames(docRef, body);
+  // a picture on a read-only page opens full size, with Copy and Save (the page is plain HTML, so one click listener covers every picture)
+  const [viewPic, setViewPic] = useState(null);
+  useEffect(() => {
+    const root = docRef.current; if (!root) return undefined;
+    const click = (e) => {
+      const cc = e.target?.closest?.('[data-code-copy]');
+      if (cc) { const code = cc.closest('pre'); const text = (code?.querySelector('code') || code)?.textContent || ''; const done = () => { cc.textContent = 'Copied'; setTimeout(() => { cc.textContent = 'Copy'; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
+      const pb = e.target?.closest?.('[data-pill-copy]');
+      if (pb) { const text = pb.getAttribute('data-pill-copy'); const done = () => { const old = pb.textContent; pb.textContent = 'Copied'; setTimeout(() => { pb.textContent = old; }, 1400); }; (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text).then(done, () => {}) : Promise.resolve()); return; }
+      const img = e.target?.closest?.('img'); if (!img || img.closest('a, button')) return; const all = [...root.querySelectorAll('img')].filter((n) => !n.closest('a, button')); setViewPic({ src: img.currentSrc || img.src, name: img.getAttribute('alt') || '', list: all.map((n) => ({ src: n.currentSrc || n.src, name: n.getAttribute('alt') || '' })), index: Math.max(0, all.indexOf(img)) }); };
+    root.addEventListener('click', click);
+    return () => root.removeEventListener('click', click);
+  }, [body]);
   // the title is shown big at the top, so a first heading that says the same thing is hidden (still there for the editor)
   useEffect(() => {
     if (data?.kind !== 'note') return undefined;
@@ -541,7 +708,7 @@ export default function SharedPage() {
     const beat = (active = true, keepalive = false) => fetch(presenceUrl, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ sessionId, active, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end, progress: Math.round(progressRef.current) }),
+      body: JSON.stringify({ sessionId, active, peek: active && holdRef.current ? true : undefined, typing: active && Date.now() - typedAt.current < 3000, name: nameRef.current || undefined, cursor: cursorRef.current ?? undefined, selStart: selRef.current?.start, selEnd: selRef.current?.end, progress: Math.round(progressRef.current) }),
       keepalive,
     }).then((response) => {
       if (response.status === 404 && live) {
@@ -647,6 +814,10 @@ export default function SharedPage() {
     return () => window.clearInterval(t);
   }, [recentEvents.length]);
   const others = viewers.filter((viewer) => !viewer.self);
+  const selfViewerId = viewers.find((viewer) => viewer.self)?.id || '';
+  const myColor = peerColor(selfViewerId || sessionIdRef.current || guestName || 'guest');
+  colorRef.current = myColor;
+  useEffect(() => { if (selfViewerId) window.dispatchEvent(new CustomEvent('pb-identity', { detail: { color: myColor } })); }, [selfViewerId, myColor]);
   // The outline stands alone until someone else is here; then the live panel slides in (wide screens), and leaves with them.
   const wasOthers = useRef(0);
   useEffect(() => {
@@ -830,9 +1001,9 @@ export default function SharedPage() {
   const reader = useShareReader({ enabled: data?.kind === 'note' && !shareOff, scope: `${kindPath}:${token}`, articleRef, deps: rev });
   const [bmOpen, setBmOpen] = useState(false);
   const showJoin = !!(data?.canEdit && !user && !previewMode && !joined && !error);
+  holdRef.current = showJoin;
   const [cardName, setCardName] = useState('');
-  const [cardColor, setCardColor] = useState(GUEST_COLORS[5]);
-  const joinNow = (anon) => { if (!anon) { saveGuestName(cardName); pickColor(cardColor); } markJoined(); };
+  const joinNow = (anon) => { if (!anon) saveGuestName(cardName); markJoined(); };
   const [fly, setFly] = useState(null); // 'outline' | 'history' | 'file' (people uses panelOpen)
   const [wideScreen, setWideScreen] = useState(() => window.innerWidth > 1280);
   useEffect(() => { const on = () => setWideScreen(window.innerWidth > 1280); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
@@ -848,11 +1019,23 @@ export default function SharedPage() {
   useEffect(() => {
     if (!shownFly) return undefined;
     const esc = (event) => { if (event.key === 'Escape') { setFly(null); setPanelOpen(false); } };
-    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
+    const away = (event) => { if (!event.target.closest?.('.srail, .srail-fly, .cp-wrap, .cp-bar, .rc-ver, .hd-stack, .mbar, .mchips')) { setFly(null); if (window.innerWidth <= 1280) setPanelOpen(false); } };
     document.addEventListener('keydown', esc); document.addEventListener('click', away);
     return () => { document.removeEventListener('keydown', esc); document.removeEventListener('click', away); };
   }, [shownFly]);
-  const tocLinks = headings.map(({ id, title, level }) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</a>);
+  const secMins = (() => {
+    const out = []; let cur = 0; let intro = 0; let started = false;
+    String(data?.content || '').split('\n').forEach((line) => {
+      if (/^#{1,3}\s+\S/.test(line)) { if (started) out.push(cur); started = true; cur = 0; } else if (started) cur += (line.match(/\S+/g) || []).length; else intro += (line.match(/\S+/g) || []).length;
+    });
+    if (started) out.push(cur);
+    return { intro: Math.max(1, Math.ceil(intro / 200)), hasIntro: intro > 0, list: out.map((n) => Math.max(1, Math.ceil(n / 200))) };
+  })();
+  const activeIdx = headings.findIndex((h) => h.id === activeHeading);
+  const tocLinks = <>
+    {secMins.hasIntro && headings.length > 0 && <a key="__overview" href="#page-main" className={`toc-ov${activeIdx < 0 ? ' on' : ''}`} onClick={(event) => { event.preventDefault(); document.getElementById('page-main')?.scrollTo?.({ top: 0, behavior: 'smooth' }); if (!pinnedToc) setFly(null); }}><span className={`toc-dot ${activeIdx < 0 ? 'cur' : 'done'}`}>{activeIdx < 0 ? <i /> : <Check size={11} />}</span><span className="toc-t">Overview</span><span className="toc-min">{secMins.intro} min</span></a>}
+    {headings.map(({ id, title, level }, index) => <a key={id} href={`#${id}`} onClick={(event) => { handleHeadingClick(event, id); if (!pinnedToc) setFly(null); }} className={`${activeHeading === id ? 'on' : ''}${level === 3 ? ' sub' : ''}`}><span className={`toc-dot ${index < activeIdx ? 'done' : index === activeIdx ? 'cur' : ''}`}>{index < activeIdx ? <Check size={11} /> : index === activeIdx ? <i /> : null}</span><span className="toc-t">{title}</span>{(sectionPeers[id] || []).length > 0 && <span className="toc-pips" data-testid="toc-pips">{sectionPeers[id].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}<span className="toc-min">{secMins.list[index] || 1} min</span></a>)}
+  </>;
   const commentsBtn = () => document.querySelector('.pb-shared .pb-cbtn');
   const handleHeadingClick = (event, id) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -861,14 +1044,67 @@ export default function SharedPage() {
     scrollToHeading(id);
   };
 
+  const shareRef = useRef(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  useEffect(() => { if (!shareOpen) return undefined; const away = (e) => { if (!shareRef.current?.contains(e.target)) setShareOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [shareOpen]);
+  const meRef = useRef(null);
+  const [meOpen, setMeOpen] = useState(false);
+  useEffect(() => { if (!meOpen) return undefined; const away = (e) => { if (!meRef.current?.contains(e.target)) setMeOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [meOpen]);
+  const forgetMe = () => { try { localStorage.removeItem('peblo-guest-name'); localStorage.removeItem('peblo-guest-joined'); } catch { /* none */ } setGuestName(''); setMeOpen(false); showToast('Forgotten on this device'); };
+  const [liveEmpty, setLiveEmpty] = useState(null);
+  kbRef.current = {
+    stepHeading: (dir) => { const hs = headings; if (!hs.length) return; const i = hs.findIndex((h) => h.id === activeHeading); const n = Math.min(hs.length - 1, Math.max(0, (i < 0 ? (dir > 0 ? 0 : 0) : i + dir))); scrollToHeading(hs[n].id); },
+    toggleListen: () => toggleListen(),
+    toggleTranslate: () => setTrOpen((o) => !o),
+    openComments: () => { const b = document.querySelector('.pb-shared .pb-cbtn'); if (b) b.click(); else showToast('Comments are for people who can edit'); },
+    toTop: () => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) || window.scrollTo({ top: 0, behavior: 'smooth' }),
+    jumpPlace: () => { if (reader.place) reader.jumpPlace(); else showToast('No place saved yet'); },
+    toggleTheme: () => setDarkMode((d) => !d),
+    copyLink: () => copy(window.location.href, 'Share link copied'),
+  };
+  const [chgIdx, setChgIdx] = useState(-1);
+  const chgEls = () => [...(articleRef.current?.querySelectorAll('[data-pb-chg="1"]') || [])];
+  const goChange = (dir) => {
+    const els = chgEls();
+    if (!els.length) return;
+    const next = chgIdx < 0 ? (dir > 0 ? 0 : els.length - 1) : (chgIdx + dir + els.length) % els.length;
+    setChgIdx(next);
+    els[next].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  useEffect(() => { if (!reader.changes || !reader.showChanges) setChgIdx(-1); }, [reader.changes, reader.showChanges]);
+  const [listening, setListening] = useState(false);
+  const toggleListen = () => {
+    if (!window.speechSynthesis) { showToast('Listening is not supported in this browser'); return; }
+    setListening((on) => !on);
+  };
+  const listenParas = () => [...(articleRef.current?.querySelectorAll('.doc p, .doc h1, .doc h2, .doc h3, .doc li, .bn-block-content') || [])].map((el) => ({ el, text: (el.innerText || '').trim() })).filter((p) => p.text);
+  const hilite = useCallback((el) => { document.querySelectorAll('[data-pb-say]').forEach((n) => n.removeAttribute('data-pb-say')); if (el) { el.setAttribute('data-pb-say', '1'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, []);
+  const [trOpen, setTrOpen] = useState(false);
+  const [trLang, setTrLang] = useState(null);
+  const [trText, setTrText] = useState('');
+  const [trBusy, setTrBusy] = useState(false);
+  const trRef = useRef(null);
+  useEffect(() => { if (!trOpen) return undefined; const away = (e) => { if (!trRef.current?.contains(e.target)) setTrOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [trOpen]);
+  const pickLang = async (code) => {
+    if (!code) { setTrLang(null); setTrText(''); setTrOpen(false); return; }
+    setTrBusy(true);
+    try {
+      const r = await fetch(`/api/public/note/${encodeURIComponent(token)}/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(getUnlock() ? { 'X-Share-Unlock': getUnlock() } : {}) }, body: JSON.stringify({ sessionId: viewerSid(kindPath, token), lang: code }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { showToast(j.error || 'Translation is not available right now.'); } else { setTrLang(code); setTrText(j.text || ''); setTrOpen(false); }
+    } catch { showToast('Translation is not available right now.'); } finally { setTrBusy(false); }
+  };
   return (
     <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
+      <a className="skip-link" href="#page-main" onClick={(e) => { e.preventDefault(); document.getElementById('page-main')?.focus(); }}>Skip to content</a>
       <header className="top">
         <div className="top-in">
           <a className="brand" href="/" aria-label="Peblo home"><i />Peblo</a>
           {data && <div className="crumb"><ChevronRight className="sep" size={14} /><span>Shared page</span><ChevronRight className="sep" size={14} /><b title={pageTitle}>{pageTitle}</b></div>}
+          {data && <button type="button" className="sp-bar" data-testid="palette-btn" aria-label="Search or jump to a heading" onClick={() => setPaletteOpen(true)}><SearchIcon size={15} /><span>Search or jump to a heading</span><kbd>Ctrl K</kbd></button>}
           <span className="spacer" />
+          {data && viewers.length > 0 && <button type="button" className="hd-stack" data-testid="hd-stack" aria-label={`${viewers.length} on this page, show people`} onClick={() => openFly('people')}>{viewers.slice(0, 3).map((v) => <span key={v.id} className="hd-av" title={v.name} style={{ background: v.self ? myColor : peerColor(v.id) }}>{(v.name || 'G')[0].toUpperCase()}</span>)}{viewers.length > 3 && <span className="hd-av more">+{viewers.length - 3}</span>}</button>}
           {data && <span className={`pill ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={15} /> : <Eye size={15} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>}
           {data?.canEdit && <button className={`btn preview-btn${previewMode ? ' active' : ''}`} type="button" aria-pressed={previewMode} onClick={() => { setPreviewMode((value) => !value); setMenuOpen(false); }} title={previewMode ? 'Return to editing' : 'Preview the page as viewers see it'}>
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
@@ -880,25 +1116,42 @@ export default function SharedPage() {
           </button>}
           {data && <button className="btn copy-btn" type="button" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={17} /><span>Copy link</span></button>}
           {data && <button className="btn icon" type="button" data-testid="fs-btn" aria-label="Full screen" title="Full screen (F)" onClick={toggleFullscreen}><Maximize2 size={18} /></button>}
-          {data && <div className="menu-wrap" ref={lookRef}>
+          {data && <div className="menu-wrap mw-look" ref={lookRef}>
             <button className="btn icon" type="button" data-testid="look-btn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded={lookOpen} title="Appearance" onClick={() => { setLookOpen((o) => !o); setMenuOpen(false); }}><Type size={18} /></button>
             {lookOpen && <div className="menu look-menu" role="dialog" aria-label="Appearance" data-testid="look-menu">
-              <h4>Appearance</h4>
+              <h4>Look</h4>
               <div className="look-row"><span>Text size</span><div className="seg" role="group" aria-label="Text size">{[['s', 'A−'], ['m', 'A'], ['l', 'A+'], ['xl', 'A++']].map(([v, l]) => <button key={v} type="button" className={look.size === v ? 'on' : ''} aria-pressed={look.size === v} data-testid={`look-size-${v}`} onClick={() => setLookPref({ size: v })}>{l}</button>)}</div></div>
+              <div className="look-row"><span>Zoom</span><div className="seg" role="group" aria-label="Zoom">{[90, 100, 125, 150].map((v) => <button key={v} type="button" data-testid={`look-zoom-${v}`} className={(look.zoom || 100) === v ? 'on' : ''} aria-pressed={(look.zoom || 100) === v} onClick={() => setLookPref({ zoom: v })}>{v}%</button>)}</div></div>
               <div className="look-row"><span>Page width</span><div className="seg" role="group" aria-label="Page width">{[['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']].map(([v, l]) => <button key={v} type="button" className={look.width === v ? 'on' : ''} aria-pressed={look.width === v} data-testid={`look-width-${v}`} onClick={() => setLookPref({ width: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Font</span><div className="seg" role="group" aria-label="Font">{[['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']].map(([v, l]) => <button key={v} type="button" className={look.font === v ? 'on' : ''} aria-pressed={look.font === v} data-testid={`look-font-${v}`} onClick={() => setLookPref({ font: v })}>{l}</button>)}</div></div>
               <div className="look-row"><span>Style</span><div className="seg" role="group" aria-label="Style">{[['follow', 'Owner'], ['soft', 'Soft'], ['river', 'River'], ['orbit', 'Orbit']].map(([v, l]) => <button key={v} type="button" className={(look.style || 'follow') === v ? 'on' : ''} aria-pressed={(look.style || 'follow') === v} data-testid={`look-style-${v}`} onClick={() => setLookPref({ style: v })}>{l}</button>)}</div></div>
-              <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[[false, 'Light'], [true, 'Dark']].map(([v, l]) => <button key={l} type="button" className={darkMode === v ? 'on' : ''} aria-pressed={darkMode === v} onClick={() => setDarkMode(v)}>{l}</button>)}</div></div>
-              <label className="look-check"><input type="checkbox" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /><span>Show other people's pointers, cursors and who is editing</span></label>
-              <label className="look-check"><input type="checkbox" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /><span>Quiet mode (no join or typing notices)</span></label>
-              <label className="look-check"><input type="checkbox" data-testid="look-pin" checked={look.pin} onChange={(event) => setLookPref({ pin: event.target.checked })} /><span>Keep the tool bar showing</span></label>
-              <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans' })}>Reset reading style</button>
+              <div className="look-row"><span>Theme</span><div className="seg" role="group" aria-label="Theme">{[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => <button key={v} type="button" className={(look.theme || 'system') === v ? 'on' : ''} aria-pressed={(look.theme || 'system') === v} onClick={() => { setLookPref({ theme: v }); setDarkMode(v === 'system' ? !!window.matchMedia?.('(prefers-color-scheme: dark)').matches : v === 'dark'); }}>{l}</button>)}</div></div>
+              <label className="look-check look-switch"><span className="ls-t"><b>Show other people's pointers</b><small>Cursors with names</small></span><input type="checkbox" role="switch" data-testid="look-pointers" checked={look.pointers} onChange={(event) => setLookPref({ pointers: event.target.checked })} /></label>
+              <label className="look-check look-switch"><span className="ls-t"><b>Quiet mode</b><small>No pills, no join notices</small></span><input type="checkbox" role="switch" data-testid="look-quiet" checked={look.quiet} onChange={(event) => setLookPref({ quiet: event.target.checked })} /></label>
+              <label className="look-check look-switch"><span className="ls-t"><b>Keep the tool bar showing</b><small>It will not hide when you scroll</small></span><input type="checkbox" role="switch" data-testid="look-pin" checked={look.pin} onChange={(event) => setLookPref({ pin: event.target.checked })} /></label>
+              <button type="button" className="look-reset" onClick={() => setLookPref({ size: 'm', width: 'normal', font: 'sans', zoom: 100 })}><RotateCcw size={15} />Reset reading style</button>
             </div>}
           </div>}
-          {data && <div className="menu-wrap" ref={menuRef}>
+          {data && <button className="btn icon" type="button" data-testid="moon-btn" aria-label={darkMode ? 'Switch to light' : 'Switch to dark'} title={darkMode ? 'Light' : 'Dark'} onClick={() => setDarkMode((d) => !d)}>{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>}
+          {data && <div className="menu-wrap mw-me" ref={meRef}>
+            <button type="button" className="hd-me" data-testid="hd-me" aria-haspopup="dialog" aria-expanded={meOpen} aria-label="Your identity" title={guestName || user?.name || 'Guest'} style={{ background: myColor }} onClick={() => setMeOpen((o) => !o)}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</button>
+            {meOpen && <div className="menu id-menu" role="dialog" aria-label="Your identity" data-testid="id-menu">
+              <div className="id-head"><span className="hd-me" style={{ background: myColor }}>{((guestName || user?.name || 'G')[0] || 'G').toUpperCase()}</span><div><b>{guestName || user?.name || 'Guest'}</b><small>{user ? 'Signed in' : 'Guest on this page'}</small></div></div>
+              {!user && <><h4>Your name</h4><input className="id-name" data-testid="id-name" aria-label="Your name" maxLength={40} placeholder="Guest" defaultValue={guestName} onBlur={(e) => saveGuestName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} /></>}
+              <div className="id-colour"><i style={{ background: myColor }} /><span>Your colour is chosen for you and stays the same on this browser.</span></div>
+              {!user && <button type="button" role="menuitem" data-testid="id-signin" onClick={() => { setMeOpen(false); setAuthMode('login'); setAuthOpen(true); }}><User size={17} /><span>Sign in<small>To keep your name everywhere</small></span></button>}
+              {!user && <button type="button" role="menuitem" data-testid="id-forget" onClick={forgetMe}><RotateCcw size={17} /><span>Forget me on this device<small>Clears name and colour</small></span></button>}
+              <button type="button" role="menuitem" data-testid="id-leave" onClick={() => { setMeOpen(false); navigate('/'); }}><LogOut size={17} /><span>Leave this page</span></button>
+            </div>}
+          </div>}
+          {data && <div className="menu-wrap mw-share" ref={shareRef}>
+            <button className="btn share-btn" type="button" data-testid="share-btn" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen((o) => !o)}><Share2 size={16} /><span>Share</span></button>
+            {shareOpen && <SharePanel kindPath={kindPath} token={token} hasPassword={!!data.hasPassword} summary={data.summary || ''} onSummary={(text) => setData((d) => ({ ...d, summary: text || null }))} link={window.location.href} canEdit={!!data.canEdit} expiresAt={data.expiresAt} title={data.title || data.text} isOwner={isOwner && !shareOff} onCopy={() => copy(window.location.href, 'Share link copied')} onTurnOff={() => { setShareOpen(false); setRevokeConfirm(true); }} />}
+          </div>}
+          {data && <div className="menu-wrap mw-more" ref={menuRef}>
             <button className="btn icon" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={19} /></button>
             {menuOpen && <div className="menu" role="menu">
-              <h4>Share</h4>
+              <h4>Share and export</h4>
               <div className="linkbox"><input readOnly value={window.location.href} aria-label="Share link" /><button className="btn dark" type="button" onClick={() => copy(window.location.href)}>Copy</button></div>
               <hr />
               <button type="button" role="menuitem" onClick={() => exportShared('md')}><Download size={17} /><span>Download as Markdown<small>Keep your note formatting</small></span></button>
@@ -906,10 +1159,10 @@ export default function SharedPage() {
               <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={17} /><span>Download as Word<small>Editable .doc document</small></span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={17} /><span>Download as HTML</span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={17} /><span>Download as plain text</span></button>
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print</span></button>
-              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy note text</span></button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print<small>Opens the print dialog</small></span></button>
+              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy as Markdown</span></button>
               <button type="button" role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setMenuOpen(false); }}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? 'Light mode' : 'Dark mode'}</span></button>
-              {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Disable this link for everyone</small></span></button></>}
+              {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Only the owner sees this</small></span></button></>}
               <hr />
               <div className="menu-note">Anyone with this link can {data?.canEdit ? 'edit' : 'read'} this {data?.kind === 'todo' ? 'task' : 'note'}.</div>
             </div>}
@@ -917,12 +1170,31 @@ export default function SharedPage() {
         </div>
         <div className="progress" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div>
       </header>
+      {data?.kind === 'note' && !error && <FocusChrome container={rootRef.current} active={fullscreen} prefs={fsp} set={setFsp} title={data.title || 'Untitled'} saveStatus={status === 'saved' ? 'saved' : status === 'error' || status === 'conflict' ? 'error' : 'saving'} words={wordCount} docKey={token} getScroller={() => articleRef.current}
+        outline={headings.map((h) => ({ level: h.level, text: h.title }))} onJump={(text, index) => { const h = headings[index]; if (h) scrollToHeading(h.id); }} onExit={toggleFullscreen}
+        noteNode={<>
+          <button type="button" role="menuitem" data-testid="fs-x-md" onClick={() => exportShared('md')}><Download size={15} />Download as Markdown</button>
+          <button type="button" role="menuitem" data-testid="fs-x-pdf" onClick={() => exportShared('pdf')}><FileText size={15} />Download as PDF</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={15} />Download as Word</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={15} />Download as HTML</button>
+          <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={15} />Download as plain text</button>
+          <button type="button" role="menuitem" onClick={() => exportDocs([{ title: data?.title || 'Untitled', content: data?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog'))}><Printer size={15} />Print</button>
+          <button type="button" role="menuitem" onClick={() => copy(`# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={15} />Copy as Markdown</button>
+        </>}
+        shareNode={<>
+          <p className="fsx-muted">Anyone with this link can {data?.canEdit ? 'edit' : 'read'} this note.</p>
+          <button type="button" className="fsx-wide" data-testid="fs-copy-link" onClick={() => copy(window.location.href, 'Link copied')}><Link2 size={15} />Copy link</button>
+        </>}
+        barItems={[
+          { id: 'who', label: 'Shared by', node: <span className="fsx-chip"><span className="av" aria-hidden="true">{initials(data.author)}</span>{data.author || 'Shared note'}</span> },
+          { id: 'save', label: 'Save to my Peblo', node: <button type="button" className="fsx-save" data-testid="fs-save" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={14} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button> },
+        ]} />}
       {showJoin && <div className="join-back" data-testid="join-back"><div className="join-card" role="dialog" aria-modal="true" aria-label="Join this page" data-testid="join-card" onKeyDown={(event) => { if (event.key === 'Escape') joinNow(true); }}>
-        <div className="join-prev"><span className="join-big" style={{ background: cardColor, boxShadow: `0 0 0 5px ${cardColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
+        <div className="join-prev"><span className="join-big" style={{ background: myColor, boxShadow: `0 0 0 5px ${myColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
         <label className="join-lbl">Your name<input aria-label="Your name" autoFocus maxLength={40} placeholder="Guest" value={cardName} onChange={(event) => setCardName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') joinNow(false); }} /></label>
-        <div><div className="join-lbl">Your colour</div><div className="join-sws" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={cardColor === c} aria-label={`Colour ${c}`} className={cardColor === c ? 'on' : ''} style={{ background: c }} onClick={() => setCardColor(c)} />)}</div></div>
+        <div className="join-auto" data-testid="join-auto-colour"><i style={{ background: myColor }} /><span>Your colour is picked for you, so everyone can tell who is who.</span></div>
         <div className="join-mem"><Lock size={14} />Remembered in this browser only. Others see your name and colour on your cursor.</div>
-        <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}>{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Just read, stay anonymous</button></div>
+        <div className="join-btns"><button type="button" className="btn primary" data-testid="join-submit" onClick={() => joinNow(false)}><Pencil size={14} />{cardName.trim() ? `Join as ${cardName.trim()}` : 'Join'}</button><button type="button" className="btn" data-testid="join-anon" onClick={() => joinNow(true)}>Join without a name</button></div>
       </div></div>}
       {data && !error && <nav className="srail" aria-label="Page panels" data-testid="srail">
         {hasToc && <button type="button" className={pinnedToc || shownFly === 'outline' ? 'on' : ''} data-testid="rail-outline" aria-label="Outline" aria-pressed={pinnedToc || shownFly === 'outline'} title="Outline [" onClick={() => openFly('outline')}><List size={19} /></button>}
@@ -938,19 +1210,24 @@ export default function SharedPage() {
       </aside>}
       {data && !error && shownFly === 'people' && <div className="srail-fly people cp-drawer docked" data-testid="fly-people">
             <CollabPanel
-              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced}
+              mode="guest" viewers={viewers} canEdit={!!data.canEdit} events={collab.events} offline={offline} synced={synced} onRetry={() => { missed.current = 0; setRev((n) => n + 1); }}
               muted={collab.muted} onMute={collab.setMuted} onClearEvents={collab.clear} onClose={() => setPanelOpen(false)}
               followId={followId} onFollow={setFollowId}
             />
       </div>}
       {data && !error && shownFly === 'history' && isNote && <aside className="srail-fly" data-testid="fly-history" aria-label="History">
-        <div className="fly-head"><b>History</b></div>
+        <div className="fly-head"><b>History</b><button type="button" className="fly-x" aria-label="Close history" onClick={() => setFly(null)}><X size={14} /></button></div>
         {reader.changes && <div className="fly-row"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div></div>}
+        {reader.changes && reader.showChanges && <button type="button" className="fly-btn" data-testid="fly-next-change" onClick={() => goChange(1)}><ArrowDown size={15} />Next change</button>}
         {reader.changes && <button type="button" className="fly-btn" data-testid="fly-marks" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button>}
         {reader.place && <div className="fly-row"><Clock size={16} /><div><b>You stopped at {reader.place.title}</b></div></div>}
         {reader.place && <button type="button" className="fly-btn" data-testid="fly-jump" onClick={() => { reader.jumpPlace(); setFly(null); }}>Jump back</button>}
         {!reader.changes && !reader.place && <p className="fly-empty">Nothing new since you were last here.</p>}
+        <ShareVersions token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} unlock={getUnlock()} name={nameRef.current || user?.name || 'Guest'}
+          onCompare={(text, at) => { const n = reader.compareWith(text, at); showToast(n ? `${n} line${n > 1 ? 's' : ''} differ from that version` : 'Same as that version'); setTimeout(() => goChange(1), 1300); setFly(null); }}
+          onRestored={() => { showToast('Version restored. Today was kept as a version.'); setRev((n) => n + 1); setFly(null); }} onError={(m) => showToast(m)} />
         <button type="button" className="fly-btn" data-testid="fly-bookmarks" onClick={() => { setBmOpen(true); setFly(null); }}><Bookmark size={15} />My bookmarks{reader.bookmarks.length > 0 ? ` (${reader.bookmarks.length})` : ''}</button>
+      <p className="fly-foot">Restoring a version asks first and keeps the current text as a version.</p>
       </aside>}
       {data && !error && shownFly === 'file' && <aside className="srail-fly" data-testid="fly-file" aria-label="File">
         <div className="fly-head"><b>{data.title || data.text || 'Shared page'}</b></div>
@@ -966,50 +1243,92 @@ export default function SharedPage() {
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
 
-      {wait && !data && !error ? (
-        <main className="stage"><section className="gone wait-room" role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span><Clock size={30} /></span></div>
+      {locked && !data && !error ? (
+        <main className="stage"><section className="gone lock-room" role="dialog" aria-label="Password needed" data-testid="lock-room"><div className="orb" aria-hidden="true"><span><Lock size={26} /></span></div>
+          <h1>This page has a password</h1>
+          <p>{locked.author ? `${locked.author} protected this page.` : 'The owner protected this page.'} Type the password they gave you.</p>
+          <form className="lock-form" onSubmit={submitLock}>
+            <input type="password" autoFocus aria-label="Password" data-testid="lock-input" placeholder="Password" value={lockPw} maxLength={100} autoComplete="off" onChange={(e) => { setLockPw(e.target.value); setLockErr(''); }} />
+            <button type="submit" className="btn dark" data-testid="lock-open" disabled={!lockPw || lockBusy}>{lockBusy ? 'Checking' : 'Open page'}</button>
+          </form>
+          {lockErr && <p className="lock-err" role="alert" data-testid="lock-error"><AlertTriangle size={14} />{lockErr}</p>}
+        </section></main>
+      ) : wait && !data && !error ? (
+        <main className="stage"><section className={`gone wait-room${wait === 'declined' ? ' is-declined' : ''}`} role="status" data-testid="waiting-room"><div className="orb" aria-hidden="true"><span>{wait === 'declined' ? <Ban size={26} /> : <Clock size={26} />}</span></div>
           <h1>{wait === 'declined' ? 'The owner did not let you in' : 'Waiting to be let in'}</h1>
-          <p>{wait === 'declined' ? 'You can ask them to send the link again.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
+          <p>{wait === 'declined' ? 'You can ask them to send the link again, or sign in if you have an account.' : 'The owner will see your name and can let you in. This page opens by itself.'}</p>
           {wait !== 'declined' && <label className="wait-name">Your name<input aria-label="Your name" data-testid="wait-name" value={waitName} maxLength={40} placeholder="Guest" onChange={(e) => { setWaitName(e.target.value); setGuestName(e.target.value.trim().slice(0, 40)); }} onBlur={(e) => saveGuestName(e.target.value)} /></label>}
+          {wait === 'declined' && <div className="gone-btns"><button type="button" className="btn dark" data-testid="ask-again" onClick={() => window.location.reload()}>Ask again</button><button type="button" className="btn" data-testid="gone-signin" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div>}
         </section></main>
       ) : error ? (
-        <main className="stage"><section className="gone" role="alert"><div className="orb" aria-hidden="true"><span><X size={30} /></span></div><h1>This link isn’t available</h1><p>{error}</p><a className="btn primary" href="/">Go to Peblo</a></section></main>
+        <main className="stage"><section className="gone is-gone" role="alert" data-testid="link-gone"><div className="orb" aria-hidden="true"><span><Ban size={26} /></span></div><h1>This link isn’t available</h1><p>{error}</p><div className="gone-btns"><button type="button" className="btn dark" data-testid="ask-owner" onClick={() => copy(`Hi, the link you shared with me is not working any more. Could you send me a new one?`, 'Message copied. Send it to the owner.')}>Ask the owner</button><a className="btn" href="/">Go to Peblo</a></div></section></main>
       ) : !data ? (
-        <main className="stage"><p className="loading">Loading your shared page…</p></main>
+        <main className="stage"><section className="skel" data-testid="page-loading" role="status" aria-live="polite"><i className="sk t" /><span className="sk-row"><i className="sk dot" /><i className="sk s" /></span><i className="sk big" /><i className="sk l" /><i className="sk l m" /><i className="sk l" /><i className="sk l s" /><i className="sk pill" /><i className="sk big" /><span className="skel-pill"><LoaderCircle className="spin" size={14} />Opening the page<span className="sr-only"> Loading your shared page…</span></span></section></main>
       ) : (
-        <main className={`stage${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
+        <main className={`stage${data.kind === 'note' ? ' note-stage' : ''}${data.kind === 'todo' || headings.length === 0 ? ' task-stage' : ''}${pinnedToc ? '' : ' no-toc'}${panelOpen && wideScreen ? ' people-pinned' : ''}`}>
           {pinnedToc && <aside className="toc" aria-label="On this page">
             <div className="toc-head"><h2>On this page</h2><button type="button" className="toc-toggle" data-testid="toc-toggle" aria-pressed="true" aria-label="Unpin outline" title="Unpin outline" onClick={toggleToc}><Pin size={17} /></button></div>
+            <div className="toc-card-top" data-testid="toc-time"><span className="toc-left"><Clock size={13} />{Math.max(1, Math.ceil(wordCount * (1 - scrollProgress / 100) / 200))} min left</span><div className="toc-bar" aria-hidden="true"><i style={{ width: `${scrollProgress}%` }} /></div></div>
             {tocLinks}
+            {data.kind === 'note' && reader.bookmarks.length > 0 && <div className="toc-bm" data-testid="toc-bookmarks"><h3>Bookmarks</h3>{reader.bookmarks.slice(0, 4).map((b) => <button type="button" key={b.sig} onClick={() => reader.goBookmark(b.sig)}><Bookmark size={13} /><span>{b.title || b.text || 'Bookmark'}</span></button>)}</div>}
+            <div className="toc-foot" data-testid="toc-foot">
+              <button type="button" onClick={() => exportShared('pdf')}><Download size={17} />Export</button>
+              <button type="button" onClick={() => setLookOpen(true)}><Type size={17} />Look</button>
+              <button type="button" onClick={() => setKeysOpen(true)}><Keyboard size={17} />Keys</button>
+              <button type="button" onClick={() => window.print()}><Printer size={17} />Print</button>
+            </div>
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}
 
-          <article ref={articleRef}>
+          <article ref={articleRef} id="page-main" tabIndex={-1} style={look.zoom && look.zoom !== 100 ? { zoom: look.zoom / 100 } : undefined}>
+          {offline && <div className="off-banner" role="status" data-testid="page-offline-banner"><WifiOff size={16} /><span>Offline. Your edits are kept on this device and will sync.</span><button type="button" onClick={() => { missed.current = 0; setRev((n) => n + 1); }}>Retry</button></div>}
+            {followId && <FollowBanner who={viewers.find((v) => v.id === followId)} color={peerColor(followId)} onStop={() => setFollowId(null)} />}
+            {data.kind === 'note' && reader.changes && reader.showChanges && chgIdx >= 0 && <div className="cmp-bar" data-testid="cmp-bar" role="status"><History size={15} /><span>Comparing now with {new Date(reader.changes.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span><b>Change {chgIdx + 1} of {chgEls().length}</b><button type="button" aria-label="Previous change" onClick={() => goChange(-1)}><ArrowUp size={15} /></button><button type="button" aria-label="Next change" onClick={() => goChange(1)}><ArrowDown size={15} /></button><button type="button" aria-label="Close comparison" onClick={() => setChgIdx(-1)}><X size={14} /></button></div>}
             {data.kind === 'note' && <>
               {data.canEdit && !previewMode
                 ? <textarea className="title-in" rows={1} aria-label="Title" key={`t${rev}`} defaultValue={data.title || ''} ref={fitTitle} onInput={(event) => fitTitle(event.currentTarget)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} onChange={(event) => { draft.current.title = event.target.value.replace(/\n/g, ' '); typedAt.current = Date.now(); queueSave(); }} />
                 : <h1 className="title">{data.title || 'Untitled'}</h1>}
+              <div className="title-tools" data-testid="title-tools">
+                <button type="button" data-testid="tt-listen" className={listening ? 'on' : ''} aria-pressed={listening} aria-label={listening ? 'Stop listening' : 'Listen to this page'} title="Listen" onClick={toggleListen}><Volume2 size={17} /></button>
+                <span className="menu-wrap" ref={trRef}><button type="button" data-testid="tt-translate" className={trLang ? 'on' : ''} aria-haspopup="menu" aria-expanded={trOpen} aria-label="Translate this page" title="Translate" onClick={() => setTrOpen((o) => !o)}><Languages size={17} /></button>{trOpen && <TranslateMenu current={trLang} busy={trBusy} onPick={pickLang} onClose={() => setTrOpen(false)} />}</span>
+                {data.canEdit && isOwner && <button type="button" data-testid="tt-preview" aria-pressed={previewMode} aria-label="Preview" title="Preview" onClick={() => setPreviewMode((v) => !v)}><Eye size={17} /></button>}
+                <button type="button" data-testid="tt-full" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}><Maximize2 size={17} /></button>
+                <button type="button" data-testid="tt-text" aria-label="Text and reading style" title="Text" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={17} /></button>
+                <button type="button" data-testid="tt-more" aria-label="More options" title="More" onClick={() => setMenuOpen(true)}><MoreHorizontal size={17} /></button>
+              </div>
               <div className="by">
-                <span className="av" aria-hidden="true">{initials(data.author)}</span>
-                <span>{data.author ? <>Shared by <b>{data.author}</b></> : 'Shared note'}</span><span className="dotsep">·</span>
-                <span>Updated {when(data.updatedAt)}</span>
-                <span className="dotsep">·</span><span data-testid="by-stats">{Math.max(1, Math.ceil(wordCount / 200))} min read · {wordCount} words</span>
+                <span className="by-who"><span className="av" aria-hidden="true">{initials(data.author)}</span>
+                <span>{data.author ? <><span className="by-pre">Shared by </span><b>{data.author}</b></> : 'Shared note'}</span></span><span className="dotsep">·</span>
+                <span className="by-upd">Updated {when(data.updatedAt)}</span>
+                <span className="dotsep">·</span><span data-testid="by-stats" className="by-stats" title={`Updated ${when(data.updatedAt)}`}><i className="by-dot" aria-hidden="true" /><span className="by-rt">{Math.max(1, Math.ceil(wordCount / 200))} min read · </span>{wordCount} words</span>
+                <span className={`by-role ${data.canEdit ? 'edit' : 'view'}`}>{data.canEdit ? <Pencil size={13} /> : <Eye size={13} />}{data.canEdit ? 'Can edit' : 'Can view'}</span>
                 {data.canEdit && <><span className="dotsep">·</span><span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span></>}
                 {data.expiresAt && <><span className="dotsep">·</span><span className={`expiry${new Date(data.expiresAt).getTime() - Date.now() < 86400000 ? ' soon' : ''}`} data-testid="link-expiry">Link ends {when(data.expiresAt)}</span>{!isOwner && new Date(data.expiresAt).getTime() > Date.now() && new Date(data.expiresAt).getTime() - Date.now() < 86400000 && (extAsked ? <span className="ext-asked" data-testid="extend-asked">Asked to keep it going</span> : <button type="button" className="ext-ask" data-testid="extend-ask" onClick={askExtend}>Ask to keep it going</button>)}</>}
               </div>
-              {data.canEdit && !user && !previewMode && <div className="welcome" data-testid="welcome">
-                <label className="guest-name"><span>You are editing as</span>
-                  <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
-                  <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small></label>
-                <span className="swatches" role="radiogroup" aria-label="Your colour">{GUEST_COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={guestColor === c} aria-label={`Colour ${c}`} data-testid="guest-color" className={guestColor === c ? 'on' : ''} style={{ background: c }} onClick={() => pickColor(c)}>{guestColor === c && <Check size={12} />}</button>)}</span>
+              <div className="mchips" data-testid="mchips">
+                <button type="button" className="c-people" onClick={() => setPanelOpen((open) => !open)}><Users size={15} />People{others.length ? ` ${others.length}` : ''}</button>
+                <button type="button" className="c-comm" onClick={() => setCardsSheet(true)}>Comments</button>
+                <button type="button" className="c-hist" onClick={() => openFly('history')}>History</button>
+                {headings.length > 0 && <button type="button" className="c-out" onClick={() => setTocSheet(true)}>Outline</button>}
+              </div>
+              {data.summary && <div className="sum-card" data-testid="page-summary"><span className="sum-ic" aria-hidden="true"><Sparkles size={16} /></span><div><div className="sum-cap">Summary by {data.author || 'the owner'}</div><p>{data.summary}</p></div></div>}
+              {data.canEdit && !user && !previewMode && <div className={`welcome${guestName ? " named" : ""}`} data-testid="welcome">
+                <label className="guest-name"><i className="gn-av" aria-hidden="true" style={{ background: myColor }}>{((guestName || 'G')[0] || 'G').toUpperCase()}</i>
+                  <span className="gn-in"><span className="gn-l">You are editing as</span>
+                  <input aria-label="Your name" placeholder="Guest" maxLength={40} defaultValue={guestName} onBlur={(event) => saveGuestName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></span>
+                  <small>{guestName ? 'Others see this name' : 'Add a name so others know it is you'}</small>
+                  <em className="gn-pill">{guestName ? 'Name saved' : 'No name yet'}</em></label>
               </div>}
               {conflict && <div className="conflict" role="alert">Someone else changed the same words while you were editing.<div className="conflict-actions"><button className="btn" type="button" onClick={() => { draft.current = { ...draft.current, title: conflict.title, content: conflict.content, base: conflict.updatedAt, baseContent: conflict.content }; setData((c) => ({ ...c, ...conflict })); setConflict(null); setStatus('saved'); setRev((n) => n + 1); }}>Load their version</button><button className="btn" type="button" onClick={() => saveNote(false, true)}>Keep both</button><button className="btn dark" type="button" onClick={() => saveNote(true)}>Keep mine</button></div></div>}
-              {data.canEdit && !previewMode
+              {trLang && <div className="tr-bar" data-testid="tr-bar" role="status"><Languages size={15} /><span>Translated to {LANGUAGES.find(([c]) => c === trLang)?.[1]} by Peblo AI. The original is kept.</span><button type="button" onClick={() => pickLang(null)}>Show original</button></div>}
+              {trLang ? <DocHtml innerRef={docRef} html={toHtml(trText)} /> : data.canEdit && !previewMode
                 ? <Suspense fallback={<p className="loading">Loading editor…</p>}><BlockEditor key={`e${rev}${collabOff ? 'x' : ''}`} guest fullPage themeOverride={darkMode ? 'dark' : 'light'} initialContent={data.content}
-                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
-                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
+                    collab={collabOff || localStorage.getItem('peblo-collab') === 'off' ? undefined : { share: token, unlock: getUnlock() || undefined, sid: sessionIdRef.current || undefined, name: nameRef.current || user?.name || 'Guest', color: colorRef.current || undefined }}
+                    onCollabState={(state) => { collabState.current = state; }} onCollabFail={() => setCollabOff(true)} onChange={(markdown) => { draft.current.content = markdown; setLiveEmpty(!String(markdown).replace(/[#>*\-\s]/g, ''));  if (document.activeElement?.closest?.('.bn-editor')) typedAt.current = Date.now(); queueSave(); }} /></Suspense>
                 : <DocHtml innerRef={docRef} html={body} />}
+              {(liveEmpty === null ? !wordCount : liveEmpty) && !trLang && <div className="empty-page" data-testid="empty-page"><span className="ep-i"><Pencil size={18} /></span><b>This page is empty</b><p>{data.canEdit ? 'Start typing here. Everyone with the link sees it as you write.' : 'Nothing here yet. The owner has not written anything.'}</p></div>}
               {readerFind && <FindBar root={docRef} selector="" editable={false} onClose={() => setReaderFind(false)} />}
+              {viewPic && <Suspense fallback={null}><PictureView src={viewPic.src} name={viewPic.name} list={viewPic.list} index={viewPic.index} onClose={() => setViewPic(null)} /></Suspense>}
               <PagePolls token={token} sid={viewerSid(kindPath, token)} getName={() => nameRef.current || user?.name} />
             </>}
 
@@ -1017,9 +1336,12 @@ export default function SharedPage() {
               <section className="taskcard">
                 <div className="chips">
                   <span className={`chip${data.priority === 'high' ? ' p' : ''}`}>{data.priority} priority</span>
+                  {data.deadline && <span className="chip due" data-testid="todo-due"><Clock size={13} />Due {when(data.deadline)}</span>}
+                  {data.completed && <span className="chip ok" data-testid="todo-done-chip"><Check size={13} />Done{data.completedAt ? ` ${when(data.completedAt)}` : ''}</span>}
                   {data.tags.map((tag) => <span key={tag} className="chip l">#{tag}</span>)}
+                  {!data.canEdit && <span className="chip lock" data-testid="todo-lock"><Lock size={13} />Only editors can tick this</span>}
                 </div>
-                {data.canEdit && !previewMode ? <input className="task-title-in" aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
+                {data.canEdit && !previewMode ? <textarea className="task-title-in" rows={1} ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} aria-label="Task" value={data.text} onChange={(event) => { setData((current) => ({ ...current, text: event.target.value })); setStatus('saving'); }} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== taskSavedText.current) patchTask({ text: value }); else if (!value) setData((current) => ({ ...current, text: taskSavedText.current || current.text })); else setStatus('saved'); }} /> : <h1>{data.text}</h1>}
                 <div className="by task-by"><span className="av" aria-hidden="true">{initials(data.author)}</span><span>{data.author ? <>Shared task from <b>{data.author}</b></> : 'Shared task'}</span>{data.canEdit && <span className={`status ${status}`} role="status">{status === 'saved' ? <Check size={15} /> : null}{statusText}</span>}</div>
                 <button type="button" className={`check${data.completed ? ' done' : ''}`} aria-pressed={data.completed} disabled={!data.canEdit || previewMode} onClick={() => patchTask({ completed: !data.completed })}><span className="box">{data.completed && <Check size={17} />}</span><span className="t">{data.completed ? (data.canEdit && !previewMode ? 'Done (tap to undo)' : 'Done') : data.canEdit && !previewMode ? 'Mark as done' : 'To do'}</span></button>
                 <div className="tmeta"><div><small>Due</small><b>{data.deadline ? when(data.deadline) : 'No due date'}</b></div><div><small>Priority</small><b>{data.priority}</b></div><div><small>Status</small><b>{data.completed ? 'Done' : 'To do'}</b></div></div>
@@ -1027,13 +1349,16 @@ export default function SharedPage() {
               {data.note && <><h2 className="linked">Linked note · {data.note.title || 'Untitled'}</h2><div className="doc" dangerouslySetInnerHTML={{ __html: body }} /></>}
             </>}
 
-            <section className="cta"><div><h2>{data.kind === 'todo' ? 'Keep every task in one place.' : 'Notes, tasks and an AI that reads them.'}</h2><p>Peblo keeps your notes, to-dos and calendar in one calm place.</p></div><a className="btn" href="/">Explore Peblo</a></section>
+            {data.kind === 'note' && <EndOfPage token={token} sid={viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} />}
             <footer className="foot"><span>{data.canEdit ? 'Anyone with this link can edit' : 'Read only'} · Made with Peblo</span><span>Shared page</span></footer>
           </article>
-
+          {data.kind === 'note' && !fullscreen && !look.quiet && <ShareTrack articleRef={articleRef} viewers={viewers} colorOf={peerColor} />}
+          {data.kind === 'todo' && !fullscreen && <><TodoAbout data={data} /><TodoCards viewers={viewers} myColor={myColor} peerColor={peerColor} saved={!!savedCopy} busy={saveBusy} onSave={() => (savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy())} /></>}
+          {data.kind === 'note' && !fullscreen && <ShareCards token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => openFly('history')} />}
         </main>
       )}
       {scrollProgress > 5 && <button className="totop" type="button" aria-label="Back to top" onClick={() => articleRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><ArrowUp size={19} /></button>}
+      {data && listening && <ListenBar getParagraphs={listenParas} onHighlight={hilite} onClose={() => setListening(false)} />}
       {data && !look.quiet && typingText && <div className="typing-pill" role="status" aria-live="polite" data-testid="typing-pill">
         <span className="typing-av" aria-hidden="true">{initials(typers[0].name)}</span>
         <span className="typing-text">{typingText}</span>
@@ -1044,7 +1369,7 @@ export default function SharedPage() {
       />}
       {data && !error && <>
         <div className="dk-edge" aria-hidden="true" onMouseEnter={showBar} />
-        {!(look.pin || barShown) && <button type="button" className="dh" data-testid="dock-handle" onClick={showBar} aria-label="Show tool bar"><Wrench size={14} /><span>Tools</span><kbd>/</kbd></button>}
+        {!(look.pin || barShown) && <button type="button" className="dh" data-testid="dock-handle" onClick={showBar} aria-label="Show tool bar"><ArrowUp size={14} /><span>Show tool bar</span><kbd>/</kbd></button>}
         {(look.pin || barShown) && <div className="dk" role="toolbar" aria-label="Page tools" data-testid="dock" onMouseEnter={showBar} onMouseLeave={() => { if (!look.pin) hideBarSoon(); }}>
           {data.kind === 'note' && headings.length > 0 && <button type="button" className="d" aria-pressed={tocOpen} onClick={toggleToc} title="Outline ["><PanelLeftOpen size={17} /><span>Outline</span><kbd>[</kbd></button>}
           <button type="button" className="d" aria-pressed={panelOpen} onClick={() => setPanelOpen((o) => !o)} title="People and comments ]"><PanelRight size={17} /><span>People</span><kbd>]</kbd></button>
@@ -1054,32 +1379,62 @@ export default function SharedPage() {
           <button type="button" className="d" onClick={() => setKeysOpen(true)} title="Shortcuts ?"><Keyboard size={17} /><span>Keys</span><kbd>?</kbd></button>
           <button type="button" className="d main" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={17} /><span>{savedCopy ? 'Open' : 'Save'}</span></button>
         </div>}
-        {fullscreen && <button type="button" className="fs-exit" data-testid="fs-exit" onClick={toggleFullscreen}><Minimize2 size={15} />Exit full screen<kbd>Esc</kbd></button>}
       </>}
       {data?.kind === 'note' && bmOpen && <aside className="bm-pop" data-testid="bookmarks" aria-label="My bookmarks">
         <h3><Bookmark size={16} />My bookmarks<span className="n">{reader.bookmarks.length}</span><button type="button" aria-label="Close" onClick={() => setBmOpen(false)}><X size={15} /></button></h3>
-        {reader.bookmarks.length === 0 && <p className="bm-empty">Nothing yet. Point at a line and press B.</p>}
-        {reader.bookmarks.map((b) => <div className="bm-row" key={b.sig}><button type="button" className="bm-go" data-testid="bookmark-item" onClick={() => { reader.goBookmark(b.sig); setBmOpen(false); }}><Bookmark size={14} /><span>{b.title}</span></button><button type="button" aria-label="Remove bookmark" onClick={() => reader.removeBookmark(b.sig)}><X size={13} /></button></div>)}
+        <p className="bm-sub">{reader.bookmarks.length} on this page</p>
+        {reader.bookmarks.length === 0 && <div className="bm-empty-card" data-testid="bookmarks-empty"><span><Bookmark size={16} /></span><b>Empty state</b><p className="bm-empty">No bookmarks yet. Point at a line and press B, or use the flag at the line start.</p></div>}
+        {reader.bookmarks.map((b) => <div className="bm-row" key={b.sig}><button type="button" className="bm-go" data-testid="bookmark-item" onClick={() => { reader.goBookmark(b.sig); setBmOpen(false); }}><Bookmark size={14} /><span>{b.title}<small>{when(b.at)}</small></span></button><button type="button" aria-label="Remove bookmark" onClick={() => { reader.removeBookmark(b.sig); showToast('Bookmark removed'); }}><X size={13} /></button></div>)}
         <button type="button" className="bm-add" data-testid="bookmark-add" onClick={() => { if (!reader.toggleBookmark()) showToast('Scroll to a line first'); }}>Bookmark the line at the top</button>
+        <p className="bm-foot"><Lock size={13} />Kept in this browser only. The owner cannot see them.</p>
       </aside>}
       {data?.kind === 'note' && !fullscreen && (reader.changes || reader.place) && <div className="reader-pills">
         {reader.changes && <div className="rp" data-testid="changes-pill"><History size={16} /><div><b>{reader.changes.count} change{reader.changes.count > 1 ? 's' : ''} since your last visit</b><small>{new Date(reader.changes.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div><button type="button" data-testid="changes-toggle" onClick={() => reader.setShowChanges((v) => !v)}>{reader.showChanges ? 'Hide marks' : 'Show marks'}</button><button type="button" aria-label="Dismiss" onClick={reader.dismissChanges}><X size={14} /></button></div>}
         {reader.place && !reader.changes && <div className="rp" data-testid="place-pill"><History size={16} /><div><b>You stopped at {reader.place.title}</b></div><button type="button" data-testid="place-jump" onClick={reader.jumpPlace}>Jump back</button><button type="button" aria-label="Dismiss" onClick={reader.dismissPlace}><X size={14} /></button></div>}
       </div>}
       {data?.kind === 'note' && !fullscreen && <GuestTour ready={!!data && !error && !showJoin} />}
+      {paletteOpen && data && !error && <SharePalette
+        headings={headings}
+        onJump={(id) => { if (window.location.hash !== `#${id}`) window.history.pushState(null, '', `#${id}`); scrollToHeading(id); }}
+        onClose={() => setPaletteOpen(false)}
+        actions={[
+          { id: 'link', title: 'Copy link to this page', icon: Link2, run: () => copy(window.location.href, 'Share link copied') },
+          savedCopy ? { id: 'open', title: 'Open in Peblo', icon: Check, run: () => navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') } : { id: 'save', title: 'Save to my Peblo', icon: Clipboard, run: () => saveSharedCopy() },
+          { id: 'fs', title: 'Focus mode', icon: Maximize2, hint: 'F', run: toggleFullscreen },
+          isNote ? { id: 'find', title: 'Find in this page', icon: SearchIcon, hint: 'Ctrl F', run: () => setReaderFind(true) } : null,
+          data.canEdit && isNote ? { id: 'comments', title: 'Open comments', icon: MessageSquare, run: () => commentsBtn()?.click() } : null,
+          { id: 'pdf', title: 'Export as PDF', icon: Download, run: () => exportShared('pdf') },
+          { id: 'md', title: 'Export as Markdown', icon: Download, run: () => exportShared('md') },
+          { id: 'print', title: 'Print', icon: Printer, run: () => exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')) },
+          { id: 'keys', title: 'Keyboard shortcuts', icon: Keyboard, hint: '?', run: () => setKeysOpen(true) },
+          { id: 'theme', title: darkMode ? 'Switch to light theme' : 'Switch to dark theme', icon: darkMode ? Sun : Moon, run: () => setDarkMode((dark) => !dark) },
+        ].filter(Boolean)}
+      />}
       {keysOpen && <div className="sheet-back keys-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setKeysOpen(false); }}>
         <section className="keys-sheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="keys-sheet">
           <header><h2>Keyboard shortcuts</h2><button type="button" aria-label="Close" onClick={() => setKeysOpen(false)}><X size={18} /></button></header>
-          <ul>{[['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['B', 'Bookmark the line under the pointer'], ['F', 'Full screen'], ['Esc', 'Leave full screen or close'], ['?', 'This list']].map(([k, l]) => <li key={k}><kbd>{k}</kbd><span>{l}</span></li>)}</ul>
+          <ul className="keys-list">{[
+            ['[', 'Show or hide the outline'], [']', 'Show or hide people and comments'], ['\\', 'Hide both side panels'], ['/', 'Show or hide the tool bar'], ['B', 'Bookmark the line under the pointer'],
+            ['Ctrl F', 'Find in page'], ['F', 'Full screen'], ['Esc', 'Close what is open'], ['Ctrl K', 'Command palette'], ['J', 'Next heading'], ['K', 'Previous heading'], ['G G', 'Back to top'],
+            ['Ctrl B', 'Jump to place you stopped'], ['L', 'Listen'], ['T', 'Translate'], ['Ctrl J', 'Switch theme'], ['Ctrl L', 'Copy link'], ['C', 'Open comments'], ['?', 'This list'],
+          ].map(([k, l]) => <li key={k + l}><span>{l}</span><kbd>{k}</kbd></li>)}</ul>
         </section>
       </div>}
       {data && !error && <nav className="mbar" aria-label="Page actions" data-testid="mbar">
         {data.kind === 'note' && headings.length > 0 && <button type="button" aria-label="Outline" onClick={() => setTocSheet(true)}><List size={20} /><span>Outline</span></button>}
         <button type="button" aria-label="People" aria-pressed={panelOpen} onClick={() => setPanelOpen((open) => !open)}><Users size={20} /><span>People{others.length ? ` ${others.length}` : ''}</span></button>
-        <button type="button" aria-label="Appearance" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={20} /><span>Look</span></button>
-        <button type="button" aria-label="Copy link" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={20} /><span>Link</span></button>
+        {data.kind === 'note' && <button type="button" aria-label="Comments" data-testid="mbar-comments" onClick={() => setCardsSheet(true)}><MessageSquare size={20} /><span>Comments</span></button>}
+        {data.kind === 'note' && <button type="button" aria-label="History" data-testid="mbar-history" onClick={() => openFly('history')}><History size={20} /><span>History</span></button>}
+        {data.kind !== 'note' && <button type="button" aria-label="Appearance" onClick={() => { setLookOpen(true); window.scrollTo?.({ top: 0 }); }}><Type size={20} /><span>Look</span></button>}
+        {data.kind !== 'note' && <button type="button" aria-label="Copy link" onClick={() => copy(window.location.href, 'Share link copied')}><Link2 size={20} /><span>Link</span></button>}
         <button type="button" className="main" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={20} /><span>Save</span></button>
       </nav>}
+      {cardsSheet && data.kind === 'note' && <div className="sheet-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCardsSheet(false); }}>
+        <section className="sheet cards-sheet" role="dialog" aria-modal="true" aria-label="Comments and page cards" data-testid="cards-sheet">
+          <header><h2>Comments</h2><button type="button" aria-label="Close" onClick={() => setCardsSheet(false)}><X size={18} /></button></header>
+          <ShareCards sheet token={token} sid={sessionIdRef.current || viewerSid(kindPath, token)} name={nameRef.current || user?.name || 'Guest'} canEdit={!!data.canEdit} owner={data.author} canComment={!!data.canEdit && !previewMode} pageText={data.content || ''} headings={headings} changes={reader.changes} showChanges={reader.showChanges} onToggleChanges={() => reader.setShowChanges((v) => !v)} onHistory={() => { setCardsSheet(false); openFly('history'); }} />
+        </section>
+      </div>}
       {tocSheet && <div className="sheet-back" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTocSheet(false); }}>
         <section className="sheet" role="dialog" aria-modal="true" aria-label="On this page" data-testid="toc-sheet">
           <header><h2>On this page</h2><button type="button" aria-label="Close" onClick={() => setTocSheet(false)}><X size={18} /></button></header>
@@ -1095,12 +1450,14 @@ export default function SharedPage() {
           <p>Save your own copy so you can find and edit it later.</p>
           <form onSubmit={submitAuthAndSave}>
             {authMode === 'signup' && <label>Your name<input value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" maxLength={80} required /></label>}
-            <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
+            <label>Email<input type="email" placeholder="you@example.com" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required /></label>
             <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={authMode === 'signup' ? 8 : undefined} required /></label>
-            {authError && <div className="auth-error" role="alert">{authError}</div>}
-            <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</button>
+            {authMode === 'signup' && !authError && <small className="auth-hint">At least 8 characters.</small>}
+            {authError && <div className="auth-error" role="alert"><AlertTriangle size={15} />{authError}</div>}
+            <button className="btn primary modal-submit" type="submit" disabled={authBusy || !authEmail.trim() || !authPassword || (authMode === 'signup' && !authName.trim())}>{authBusy ? <><LoaderCircle className="spin" size={16} />Please wait…</> : <><FileIcon size={15} />{authMode === 'signup' ? 'Create account and save' : 'Sign in and save'}</>}</button>
           </form>
           <button className="auth-switch" type="button" disabled={authBusy} onClick={() => { setAuthMode((mode) => mode === 'login' ? 'signup' : 'login'); setAuthError(''); }}>{authMode === 'signup' ? 'Already have an account? Sign in' : 'New to Peblo? Create an account'}</button>
+          {authMode === 'login' && authError && <a className="auth-switch" data-testid="auth-reset" href="/forgot-password">Forgot it? Reset password</a>}
         </section>
       </div>}
       {revokeConfirm && <div className="share-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRevokeConfirm(false); }}>
@@ -1108,8 +1465,8 @@ export default function SharedPage() {
           <button className="share-modal-close" type="button" aria-label="Close" onClick={() => setRevokeConfirm(false)}><X size={18} /></button>
           <span className="modal-kicker">You own this link</span>
           <h2 id="revoke-title">Turn sharing off?</h2>
-          <p>Anyone using this link will lose access. You can create a new link later from Peblo.</p>
-          <div className="modal-actions"><button className="btn" type="button" onClick={() => setRevokeConfirm(false)}>Keep link on</button><button className="btn danger-btn" type="button" onClick={turnSharingOff}>Turn sharing off</button></div>
+          <p>Anyone using this link loses access straight away{others.length ? `, including the ${others.length} ${others.length === 1 ? 'person' : 'people'} here now` : ''}. You can create a new link later from Peblo.</p>
+          <div className="modal-actions rv"><button className="btn keep" type="button" onClick={() => setRevokeConfirm(false)}>Keep link on</button><button className="btn danger-btn" type="button" data-testid="revoke-confirm" onClick={turnSharingOff}>Turn sharing off</button></div>
         </section>
       </div>}
     </div>

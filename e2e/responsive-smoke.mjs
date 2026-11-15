@@ -89,8 +89,10 @@ const audit = (phone) => {
       const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
       if (!visible(r, cs) || el.disabled || el.closest('[inert]')) continue;
       if (r.bottom < 0 || r.top > H) continue; // below the fold is reachable by scrolling
-      if (r.right > W + 1 || r.left < -1) { out.offscreen.push(`${desc(el)} ${Math.round(r.left)}..${Math.round(r.right)} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20)}"`); continue; }
-      if (r.height < 31.5) { const k = desc(el); if (!seen.has(k)) { seen.add(k); out.tiny.push(`${k} ${Math.round(r.width)}x${Math.round(r.height)} "${(el.getAttribute('aria-label') || el.textContent || el.placeholder || '').trim().slice(0, 24)}"`); } }
+      // a row you swipe sideways (overflow-x auto/scroll) can still be reached: only flag what no scroller can bring into view
+      const swipeable = (() => { for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) { const ox = getComputedStyle(p).overflowX; if ((ox === 'auto' || ox === 'scroll') && p.scrollWidth > p.clientWidth && p.getBoundingClientRect().right <= W + 1) return true; } return false; })();
+      if (!swipeable && (r.right > W + 1 || r.left < -1)) { out.offscreen.push(`${desc(el)} ${Math.round(r.left)}..${Math.round(r.right)} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20)}"`); continue; }
+      if (r.height < 31.5 && !(el.type === 'checkbox' && r.height >= 24)) { const k = desc(el); if (!seen.has(k)) { seen.add(k); out.tiny.push(`${k} ${Math.round(r.width)}x${Math.round(r.height)} "${(el.getAttribute('aria-label') || el.textContent || el.placeholder || '').trim().slice(0, 24)}"`); } }
     }
   }
   const seenC = new Set();

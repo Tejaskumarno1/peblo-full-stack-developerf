@@ -1,0 +1,16 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'FS test', content: 'Hello\n\n## A\n\nBody', tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: false })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); localStorage.setItem('peblo-guest-joined', '1'); } catch {} });
+const g = await c.newPage();
+g.on('console', (m) => { if (/fullscreen/i.test(m.text())) console.log('console:', m.text()); });
+await g.goto(`${base}/s/note/${tok}`); await g.locator('article').waitFor({ timeout: 20000 }); await g.waitForTimeout(1200);
+console.log('cta present (want 0):', await g.locator('.cta').count());
+await g.locator('[data-testid="tt-full"]').first().click();
+await g.waitForTimeout(800);
+console.log('fullscreenElement:', await g.evaluate(() => document.fullscreenElement ? document.fullscreenElement.tagName + '.' + document.fullscreenElement.className : null), 'is-fs:', await g.locator('.pb-shared.is-fs').count());
+await g.keyboard.press('f'); await g.waitForTimeout(600);
+console.log('after F again, fullscreenElement:', await g.evaluate(() => !!document.fullscreenElement), 'is-fs:', await g.locator('.pb-shared.is-fs').count());
+await finish();

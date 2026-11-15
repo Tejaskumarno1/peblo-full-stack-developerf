@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, GripHorizontal, X } from 'lucide-react';
 
 // Find (Ctrl F) and Replace (Ctrl H) in the open note. Matches are painted with the browser's highlight feature, so the note itself is only
 // changed when someone presses Replace. Readers get Find only; people who can edit also get Replace.
@@ -9,7 +10,18 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
   const [idx, setIdx] = useState(0);
   const [count, setCount] = useState(0);
   const [tick, setTick] = useState(0);
-  const [place, setPlace] = useState({ top: 84, right: 28 });
+  const [place, setPlace] = useState(() => { try { const v = JSON.parse(sessionStorage.getItem('peblo-find-pos') || 'null'); if (v && typeof v.top === 'number') return { ...v, moved: true }; } catch { /* no storage */ } return { top: 84, right: 28 }; });
+  const box = useRef(null);
+  const clamp = (top, right) => { const w = box.current?.offsetWidth || 330; const h = box.current?.offsetHeight || 90; return { top: Math.round(Math.min(Math.max(8, top), Math.max(8, window.innerHeight - h - 8))), right: Math.round(Math.min(Math.max(8, right), Math.max(8, window.innerWidth - w - 8))), moved: true }; };
+  const drag = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const r = box.current.getBoundingClientRect(); const dx = e.clientX - r.left; const dy = e.clientY - r.top;
+    const el = e.currentTarget; try { el.setPointerCapture(e.pointerId); } catch { /* capture is optional */ }
+    const move = (m) => setPlace(clamp(m.clientY - dy, window.innerWidth - (m.clientX - dx + r.width)));
+    const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); setPlace((cur) => { try { sessionStorage.setItem('peblo-find-pos', JSON.stringify({ top: cur.top, right: cur.right })); } catch { /* no storage */ } return cur; }); };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  };
   const ranges = useRef([]);
   // sit just below whatever the page keeps at the top right (Live chip, share and menu buttons), never on top of it
   useLayoutEffect(() => {
@@ -24,7 +36,7 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
           if (hit) bottom = Math.max(bottom, hit.getBoundingClientRect().bottom);
         }
       }
-      setPlace((cur) => { const top = Math.round(bottom ? Math.max(bottom + 10, 56) : 84); return cur.top === top && cur.right === right ? cur : { top, right }; });
+      setPlace((cur) => { if (cur.moved) return clamp(cur.top, cur.right); const top = Math.round(bottom ? Math.max(bottom + 10, 56) : 84); return cur.top === top && cur.right === right ? cur : { top, right }; });
     };
     place(); const t1 = setTimeout(place, 300); const t2 = setTimeout(place, 1200);
     window.addEventListener('resize', place);
@@ -39,11 +51,6 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('keydown', esc); try { CSS.highlights.delete('pb-find'); CSS.highlights.delete('pb-find-cur'); } catch { /* not supported */ } };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const at = () => { const r = root.current?.getBoundingClientRect(); if (r) setPlace({ top: Math.max(76, r.top + 12), right: Math.max(12, window.innerWidth - r.right + 12) }); };
-    at(); window.addEventListener('resize', at);
-    return () => window.removeEventListener('resize', at);
-  }, [root]);
   useEffect(() => {
     const el = selector ? root.current?.querySelector(selector) : root.current;
     ranges.current = [];
@@ -92,11 +99,12 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
     } catch { /* the document changed */ }
   };
   const keys = (onEnter) => (e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter(e); } if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
-  return (
-    <div className="pb-find" role="search" style={{ top: place.top, right: place.right }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } }}>
+  return createPortal(
+    <div ref={box} className="pb-find" role="search" data-testid="find-bar" data-moved={place.moved ? '1' : undefined} style={{ top: place.top, right: place.right }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } }}>
       <div className="row">
+        <button type="button" className="grip" data-testid="find-grip" aria-label="Drag the find bar" title="Drag to move" onPointerDown={drag}><GripHorizontal size={15} /></button>
         <input ref={input} className="q" aria-label="Find in this note" placeholder="Find in this note" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={keys((e) => step(e.shiftKey ? -1 : 1))} />
-        <span className="n">{q ? (count ? `${idx + 1} of ${count}` : 'No matches') : ''}</span>
+        {q && <span className="n">{ (count ? `${idx + 1} of ${count}` : 'No matches')}</span>}
         <button type="button" aria-label="Previous match" onClick={() => step(-1)}><ChevronLeft size={15} /></button>
         <button type="button" aria-label="Next match" onClick={() => step(1)}><ChevronRight size={15} /></button>
         <button type="button" aria-label="Close find" onClick={onClose}><X size={15} /></button>
@@ -108,6 +116,7 @@ export default function FindBar({ root, selector = '.bn-editor', editor, editabl
           <button type="button" className="txt ac" data-testid="replace-all" disabled={!count} onClick={replaceAll}>All</button>
         </div>
       ) : <div className="hint">Viewers get Find only. Editors also get Replace. Opens with Ctrl F.</div>}
-    </div>
+    </div>,
+    document.body,
   );
 }

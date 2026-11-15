@@ -1,0 +1,14 @@
+/* The voice control: round when idle, a pill while it listens. Fixed anywhere on screen, above the editor chrome and Focus mode. */
+.vp { position: fixed; z-index: 9400; touch-action: none; user-select: none; -webkit-user-select: none; }
+.vp.round { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; background: #2A221C; color: #FFE9A6; box-shadow: 0 10px 24px rgba(0, 0, 0, .3); cursor: grab; padding: 0; }
+.vp.round:hover { background: #3a2f27; }
+.vp.round:focus-visible, .vp .vp-grip:focus-visible, .vp .vp-x:focus-visible { outline: 3px solid #FFE9A6; outline-offset: 2px; }
+.vp.pill { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; border-radius: 999px; background: #2A221C; color: #E8E0D6; box-shadow: 0 14px 30px rgba(0, 0, 0, .35); font: 700 13px/1 inherit; cursor: grab; max-width: calc(100vw - 16px); }
+.vp.pill.err { background: #5a1f14; }
+.vp-grip { display: grid; place-items: center; width: 18px; height: 30px; opacity: .6; cursor: grab; border-radius: 8px; }
+.vp-mic { width: 36px; height: 36px; border-radius: 50%; background: #C4441C; color: #fff; display: grid; place-items: center; flex: none; box-shadow: 0 0 0 calc(2px + var(--lv, 0) * 9px) rgba(196, 68, 28, .3); transition: box-shadow .08s linear; }
+.vp-mic.off { background: #6b5b4e; box-shadow: none; }
+.vp.pill b { font-size: 13px; white-space: nowrap; min-width: 74px; } .vp.pill b.msg { max-width: 250px; white-space: normal; line-height: 1.3; font-weight: 600; }
+.vp-x { width: 30px; height: 30px; border-radius: 50%; border: 0; display: grid; place-items: center; background: rgba(255, 255, 255, .12) !important; color: #E8E0D6 !important; cursor: pointer; padding: 0; }
+.vp-x:hover { background: rgba(255, 255, 255, .24) !important; }
+@media (prefers-reduced-motion: reduce) { .vp-mic { transition: none; } }

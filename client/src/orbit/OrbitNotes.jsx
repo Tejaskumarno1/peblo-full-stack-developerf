@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, Copy, FileDown, FileText, History, Link2, Lock, Printer, Replace, Share2, Trash2, Undo2, ChevronRight, Loader2, X, Network, Star, Maximize2 } from 'lucide-react';
@@ -17,6 +17,7 @@ import '../soft/dialogs.css';
 import { exportDocs } from '../utils/exporters';
 import { TEMPLATES, outlineOf, countMatches, replaceAll } from './noteTemplates';
 import { IconPicker, NOTE_CHOICES } from './OrbitIcons';
+import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
 
 const words = (s) => [...new Set((s || '').toLowerCase().match(/[\p{L}\p{N}]{5,}/gu) || [])];
 
@@ -55,6 +56,9 @@ function OrbitNote({ note }) {
   const [dismissed, setDismissed] = useState([]);
   // Round 6: focus mode, emoji picker, copied message
   const [zen, setZen] = useState(false);
+  const [fsp, setFsp] = useFocusPrefs(); // full-screen choices (width, text size, theme, tools), kept per person in this browser
+  const [fsOpts, setFsOpts] = useState(false);
+  const getFsScroller = useCallback(() => document.querySelector('.o-sheet.zen'), []);
   const [flash, setFlash] = useState('');
   // Round 10: find & replace bar
   const [findOpen, setFindOpen] = useState(false);
@@ -62,12 +66,7 @@ function OrbitNote({ note }) {
   const [findText, setFindText] = useState('');
   const [replText, setReplText] = useState('');
   const [matchCase, setMatchCase] = useState(false);
-  useEffect(() => {
-    if (!zen) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setZen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [zen]);
+  useFocusKeys({ enabled: !!doc && !doc.isDeleted, active: zen, toggle: () => setZen((v) => !v), exit: () => { setZen(false); setFsOpts(false); } });
   // Ctrl/Cmd+F opens find and replace (instead of the browser's own find) while a note can be edited
   const canEdit = !!doc && !doc.isDraft && !doc.isDeleted && !doc.meta?.locked;
   useEffect(() => {
@@ -185,7 +184,7 @@ function OrbitNote({ note }) {
   };
 
   return (
-    <article className={`o-sheet${zen ? ' zen' : ''}`} style={{ top: 92, width: 876 }} aria-label="Note">
+    <article className={`o-sheet${zen ? ' zen' : ''}${zen && fsOpts ? ' fs-opts' : ''}`} style={{ top: 92, width: 876 }} aria-label="Note">
       <SheetHead onBack={back}>
         <nav className="o-crumbs" aria-label="Breadcrumb">
           <button type="button" className="crumb" aria-label="Back to the map" onClick={back}>{space ? topicName(space) : 'Map'}</button>
@@ -206,7 +205,7 @@ function OrbitNote({ note }) {
             <Star size={18} fill={meta.favourite ? 'currentColor' : 'none'} />
           </button>
         )}
-        <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label={zen ? 'Leave focus mode' : 'Focus mode'} aria-pressed={zen} onClick={() => setZen(!zen)}><Maximize2 size={17} /></button>
+        <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label={zen ? 'Leave focus mode' : 'Focus mode'} title={zen ? 'Leave focus mode (Esc)' : 'Focus mode (Ctrl+Shift+F)'} aria-pressed={zen} onClick={() => { setZen(!zen); setFsOpts(false); }}><Maximize2 size={17} /></button>
         {!doc.isDraft && (
           <div className="o-menu-wrap" ref={menuRef}>
             <button type="button" className="o-btn ghost small" style={{ height: 44, width: 44, padding: 0 }} aria-label="More" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>···</button>
@@ -230,6 +229,8 @@ function OrbitNote({ note }) {
           </div>
         )}
       </SheetHead>
+      <FocusChrome active={zen} prefs={fsp} set={setFsp} title={doc.title} saveStatus={saveStatus} words={wordCount} docKey={doc.id} getScroller={getFsScroller}
+        outline={outline} onJump={(text) => jumpTo({ text })} onExit={() => { setZen(false); setFsOpts(false); }} hasOptions optsOpen={fsOpts} onOptions={() => setFsOpts((v) => !v)} />
       {shareOpen && doc?.id && <div className="pb-dlg-host"><ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} /></div>}
       {historyOpen && <VersionHistory noteId={doc.id} currentContent={doc.content} onClose={() => setHistoryOpen(false)} onRestored={(n) => note.applyContent({ content: n.content, title: n.title })} />}
 
@@ -283,7 +284,7 @@ function OrbitNote({ note }) {
             </div>
           )}
           <div className="o-body">
-            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} />
+            <BlockEditor noteId={doc.id} key={editorKey} initialContent={doc.content} onChange={(md) => patch({ content: md })} editable={!readOnly} focusMode={zen && fsp.para} typewriter={zen && fsp.type} />
           </div>
           {!readOnly && <p className="o-quiet" style={{ margin: '6px 0 0', fontSize: 12.5 }}>Type <kbd>/</kbd> for commands, <kbd>@</kbd> to link a note.</p>}
           <p className="o-wc" aria-label="Word count">{wordCount} {wordCount === 1 ? 'word' : 'words'} · {String(doc.content || '').length} characters · {readMin} min read</p>

@@ -20,7 +20,7 @@ export function maskKey(plain: string): string {
 export async function loadProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, emailVerifiedAt: true, jobTitle: true, bio: true, avatar: true, timezone: true, settings: true, apiKeys: true },
+    select: { id: true, name: true, email: true, emailVerifiedAt: true, jobTitle: true, bio: true, avatar: true, timezone: true, username: true, pronouns: true, language: true, passwordChangedAt: true, deletionRequestedAt: true, createdAt: true, settings: true, apiKeys: true },
   });
   if (!user) return null;
   const { apiKeys, settings, emailVerifiedAt, ...rest } = user;

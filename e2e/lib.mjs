@@ -20,7 +20,7 @@ export async function boot(opts = {}) {
   process.env.SIGNUP_RATE_MAX = '1000';
   delete process.env.OPENAI_API_KEY; delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_API_KEYS;
   const { startServer } = await import(pathToFileURL(path.join(REPO, process.env.PEBLO_SERVER_DIST || 'dist', 'server', 'index.js')).href);
-  const { server, port } = await startServer({ port: 0, staticDir: path.join(REPO, 'client', 'dist') });
+  const { server, port } = await startServer({ port: 0, staticDir: process.env.PEBLO_STATIC_DIR || path.join(REPO, 'client', 'dist') });
   const base = `http://127.0.0.1:${port}`;
   process.env.PUBLIC_URL = base; // links use the "public" address; in a test that is this server
   const email = `e2e-${Date.now()}@peblo.test`;
@@ -30,14 +30,16 @@ export async function boot(opts = {}) {
     const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined });
     return res.json().catch(() => ({}));
   };
-  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: !process.env.HEADED, args: process.env.HEADED ? ['--window-position=-1366,0', '--window-size=1366,768'] : [] });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: !process.env.HEADED, args: [...(process.env.HEADED ? ['--window-position=-1366,0', '--window-size=1366,768'] : []), ...(process.env.E2E_CHROME_ARGS ? process.env.E2E_CHROME_ARGS.split(' ') : [])] });
   { // every context (guests too) starts with live cursors on and the join card already answered, like the tests were written for
     const mk = browser.newContext.bind(browser);
-    browser.newContext = async (o) => { const c = await mk(o); await c.addInitScript((f) => { try { if (!f.presence && !localStorage.getItem('peblo-pointers')) localStorage.setItem('peblo-pointers', 'on'); if (!f.guest && !localStorage.getItem('peblo-guest-joined')) localStorage.setItem('peblo-guest-joined', '1'); localStorage.setItem('peblo-present-instant', '1'); localStorage.setItem('peblo-present-fs', '0'); } catch {} }, { presence: !!opts.freshPresence, guest: !!opts.freshGuest }); return c; };
+    browser.newContext = async (o) => { const c = await mk(o); await c.addInitScript((f) => { try { if (!f.presence && !localStorage.getItem('peblo-pointers')) localStorage.setItem('peblo-pointers', 'on'); if (!f.guest && !localStorage.getItem('peblo-guest-joined')) localStorage.setItem('peblo-guest-joined', '1'); if (!f.tip) localStorage.setItem('peblo-spaces-tip', '1'); localStorage.setItem('peblo-present-instant', '1'); localStorage.setItem('peblo-present-fs', '0'); } catch {} }, { presence: !!opts.freshPresence, guest: !!opts.freshGuest, tip: !!opts.freshTip }); return c; };
   }
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((t) => { try { if (!localStorage.getItem('peblo-token')) localStorage.setItem('peblo-token', t); } catch {} }, token);
   // live cursors are off by default in the app; the older tests exercise them, so they start with them on
+  // The default Notes list layout is folder cards; older tests drive the folded sections, so pin that unless a test asks (opts.noteLayout).
+  await ctx.addInitScript((lay) => { try { const o = JSON.parse(localStorage.getItem('peblo-settings') || '{}') || {}; if (!o.noteLayout) { o.noteLayout = lay; localStorage.setItem('peblo-settings', JSON.stringify(o)); } } catch {} }, opts.noteLayout || 'sections');
   if (process.env.STYLE) await ctx.addInitScript((st) => { try { localStorage.setItem('peblo-style', st); } catch {} }, process.env.STYLE);
   if (process.env.COLLAB_OFF) await ctx.addInitScript(() => { try { localStorage.setItem('peblo-collab', 'off'); } catch {} });
   const page = await ctx.newPage();

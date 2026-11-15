@@ -1,3 +1,4 @@
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { aiLimit } from '../middleware/rateLimit.js';
@@ -33,7 +34,7 @@ router.post('/search', async (req, res, next) => {
  * Events: {type:'sources'} → {type:'delta', text}* → {type:'done', provider, model, local, ms}
  *         or {type:'consent', provider, message} / {type:'error', code, message}
  */
-router.post('/chat', ...aiLimit, async (req, res) => {
+router.post('/chat', ...aiLimit, orgAiGate, async (req, res) => {
   const userId = req.user!.id;
   const messages: HubMessage[] = (Array.isArray(req.body?.messages) ? req.body.messages : [])
     .filter((m: any) => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') // a body may hold null or numbers: an error thrown here would not be caught and would stop the server

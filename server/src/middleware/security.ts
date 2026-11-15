@@ -28,10 +28,11 @@ export function inlineScriptHashes(html: string): string[] {
 }
 
 export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): string {
-  const connect = ["'self'", ...extraConnect].join(' ');
+  // The speech model is downloaded once from Hugging Face (the model hub and its file hosts) and then kept in the browser.
+  const connect = ["'self'", 'https://huggingface.co', 'https://*.huggingface.co', 'https://*.hf.co', ...extraConnect].join(' ');
   return [
     "default-src 'self'",
-    `script-src 'self' ${scriptHashes.join(' ')}`.trim(),
+    `script-src 'self' ${scriptHashes.join(' ')} 'wasm-unsafe-eval'`.replace(/ {2,}/g, ' '), // wasm: the in-browser speech model (Whisper) runs on WebAssembly
     "style-src 'self' 'unsafe-inline'", // React inline style={} attributes
     "img-src 'self' data: blob: https: http:", // link previews and images in notes come from anywhere
     "font-src 'self' data:",
@@ -43,6 +44,17 @@ export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): s
     "form-action 'self'",
     "frame-ancestors 'none'",
   ].join('; ');
+}
+
+/**
+ * Behind a hosting platform's proxy (TRUST_PROXY set) in production, plain http is sent to https.
+ * The health probe is exempt so the platform can still check the server.
+ */
+export function forceHttps(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY && !req.secure && req.path !== '/api/health') {
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+  }
+  next();
 }
 
 export function securityHeaders(staticDir?: string) {

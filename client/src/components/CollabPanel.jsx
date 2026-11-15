@@ -5,6 +5,7 @@ import { usePresence } from '../utils/presencePref';
 import ShareQr, { QR_CSS } from './ShareQr';
 import PollManager from './PollManager';
 import './collab.css';
+import Toast from './Toast';
 
 /** The people-on-the-link UI shared by the notes editor and the public share page. All data comes from the server's presence list. */
 
@@ -76,10 +77,10 @@ export function CollabBar({ viewers, open, onToggle, offline, toasts = [], onDis
   return (
     <div className="cp-wrap">
       {toasts.map((t) => (
-        <div key={t.id} className="cp-toast" role="status">
+        <Toast key={t.id}><div className="cp-toast" role="status">
           <b>{t.name}</b> {EVENT_WORDS[t.kind]}
           <button type="button" aria-label="Dismiss" onClick={() => onDismissToast?.(t.id)}><X size={13} /></button>
-        </div>
+        </div></Toast>
       ))}
       <button type="button" className={`cp-bar${typers.length ? ' is-typing' : ''}${soon ? ' is-soon' : ''}${offline ? ' is-off' : ''}`} aria-expanded={open} onClick={onToggle} data-testid="live-editors" title="Who is here, and what happened">
         <span className="cp-bar-eye" aria-hidden="true">{offline ? <WifiOff size={15} /> : <Eye size={15} />}</span>
@@ -109,8 +110,8 @@ export function CollabChips({ viewers, canEdit, onCopy, onOpen, copied }) {
 }
 
 export function CollabPanel({
-  viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents,
-  onRemove, onExtend, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
+  viewers, mode = 'guest', canEdit, expiresAt, activity = [], events = [], offline, synced, muted, onMute, onClearEvents, onRetry,
+  onRemove, onExtend, editRequest, onAllowEdit, onTurnOff, onCopy, busy, onClose, followId, onFollow, link, stats, waiting = [], approval, onApproval, onAdmit, onDecline, onRole, shortLink, noteId, extendRequest,
 }) {
   const [tab, setTab] = useState('viewers');
   const [menu, setMenu] = useState(null);
@@ -142,14 +143,15 @@ export function CollabPanel({
     ...activity.map((a, i) => ({ key: `${a.at}-${i}`, who: a.actor, text: WORDS[a.action] || a.action, at: new Date(a.at).getTime() })),
   ].sort((a, b) => b.at - a.at).slice(0, 40);
 
-  const unread = waiting.length + (extendRequest ? 1 : 0) + events.filter((e) => e.kind === 'joined' && e.at > seenAt).length;
+  const unread = waiting.length + (extendRequest ? 1 : 0) + (editRequest ? 1 : 0) + events.filter((e) => e.kind === 'joined' && e.at > seenAt).length;
   return (
     <aside className="cp" role="dialog" aria-label="Live collaboration" data-testid="live-panel" ref={ref}>
       <div className="cp-head">
-        <span className="cp-title"><i className={offline ? 'off' : ''} />Live collaboration</span>
+        <span className="cp-title"><i className={offline ? 'off' : ''} />{mode === 'guest' ? <span className="cp-title-t">{tab === 'activity' ? <>Activity<small>Live, while you read</small></> : <>People here<small>{rows.length} now</small></>}</span> : 'Live collaboration'}</span>
         {mode === 'owner' && <span className="cp-bell-wrap"><button type="button" className="cp-bell" data-testid="notif-bell" aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'} aria-expanded={bell} onClick={() => { setBell((v) => !v); setSeenAt(Date.now()); }}><Bell size={15} />{unread > 0 && <i data-testid="notif-count">{unread}</i>}</button>
           {bell && <div className="cp-notifs" data-testid="notif-list" role="menu">
             {waiting.map((w) => <div className="cp-n" key={w.id}><b>{w.name}</b> is asking to join<span><button type="button" onClick={() => onAdmit?.(w.id)}>Let in</button></span></div>)}
+            {editRequest && <div className="cp-n" data-testid="edit-ask"><b>{editRequest.by}</b> asked for edit access{editRequest.message ? `: ${editRequest.message}` : ''}<span><button type="button" onClick={() => onAllowEdit?.()}>Allow editing</button></span></div>}
             {extendRequest && <div className="cp-n"><b>{extendRequest.by}</b> asked to keep the link going<span><button type="button" onClick={() => onExtend?.(1)}>+1 day</button></span></div>}
             {log.filter((a) => !(extendRequest && a.text === EVENT_WORDS.extend) && !(waiting.length && a.text === EVENT_WORDS.knock)).slice(0, 5).map((a) => <div className="cp-n" key={a.key}><b>{a.who}</b> {a.text}<small>{ago(a.at)}</small></div>)}
             {log.length === 0 && waiting.length === 0 && !extendRequest && <p className="cp-empty">Nothing yet.</p>}
@@ -158,7 +160,7 @@ export function CollabPanel({
         {mode === 'owner' && onCopy && <button type="button" className="cp-share" onClick={onCopy}><Link2 size={14} />Share</button>}
         <button type="button" className="cp-x" aria-label="Close" onClick={onClose}><X size={16} /></button>
       </div>
-      {offline && <div className="cp-banner off" role="status"><WifiOff size={14} />Reconnecting… your changes are kept and will sync.</div>}
+      {offline && <div className="cp-banner off" role="status" data-testid="offline-banner"><WifiOff size={14} /><span>Offline. Your edits are kept on this device and will sync.</span>{onRetry && <button type="button" className="cp-link" data-testid="offline-retry" onClick={onRetry}>Retry</button>}</div>}
       {!offline && synced && <div className="cp-banner ok" role="status">Back online. Everything is synced.</div>}
       <div className="cp-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'viewers'} className={tab === 'viewers' ? 'on' : ''} onClick={() => setTab('viewers')}>Viewers</button>
@@ -185,6 +187,7 @@ export function CollabPanel({
                 <small className={`st s-${v.status || 'viewing'}`}>{STATUS[v.status] || 'Viewing'} · {seen(v.idleSeconds || 0)}{v.cursor != null && v.status !== 'idle' ? ` · paragraph ${v.cursor + 1}` : ''}</small>
               </span>
               {v.self && <span className="cp-badge you">You</span>}
+              {!v.self && !v.owner && <span className={`cp-badge st-${v.status === 'idle' ? 'idle' : 'active'}`} data-testid="presence-state">{v.status === 'idle' ? 'Idle' : 'Active'}</span>}
               {v.owner && !v.self && <span className="cp-badge">Owner</span>}
               {mode === 'owner' && v.custom && !v.self && <span className="cp-badge" data-testid="role-badge">{v.canEdit ? 'Can edit' : 'Can view'}</span>}
               {onFollow && !v.self && v.cursor != null && <button type="button" className={`cp-follow`} aria-pressed={followId === v.id} onClick={() => onFollow(followId === v.id ? null : v.id)}>{followId === v.id ? 'Following' : 'Follow'}</button>}
@@ -203,6 +206,7 @@ export function CollabPanel({
             </li>
           ))}
         </ul>
+        {mode === 'guest' && onMute && <label className="cp-mute2" data-testid="mute-row"><span>Mute join and leave notices</span><input type="checkbox" role="switch" checked={!!muted} onChange={(e) => onMute(e.target.checked)} /></label>}
         <label className="cp-mute cp-presence"><input type="checkbox" data-testid="presence-toggle" checked={showPresence} onChange={(e) => setShowPresence(e.target.checked)} /><span><b>Show live cursors</b><small>Other people's pointers, text cursors and who edited a line. Off keeps the page calm.</small></span></label>
         {mine && mode === 'guest' && !canEdit && <p className="cp-note">This link is view only. You can read, but not change it.</p>}
 
@@ -241,14 +245,15 @@ export function CollabPanel({
           <small className="cp-stopl">Where readers stop, top to bottom of the page</small>
           <ul className="cp-rlist">{stats.readers.people.slice(0, 6).map((r, i) => <li key={i}><span>{r.name}</span><em>{r.progress}% · {fmtSecs(r.secs)}</em></li>)}</ul>
         </div>}
-        <h3 className="cp-h">Recent activity {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
+        <h3 className="cp-h">Recent activity <small className="cp-live-note">Live, while you read</small> {log.length > 0 && events.length > 0 && <button type="button" className="cp-link" onClick={onClearEvents}>Clear joins</button>}</h3>
         {log.length === 0 && <p className="cp-empty">Nothing yet.</p>}
         <ul className="cp-log" data-testid="live-activity">
           {log.map((a) => (
-            <li key={a.key}><span className="cp-av mini" style={{ '--cp-c': peerColor(a.who) }}>{initials(a.who)}</span><span><b>{a.who}</b> {a.text}<small>{ago(a.at)}</small></span></li>
+            <li key={a.key}><span className="cp-av mini" style={{ '--cp-c': peerColor(a.who) }}>{initials(a.who)}</span><span><b>{a.who} {a.text}</b><small>{ago(a.at)}</small></span></li>
           ))}
         </ul>
         <label className="cp-mute"><input type="checkbox" checked={!!muted} onChange={(e) => onMute?.(e.target.checked)} />Hide “joined / left” pop-ups</label>
+        <p className="cp-quiet-tip" data-testid="quiet-tip">Switch on Quiet mode in Look to hide notices.</p>
       </div>}
 
       <style>{QR_CSS + WAIT_CSS + '.cp-stats{display:flex;align-items:center;gap:14px;padding:8px 0 10px}.cp-stats div{display:flex;flex-direction:column}.cp-stats b{font-size:18px}.cp-stats small{opacity:.65;font-size:11.5px}.cp-stats svg{margin-left:auto;width:70px;height:26px}.cp{position:relative}.cp-bell-wrap{margin-left:auto}.cp-bell{position:relative;border:0;background:transparent;color:inherit;border-radius:8px;padding:5px;cursor:pointer;display:inline-flex}.cp-bell i{position:absolute;top:-2px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:#e2501a;color:#fff;font-size:10px;font-style:normal;display:grid;place-items:center;padding:0 3px}.cp-notifs{position:absolute;left:12px;right:12px;top:54px;z-index:5;max-height:320px;overflow:auto;background:var(--cp-surface,#fff);color:inherit;border:1px solid rgba(127,127,127,.3);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:8px}.cp-n{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 4px;font-size:12.5px;border-bottom:1px solid rgba(127,127,127,.15)}.cp-n span{margin-left:auto}.cp-n small{opacity:.6;margin-left:auto}.cp-n button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:2px 8px;font:inherit;cursor:pointer}.cp-readers{padding:6px 0 10px;border-top:1px solid rgba(127,127,127,.25)}.cp-rhead{display:flex;gap:18px}.cp-rhead div{display:flex;flex-direction:column}.cp-rhead b{font-size:17px}.cp-rhead small,.cp-stopl{opacity:.65;font-size:11.5px}.cp-stops{display:flex;align-items:flex-end;gap:3px;height:36px;margin:8px 0 2px}.cp-stops i{flex:1;background:currentColor;border-radius:2px}.cp-rlist{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px}.cp-rlist li{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.cp-rlist em{opacity:.65;font-style:normal}.cp-extreq{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(226,80,26,.1);font-size:12.5px}.cp-extreq button{margin-left:6px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}.cp-short{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px}.cp-short span{opacity:.65}.cp-short code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.cp-short button{border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;border-radius:8px;padding:3px 9px;font:inherit;cursor:pointer}'}</style>

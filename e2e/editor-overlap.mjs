@@ -11,8 +11,13 @@ try {
     if (theme === 'dark') await page.evaluate(() => document.documentElement.classList.add('theme-dark') || document.body.classList.add('theme-dark'));
     for (const which of ['first', 'second']) {
       const para = page.locator('.bn-block-content').nth(which === 'first' ? 0 : 1);
-      await para.click({ force: true }).catch(() => {});
-      await para.evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); });
+      const select = async () => {
+        await para.click({ force: true }).catch(() => {});
+        await para.evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); });
+      };
+      await select();
+      // a fresh page can swallow the first selection while the editor is still settling: select once more
+      if (!(await page.locator('.bn-toolbar').waitFor({ timeout: 2500 }).then(() => true, () => false))) await select();
       await page.locator('.bn-toolbar').waitFor({ timeout: 5000 });
       await wait(500);
       check(`${theme} ${which}: no separate Explain pill`, (await page.locator('.s-sel-pill').count()) === 0);

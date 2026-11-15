@@ -47,6 +47,10 @@ try {
   check('the pill counts one change', /1 change\b/.test(await g.getByTestId('changes-pill').innerText()), await g.getByTestId('changes-pill').innerText());
   check('the changed line is marked', (await g.locator('[data-pb-chg="1"]').count()) === 1 && /changed by the owner/.test(await g.locator('[data-pb-chg="1"]').innerText()));
   await g.screenshot({ path: `${SHOTS}/reader-3-changes.png` });
+  await g.getByTestId('rail-history').click();
+  await g.getByTestId('fly-next-change').click();
+  check('Next change opens the compare bar at change 1 of 1', /Change 1 of 1/.test(await g.getByTestId('cmp-bar').innerText()));
+  await g.keyboard.press('Escape');
   await g.getByTestId('changes-toggle').click();
   check('marks can be hidden', await g.locator('.pb-shared.no-chg').count() === 1);
   await open();

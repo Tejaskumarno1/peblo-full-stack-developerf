@@ -1,0 +1,21 @@
+// A share link as a PDF: /s/note/<token>.pdf has the text and every picture drawn on the page, with its address.
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { boot } from './lib.mjs';
+const { base, api, check, finish, token } = await boot();
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
+const img = fs.readFileSync('D:/Peblo/_share-img/img1.webp');
+const up = await (await fetch(`${base}/api/media`, { method: 'POST', headers: { 'Content-Type': 'image/webp', Authorization: `Bearer ${token}` }, body: img })).json();
+const n = (await api('POST', '/api/notes', { title: 'Receipt bundle', content: `# Heading one\n\nFirst paragraph of the note.\n\n- a bullet point\n\n![shot](/api/media/${up.id})\n`, tags: [] })).note;
+const tok = (await api('POST', `/api/share/note/${n.id}`, { edit: false })).token;
+const res = await fetch(`${base}/s/note/${tok}.pdf`);
+const buf = Buffer.from(await res.arrayBuffer());
+check('the .pdf address answers with a PDF', res.status === 200 && /application\/pdf/.test(res.headers.get('content-type') || '') && buf.slice(0, 4).toString() === '%PDF', `${res.status} ${res.headers.get('content-type')}`);
+const parsed = await pdfParse(buf);
+check('it holds the title, text and the picture address', /Receipt bundle/.test(parsed.text) && /First paragraph/.test(parsed.text) && parsed.text.includes(`/api/media/${up.id}`), parsed.text.slice(0, 200));
+check('the picture itself is embedded', buf.includes('/Subtype /Image') || buf.includes('/Image'), String(buf.length));
+const gone = await fetch(`${base}/s/note/${'x'.repeat(24)}.pdf`);
+check('an unknown link gives 404, not a PDF', gone.status === 404);
+fs.writeFileSync('D:/Peblo/_shots/bundle.pdf', buf);
+await finish();

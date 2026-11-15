@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
+import './connecthub.css';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Monitor, MessageCircleQuestion, Cloud } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +8,25 @@ import { aiAPI, hubAPI } from '../api';
 import { normalizeRouting } from '../utils/aiRouting';
 import LocalModels from '../components/hub/LocalModels';
 import AiConnections from '../components/hub/AiConnections';
+
+// Loaded on demand: the Settings page imports this file too, so a plain import would go in a circle.
+const AgentApps = lazy(() => import('./settings/sections2').then((m) => ({ default: m.AgentApps })));
+const AgentActivity = lazy(() => import('./settings/sections2').then((m) => ({ default: m.AgentActivity })));
+
+/** The full page is three columns: AI inside Peblo, AI apps using Peblo, Activity. Inside Settings it stays one column. */
+const ActivityAll = lazy(() => import('./settings/sections2').then((m) => ({ default: m.ActivityAll })));
+
+function HubLayout({ embedded, children, onSeeAll, seeAll, onBack }) {
+  if (embedded) return children;
+  if (seeAll) return <Suspense fallback={null}><ActivityAll onBack={onBack} /></Suspense>;
+  return (
+    <div className="s-hub">
+      <div className="s-hub-col" data-col="ai">{children}</div>
+      <div className="s-hub-col" data-col="agents"><Suspense fallback={<p className="s-empty small">Loading…</p>}><AgentApps /></Suspense></div>
+      <div className="s-hub-col narrow" data-col="activity"><Suspense fallback={null}><AgentActivity onSeeAll={onSeeAll} /></Suspense></div>
+    </div>
+  );
+}
 
 const CHOICES = [
   { id: 'ollama', title: 'Only on this computer', desc: 'Nothing leaves your laptop. Works offline. Needs the free Ollama app.', tone: 'mint', icon: Monitor },
@@ -15,6 +36,7 @@ const CHOICES = [
 
 /** Soft Studio · Your AI (mockup: SoftConnections). Same settings as Connections, friendlier layout. */
 export default function SoftConnections({ embedded = false }) {
+  const [params, setParams] = useSearchParams();
   const { settings, updateSettings } = useAuth();
   const queryClient = useQueryClient();
   const { data: models, refetch } = useQuery({ queryKey: ['hub-models'], queryFn: () => hubAPI.models().then((r) => r.data) });
@@ -60,11 +82,12 @@ export default function SoftConnections({ embedded = false }) {
     <div className={embedded ? 's-conn s-conn-embedded' : 'soft-page s-conn'}>
       {embedded ? <h2 className="s-set-sub">{hosted ? 'Connect your AI' : 'When Peblo needs AI'}</h2> : (
         <div className="s-page-title" style={{ flexShrink: 0 }}>
-          <h1 className="s-h1">{hosted ? 'Connect your AI' : 'How Peblo uses AI'}</h1>
-          <span className="s-sub">{hosted ? 'Add a key from OpenAI or Google. You can change it any time, and every answer shows what it read.' : 'Pick one. You can change it any time, and every answer shows what it read.'}</span>
+          <h1 className="s-h1">Connect</h1>
+          <span className="s-sub">Bring AI into Peblo, and let AI apps work on your Peblo. Every answer shows what it read.</span>
         </div>
       )}
 
+      <HubLayout embedded={embedded} seeAll={params.get('view') === 'activity'} onSeeAll={() => setParams({ view: 'activity' })} onBack={() => setParams({})}>
       {showLocal && <fieldset className="s-choices">
         <legend className="s-sr">When Peblo needs AI</legend>
         {CHOICES.map(({ id, title, desc, tone, icon: Icon }) => (
@@ -125,16 +148,8 @@ export default function SoftConnections({ embedded = false }) {
 
         {showLocal && <LocalModels variant="soft" />}
 
-        {!embedded && <section className="s-conn-card" style={{ background: 'var(--s-lilac)' }} aria-labelledby="s-next">
-          <span className="s-count" style={{ alignSelf: 'flex-start', fontSize: 12.5, fontWeight: 800 }}>Coming next</span>
-          <h2 id="s-next" className="s-conn-h2" style={{ lineHeight: 1.2 }}>Use your notes from Claude Desktop, Cursor and VS Code</h2>
-          <div className="s-promises">
-            <span>Read-only unless you allow more</span>
-            <span>You approve every new task</span>
-            <span>#private notes stay hidden</span>
-          </div>
-        </section>}
       </div>
+      </HubLayout>
     </div>
   );
 }

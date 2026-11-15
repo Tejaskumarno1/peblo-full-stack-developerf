@@ -2,12 +2,15 @@ import { Router } from 'express';
 import { chatAndCreateNotes, chatStream, smartIntake, smartIntakeUpload, applyChatUpdate } from '../controllers/aiChatController.js';
 import multer from 'multer';
 import { authenticate } from '../middleware/auth.js';
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { aiLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }); // PEB-62: upload limits
 
 router.use(authenticate);
+// An organization can turn AI off for its team notes (Policy > AI features).
+router.use(orgAiGate);
 router.post('/chat', ...aiLimit, chatAndCreateNotes);
 router.post('/chat-stream', ...aiLimit, chatStream);
 router.post('/chat/apply-update', applyChatUpdate); // the person said yes to a suggested change: no AI call

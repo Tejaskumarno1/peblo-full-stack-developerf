@@ -1,3 +1,4 @@
+import { liveLevel } from '../utils/noteAccess.js';
 import { accessFor } from '../services/shareAccess.js';
 import { Router } from 'express';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -18,7 +19,7 @@ const router = Router();
 export const collabPublic = Router();
 router.use(authenticate);
 
-const ownNote = (userId: string, id: string) => prisma.note.findFirst({ where: { id, userId, isDeleted: false }, select: { id: true, title: true } });
+const ownNote = (userId: string, id: string) => prisma.note.findFirst({ where: { id, userId, isDeleted: false, spaceId: undefined }, select: { id: true, title: true } }); // spaceId named on purpose: Office and Team notes are live-edited too (see personalGuard.ts)
 
 // POST /api/collab/ticket { noteId } -> { ticket }: a 30-second, single-use pass for opening the live-editing WebSocket for ONE of my notes.
 // (The WebSocket address used to carry the sign-in token itself, which ends up in logs and browser history.)
@@ -27,9 +28,17 @@ router.post('/ticket', ticketLimit, async (req, res, next) => {
   try {
     if ((req.user as any).viaToken && (req.user as any).readOnly) return res.status(403).json({ error: 'This access token is read-only.' });
     const noteId = String(req.body?.noteId || '');
-    if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId) || !(await ownNote(req.user!.id, noteId))) return res.status(404).json({ error: 'Note not found' });
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(noteId)) return res.status(404).json({ error: 'Note not found' });
+    let readOnly = false;
+    if (!(await ownNote(req.user!.id, noteId))) {
+      // a team note (any member who can write edits live, a viewer reads) or an Office note shared with this person
+      const n = (await prisma.$queryRaw<{ spaceId: string | null }[]>`SELECT space_id AS "spaceId" FROM notes WHERE id = ${noteId} AND NOT is_deleted`)[0];
+      const lv = n?.spaceId ? await liveLevel(req.user!.id, noteId, n.spaceId) : null;
+      if (!lv) return res.status(404).json({ error: 'Note not found' });
+      readOnly = lv === 'view';
+    }
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ ticket: issueTicket(req.user!.id, noteId) });
+    res.json({ ticket: issueTicket(req.user!.id, noteId), readOnly });
   } catch (err) { next(err); }
 });
 
@@ -38,7 +47,7 @@ router.get('/presence', async (req, res, next) => {
   try {
     const ids = liveRoomIds();
     if (!ids.length) return res.json({ presence: {} });
-    const mine = await prisma.note.findMany({ where: { id: { in: ids }, userId: req.user!.id, isDeleted: false }, select: { id: true } });
+    const mine = await prisma.note.findMany({ where: { id: { in: ids }, userId: req.user!.id, isDeleted: false, spaceId: undefined }, select: { id: true } });
     res.json({ presence: presenceOf(mine.map((n) => n.id)) });
   } catch (err) { next(err); }
 });
@@ -80,9 +89,9 @@ router.delete('/comments/:noteId/:cid', async (req, res, next) => {
 // ---- notifications ----
 router.get('/notifications', async (req, res, next) => {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>('SELECT id, kind, note_id, title, body, from_name, is_read, created_at FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', req.user!.id);
+    const rows = await prisma.$queryRawUnsafe<any[]>('SELECT id, kind, note_id, title, body, from_name, is_read, created_at, space_id, todo_id FROM user_notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', req.user!.id);
     res.json({
-      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, title: r.title, body: decField('user_notifications', 'body', r.id, r.body), from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
+      notifications: rows.map((r) => ({ id: r.id, kind: r.kind, noteId: r.note_id, spaceId: r.space_id, todoId: r.todo_id, title: r.title, body: decField('user_notifications', 'body', r.id, r.body), from: r.from_name, read: r.is_read, createdAt: new Date(r.created_at).toISOString() })),
       unread: rows.filter((r) => !r.is_read).length,
     });
   } catch (err) { next(err); }

@@ -8,6 +8,7 @@ export default function Gallery({ notes, onOpen, onClose }) {
   const [q, setQ] = useState('');
   const dlg = useRef(null);
   useEffect(() => { dlg.current?.focus(); }, []); // focus inside so Escape works
+  useEffect(() => { const k = (e) => { if (e.key === 'Escape') onClose(); }; document.addEventListener('keydown', k); return () => document.removeEventListener('keydown', k); }, [onClose]); // Escape closes even when focus is on the page
   const pics = useMemo(() => {
     const out = [];
     for (const n of notes) {

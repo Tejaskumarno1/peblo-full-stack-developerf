@@ -44,10 +44,35 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     },
     estimateMin: (v) => int(v, 1, 1440),
     spentMin: (v) => int(v, 0, 100000),
+    // minutes worked per day, {"2026-11-05": 45}, so the time can be shown as "3 h over 4 days"
+    timeLog: (v) => {
+      if (!isObj(v)) return undefined;
+      const out: Record<string, number> = {};
+      for (const [k, n] of Object.entries(v).slice(0, 400)) { const m = int(n, 1, 1440); if (/^\d{4}-\d{2}-\d{2}$/.test(k) && m !== undefined) out[k] = m; }
+      return Object.keys(out).length ? out : undefined;
+    },
     label: (v) => ((LABELS as readonly string[]).includes(v) ? v : undefined),
-    status: (v) => (v === 'doing' ? 'doing' : undefined),
+    // board column: "doing" and "review"; a task with neither is To do, a completed one is Done
+    status: (v) => (typeof v === 'string' && /^[a-z][a-z0-9_]{0,31}$/.test(v) && v !== 'todo' && v !== 'done' ? v : undefined),
+    // who sees a team task: nothing = the whole team, "me" = only the creator and the assignees, "people" = those plus the chosen viewers
+    visibility: (v) => (v === 'me' || v === 'people' ? v : undefined),
+    viewers: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 50) : undefined),
+    assignees: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
+    watchers: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 50) : undefined),
     dependsOn: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => str(x, 64)).filter(Boolean))].slice(0, 10) : undefined),
     remindMin: (v) => int(v, 0, 43200),
+    // every reminder lead time in minutes (an event can ring more than once), and the trip time that makes "time to leave" ring
+    reminders: (v) => (Array.isArray(v) ? [...new Set(v.map((x) => int(x, 0, 43200)).filter((x): x is number => x !== undefined))].sort((a, b) => a - b).slice(0, 6) : undefined),
+    travelMin: (v) => int(v, 1, 600),
+    repeatFromDone: (v) => (v === true ? true : undefined),
+    source: (v) => {
+      if (!isObj(v)) return undefined;
+      const quote = str(v.quote, 400);
+      if (!quote) return undefined;
+      const noteId = str(v.noteId, 64);
+      const line = int(v.line, 1, 100000);
+      return { quote, ...(noteId ? { noteId } : {}), ...(line ? { line } : {}) };
+    },
       link: (v) => { const s = str(v, 300); return s && /^https?:\/\/\S+$/i.test(s) ? s : undefined; },
       linkedTasks: (v) => {
         if (!Array.isArray(v)) return undefined;
@@ -63,6 +88,10 @@ export function cleanTodoMeta(input: unknown, current: unknown = {}): Meta {
     assignment: (v) => (v === true ? true : undefined),
     astatus: (v) => (ASTATUS.includes(v) ? v : undefined),
     order: (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined),
+    list: (v) => str(v, 60),
+    planned: (v) => (v === true ? true : undefined),
+    moves: (v) => int(v, 0, 99),
+    proposal: (v) => { if (!isObj(v)) return undefined; const by = str(v.by, 60); if (!by) return undefined; const from = str(v.from, 120); return { by, ...(from ? { from } : {}) }; },
   });
 }
 

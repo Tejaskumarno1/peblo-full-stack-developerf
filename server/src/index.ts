@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
 import { purgeExpiredTrash } from './controllers/notesController.js';
+import { purgeScheduledDeletions } from './services/accountDeletion.js';
 import tagsRoutes from './routes/tags.js';
 import tokensRoutes from './routes/tokens.js';
 import aiRoutes, { noteAiRoutes } from './routes/ai.js';
@@ -28,12 +29,18 @@ import aiConnectionsRoutes from './routes/aiConnections.js';
 import studyRoutes from './routes/study.js';
 import riverRoutes from './routes/river.js';
 import { shareRoutes, publicRoutes, shortRedirect } from './routes/share.js';
+import { listMcpRoutes } from './mcp/listMcp.js';
+import { listShareRoutes, listPublicRoutes, listMarkdownHandler, listPdfHandler } from './routes/listShare.js';
 import mediaRoutes from './routes/media.js';
+import { calendarSyncRoutes, calendarPublicRoutes } from './routes/calendarSync.js';
+import workspaceRoutes from './routes/workspaces.js';
+import orgRoutes from './routes/orgs.js';
+import announcementRoutes from './routes/announcements.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { verifyToken } from './middleware/auth.js';
-import { securityHeaders, corsDelegate } from './middleware/security.js';
+import { verifyToken, authenticate } from './middleware/auth.js';
+import { securityHeaders, forceHttps, corsDelegate } from './middleware/security.js';
 import { rejectNulInUrl, cleanBody, inputErrors } from './middleware/cleanInput.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { agentNote, origin as reqOrigin } from './services/agentView.js';
@@ -58,6 +65,7 @@ export function createApp(staticDir?: string) {
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
   app.disable('x-powered-by');
+  app.use(forceHttps);
   app.use(securityHeaders(staticDir));
   app.use(rejectNulInUrl); // %00 can never be stored: answer 400 here instead of a database error
 
@@ -73,6 +81,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 
   app.use('/.well-known', cors({ origin: '*' })); // so Settings can test the address from the page
   app.use(wellKnown);
   app.use('/oauth', ...open, oauthRoutes);
+  app.use('/mcp/list', ...open, listMcpRoutes);
   app.use('/mcp', ...open, mcpRoutes);
 
   // Who may call the API from a browser: see middleware/security.ts (own origin, ALLOWED_ORIGINS, any localhost in dev only).
@@ -118,6 +127,16 @@ app.use('/api', apiLimiter());
     res.json({ publicUrl });
   });
 
+  // What a connected app (MCP client) may know about the connection: its time zone, today's date there, and whether it can write.
+  app.get('/api/whoami', authenticate, async (req, res, next) => {
+    try {
+      const u = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { timezone: true } });
+      const timezone = u?.timezone || 'UTC';
+      let today = new Date().toISOString().slice(0, 10);
+      try { today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch { /* unknown zone: UTC date */ }
+      res.json({ timezone, today, now: new Date().toISOString(), viaToken: !!req.user!.viaToken, readOnly: !!req.user!.readOnly, privateNotesHidden: !!req.user!.viaToken });
+    } catch (e) { next(e); }
+  });
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/ai/hub', hubRoutes);
@@ -137,9 +156,18 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/files', filesRoutes);
 app.get('/l/:code', apiLimiter(), shortRedirect);
 app.use('/api/share', shareRoutes);
+app.get(/^\/s\/list\/([A-Za-z0-9_-]{20,40})\.md$/, apiLimiter(), listMarkdownHandler);
+app.get(/^\/s\/list\/([A-Za-z0-9_-]{20,40})\.pdf$/, apiLimiter(), listPdfHandler);
 app.get('/s/note/:tok', apiLimiter(), agentNote); // bots and programs get Markdown or JSON from the same link
 app.use('/api/collab', collabRoutes);
 app.use('/api/public/collab', collabPublic);
+app.use('/api/task-lists', listShareRoutes);
+app.use('/api/public/list', listPublicRoutes);
+app.use('/api/public', calendarPublicRoutes);
+app.use('/api/calendar-sync', calendarSyncRoutes);
+app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/workspaces', orgRoutes);
+app.use('/api/workspaces', announcementRoutes);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);
 
@@ -243,6 +271,11 @@ if (isDirectRun) {
     const trashSweep = process.env.PEBLO_TRASH_PURGE === '1' ? setInterval(sweepTrash, 60 * 60 * 1000) : null;
     trashSweep?.unref?.();
     if (trashSweep) setTimeout(sweepTrash, 30_000).unref();
+    // Accounts asked to be deleted more than 30 days ago are removed (on by default: it is what the person was told).
+    const sweepAccounts = () => { purgeScheduledDeletions().then((n) => { if (n) console.log(`[accounts] removed ${n} account(s) past their 30-day deletion grace`); }).catch((e) => console.error('[accounts] purge:', e)); };
+    const accountSweep = process.env.PEBLO_ACCOUNT_PURGE === '0' ? null : setInterval(sweepAccounts, 60 * 60 * 1000);
+    accountSweep?.unref?.();
+    if (accountSweep) setTimeout(sweepAccounts, 45_000).unref();
     // Hosting platforms stop the app with SIGTERM: save the open live documents and let the database connections go first.
     let stopping = false;
     const stop = (signal: string) => {
@@ -250,6 +283,7 @@ if (isDirectRun) {
       stopping = true;
       console.log(`${signal} received, shutting down`);
       if (trashSweep) clearInterval(trashSweep);
+      if (accountSweep) clearInterval(accountSweep);
       setTimeout(() => process.exit(0), 10_000).unref();
       closeCollab()
         .catch((e) => console.error('[collab] shutdown:', e))

@@ -50,6 +50,7 @@ try {
   // Linked tasks
   await page.goto(base + `/notes/${n5.id}`);
   await page.locator('#s-note-title').waitFor();
+  if (!(await page.getByLabel('Add a task to this note').isVisible())) await page.locator('#s-linked').click(); // an empty Linked tasks card folds to one line (mockup WsD02); a press opens it
   await page.getByLabel('Add a task to this note').fill('Revise cells');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(800);

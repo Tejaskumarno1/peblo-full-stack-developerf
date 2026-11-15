@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pin, Copy, X, Undo2, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-// Tabs belong to the signed-in person (another account on this computer starts with none).
+import { getSpace } from '../api/space';
+// Tabs belong to the signed-in person AND to the space they are in (Personal or a team), so another account on this
+// computer starts with none and a team note never lingers as a tab in Personal.
 // The back / forward trail and the "reopen closed" list last for this session, so a refresh keeps them.
-const keyFor = (uid) => `peblo-note-tabs:${uid || 'anon'}`;
+const keyFor = (uid) => `peblo-note-tabs:${uid || 'anon'}${getSpace() ? ':' + getSpace() : ''}`;
+export const MAX_TABS = 8;
 const load = (key) => { try { const s = JSON.parse(localStorage.getItem(key)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
 const loadSession = (key) => { try { return JSON.parse(sessionStorage.getItem(`${key}:trail`)) || {}; } catch { return {}; } };
 
@@ -34,7 +37,12 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onE
   // opening a note adds its tab and a step in the back / forward trail
   useEffect(() => {
     if (!docId) return;
-    setTabs((ts) => (ts.some((t) => t.id === docId) ? ts : [...ts, { id: docId, title: doc.title || 'Untitled', pinned: false }]));
+    setTabs((ts) => {
+      if (ts.some((t) => t.id === docId)) return ts;
+      const next = [...ts, { id: docId, title: doc.title || 'Untitled', pinned: false }];
+      while (next.length > MAX_TABS) { const i = next.findIndex((t) => !t.pinned && t.id !== docId); if (i < 0) break; next.splice(i, 1); } // the oldest unpinned tab makes room
+      return next;
+    });
     const h = hist.current;
     if (h.skip) { h.skip = false; bump((n) => n + 1); return; }
     if (h.list[h.i] === docId) return;

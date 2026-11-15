@@ -1,4 +1,7 @@
+import { decorateNotes, hiddenNoteIds } from '../utils/noteAccess.js';
 import { Request, Response, NextFunction } from 'express';
+import { noteScope } from '../utils/scope.js';
+import { can, spaceAccess } from '../utils/access.js';
 import { notify } from '../utils/notify.js';
 import prisma from '../db.js';
 import * as aiService from '../services/aiService.js';
@@ -6,6 +9,7 @@ import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
+import { PRIVATE_TAG } from '../utils/aiAccess.js';
 import { aadOf, decryptText } from '../dataCrypto.js';
 
 // prisma imported from db.js
@@ -96,7 +100,8 @@ async function syncLinks(userId: string, noteId: string, content: string) {
     const ids = [...new Set([...String(content || '').matchAll(/\]\(\/notes\/([\w-]+)(?:#[^)]*)?\)/g)].map((m) => m[1]))].filter((x) => x !== noteId).slice(0, 200);
     await prisma.$executeRaw`DELETE FROM note_links WHERE source_id = ${noteId}`;
     if (!ids.length) return;
-    const valid = await prisma.note.findMany({ where: { id: { in: ids }, userId }, select: { id: true } });
+    const src = await prisma.$queryRaw<{ space_id: string | null }[]>`SELECT space_id FROM notes WHERE id = ${noteId}`;
+    const valid = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM notes WHERE id = ANY(${ids}::text[]) AND space_id IS NOT DISTINCT FROM ${src[0]?.space_id ?? null} AND (${src[0]?.space_id ?? null}::text IS NOT NULL OR user_id = ${userId})`;
     for (const v of valid) await prisma.$executeRaw`INSERT INTO note_links (source_id, target_id) VALUES (${noteId}, ${v.id}) ON CONFLICT DO NOTHING`;
   } catch { /* rebuilt by the next save */ }
 }
@@ -104,14 +109,15 @@ async function syncLinks(userId: string, noteId: string, content: string) {
 /** Other notes that say this note's title but do not link to it yet. */
 export async function getMentions(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read'); if (!own) return;
     const id = String(req.params.id);
-    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
+    const me = await prisma.note.findFirst({ where: { id, ...own }, select: { title: true } });
     const title = (me?.title || '').trim();
     if (!me || title.length < 3 || /^untitled/i.test(title)) return res.json({ mentions: [] });
     // Note text is encrypted at rest, so the database cannot search it: read the person's notes (newest first) and look in JS.
     const needle = title.toLowerCase();
     const rows = (await prisma.note.findMany({
-      where: { userId: req.user.id, isDeleted: false, id: { not: id } },
+      where: { ...own, isDeleted: false, id: { not: id } },
       select: { id: true, title: true, content: true },
       orderBy: { updatedAt: 'desc' },
       take: 5000,
@@ -136,10 +142,11 @@ export async function getMentions(req: any, res: any, next: any) {
 /** Turns the first plain mention of this note's title, in another note, into a link to this note. */
 export async function linkMention(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write'); if (!own) return;
     const id = String(req.params.id);
     const otherId = String(req.params.otherId);
-    const me = await prisma.note.findFirst({ where: { id, userId: req.user.id }, select: { title: true } });
-    const other = await prisma.note.findFirst({ where: { id: otherId, userId: req.user.id, isDeleted: false }, select: { content: true } });
+    const me = await prisma.note.findFirst({ where: { id, ...own }, select: { title: true } });
+    const other = await prisma.note.findFirst({ where: { id: otherId, ...own, isDeleted: false }, select: { content: true } });
     if (!me || !other) return res.status(404).json({ error: 'Note not found' });
     const title = (me.title || '').trim();
     const content = other.content || '';
@@ -147,7 +154,7 @@ export async function linkMention(req: any, res: any, next: any) {
     if (!m) return res.status(404).json({ error: 'That note no longer mentions this one.' });
     const next2 = content.slice(0, m.index) + `[${m[0]}](/notes/${id})` + content.slice(m.index + m[0].length);
     await saveVersion(otherId, content, { force: true }).catch(() => {});
-    await prisma.note.update({ where: { id: otherId }, data: { content: next2 }, select: { id: true } });
+    await prisma.note.update({ where: { id: otherId, ...own }, data: { content: next2 }, select: { id: true } });
     await syncLinks(req.user.id, otherId, next2);
     invalidateNote(otherId, next2); // an open live room would otherwise write its old text back over the new link
     notify(req, 'notes_changed');
@@ -221,12 +228,16 @@ function rankNotes(list: any[], q: string, words: string[], fuzzy: Set<string>) 
 
 export async function getNotes(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read');
+    if (!own) return;
     const { search, tag, category, sort = 'updated', archived, deleted, snippet } = req.query;
     const userId = req.user.id;
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? ''), 10) || 0, 0), 500);
     const offset = Math.max(parseInt(String(req.query.offset ?? ''), 10) || 0, 0);
 
-    const where: any = { userId };
+    const where: any = { ...own };
+    // An access token (an AI client over MCP) never sees #private notes
+    if (req.user.viaToken) where.AND = [{ tags: { none: { tag: { name: PRIVATE_TAG } } } }];
 
     // Archive filter
     where.isArchived = archived === 'true';
@@ -325,12 +336,12 @@ export async function getNotes(req: any, res: any, next: any) {
     if (sq && found.length < 3 && sq.length >= 4) {
       // Few hits: also look for titles that are one or two letters off (typing "meetng" finds "Meeting").
       const words = searchWords(sq);
-      const titles = await prisma.note.findMany({ where: { userId, isArchived: where.isArchived, isDeleted: where.isDeleted }, select: { id: true, title: true } });
+      const titles = await prisma.note.findMany({ where: { ...own, isArchived: where.isArchived, isDeleted: where.isDeleted, ...(req.user.viaToken ? { tags: { none: { tag: { name: PRIVATE_TAG } } } } : {}) }, select: { id: true, title: true } });
       const have = new Set(found.map((n: any) => n.id));
       const near = titles.filter((t) => !have.has(t.id) && nearTitle(t.title, words)).slice(0, 10).map((t) => t.id);
       if (near.length) {
         near.forEach((id) => fuzzy.add(id));
-        found = found.concat(await prisma.note.findMany({ where: { id: { in: near }, userId }, include: noteInclude }));
+        found = found.concat(await prisma.note.findMany({ where: { id: { in: near }, ...own, ...(req.user.viaToken ? { tags: { none: { tag: { name: PRIVATE_TAG } } } } : {}) }, include: noteInclude }));
       }
     }
     let out: any[] = found.map(formatNote);
@@ -344,6 +355,7 @@ export async function getNotes(req: any, res: any, next: any) {
         truncated: !!n.content && n.content.length > 400,
       }));
     }
+    await decorateNotes(userId, 'spaceId' in own ? own.spaceId : null, out);
     res.json({ notes: out, ...(limit ? { limit, offset } : {}) });
   } catch (error) {
     next(error);
@@ -352,8 +364,10 @@ export async function getNotes(req: any, res: any, next: any) {
 
 export async function getNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read');
+    if (!own) return;
     const note = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, ...own, ...(req.query.deleted === '1' ? {} : { isDeleted: false }) },
       include: noteInclude
     });
 
@@ -361,7 +375,9 @@ export async function getNote(req: any, res: any, next: any) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
-    res.json({ note: formatNote(note) });
+    const shaped = formatNote(note);
+    await decorateNotes(req.user.id, 'spaceId' in own ? own.spaceId : null, [shaped]);
+    res.json({ note: shaped });
   } catch (error) {
     next(error);
   }
@@ -369,6 +385,8 @@ export async function getNote(req: any, res: any, next: any) {
 
 export async function createNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write');
+    if (!own) return;
     scrubBody(req.body, ['title', 'content', 'category']);
     const { title, content, category, tags, meta } = req.body;
     const cleanMeta = cleanNoteMeta(meta);
@@ -376,6 +394,7 @@ export async function createNote(req: any, res: any, next: any) {
     const note = await prisma.note.create({
       data: {
         userId: req.user.id,
+        ...('spaceId' in own ? { spaceId: own.spaceId } : {}),
         title: (typeof title === 'string' ? title.slice(0, 300) : '') || 'Untitled',
         content: content || '',
         category: category || null,
@@ -392,7 +411,7 @@ export async function createNote(req: any, res: any, next: any) {
 
     // Re-fetch with tags
     const updated = await prisma.note.findUnique({
-      where: { id: note.id },
+      where: { id: note.id, ...own },
       include: noteInclude
     });
 
@@ -400,7 +419,9 @@ export async function createNote(req: any, res: any, next: any) {
     const io = req.app.get('io');
     if (io) io.to(req.user.id).emit('notes_changed');
 
-    res.status(201).json({ note: formatNote(updated) });
+    const shaped = formatNote(updated);
+    await decorateNotes(req.user.id, 'spaceId' in own ? own.spaceId : null, [shaped]);
+    res.status(201).json({ note: shaped });
   } catch (error) {
     next(error);
   }
@@ -419,6 +440,8 @@ async function nameOf(userId: string): Promise<string | undefined> {
 
 export async function updateNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write');
+    if (!own) return;
     scrubBody(req.body, ['title', 'content', 'category', 'baseContent']);
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
     // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.
@@ -429,7 +452,7 @@ export async function updateNote(req: any, res: any, next: any) {
     let merged: { status: string; content: string; updatedAt: Date } | null = null;
     if (typeof content === 'string' && baseUpdatedAt) {
       const r = await saveNoteMerged(
-        { id: req.params.id, userId: req.user.id },
+        { id: req.params.id, ...own },
         { content, title: typeof title === 'string' ? title : undefined, baseUpdatedAt, baseContent: typeof baseContent === 'string' ? baseContent : null, force: !!force, keepBoth: !!keepBoth, collab: collab === true, by: await nameOf(req.user.id) },
       );
       if (r.status === 'missing') return res.status(404).json({ error: 'Note not found' });
@@ -445,7 +468,7 @@ export async function updateNote(req: any, res: any, next: any) {
     if (isArchived !== undefined) data.isArchived = isArchived;
     if (meta !== undefined) {
       // a favourite or an emoji is not an edit of the text: keep the "last edited" time as it was
-      const cur = await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { meta: true, updatedAt: true } });
+      const cur = await prisma.note.findFirst({ where: { id: req.params.id, ...own }, select: { meta: true, updatedAt: true } });
       if (cur) {
         data.meta = cleanNoteMeta(meta, cur.meta);
         if (Object.keys(data).length === 1 && tags === undefined) data.updatedAt = cur.updatedAt;
@@ -454,7 +477,7 @@ export async function updateNote(req: any, res: any, next: any) {
 
     // the text before this edit is kept as a version (at most one every 10 minutes while editing)
     const before = content !== undefined && !merged
-      ? await prisma.note.findFirst({ where: { id: req.params.id, userId: req.user.id }, select: { content: true } })
+      ? await prisma.note.findFirst({ where: { id: req.params.id, ...own }, select: { content: true } })
       : null;
 
     // Changing only the tags still counts as an edit. (An empty update would match nothing and wrongly answer 404.)
@@ -462,8 +485,8 @@ export async function updateNote(req: any, res: any, next: any) {
 
     // Use updateMany to enforce userId ownership safely in a single query
     const { count } = Object.keys(data).length
-      ? await prisma.note.updateMany({ where: { id: req.params.id, userId: req.user.id }, data })
-      : { count: await prisma.note.count({ where: { id: req.params.id, userId: req.user.id } }) };
+      ? await prisma.note.updateMany({ where: { id: req.params.id, ...own }, data })
+      : { count: await prisma.note.count({ where: { id: req.params.id, ...own } }) };
 
     if (count === 0) {
       return res.status(404).json({ error: 'Note not found' });
@@ -478,7 +501,7 @@ export async function updateNote(req: any, res: any, next: any) {
     notify(req, 'notes_changed');
     // Return early to save an extra sequential database lookup
     if (merged) {
-      const fresh = Object.keys(data).length ? await prisma.note.findUnique({ where: { id: req.params.id }, select: { updatedAt: true } }) : null;
+      const fresh = Object.keys(data).length ? await prisma.note.findUnique({ where: { id: req.params.id, ...own }, select: { updatedAt: true } }) : null;
       return res.json({ message: 'Note updated', status: merged.status, updatedAt: fresh?.updatedAt ?? merged.updatedAt, ...(merged.status !== 'saved' ? { content: merged.content } : {}) });
     }
     res.json({ message: 'Note updated' });
@@ -506,12 +529,14 @@ export async function purgeExpiredTrash(): Promise<number> {
 
 export async function deleteNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'manage');
+    if (!own) return;
     const noteId = req.params.id;
     const userId = req.user.id;
 
     // Try soft-delete first (move to trash) — single query with ownership check
     const { count: softDeleted } = await prisma.note.updateMany({
-      where: { id: noteId, userId, isDeleted: false },
+      where: { id: noteId, ...own, isDeleted: false },
       data: { isDeleted: true, deletedAt: new Date(), isArchived: false }
     });
 
@@ -524,13 +549,18 @@ export async function deleteNote(req: any, res: any, next: any) {
     const flag = String(req.query?.permanent ?? '').toLowerCase();
     const permanent = flag === '1' || flag === 'true';
     if (!permanent) {
-      const inTrash = await prisma.note.count({ where: { id: noteId, userId, isDeleted: true } });
+      const inTrash = await prisma.note.count({ where: { id: noteId, ...own, isDeleted: true } });
       if (inTrash > 0) return res.json({ message: 'Note already in trash' });
       return res.status(404).json({ error: 'Note not found' });
     }
 
+    // In a team only a lead can delete forever; the team trash is never emptied on a timer.
+    if ('spaceId' in own) {
+      const acc = await spaceAccess(userId, own.spaceId);
+      if (!acc || !can('space.manage', acc.org, acc.role)) return res.status(403).json({ error: 'Only a team lead can delete a note forever.' });
+    }
     const { count: hardDeleted } = await prisma.note.deleteMany({
-      where: { id: noteId, userId, isDeleted: true }
+      where: { id: noteId, ...own, isDeleted: true }
     });
 
     if (hardDeleted > 0) {
@@ -546,9 +576,11 @@ export async function deleteNote(req: any, res: any, next: any) {
 
 export async function restoreNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write');
+    if (!own) return;
     // Single updateMany enforces ownership without a separate findFirst
     const { count } = await prisma.note.updateMany({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, ...own },
       data: { isDeleted: false, deletedAt: null }
     });
 
@@ -558,7 +590,7 @@ export async function restoreNote(req: any, res: any, next: any) {
 
     // Fetch the restored note for the response
     const note = await prisma.note.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id, ...own },
       include: noteInclude
     });
 
@@ -571,15 +603,17 @@ export async function restoreNote(req: any, res: any, next: any) {
 
 export async function archiveNote(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'write');
+    if (!own) return;
     const existing = await prisma.note.findFirst({
-      where: { id: req.params.id, userId: req.user.id }
+      where: { id: req.params.id, ...own }
     });
     if (!existing) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
     const note = await prisma.note.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id, ...own },
       data: { isArchived: !existing.isArchived },
       include: noteInclude
     });
@@ -681,11 +715,15 @@ export async function saveEmbeddingForNote(userId: string, noteId: string, title
 /** Notes that link to this one. A link is written as a normal Markdown link to /notes/<id>, so it survives export and import. */
 export async function getBacklinks(req: any, res: any, next: any) {
   try {
+    const own = await noteScope(req, res, 'read'); if (!own) return;
     const id = String(req.params.id);
+    const inSpace: string | null = 'spaceId' in own ? own.spaceId : null;
+    const hidden = inSpace ? await hiddenNoteIds(req.user.id, inSpace, 'read') : [];
     const rows = await prisma.$queryRaw`
       SELECT n.id, n.title, n.updated_at AS "updatedAt"
       FROM note_links l JOIN notes n ON n.id = l.source_id
-      WHERE l.target_id = ${id} AND n.user_id = ${req.user.id} AND n.is_deleted = false AND n.id <> ${id}
+      WHERE l.target_id = ${id} AND n.space_id IS NOT DISTINCT FROM ${inSpace} AND (${inSpace}::text IS NOT NULL OR n.user_id = ${req.user.id}) AND n.is_deleted = false AND n.id <> ${id} AND NOT (n.id = ANY(${hidden}::text[]))
+        AND (${!req.user.viaToken} OR NOT EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = n.id AND t.name = ${PRIVATE_TAG}))
       ORDER BY n.updated_at DESC LIMIT 50`;
     res.json({ backlinks: rows });
   } catch (error) {

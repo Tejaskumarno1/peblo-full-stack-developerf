@@ -26,6 +26,7 @@ export function rateLimit(opts: { windowMs: number; max: number; message?: strin
     if (recent.length >= opts.max) {
       const retry = Math.ceil((recent[0] + opts.windowMs - now) / 1000);
       res.setHeader('Retry-After', String(retry));
+      if (process.env.NODE_ENV !== 'test') console.warn(`[security] rate limit hit: ${req.method} ${req.path} from ${req.ip || 'unknown'}`); // address and route only, never the person's text
       return res.status(429).json({ error: opts.message || `Too many attempts. Try again in ${Math.ceil(retry / 60)} min.` });
     }
     // make the timestamp unique so a successful request removes exactly its own entry

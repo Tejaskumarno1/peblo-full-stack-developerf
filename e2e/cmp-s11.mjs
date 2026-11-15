@@ -1,0 +1,17 @@
+import { boot } from './lib.mjs';
+const { base, api, ctx, finish } = await boot({ freshGuest: true });
+const note = (await api('POST', '/api/notes', { title: 'Q4 client report', content: '## 1. What we heard\n\nOld first line.\n\nKept line.', tags: [] })).note;
+await api('PATCH', `/api/notes/${note.id}`, { content: '## 1. What we heard\n\nNew first line.\n\nKept line.' });
+const tok = (await api('POST', `/api/share/note/${note.id}`, { edit: true })).token;
+const c = await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } });
+await c.addInitScript(() => { try { localStorage.setItem('peblo-guest-tour', '1'); } catch {} });
+const g = await c.newPage();
+await g.goto(`${base}/s/note/${tok}`);
+await g.locator('.bn-editor').waitFor({ timeout: 20000 });
+await g.locator('[data-testid="join-anon"]').click({ timeout: 4000 }).catch(() => {});
+await g.waitForTimeout(1500);
+await g.locator('[data-testid="rc-versions"]').click();
+await g.locator('[data-testid="versions"]').waitFor({ timeout: 5000 }).catch(() => {});
+await g.waitForTimeout(800);
+await g.screenshot({ path: 'D:/Peblo/_shots/real-S11.png' });
+await finish();

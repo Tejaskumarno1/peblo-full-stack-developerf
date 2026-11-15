@@ -5,16 +5,19 @@ import type { Request } from 'express';
 /*
  * Sends the few emails Peblo needs (confirm an address, a change of address). No extra package:
  *  - SMTP_HOST + SMTP_USER + SMTP_PASS (port 465, TLS): works with Gmail (use an App Password), Outlook, any host.
- *  - RESEND_API_KEY: the Resend HTTPS API.
+ *  - RESEND_API_KEY: the Resend HTTPS API (without a verified domain Resend only delivers to the account owner).
+ *  - BREVO_API_KEY: the Brevo HTTPS API (needs a verified sender address, delivers to anyone). Use one of these on hosts such as
+ *    Render's free plan, which block outgoing SMTP.
  *  - MAIL_OUTBOX=<file>: tests only; each mail is written to that file as one JSON line and nothing is sent.
  * MAIL_FROM is the "From" address (defaults to SMTP_USER). Without any of these, mail is simply "not set up"
  * and the app says so plainly instead of pretending.
  */
 export type Mail = { to: string; subject: string; text: string; html?: string };
 
-export function mailMode(): 'outbox' | 'resend' | 'smtp' | null {
+export function mailMode(): 'outbox' | 'resend' | 'brevo' | 'smtp' | null {
   if (process.env.MAIL_OUTBOX) return 'outbox';
   if (process.env.RESEND_API_KEY) return 'resend';
+  if (process.env.BREVO_API_KEY) return 'brevo';
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp';
   return null;
 }
@@ -106,7 +109,19 @@ export async function sendMail(mail: Mail): Promise<boolean> {
         body: JSON.stringify({ from: fromAddress(), to: [clean(mail.to)], subject: clean(mail.subject), text: mail.text, html: mail.html }),
         signal: AbortSignal.timeout(20_000),
       });
-      if (!r.ok) throw new Error(`Resend answered ${r.status}`);
+      if (!r.ok) throw new Error(`Resend answered ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
+      return true;
+    }
+    if (mode === 'brevo') {
+      const from = fromAddress();
+      const name = from.match(/^(.*)<[^>]+>\s*$/)?.[1]?.trim().replace(/^"|"$/g, '') || 'Peblo';
+      const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': process.env.BREVO_API_KEY!, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ sender: { name, email: bareAddress(from) }, to: [{ email: bareAddress(clean(mail.to)) }], subject: clean(mail.subject), textContent: mail.text, ...(mail.html ? { htmlContent: mail.html } : {}) }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!r.ok) throw new Error(`Brevo answered ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
       return true;
     }
     if (mode === 'smtp') { await smtpSend(mail); return true; }

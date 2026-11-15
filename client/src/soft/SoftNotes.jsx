@@ -1,17 +1,25 @@
-﻿import { Fragment, memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon , MousePointer2 } from 'lucide-react';
+import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Type, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
+import MoveNote from './MoveNote';
+import ShareToTeam, { useShareTargets } from './ShareToTeam';
+import TeamNoteStrip from './TeamNoteStrip';
+import NoteTasks from './NoteTasks';
+import { useSpaceRole, useCurrentSpace, useWorkspaces } from './spaces';
+import { AccessChip, NoAccess } from './OfficeAccess';
 import CompareBox from '../components/CompareBox';
 import { ViewPopover, MoveSheet, TagSheet, NewFolderSheet, SmartFolderPage, DEFAULT_VIEW, useOutside } from './NotesPanelParts';
-import { colorOf, withLegacy, inFolder, smartMatch } from './folders';
+import { FOLDER_COLORS, colorOf, withLegacy, inFolder, smartMatch } from './folders';
 import { useAuth } from '../context/AuthContext';
 import './notespanel.css';
+import './notesV2.css';
+import { EditorSkeleton, RailSkeleton } from './Skeletons';
 import TagManager from './TagManager';
 import Gallery from './Gallery';
 import { inlineMedia } from '../utils/imageData';
@@ -22,11 +30,13 @@ import { usePublicUrl } from '../api/publicUrl';
 import { useAutoSave } from '../hooks';
 import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
-import ShareChips from '../components/ShareChips';
+import FocusChrome, { useFocusPrefs, useFocusKeys } from '../components/FocusMode';
+import ShareChips, { useShareParts } from '../components/ShareChips';
 import { usePresence, appPref, setPresence, restoreAppPresence } from '../utils/presencePref';
 import { useLive } from '../utils/liveStore';
 import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
+import Toast from '../components/Toast';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 // the first line of a note, used as its name while it has no title
@@ -59,14 +69,14 @@ const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels,
         <span className="txt">
           <span className={`t${n.meta?.pinned ? ' pin' : ''}${untitled && first ? ' fb' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{untitled ? first || 'Untitled' : n.title}</span>
           {!selectMode && preview && <span className="s">{dq && n.matchSnippet ? <Hl text={n.matchSnippet} q={dq} /> : untitled && first ? 'No title yet' : snippetOfNote(n) || 'Empty note'}</span>}
-          <span className="m">{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
+          <span className="m">{n.access && n.access !== 'owner' && <span className="oa-own">{n.owner?.name ? `by ${n.owner.name} · ` : ''}</span>}{labels && n.meta?.folder && <span className="np-pill"><span className="np-dot" style={{ background: colorOf(fdef?.color || 'sand')[2] }} />{n.meta.folder}</span>}<span>{(n.tags || []).find((t) => t !== 'inbox') ? `#${(n.tags || []).find((t) => t !== 'inbox')} · ` : ''}{relTime(n.updatedAt)}{n.taskCount > 0 ? ` · ${n.taskCount} task${n.taskCount > 1 ? 's' : ''}` : ''}{w >= 30 ? ` · ${w} words` : ''}</span></span>
         </span>
       </Link>
 
   );
 });
 
-/** Soft Studio · Notes (mockup: SoftNotes). List, editor and helpers, with its own layout. */
+/** Soft Studio — Notes (mockup: SoftNotes). List, editor and helpers, with its own layout. */
 export default function SoftNotes() {
   const { id: routeId } = useParams();
   const [params, setParams] = useSearchParams();
@@ -77,13 +87,21 @@ export default function SoftNotes() {
   const [filter, setFilter] = useState(() => (new URLSearchParams(window.location.search).get('filter') === 'trash' ? 'trash' : 'all'));
   const [selTags, setSelTags] = useState(() => (params.get('tag') ? [params.get('tag')] : []));
   const [tagMatch, setTagMatch] = useState('any');
-  const [collapsed, setCollapsed] = useState(() => { try { return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
+  const [collapsed, setCollapsed] = useState(() => { try { if (JSON.parse(localStorage.getItem('peblo-settings') || '{}').rememberFolds === false) return {}; return JSON.parse(localStorage.getItem('peblo-notes-collapsed') || '{}') || {}; } catch { return {}; } });
   const toggleGroup = (k) => setCollapsed((c) => {
     const n = { ...c, [k]: !c[k] };
     if (!n[k]) delete n[k];
     try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ }
     return n;
   });
+  const jumpTo = (k) => {
+    setCollapsed((c) => { const n = { ...c }; delete n[`${group}:${k}`]; try { localStorage.setItem('peblo-notes-collapsed', JSON.stringify(n)); } catch { /* ignore */ } return n; });
+    requestAnimationFrame(() => { const el = [...document.querySelectorAll('[data-gk]')].find((e) => e.getAttribute('data-gk') === k); el?.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  };
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches);
+  useEffect(() => { const m = window.matchMedia('(max-width: 700px)'); const f = () => setPhone(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  const [railOpen, setRailOpen] = useState({}); // empty side cards fold to one line until clicked
+  const [phRail, setPhRail] = useState(null); // phone: which helper card is open as a sheet ('ask' | 'tasks' | 'ment')
   const [focus, setFocus] = useState(false);
   const [cursorsOn, setCursors] = usePresence();
   // in full screen people's live cursors are on by themselves; leaving it puts the earlier choice back (off unless it was turned on)
@@ -93,7 +111,11 @@ export default function SoftNotes() {
     setPresence(true);
     return () => restoreAppPresence(prev);
   }, [focus]);
+  const [fsp, setFsp] = useFocusPrefs(); // full-screen choices (width, text size, theme, tools), kept per person in this browser
+  
   const [shareOpen, setShareOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const shareTargets = useShareTargets();
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
   const [editorKey, setEditorKey] = useState('none');
@@ -105,15 +127,17 @@ export default function SoftNotes() {
   const [toast, setToast] = useState('');
   const [toastAct, setToastAct] = useState(null); // { label, run }: a button on the message (Undo)
   const toastTimer = useRef(null);
-  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
-  useEffect(() => {
-    const on = () => setOnline(true); const off = () => setOnline(false);
-    window.addEventListener('online', on); window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
   const [allLinked, setAllLinked] = useState(false);
   const publicUrl = usePublicUrl();
-  const [q, setQ] = useState(''); // the search box
+  const spaceRole = useSpaceRole();
+  const { data: wsData } = useWorkspaces();
+  const curSpace = useCurrentSpace();
+  const isOffice = (wsData?.orgs || []).flatMap((o) => o.spaces).find((x) => x.id === curSpace)?.kind === 'office';
+  const [own, setOwn] = useState('all'); // Office only: all | mine | shared with me
+  const [denied, setDenied] = useState(null);
+  const viewer = spaceRole === 'viewer' || doc?.access === 'view';
+  const canPurge = !spaceRole || spaceRole === 'lead';
+  const [q, setQ] = useState(() => params.get('q') || ''); // the search box (the palette's "See all" arrives with ?q=)
   const [dq, setDq] = useState(''); // what was typed, after a short pause
   const [diffV, setDiffV] = useState(null); // the earlier version being compared
   const [typewriter, setTypewriter] = useState(() => store('peblo-typewriter', 'off'));
@@ -124,14 +148,17 @@ export default function SoftNotes() {
   const { settings: acct, updateSettings } = useAuth();
   const [view, setViewState] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem('peblo-notes-view') || 'null'); if (v && typeof v === 'object') return { ...DEFAULT_VIEW, ...v }; } catch { /* ignore */ }
-    const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', 'date') };
-    return { ...DEFAULT_VIEW, sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : 'date' };
+    const old = { sort: store('peblo-notes-sort', 'updated'), group: store('peblo-notes-group', '') };
+    return { ...DEFAULT_VIEW, ...(['cozy', 'compact'].includes(acct?.noteDensity) ? { density: acct.noteDensity } : {}), sort: ['updated', 'created', 'title'].includes(old.sort) ? old.sort : 'updated', pinFirst: old.sort === 'pinned' || true, group: ['date', 'folder', 'tag', 'none'].includes(old.group) ? old.group : (['date', 'folder', 'tag', 'none'].includes(acct?.noteGroup) ? acct.noteGroup : 'date') };
   });
   const setView = (v) => { setViewState(v); try { localStorage.setItem('peblo-notes-view', JSON.stringify(v)); } catch { /* ignore */ } };
   const sort = view.sort;
   const group = view.group;
+  const layout = ['cards', 'sections', 'classic'].includes(acct?.noteLayout) ? acct.noteLayout : 'cards';
   const [viewOpen, setViewOpen] = useState(false);
   const [fSel, setFSel] = useState(null); // { kind: 'folder' | 'smart', id }
+  const [cards, setCards] = useState(false); // the folder cards view
+  const [gSel, setGSel] = useState(null); // the date or tag card that is open
   const [sheet, setSheet] = useState(null); // 'move' | 'tag' | 'folder'
   const [folderEdit, setFolderEdit] = useState(null); // the folder being edited (or {} for a new one)
   const [smartPage, setSmartPage] = useState(null); // { initial, startName }
@@ -193,11 +220,17 @@ export default function SoftNotes() {
   };
   const folderCount = (d) => allNotes.filter((n) => (d.smart ? smartMatch(n, d.smart) : inFolder(n, d, allDefs, view.subs))).length;
   const groups = useMemo(() => {
-    if (dq) return [{ key: 'found', label: '', notes: found.filter(passes) }]; // best match first, as the server ranked them
-    let base = (filter === 'all' || filter === 'inbox' ? allNotes : listed).filter(passes);
+    const ownOk = (n) => !isOffice || own === 'all' || (own === 'mine' ? n.access === 'owner' : n.access && n.access !== 'owner');
+    if (dq) return [{ key: 'found', label: '', notes: found.filter((n) => passes(n) && ownOk(n)) }]; // best match first, as the server ranked them
+    let base = (filter === 'all' || filter === 'inbox' ? allNotes : listed).filter((n) => passes(n) && ownOk(n));
     if (filter === 'inbox') base = base.filter((n) => (n.tags || []).includes('inbox'));
     if (filter !== 'archive' && filter !== 'trash' && selTags.length) {
       base = base.filter((n) => (tagMatch === 'all' ? selTags.every((t) => (n.tags || []).includes(t)) : selTags.some((t) => (n.tags || []).includes(t))));
+    }
+    if (isOffice && own === 'all' && filter !== 'archive' && filter !== 'trash') { // an Office: your notes, then the ones shared with you (mockup E01)
+      const byNew = (x, y) => new Date(y.updatedAt || 0) - new Date(x.updatedAt || 0);
+      const out2 = [['ofc-mine', 'Mine', base.filter((n) => n.access === 'owner' || !n.access).sort(byNew)], ['ofc-shared', 'Shared with me', base.filter((n) => n.access && n.access !== 'owner').sort(byNew)]];
+      return out2.filter((g) => g[2].length).map(([key, label, notes]) => ({ key, label, notes }));
     }
     const isPin = (n) => !!n.meta?.pinned;
     const time = (n, k) => new Date(n[k] || 0).getTime();
@@ -216,7 +249,7 @@ export default function SoftNotes() {
     if (group === 'tag') {
       const m = new Map();
       for (const n of rest) { const t = (n.tags || []).find((x) => x !== 'inbox') || 'untagged'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
-      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: `#${t}`, notes });
+      for (const [t, notes] of [...m.entries()].sort((a, b) => b[1].length - a[1].length)) out.push({ key: `t-${t}`, label: t === 'untagged' ? 'Untagged' : `#${t}`, notes });
     } else if (group === 'folder') {
       const m = new Map();
       for (const n of rest) { const t = n.meta?.folder || 'No folder'; if (!m.has(t)) m.set(t, []); m.get(t).push(n); }
@@ -241,7 +274,12 @@ export default function SoftNotes() {
       for (const [k, g] of older) out.push({ key: `m-${k}`, label: g.label, notes: g.notes });
     }
     return out;
-  }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allNotes, listed, filter, selTags, tagMatch, view, dq, found, fSel, allDefs, isOffice, own]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownGroups = gSel && !dq ? groups.filter((g) => g.key === gSel) : groups;
+  const dateTagCards = !isOffice && layout === 'cards' && (group === 'date' || group === 'tag') && !dq && filter === 'all' && !selectMode && !fSel && !cards;
+  const gOpen = !isOffice && layout === 'cards' && !!gSel && !dq && !fSel && (group === 'date' || group === 'tag') && filter === 'all' && !selectMode;
+  const folderMode = group === 'folder' && !dq && filter === 'all' && !selectMode; // Group by Folder shows the folder cards
+  useEffect(() => { setGSel(null); }, [group, filter]);
   const shownList = useMemo(() => groups.flatMap((g) => g.notes), [groups]);
   const { data: openTasks = [] } = useQuery({
     queryKey: ['todos', 'open-unlinked'],
@@ -257,7 +295,7 @@ export default function SoftNotes() {
   const open = useCallback((note) => {
     setDoc({ ...note, title: editable(note.title), content: note.content || '', tags: note.tags || [] });
     setEditorKey(`${note.id}-${Date.now()}`);
-    setPreview(!!note.isDeleted);
+    setPreview(!!note.isDeleted || new URLSearchParams(window.location.search).get('view') === 'reader'); // Open as > Reader view
     setTagDraft(null);
     setMenuOpen(false);
     setHistoryOpen(false);
@@ -266,6 +304,8 @@ export default function SoftNotes() {
   // set when the person closed every tab on purpose: the list must not open a note again by itself
   const noAuto = useRef(false);
   const closeDoc = useCallback(() => { noAuto.current = true; setDoc(null); setEditorKey('none'); navigate('/notes', { replace: true }); }, [navigate]);
+  useEffect(() => { if (doc?.id && !doc.isDraft && params.get('view') === 'reader') setPreview(true); }, [doc?.id, params.get('view')]); // eslint-disable-line react-hooks/exhaustive-deps -- Open as > Reader view
+
   const startDraft = useCallback(() => {
     noAuto.current = false;
     const folderName = selDef && !selDef.smart ? selDef.name : '';
@@ -282,14 +322,15 @@ export default function SoftNotes() {
       return;
     }
     if (!routeId) {
-      if (!doc && !noAuto.current && allNotes[0]) navigate(`/notes/${allNotes[0].id}`, { replace: true });
+      if (!doc && !noAuto.current && allNotes[0] && !phone) navigate(`/notes/${allNotes[0].id}`, { replace: true });
       return;
     }
+    setDenied(null);
     if (doc?.id === routeId) return;
     noAuto.current = false;
     const found = allNotes.find((n) => n.id === routeId) || listed.find((n) => n.id === routeId);
     if (found) open(found);
-    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch(() => navigate('/notes', { replace: true }));
+    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else navigate('/notes', { replace: true }); });
   }, [routeId, allNotes, listed, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- saving ----------
@@ -461,7 +502,7 @@ export default function SoftNotes() {
   };
   const restoreVersion = async (v) => {
     await notesAPI.revertBackup(doc.id, v.id);
-    const { data } = await notesAPI.get(doc.id);
+    const { data } = await notesAPI.get(doc.id, { deleted: !!doc.isDeleted });
     open(data.note);
     refreshLists();
     queryClient.invalidateQueries({ queryKey: ['notes', 'backups', doc.id] });
@@ -606,12 +647,8 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
-  useEffect(() => {
-    if (!focus) return undefined;
-    const esc = (e) => { if (e.key === 'Escape' && !document.querySelector('.bn-suggestion-menu')) setFocus(false); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [focus]);
+  useFocusKeys({ enabled: !!doc && !doc.isDeleted, active: focus, toggle: () => setFocus((v) => !v), exit: () => { setFocus(false); } });
+  const getFsScroller = useCallback(() => document.querySelector('.s-notes.focus .s-note-main'), []);
   const outline = useMemo(() => {
     const out = [];
     let fence = false;
@@ -658,15 +695,81 @@ export default function SoftNotes() {
 
   const listTitle = filter === 'archive' ? 'Archive' : filter === 'trash' ? 'Trash' : 'Notes';
 
+  const fsParts = useShareParts(doc?.id);
+  const renderTags = () => (
+    <div className="s-note-tags">
+      {viewer && <span className="s-viewer-note" data-testid="viewer-note"><Lock size={13} /> Read only</span>}
+                {doc.tags.map((t) => (
+                  <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
+                    #{t}
+                    {!doc.isDeleted && !viewer && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
+                  </span>
+                ))}
+                {tagDraft === null ? (
+                  !doc.isDeleted && !viewer && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
+                ) : (
+                  <input
+                    className="s-tag-input"
+                    aria-label="New tag"
+                    autoFocus
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagDraft); } if (e.key === 'Escape') setTagDraft(null); }}
+                    onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
+                    placeholder="tag"
+                  />
+                )}
+                {!doc.isDeleted && !doc.isDraft && !viewer && <MoveNote noteId={doc.id} title={doc.title} />}
+              </div>
+  );
+  const renderMenuItems = () => (
+    <>
+      {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+                    <div className="s-menu-sep" role="separator" />
+      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
+                    <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
+          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
+                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions'}</button>}
+{!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
+          <div className="s-menu-sep" role="separator" />
+      <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
+                    <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
+                    <div className="s-menu-sep" role="separator" />
+      {(!doc.isDeleted || canPurge) && <button type="button" role="menuitem" className="danger" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
+    </>
+  );
+  const quickTask = async (text) => { await todosAPI.create({ text, priority: 'medium', noteId: doc.id }); queryClient.invalidateQueries({ queryKey: ['todos'] }); };
   return (
-    <div className={`soft-page s-notes${focus ? ' focus' : ''}`} data-width={wide}>
+    <div className={`soft-page s-notes${focus ? ' focus' : ''}${phone ? (routeId ? ' ph-note' : ' ph-list') : ''}`} data-width={wide}>
       {diffV && doc && !doc.isDraft && <CompareBox title={doc.title || 'Untitled'} now={{ content: doc.content || '', at: doc.updatedAt }} versions={versions} loadVersion={loadVersionText} initialId={diffV.id}
         onClose={() => setDiffV(null)} onRestore={async (v) => { setDiffV(null); await guarded(restoreVersion, 'Could not restore that version')(v); }} onKeep={keepAsNote} />}
+      {teamOpen && doc && !doc.isDraft && <ShareToTeam noteId={doc.id} title={doc.title} onClose={() => setTeamOpen(false)} onDone={({ team, tasks }) => flash(`Shared with ${team.name}${tasks ? ` with ${tasks} task${tasks === 1 ? '' : 's'}` : ''}`)} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
-      <aside className={`s-notes-list np${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
+      <aside className={`s-notes-list np lay-${layout}${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
         {selectMode ? (
           <div className="np-selhead"><button type="button" onClick={() => { setSelectMode(false); setPicked([]); setSheet(null); }}>Cancel</button><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(picked.length === shownList.length ? [] : shownList.map((n) => n.id))}>{picked.length && picked.length === shownList.length ? 'Clear' : 'Select all'}</button></div>
+        ) : gOpen ? (
+          <div className="np-head np-fhead">
+            <button type="button" className="np-ib" aria-label={`Back to ${group === 'tag' ? 'tags' : 'dates'}`} title="Back" onClick={() => setGSel(null)}><ChevronLeft size={18} strokeWidth={1.9} /></button>
+            <div className="np-ftitle"><small>{group === 'tag' ? 'Tag' : 'Date'}</small><h1 className="s-notes-h1">{groups.find((g) => g.key === gSel)?.label || ''}</h1></div>
+          </div>
+        ) : fSel && selDef && filter !== 'archive' && filter !== 'trash' ? (
+          <div className="np-head np-fhead">
+            <button type="button" className="np-ib" aria-label="Back to folders" title="Back to folders" onClick={() => { setFSel(selDef.parent ? { kind: 'folder', id: selDef.parent } : null); if (!selDef.parent) setCards(true); }}><ChevronLeft size={18} strokeWidth={1.9} /></button>
+            <div className="np-ftitle"><small>{selDef.smart ? 'Smart folder' : selDef.parent ? `Folders / ${normalDefs.find((d) => d.id === selDef.parent)?.name || ''}` : 'Folders'}</small><h1 className="s-notes-h1">{selDef.name}</h1></div>
+            {!selDef.smart && <button type="button" className="s-new" data-testid="folder-new-note" aria-label={`New note in ${selDef.name}`} title={`New note in ${selDef.name}`} onClick={startDraft}><Plus size={18} strokeWidth={2.6} /></button>}
+            <button type="button" className="np-ib" aria-label="Edit this folder" title="Edit this folder" onClick={() => openEdit(selDef)}><Pencil size={15} strokeWidth={1.8} /></button>
+            <button type="button" className="np-ib" aria-label="Show all notes" title="Show all notes" onClick={() => { setFSel(null); setCards(false); if (folderMode) setView({ ...view, group: 'date' }); }}><X size={16} strokeWidth={2} /></button>
+          </div>
         ) : (
           <div className="np-head">
             <h1 className="s-notes-h1">{listTitle}</h1>
@@ -679,49 +782,96 @@ export default function SoftNotes() {
         {!selectMode && (
           <div className="np-bar">
             <label className="s-nsearch"><Search size={18} strokeWidth={1.8} aria-hidden="true" /><input aria-label="Search notes" placeholder="Search notes" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setQ(''); }} />{q.trim() && <button type="button" className="save" aria-label="Save this search" title="Save this search" onClick={saveSearch}><Star size={13} fill={savedQ.includes(q.trim()) ? 'currentColor' : 'none'} /></button>}{q && <button type="button" aria-label="Clear search" onClick={() => setQ('')}><X size={12} /></button>}</label>
-            <button type="button" className="np-view" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />View</button>
+            <button type="button" className={`np-view${group !== 'date' || sort !== 'updated' ? ' set' : ''}`} aria-label="View options" aria-haspopup="dialog" aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}><SlidersHorizontal size={16} strokeWidth={1.8} />{group !== 'date' || sort !== 'updated' ? { date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group] : 'View'}</button>
           </div>
         )}
-        {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}>×</button></span>)}</div>}
-        {filter !== 'archive' && filter !== 'trash' && (
+        {!selectMode && savedQ.length > 0 && <div className="s-saved-searches" aria-label="Saved searches">{savedQ.map((t) => <span key={t} className={t === q.trim() ? 'on' : ''}><button type="button" onClick={() => setQ(t)}>{t}</button><button type="button" className="x" aria-label={`Forget the search ${t}`} onClick={() => dropSearch(t)}><X size={12} /></button></span>)}</div>}
+        {isOffice && filter !== 'archive' && filter !== 'trash' && (
+          <div className="np-row" role="tablist" aria-label="Whose notes" data-testid="office-owner-chips">
+            {[['all', 'All'], ['mine', 'Mine'], ['shared', 'Shared with me']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={own === k} className={`np-chip${own === k ? ' on' : ''}`} onClick={() => setOwn(k)}>{l}</button>)}
+          </div>
+        )}
+        {filter !== 'archive' && filter !== 'trash' && !(fSel && selDef) && !gOpen && (
           <div className="np-row" role="tablist" aria-label="Folders">
-            <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); }}>All <i>{allNotes.length}</i></button>
+            <button type="button" role="tab" aria-selected={filter === 'all' && !fSel} className={`np-chip${filter === 'all' && !fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); setCards(false); }}>All <i>{allNotes.length}</i></button>
             <button type="button" role="tab" aria-selected={filter === 'inbox'} className={`np-chip${filter === 'inbox' ? ' on' : ''}`} onClick={() => { setFilter('inbox'); setFSel(null); }}><span className="np-dot" style={{ background: '#FFB48C' }} />Inbox <i>{inboxCount}</i></button>
-            {normalDefs.filter((d) => !d.parent).map((d) => (
-              <Fragment key={d.id}>
-                <button type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><span className="np-dot" style={{ background: colorOf(d.color)[2] }} />{d.name} <i>{folderCount(d)}</i></button>
-                {(fSel?.id === d.id || normalDefs.some((k) => k.parent === d.id && fSel?.id === k.id)) && normalDefs.filter((k) => k.parent === d.id).map((k) => (
-                  <button key={k.id} type="button" role="tab" aria-selected={fSel?.id === k.id} className={`np-chip kid${fSel?.id === k.id ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: 'folder', id: k.id }); }} onDoubleClick={() => openEdit(k)} onContextMenu={(e) => { e.preventDefault(); openEdit(k); }}><span className="np-dot" style={{ background: colorOf(k.color)[2] }} />{k.name} <i>{folderCount(k)}</i></button>
-                ))}
-              </Fragment>
-            ))}
-            {smartDefs.map((d) => (
-              <button key={d.id} type="button" role="tab" aria-selected={fSel?.id === d.id} className={`np-chip sm${fSel?.id === d.id ? ' on' : ''}`} title="Double-click to edit" onClick={() => { setFilter('all'); setFSel({ kind: 'smart', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }}><Zap size={14} strokeWidth={1.8} />{d.name} <i>{folderCount(d)}</i></button>
-            ))}
+            <button type="button" role="tab" aria-selected={cards || folderMode || !!fSel} className={`np-chip fold${cards || folderMode || fSel ? ' on' : ''}`} onClick={() => { setFilter('all'); setFSel(null); if (folderMode) { setView({ ...view, group: 'date' }); setCards(false); } else setCards((v) => !v); }}><Folder size={14} strokeWidth={1.8} />Folders <i>{normalDefs.filter((d) => !d.parent).length + smartDefs.length}</i></button>
             <button type="button" className="np-chip new" aria-label="New folder" title="New folder" onClick={() => openNew(false)}><Plus size={15} strokeWidth={1.8} /></button>
           </div>
         )}
-        {!selectMode && filter !== 'archive' && filter !== 'trash' && (viewOpen || sort !== 'updated' || group !== 'date' || selTags.length > 0) && (
-          <div className="np-sum"><span>Sorted by {{ updated: 'edited', created: 'created', title: 'title' }[sort]}</span><span>Group: {{ date: 'Date', folder: 'Folder', tag: 'Tag', none: 'None' }[group]}</span>{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
+        {!selectMode && filter !== 'archive' && filter !== 'trash' && selTags.length > 0 && (
+          <div className="np-sum">{selTags.map((t) => <span key={t}>#{t}<button type="button" aria-label={`Remove tag ${t}`} style={{ border: 0, background: 'transparent', padding: '0 0 0 6px', cursor: 'pointer', color: 'inherit', display: 'grid' }} onClick={() => setSelTags(selTags.filter((x) => x !== t))}><X size={12} strokeWidth={2.6} /></button></span>)}</div>
         )}
-        {selDef && !selectMode && filter !== 'archive' && filter !== 'trash' && (
-          <div className="np-folderbar" data-testid="folder-bar">
-            <span className="np-dot" style={{ background: selDef.smart ? '#F2C94C' : colorOf(selDef.color)[2] }} />
-            <b title={selDef.name}>{selDef.name}</b><i>{shownList.length}</i>
-            <span className="grow" />
-            {!selDef.smart && <button type="button" className="np-fb primary" data-testid="folder-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} />New note</button>}
-            {!selDef.smart && !selDef.legacy && <button type="button" className="np-fb" data-testid="folder-new-sub" title="New subfolder" aria-label="New subfolder" onClick={() => { setMoveAfter(false); setFolderEdit({ parent: selDef.parent || selDef.id }); setSheet('folder'); }}><Folder size={14} strokeWidth={2} /></button>}
-            <button type="button" className="np-fb" data-testid="folder-edit" title="Rename or edit this folder" aria-label="Edit folder" onClick={() => openEdit(selDef)}><Pencil size={14} strokeWidth={2} /></button>
-            <button type="button" className="np-fb" title="Show all notes" aria-label="Close folder" onClick={() => setFSel(null)}><X size={14} strokeWidth={2.2} /></button>
+        {(cards || folderMode || fSel) && filter !== 'archive' && filter !== 'trash' && (() => {
+          const parent = fSel && fSel.kind === 'folder' ? normalDefs.find((d) => d.id === fSel.id) : null;
+          const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
+          const list = fSel ? (parent ? normalDefs.filter((k) => k.parent === parent.id) : []) : [...normalDefs.filter((d) => !d.parent), ...smartDefs];
+          const card = (d) => (
+            <button key={d.id} type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} title="Click to open, double-click to edit">
+              <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
+              <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
+            </button>
+          );
+          return (
+            <div className="np-cards-wrap">
+              {fSel && !selDef && (
+                <nav className="np-crumbs" aria-label="Folder path">
+                  <button type="button" onClick={() => { setFSel(null); setCards(true); }}>Folders</button>
+                  {top && <><span>/</span><button type="button" onClick={() => setFSel({ kind: 'folder', id: top.id })}>{top.name}</button></>}
+                  {selDef && <><span>/</span><b>{selDef.name}</b></>}
+                  {selDef && <button type="button" className="np-crumb-edit" aria-label="Edit this folder" title="Edit this folder" onClick={() => openEdit(selDef)}><Pencil size={13} strokeWidth={1.8} /></button>}
+                  <button type="button" className="np-crumb-all" aria-label="Show all notes" title="Show all notes" onClick={() => { setFSel(null); setCards(false); if (folderMode) setView({ ...view, group: 'date' }); }}><X size={14} strokeWidth={2} /></button>
+                </nav>
+              )}
+              {list.length > 0 && <div className="np-cards" role="list" aria-label="Folders">{list.map((d) => card(d))}</div>}
+              {!fSel && list.length === 0 && (
+                <div className="np-empty"><span className="np-empty-ic"><Folder size={22} strokeWidth={1.8} /></span><b>No folders yet</b><small>Folders keep related notes together. Smart folders fill themselves from a rule.</small><button type="button" className="np-empty-btn" onClick={() => openNew(false)}><Plus size={15} strokeWidth={2.2} />New folder</button></div>
+              )}
+            </div>
+          );
+        })()}
+        {!isOffice && layout === 'sections' && !dq && !cards && !fSel && (group === 'date' || group === 'tag') && filter !== 'archive' && filter !== 'trash' && groups.length > 1 && (
+          <div className="np-cards mini" role="list" aria-label={group === 'tag' ? 'Jump to a tag' : 'Jump to a date'}>
+            {groups.map((g) => (
+              <button key={g.key} type="button" role="listitem" className={`np-card mini${gSel === g.key ? ' on' : ''}`} onClick={() => jumpTo(g.key)}><b>{g.label}</b><i>{g.notes.length}</i></button>
+            ))}
           </div>
         )}
-        <div className="s-notes-rows">
-          {shownList.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
-          {shownList.length === 0 && !dq && filter !== 'trash' && filter !== 'archive' && (!selDef || !selDef.smart) && <div style={{ padding: '4px 12px' }}><button type="button" className="s-accent-btn" data-testid="empty-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} /> {selDef ? `New note in ${selDef.name}` : 'New note'}</button></div>}
-          {groups.map((g) => (<div key={g.key} className="s-grp">{g.label && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}>{g.label}<span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
+        {dateTagCards && !gSel && (
+          <div className="np-cards-wrap">
+            <div className="np-cards gcards" role="list" aria-label={group === 'tag' ? 'Tags' : 'Dates'}>
+              {groups.map((g, i) => {
+                const col = FOLDER_COLORS[i % FOLDER_COLORS.length];
+                return (
+                  <button key={g.key} type="button" role="listitem" className="np-card gcard" onClick={() => setGSel(g.key)}>
+                    <span className="np-card-ic" style={{ background: col[1], color: col[2] }}>{g.key === 'pin' ? <Pin size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
+                    <b>{g.label}</b><i>{g.notes.length} {g.notes.length === 1 ? 'note' : 'notes'}</i>
+                  </button>
+                );
+              })}
+              {groups.length === 0 && <p className="s-empty" style={{ padding: '8px 12px' }}>No notes here yet.</p>}
+            </div>
+            {shownList.length > 0 && (
+              <div className="np-recent" aria-label="Recent notes">
+                <h3>Recent</h3>
+                {[...shownList].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).slice(0, 3).map((n) => (
+                  <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={false} sel={false} preview={view.preview} labels={view.labels} dq="" fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {((!cards && !folderMode && !(dateTagCards && !gSel)) || fSel) && <div className="s-notes-rows">
+          {spaceRole && filter === 'trash' && <p className="s-viewer-note" style={{ padding: '0 12px', whiteSpace: 'normal' }} data-testid="team-trash-note">Team trash is kept until a team lead deletes a note forever.</p>}
+          {shownList.length === 0 && filter === 'trash' && (
+            <div className="np-empty"><span className="np-empty-ic"><Trash2 size={22} strokeWidth={1.8} /></span><b>The Trash is empty</b><small>Deleted notes wait here until you remove them for good.</small></div>
+          )}
+          {shownList.length === 0 && filter !== 'trash' && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && !dq && filter !== 'trash' && filter !== 'archive' && selDef && !selDef.smart && <div style={{ padding: '4px 12px' }}><button type="button" className="s-accent-btn" data-testid="empty-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} /> New note in {selDef.name}</button></div>}
+          {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
           ))}</div>))}
-        </div>
+        </div>}
         {selectMode ? (
           <div className="np-actions" role="toolbar" aria-label="Bulk actions">
             <button type="button" className={sheet === 'move' ? 'on' : ''} disabled={!picked.length} onClick={() => setSheet(sheet === 'move' ? null : 'move')}><Folder size={18} strokeWidth={1.8} />Move</button>
@@ -736,7 +886,7 @@ export default function SoftNotes() {
             <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => { setFSel(null); setFilter(filter === 'trash' ? 'all' : 'trash'); }}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
             <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
             <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
-            {filter === 'trash' && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) closeDoc(); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
+            {filter === 'trash' && canPurge && shownList.length > 0 && <button type="button" className="danger" onClick={async () => { if (!window.confirm(`Delete all ${shownList.length} notes in the Trash forever? This cannot be undone.`)) return; try { await Promise.all(shownList.map((n) => notesAPI.delete(n.id, { permanent: true }))); refreshLists(); flash('Trash emptied'); if (doc?.isDeleted) navigate('/notes'); } catch { flash('Could not empty the Trash'); } }}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
         {viewOpen && <><div className="np-dim" style={{ background: 'rgba(58,42,26,.18)' }} aria-hidden="true" /><ViewPopover view={view} setView={setView} onClose={() => setViewOpen(false)} /></>}
@@ -750,9 +900,12 @@ export default function SoftNotes() {
 
       {/* ---------- editor ---------- */}
       <main className="s-note-main" aria-label="Note">
-        {!online && <div className="s-offline" role="status" data-testid="offline-banner">You are offline. What you write is kept on this screen and is saved when the connection is back.</div>}
         <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} onEmpty={closeDoc} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
-        {!doc ? (
+        {denied ? (
+          <NoAccess owner={denied.owner} />
+        ) : !doc && routeId ? (
+          <EditorSkeleton />
+        ) : !doc ? (
           <div className="s-note-empty">
             <h2 className="s-h2">Write something</h2>
             <p className="s-empty">Pick a note on the left, or start a new one.</p>
@@ -760,6 +913,9 @@ export default function SoftNotes() {
           </div>
         ) : (
           <>
+            <div className="ph-back"><button type="button" className="np-ib" aria-label="Back to notes" onClick={() => { forceSaveRef.current(); navigate('/notes'); }}><ChevronLeft size={18} strokeWidth={1.9} /></button><b>Notes</b></div>
+            {doc?.meta?.teamShare && !doc.isDraft && <TeamNoteStrip doc={doc} />}
+      {doc && !doc.isDraft && <NoteTasks doc={doc} />}
             <div className="s-note-bar s-note-head">
               <label htmlFor="s-note-title" className="s-sr">Title</label>
               <textarea
@@ -771,53 +927,25 @@ export default function SoftNotes() {
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                 onChange={(e) => patch({ title: e.target.value.replace(/\n/g, ' ') })}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); bodyRef.current?.querySelector('[contenteditable="true"]')?.focus(); } }}
-                disabled={doc.isDeleted}
+                disabled={doc.isDeleted || viewer}
               />
-              <div className="s-note-tags">
-                {doc.tags.map((t) => (
-                  <span key={t} className="s-tag s-note-tag" style={{ background: toneVar(toneOf(t)) }}>
-                    #{t}
-                    {!doc.isDeleted && <button type="button" aria-label={`Remove tag ${t}`} onClick={() => patch({ tags: doc.tags.filter((x) => x !== t) })}><X size={12} strokeWidth={2.6} /></button>}
-                  </span>
-                ))}
-                {tagDraft === null ? (
-                  !doc.isDeleted && <button type="button" className="s-dashed s-add-tag" onClick={() => setTagDraft('')}>+ tag</button>
-                ) : (
-                  <input
-                    className="s-tag-input"
-                    aria-label="New tag"
-                    autoFocus
-                    value={tagDraft}
-                    onChange={(e) => setTagDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagDraft); } if (e.key === 'Escape') setTagDraft(null); }}
-                    onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
-                    placeholder="tag"
-                  />
-                )}
-              </div>
+              {!focus && renderTags()}
               <span className={`s-saved${saved.bad ? ' bad' : ''}${saveStatus === 'saving' || saved.bad || justSaved ? ' say' : ''}`} title={saved.text} data-testid="save-state">{saved.icon}<span className={saveStatus === 'saving' || saved.bad || justSaved ? '' : 's-sr'}>{saved.text}</span>{saved.bad && <button type="button" className="s-retry" data-testid="save-retry" onClick={(e) => { e.stopPropagation(); forceSave(); }}>Retry</button>}</span>
               {!doc.isDraft && <span className="s-note-stats" title={`${words} words · ${chars} characters · ${Math.max(1, Math.round(words / 200))} min read`} aria-label="Length of this note">{words} word{words === 1 ? '' : 's'}<span className="s-sr"> · {chars} characters · {Math.max(1, Math.round(words / 200))} min read</span></span>}
               {crumb && <span className="s-crumb" title="Where this note lives">{crumb}</span>}
-              {!doc.isDraft && <ShareChips noteId={doc.id} />}
+              {!doc.isDraft && !focus && <ShareChips noteId={doc.id} />}
+              {!doc.isDraft && !focus && doc.access && <AccessChip note={doc} />}
               <span className="grow" />
               {doc.isDeleted ? (
                 <button type="button" className="s-outline" onClick={guarded(restore, 'Could not restore the note')}>Restore</button>
               ) : (
                 <button type="button" className="s-outline round s-ico" onClick={() => setPreview((v) => !v)} aria-pressed={preview} aria-label={preview ? 'Edit' : 'Preview'} title={preview ? 'Edit' : 'Preview'}>{preview ? <Pencil size={15} /> : <Eye size={15} />}</button>
               )}
-              {focus && (
-                <button type="button" className="s-outline s-cursors" data-testid="focus-cursors" aria-pressed={cursorsOn} title="Show other people's cursors and selections" onClick={() => setCursors(!cursorsOn)}><MousePointer2 size={14} />Live cursors<span className="s-sw" aria-hidden="true" /></button>
-              )}
-              {focus && (
-                <select className="s-outline s-focus-width" aria-label="Writing width" value={wide} onChange={(e) => { setWide(e.target.value); try { localStorage.setItem('peblo-focus-width', e.target.value); } catch { /* ignore */ } }}>
-                  <option value="narrow">Width: Narrow</option><option value="wide">Width: Wide</option><option value="full">Width: Full</option>
-                </select>
-              )}
-              <button type="button" className="s-outline round s-ico" onClick={() => setFocus((v) => !v)} aria-pressed={focus} aria-label={focus ? 'Exit full screen' : 'Full screen'} title={focus ? 'Exit full screen (Esc)' : 'Full screen'}>
+              <button type="button" className="s-outline round s-ico" onClick={() => setFocus((v) => !v)} aria-pressed={focus} aria-label={focus ? 'Exit full screen' : 'Full screen'} title={focus ? 'Exit full screen (Esc)' : 'Full screen (Ctrl+Shift+F)'}>
                 {focus ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
               <div className="s-menu-wrap" ref={outsideMenu}>
-                <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>···</button>
+                <button type="button" className="s-outline round" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={18} /></button>
                 {menuOpen && doc.isDraft && (
                   <div className="s-menu" role="menu">
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
@@ -828,39 +956,30 @@ export default function SoftNotes() {
                 )}
                 {menuOpen && !doc.isDraft && (
                   <div className="s-menu" role="menu">
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
-                    {!doc.isDeleted && <button type="button" role="menuitem" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
-                    <div className="s-menu-sep" role="separator" />
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
-                    <button type="button" role="menuitem" onClick={duplicate}><Copy size={15} />Duplicate note</button>
-          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
-          <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
-                    <div className="s-menu-sep" role="separator" />
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
-                    <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
-                    <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
-                    <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
-                    <div className="s-menu-sep" role="separator" />
-                    <button type="button" role="menuitem" className="danger" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>
+                    {renderMenuItems()}
                   </div>
                 )}
               </div>
             </div>
 
-            {focus && (
-              <nav className="s-focus-outline" aria-label="Outline">
-                <span className="lab">Outline</span>
-                {outline.length === 0 && <span className="none">Add a heading to see it here.</span>}
-                {outline.map((h, i) => <button key={i} type="button" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
-                <span className="lab" style={{ marginTop: 14 }}>This note</span>
-                <span className="none">{words} words · {Math.max(1, Math.round(words / 200))} min read</span>
-                <span className="none">{linked.length} linked task{linked.length === 1 ? '' : 's'}</span>
-              </nav>
-            )}
+            <FocusChrome active={focus} prefs={fsp} set={setFsp} title={doc.title} saveStatus={saveStatus} words={words} docKey={doc.id} getScroller={getFsScroller}
+              outline={outline.map((h) => ({ ...h, pips: (sec[h.text] || []).map((p) => ({ id: p.id, name: p.name, color: peerColor(p.id) })) }))} onJump={jump}
+              onExit={() => { setFocus(false); }}
+              barItems={[
+                { id: 'tag', label: 'Tag', node: renderTags() },
+                ...(fsParts ? [{ id: 'shared', label: 'Shared link and access', node: fsParts.shared }, { id: 'copy', label: 'Copy link', node: fsParts.copy }] : []),
+                { id: 'cursors', label: 'Live cursors', node: <button type="button" className={`fsx-ic${cursorsOn ? ' on acc' : ''}`} data-testid="focus-cursors" aria-pressed={cursorsOn} aria-label="Live cursors" title="Show other people's cursors and selections" onClick={() => setCursors(!cursorsOn)}><MousePointer2 size={16} /></button> },
+                ...(fsParts ? [{ id: 'live', label: 'Who is here', node: fsParts.live }] : []),
+              ]}
+              noteNode={renderMenuItems()}
+              shareNode={<>{fsParts ? fsParts.full : <p className="fsx-muted">This note is not shared yet.</p>}<button type="button" className="fsx-wide" data-testid="fs-share-open" onClick={() => setShareOpen(true)}><Share2 size={15} />Share link</button></>}
+              onQuickTask={quickTask} />
+            <div className="ph-chips" role="group" aria-label="About this note">
+              <button type="button" onClick={() => setPhRail('ask')}><Sparkles size={14} strokeWidth={2} />Ask</button>
+              <button type="button" onClick={() => setPhRail('tasks')}>Tasks {linked.length}</button>
+              <button type="button" onClick={() => setPhRail('ment')}>Mentioned {mentions.length}</button>
+              {noteId && <button type="button" onClick={() => { setPhRail('ver'); setHistoryOpen(true); }}><History size={14} strokeWidth={2} />Versions</button>}
+            </div>
             <div className="s-note-body" ref={bodyRef} data-font={font}>
               <BlockEditor
           mentions={false}
@@ -868,19 +987,21 @@ export default function SoftNotes() {
                 key={editorKey}
                 initialContent={doc.content}
                 onChange={(md) => patch({ content: md })}
-                editable={!preview && !doc.isDeleted}
-                focusMode={typewriter === 'on'}
+                editable={!preview && !doc.isDeleted && !viewer}
+                focusMode={typewriter === 'on' || (focus && fsp.para)}
+                typewriter={typewriter === 'on' || (focus && fsp.type)}
                 formattingToolbar
               />
             </div>
           </>
         )}
-        {toast && <div className="s-toast" role="status">{toast}{toastAct && <button type="button" className="s-toast-act" data-testid="toast-undo" onClick={() => { const a = toastAct; setToast(''); setToastAct(null); Promise.resolve().then(a.run).catch(() => flash('Could not undo')); }}>{toastAct.label}</button>}</div>}
+        {toast && <Toast><div className="s-toast" role="status">{toast}{toastAct && <button type="button" className="s-toast-act" data-testid="toast-undo" onClick={() => { const a = toastAct; setToast(''); setToastAct(null); Promise.resolve().then(a.run).catch(() => flash('Could not undo')); }}>{toastAct.label}</button>}</div></Toast>}
       </main>
 
       {/* ---------- helpers ---------- */}
-      <aside className="s-note-side" aria-label="About this note">
-        <form className="s-note-ask" onSubmit={(e) => { e.preventDefault(); ask(question); setQuestion(''); }}>
+      <aside className={`s-note-side${phRail ? ' open' : ''}`} data-rail={phRail || ''} aria-label="About this note">
+        <button type="button" className="ph-close" aria-label="Close" onClick={() => setPhRail(null)}><X size={16} strokeWidth={2.2} /></button>
+        <form className="s-note-ask rl-ask" onSubmit={(e) => { e.preventDefault(); ask(question); setQuestion(''); }}>
           <label htmlFor="s-note-ask" className="s-ask-label" style={{ fontSize: 15 }}><Sparkles size={17} /> Ask about this note</label>
           <div className="s-ask-row small">
             <input id="s-note-ask" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={noteId ? 'What should I remember from this?' : 'Save the note to ask about it'} disabled={!noteId} autoComplete="off" />
@@ -893,7 +1014,7 @@ export default function SoftNotes() {
           </div>
         </form>
 
-        <section className="s-side-card" style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked">
+        <section className={`s-side-card rl-tasks${!phone && !linked.length && !railOpen.tasks ? ' min' : ''}`} style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked" onClick={(e) => { if (e.currentTarget.classList.contains('min')) setRailOpen((o) => ({ ...o, tasks: true })); }}>
           <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>
           {linked.length === 0 && <p className="s-empty small">Add a task below, link one you already have, or select text and press Make a task.</p>}
           {(allLinked ? linked : linked.slice(0, 8)).map((t) => (
@@ -930,21 +1051,14 @@ export default function SoftNotes() {
           {sheetTask && <TaskSheet task={sheetTask} onClose={() => setSheetTask(null)} />}
         </section>
 
-        {outline.length >= 2 && (
-          <section className="s-side-card s-outline-card" style={{ background: 'var(--s-butter)' }} aria-labelledby="s-outl">
-            <h3 id="s-outl" className="s-h3">Outline <span className="s-cnt">{outline.length}</span></h3>
-            {outline.slice(0, 20).map((h, i) => <button key={i} type="button" className="s-side-link s-outl-item" style={{ paddingLeft: (h.level - 1) * 12 }} onClick={() => jump(h.text)}>{h.text}{(sec[h.text] || []).length > 0 && <span className="s-pips" data-testid="outline-pips">{sec[h.text].map((p) => <i key={p.id} title={`${p.name} is here`} style={{ background: peerColor(p.id) }} />)}</span>}</button>)}
-          </section>
-        )}
-
-        <section className="s-side-card" style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions">
+        <section className={`s-side-card rl-ment${!phone && !mentions.length && !railOpen.ment ? ' min' : ''}`} style={{ background: 'var(--s-mint)' }} aria-labelledby="s-mentions" onClick={(e) => { if (e.currentTarget.classList.contains('min')) setRailOpen((o) => ({ ...o, ment: true })); }}>
           <h3 id="s-mentions" className="s-h3">Mentioned in</h3>
           {mentions.length === 0 && <p className="s-empty small">{(doc?.title || '').trim().length < 4 ? 'Give the note a title to see where it is mentioned.' : 'No other note mentions this one yet.'}</p>}
           {mentions.map((n) => <Link key={n.id} to={`/notes/${n.id}`} className="s-side-link">{n.title || 'Untitled'}</Link>)}
         </section>
 
         {noteId && (
-          <div className="s-menu-wrap" ref={outsideHist}>
+          <div className="s-menu-wrap rl-ver" ref={outsideHist}>
             <button type="button" className="s-versions" onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
               <History size={15} strokeWidth={2.2} /> {versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'} kept` : 'No earlier versions'}
             </button>

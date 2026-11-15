@@ -1,5 +1,8 @@
 # Peblo server — reverse-engineering report
 
+> **Correction (7 Nov 2026):** this report was written against the MySQL-era code on branch pp. The database is now **Postgres** (Supabase, CITEXT, transaction-level advisory lock, migrations in server/prisma/sql/), the live branch is supabase, password reset and email verification exist, the desktop app has an auto-updater, and packaged builds default to the hosted server. Treat MySQL details below as history; see [07-history-and-decisions.md](07-history-and-decisions.md).
+
+
 Scope: `server/src` (Express 4.22, Prisma 6 on MySQL, Socket.IO 4, Zod 4.6, OpenAI SDK 6, `@google/generative-ai` 0.21, multer 2, pdf-parse 1, adm-zip, bcryptjs, jsonwebtoken). The files are TypeScript ESM. `river.ts` and `study.ts` are covered by someone else, so this report only lists their endpoints. All line numbers are file-relative.
 
 File sizes: aiService 1147 lines, aiChatController 450, dashboardController 329, notesController 384, aiController 299, todosController 280, importService 209, retrieval 169, activityStats 142, index 138, others under 105.

@@ -56,7 +56,10 @@ export function PresentMenu({ anchor, count, qOn, setQOn, onPick, onOptions, onC
     document.addEventListener('mousedown', off); document.addEventListener('keydown', key);
     return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', key); };
   }, [anchor]);
-  const Row = ({ tid, icon, title, sub, keys, hot, off, mode }) => (
+  // one stable component (a Row made fresh on every render is a new element each time, and a click whose mouse-down and mouse-up straddle a render is lost)
+  const rowImpl = useRef(null);
+  const Row = useMemo(() => (p) => rowImpl.current(p), []);
+  rowImpl.current = ({ tid, icon, title, sub, keys, hot, off, mode }) => (
     <button type="button" role="menuitem" className={`pm-row${hot ? ' hot' : ''}`} data-testid={tid} disabled={off} onClick={() => (mode === 'ppt' ? (decks.length === 1 ? onDeck?.(decks[0]) : setDeckList((v) => !v)) : onPick(mode))}>
       <span className="pm-ic">{icon}</span><span className="pm-tx"><b>{title}</b><small>{sub}</small></span>{keys && <kbd>{keys}</kbd>}
     </button>

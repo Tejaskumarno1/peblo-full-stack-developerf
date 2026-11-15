@@ -19,7 +19,7 @@ try {
   await page.locator('.s-note-row').first().waitFor({ timeout: 15000 });
   // Group lives in the one View menu (dialog "View options", radiogroup "Group by")
   const pickGroup = async (name) => {
-    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.getByRole('button', { name: 'View options', exact: true }).click();
     await page.getByRole('dialog', { name: 'View options' }).getByRole('radio', { name, exact: true }).click();
     await page.keyboard.press('Escape');
   };

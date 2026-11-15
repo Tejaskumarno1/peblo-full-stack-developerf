@@ -8,7 +8,7 @@ try {
     const label = edit ? 'Editor' : 'Reader';
     const note = (await api('POST', '/api/notes', { title: 'Rail ' + label, content: body })).note;
     const tok = (await api('POST', `/api/share/note/${note.id}`, { edit })).token;
-    const g = await (await ctx.browser().newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+    const g = await (await ctx.browser().newContext({ viewport: { width: 1200, height: 900 } })).newPage();
     await g.goto(`${base}/s/note/${tok}`);
     await g.locator(edit ? '.bn-editor' : '.doc').waitFor({ timeout: 20000 });
     await wait(1500);

@@ -1,3 +1,4 @@
+import { orgAiGate } from '../utils/orgAiScope.js';
 import { Router, raw } from 'express';
 import prisma from '../db.js';
 import { decField, encField } from '../dataCrypto.js';
@@ -11,6 +12,25 @@ const router = Router();
 const OK = /^image\/(webp|png|jpeg|gif)$/;
 const MAX = 6 * 1024 * 1024;
 const MAX_TOTAL = 500 * 1024 * 1024; // per account, same ceiling as files
+
+// Find your pictures by what they show or the text inside them. Descriptions are stored encrypted, so they are matched here, not in SQL.
+router.get('/search', authenticate, async (req: any, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 80);
+    if (q.length < 2) return res.json({ pictures: [] });
+    const rows: any[] = await prisma.$queryRaw`SELECT id, description FROM media WHERE user_id = ${req.user.id} AND description IS NOT NULL ORDER BY described_at DESC NULLS LAST LIMIT 500`;
+    const pictures: { id: string; url: string; snippet: string }[] = [];
+    for (const r of rows) {
+      const d = decField('media', 'description', r.id, r.description) || '';
+      const at = d.toLowerCase().indexOf(q);
+      if (at < 0) continue;
+      const from = Math.max(0, at - 40);
+      pictures.push({ id: r.id, url: `/api/media/${r.id}`, snippet: (from ? '...' : '') + d.slice(from, at + q.length + 80).replace(/\s+/g, ' ').trim() });
+      if (pictures.length >= 5) break;
+    }
+    res.json({ pictures });
+  } catch (e) { next(e); }
+});
 
 router.get('/:id', async (req, res, next) => {
   try {
@@ -40,7 +60,7 @@ router.get('/:id/text', async (req, res, next) => {
 });
 
 // Make (or redo) the words for one of your pictures with your AI.
-router.post('/:id/describe', authenticate, ...aiLimit, async (req: any, res, next) => {
+router.post('/:id/describe', authenticate, ...aiLimit, orgAiGate, async (req: any, res, next) => {
   try {
     const id = String(req.params.id);
     if (!/^[\w-]{8,64}$/.test(id)) return res.status(404).end();

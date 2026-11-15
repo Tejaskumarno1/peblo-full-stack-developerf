@@ -46,8 +46,16 @@ try {
   check('1024 x 768: scaled', Math.abs(parseFloat(s.zoom) - 1024 / 1440) < 0.01 && s.reachesRight && s.reachesBottom, JSON.stringify(s));
   s = await at(768, 1024);
   check('tablet 768 x 1024: scaled', Math.abs(parseFloat(s.zoom) - 768 / 1440) < 0.01 && s.reachesRight, JSON.stringify(s));
+  // Notes and Settings have a real phone layout (not scaled); the other screens still show the whole desktop scaled.
+  await page.evaluate(() => localStorage.setItem('peblo-style', 'river'));
+  await page.goto(base + '/calendar'); await page.waitForSelector('#root *', { timeout: 15000 });
   s = await at(390, 844);
-  check('phone 390 x 844: the whole screen is shown, scaled', parseFloat(s.zoom) > 0.2 && parseFloat(s.zoom) < 0.3, JSON.stringify(s));
+  check('phone 390 x 844: the whole screen is shown, scaled', parseFloat(s.zoom) > 0.2 && parseFloat(s.zoom) < 0.3, JSON.stringify(s));
+  // Soft has its own phone layout on the main screens: not scaled.
+  await page.evaluate(() => localStorage.setItem('peblo-style', 'soft'));
+  await page.goto(base + '/calendar'); await page.waitForSelector('#root *', { timeout: 15000 }); await page.waitForTimeout(600);
+  s = await at(390, 844);
+  check('Soft at 390 x 844: its own phone layout, not scaled', s.zoom === '' && s.scrollX <= 1, JSON.stringify(s));
 
   s = await at(1440, 900);
   check('back at 1440 x 900: scaling removed', s.zoom === '' && s.vw === '', JSON.stringify(s));

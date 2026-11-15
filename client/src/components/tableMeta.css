@@ -1,0 +1,48 @@
+/* What a table's saved settings look like. The settings sit on the table block in the editor and on the <table> on the shared page,
+   so every rule here reads "inside something that carries the setting". */
+:root { --pb-tbl-line: #e3d7c4; --pb-tbl-stripe: rgba(120, 90, 50, .07); }
+:root[data-theme="dark"], .dark { --pb-tbl-line: #4a3a2d; --pb-tbl-stripe: rgba(255, 240, 220, .06); }
+
+/* the editor's own add-row / add-column strips and its thin column handle give way to the round "+" and the grip of the table controls */
+.block-editor-container .bn-extend-button { display: none !important; }
+.block-editor-container .column-resize-handle { display: none !important; }
+
+/* a table nobody has sized fills the note; once columns have widths the table is as wide as they add up to */
+.block-editor-container .bn-editor table:not([style*=" width:"]):not([style^="width:"]) { width: 100% !important; }
+/* the text toolbar would sit on top of the table toolbar while whole cells are selected */
+body:has(.bn-editor .selectedCell) .bn-formatting-toolbar, body:has(.bn-editor .selectedCell) .bn-toolbar { display: none !important; }
+/* widths that were set stay what they were set to (the editor's style sheet says width:auto !important, which squeezed a table that had been made wider back into the note) */
+.block-editor-container .bn-editor [data-pb-w="1"] table { width: var(--pb-tw) !important; table-layout: fixed; }
+[data-pb-w="1"] table, table[data-pb-w="1"] { table-layout: fixed; }
+[data-pb-w="1"] :is(td, th) { overflow-wrap: anywhere; }
+.pb-twrap { max-width: 100%; overflow-x: auto; margin: 0 0 1em; }
+.pb-twrap > table { margin: 0; }
+
+/* zebra stripes */
+.block-editor-container .bn-editor [data-pb-z="1"] table tr:nth-child(even) > td:not([data-background-color]),
+[data-pb-z="1"] tr:nth-child(even) > td:not([data-background-color]):not([style*="background"]) { background: var(--pb-tbl-stripe) !important; }
+
+/* borders: all lines, row lines only, none */
+.block-editor-container .bn-editor [data-pb-b="grid"] table :is(td, th), table[data-pb-b="grid"] :is(td, th) { border: none !important; border-right: 1px solid var(--pb-tbl-line) !important; border-bottom: 1px solid var(--pb-tbl-line) !important; }
+.block-editor-container .bn-editor [data-pb-b="grid"] table tr:first-child > :is(td, th), table[data-pb-b="grid"] tr:first-child > :is(td, th) { border-top: 1px solid var(--pb-tbl-line) !important; }
+.block-editor-container .bn-editor [data-pb-b="grid"] table tr > :first-child, table[data-pb-b="grid"] tr > :first-child { border-left: 1px solid var(--pb-tbl-line) !important; }
+.block-editor-container .bn-editor [data-pb-b="none"] table :is(td, th), table[data-pb-b="none"] :is(td, th) { border: none !important; }
+.block-editor-container .bn-editor [data-pb-b="rows"] table :is(td, th), table[data-pb-b="rows"] :is(td, th) { border: none !important; border-top: 1px solid var(--pb-tbl-line) !important; }
+.block-editor-container .bn-editor [data-pb-b="rows"] table tr:first-child > :is(td, th), table[data-pb-b="rows"] tr:first-child > :is(td, th) { border-top: none !important; }
+
+/* vertical alignment of the cells */
+[data-pb-va="middle"] :is(td, th), table[data-pb-va="middle"] :is(td, th) { vertical-align: middle; }
+[data-pb-va="bottom"] :is(td, th), table[data-pb-va="bottom"] :is(td, th) { vertical-align: bottom; }
+
+/* a frozen header row stays at the top of the page while the table scrolls past (a scroll box around the table would hold it, so there is none) */
+[data-pb-fh="1"], [data-pb-fh="1"] .tableWrapper, [data-pb-fh="1"] .tableWrapper-inner { overflow: visible !important; }
+[data-pb-fh="1"] table tr:first-child > :is(td, th) { position: sticky; top: 0; z-index: 3; background-color: var(--bn-colors-editor-background, #fff); box-shadow: 0 1px 0 var(--pb-tbl-line); }
+[data-pb-fh="1"] table tr:first-child > :is(td, th)[data-background-color] { background-image: none; }
+
+/* the first column read as a heading */
+table[data-pb-hc="1"] tr > :first-child { font-weight: 800; }
+
+/* the table's grips (drag a row or a column to move it) in the mockup's look */
+.block-editor-container .bn-table-handle { width: 24px; height: 24px; border-radius: 8px; background: #fff; border: 1px solid #eadfce; color: #6b5d50; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: none; }
+.block-editor-container .bn-table-handle:hover { background: #f4ede2; color: #2a1f17; }
+.block-editor-container .bn-table-handle svg { width: 12px; height: 12px; }

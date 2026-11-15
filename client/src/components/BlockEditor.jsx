@@ -2,25 +2,32 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BlockNoteView } from '@blocknote/mantine';
+import { BlockMenu as ToolbarBlockMenu } from './ToolbarBlockMenu';
 import {
   useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems,
-  FormattingToolbarController, FormattingToolbar, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
+  FormattingToolbarController, FormattingToolbar, TextAlignButton, SideMenuController, SideMenu, TableHandlesController, TableHandle, getFormattingToolbarItems, useBlockNoteEditor, useComponentsContext,
 } from '@blocknote/react';
 import { filterSuggestionItems, SuggestionMenu } from '@blocknote/core/extensions';
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import '@blocknote/mantine/style.css';
-import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Presentation, FileText, FileSpreadsheet, File as FileGlyph, Lightbulb, TriangleAlert, CircleCheck, Info, ListTree, Clock, CalendarDays, Link2, LayoutTemplate } from 'lucide-react';
+import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus, Plus, ChevronDown, Images, Smile, Video as VideoIcon, Mic, Keyboard, Crop, Download, Trash2, ImageUp, Captions, Presentation, FileText, FileSpreadsheet, File as FileGlyph, Lightbulb, TriangleAlert, CircleCheck, Info, ListTree, Clock, CalendarDays, Link2, LayoutTemplate } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { aiAPI, notesAPI, todosAPI } from '../api/index';
+import { aiAPI, notesAPI, tagsAPI, todosAPI } from '../api/index';
 import { fileToAttachment } from '../utils/imageData';
+import { copyImage } from '../utils/copyImage';
+import { Copy as CopyIcon, Check as CheckIcon } from 'lucide-react';
 import { createCollab } from '../utils/collab';
 import PresenceBar from './Presence';
 import CommentsDock from './CommentsDock';
 import EditedBy from './EditedBy';
 import ColorTool from './ColorPanel';
 import TableMenu from './TableMenu';
+import TableTools from './TableTools';
+import { newMarks, noteTable, insertMarkers, splitMarkers, applyMarks, createMetaStore, exportRows } from '../utils/tableMeta';
+import { makeTablePlugin } from '../utils/tablePlugin';
+import './tableMeta.css';
 import Reactions from './Reactions';
 import Pointers from './Pointers';
 import { Ic } from '../utils/icons';
@@ -30,12 +37,16 @@ import { docFileSpec } from './DocFile';
 import { packProps, unpackProps, isFileUrl } from '../utils/docFiles';
 import './docfile.css';
 import FindBar from './FindBar';
+import { NotePreview } from '../soft/Skeletons';
 import BlockMenu from './BlockMenu';
 import { commentTarget } from '../utils/comments';
 import { setNoteLive, peekExternalEdit, clearExternalEdit } from '../utils/noteSync';
 import Backlinks from './Backlinks';
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
+import './editorChrome.css';
+import Toast from './Toast';
+import VoicePill from './VoicePill';
 
 // A picture, video, audio clip or file picked from the computer becomes a data address inside the note
 // (pictures are shrunk first). Bigger than 4 MB is refused with a message instead of silently bloating the note.
@@ -61,7 +72,7 @@ async function uploadFile(file) {
 const textOf = (content) => (Array.isArray(content) ? content.map((c) => (c.type === 'link' ? textOf(c.content) : c.text || '')).join('') : typeof content === 'string' ? content : '');
 
 // A picture's size and side are kept in the address ("...#pw=320&ta=right") because Markdown has nowhere else for them.
-// A picture made smaller than the column floats to its side, so the text beside it uses the space.
+// A picture made smaller than the column sits on its own row (left, centre or right); it never floats.
 const withLayout = (p) => {
   const q = [];
   const pwOk = Number.isFinite(p.previewWidth) && p.previewWidth > 0;
@@ -86,9 +97,14 @@ const withLayout = (p) => {
 // Pictures, files and documents live in notes as blocks; the document block (PowerPoint, Word, Excel, PDF and other files) is added to the standard set.
 const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, docfile: docFileSpec() } });
 
-function toStorage(blocks) {
+// `ctx` (from newMarks) collects each table's saved settings, to be written after the table by insertMarkers.
+function toStorage(blocks, ctx, store) {
   return blocks.map((b) => {
-    const children = b.children?.length ? toStorage(b.children) : [];
+    if (b.type === 'table' && ctx && b.content?.type === 'tableContent') {
+      noteTable(ctx, b, store);
+      return { ...b, content: { ...b.content, rows: exportRows(b) }, children: b.children?.length ? toStorage(b.children, ctx, store) : [] };
+    }
+    const children = b.children?.length ? toStorage(b.children, ctx, store) : [];
     if (b.type === 'docfile') {
       if (!b.props?.url) return { ...b, type: 'paragraph', props: {}, content: [], children };
       return { id: b.id, type: 'image', props: { url: packProps(b.props), caption: b.props.name || 'file' }, children };
@@ -142,6 +158,12 @@ function fromStorage(blocks) {
     }
     return { ...b, children };
   });
+}
+
+// Markdown to blocks, with each table's saved settings put back (see utils/tableMeta).
+async function parseMd(editor, text, store) {
+  const { text: plain, marks } = splitMarkers(text);
+  return applyMarks(fromStorage(await editor.tryParseMarkdownToBlocks(plain)), marks, store);
 }
 
 // Callouts, cropped pictures and picture groups are drawn with decorations (the editor rewrites attributes it did not set itself, so a decoration is what it keeps).
@@ -205,35 +227,60 @@ function keepUndo(editor) {
   return um;
 }
 
-// Buttons that appear above a picture when it is clicked: where it sits and how wide it is.
-function ImageTools() {
+// The bar that appears over a clicked picture: a short bar of its own (size, side, shape, caption, replace, download, delete),
+// not the 21-button text toolbar. It sits centred on the picture and is kept inside the note panel (see boundedToolbar below).
+const PIC_SIZES = [['small', 'Small picture', 'S', 0.25], ['medium', 'Medium picture', 'M', 0.45], ['large', 'Large picture', 'L', 0.7]];
+const PIC_SHAPES = [['orig', 'Original shape', '◻', ''], ['sq', 'Crop to a square', '1:1', 'crop=1'], ['43', 'Crop to 4:3', '4:3', 'crop=1.333'], ['169', 'Crop to 16:9', '16:9', 'crop=1.778']];
+function PictureBar({ b }) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext();
-  const sel = editor.getSelection();
-  const blocks = sel ? sel.blocks : [editor.getTextCursorPosition().block];
-  const b = blocks.length === 1 ? blocks[0] : null;
-  if (!b || b.type !== 'image' || !Components) return null;
+  const [panel, setPanel] = useState(null); // 'shape' | null: a second row under the buttons
+  const fileRef = useRef(null);
+  useEffect(() => { setPanel(null); }, [b.id]);
+  if (!Components) return null;
+  const Btn = Components.FormattingToolbar.Button;
   const width = () => editor.domElement?.clientWidth || 700;
   const set = (props) => editor.updateBlock(b, { props });
-  const Btn = Components.FormattingToolbar.Button;
   const pw = b.props.previewWidth;
   const pct = (p) => Math.round(width() * p);
   const near = (p) => pw && Math.abs(pw - pct(p)) < 12;
   const tag = (t) => <span style={{ fontWeight: 800, fontSize: 12 }}>{t}</span>;
+  const replace = async (file) => {
+    if (!file) return;
+    try { const url = await uploadFile(file); set({ url, name: '' }); } catch { /* the notice says why */ }
+  };
+  const download = () => {
+    const a = document.createElement('a');
+    a.href = String(b.props.url || '').split('#')[0];
+    a.download = (b.props.caption || 'picture').replace(/[^\w.-]+/g, '-').slice(0, 60) || 'picture';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const shapeOn = PIC_SHAPES.find(([, , , v]) => (b.props.name || '') === v)?.[0] || 'orig';
   return (
-    <>
-      <Btn key="s" mainTooltip="Small picture. Smaller than the page, it sits to one side (use the align buttons) and text wraps beside it" icon={tag('S')} isSelected={near(0.25)} onClick={() => set({ previewWidth: pct(0.25) })} />
-      <Btn key="m" mainTooltip="Medium picture" icon={tag('M')} isSelected={near(0.45)} onClick={() => set({ previewWidth: pct(0.45) })} />
-      <Btn key="l" mainTooltip="Large picture" icon={tag('L')} isSelected={near(0.7)} onClick={() => set({ previewWidth: pct(0.7) })} />
-      {[['orig', 'Original shape', ''], ['sq', 'Crop to a square', 'crop=1'], ['43', 'Crop to 4:3', 'crop=1.333'], ['169', 'Crop to 16:9', 'crop=1.778']].map(([k, tip, v]) => (
-        <Btn key={'c' + k} mainTooltip={tip} icon={tag({ orig: '◻', sq: '1:1', 43: '4:3', 169: '16:9' }[k])} isSelected={(b.props.name || '') === v || (!v && !/^crop=/.test(b.props.name || ''))} onClick={() => set({ name: v })} />
-      ))}
-      <Btn key="crop" mainTooltip="Crop, rotate or flip this picture" icon={<Crop size={15} />} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'crop', id: b.id } }))} />
-      <Btn key="f" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />
-    </>
+    <FormattingToolbar>
+      {[
+        ...PIC_SIZES.map(([k, tip, t, p]) => <Btn key={k} mainTooltip={tip} icon={tag(t)} isSelected={near(p)} onClick={() => set({ previewWidth: pct(p) })} />),
+        <Btn key="full" mainTooltip="Full width, on its own line" icon={tag('Full')} isSelected={!pw} onClick={() => set({ previewWidth: undefined, textAlignment: 'center' })} />,
+        <TextAlignButton key="al" textAlignment="left" />,
+        <TextAlignButton key="ac" textAlignment="center" />,
+        <TextAlignButton key="ar" textAlignment="right" />,
+        <Btn key="shape" mainTooltip="Crop and shape" icon={<Crop size={15} />} isSelected={panel === 'shape'} onClick={() => setPanel(panel === 'shape' ? null : 'shape')} />,
+        <Btn key="cap" mainTooltip="Caption and alt text" icon={<Captions size={15} />} isSelected={!!b.props.caption} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'caption', id: b.id } }))} />,
+        <Btn key="rep" mainTooltip="Replace picture" icon={<ImageUp size={15} />} onClick={() => fileRef.current?.click()} />,
+        <Btn key="copy" mainTooltip="Copy picture" icon={<CopyIcon size={15} />} onClick={() => { copyImage(b.props.url); }} />,
+        <Btn key="dl" mainTooltip="Download picture" icon={<Download size={15} />} onClick={download} />,
+        <Btn key="del" mainTooltip="Delete picture" icon={<Trash2 size={15} />} onClick={() => { try { editor.removeBlocks([b.id]); } catch { /* already gone */ } }} />,
+        <input key="file" ref={fileRef} type="file" accept="image/*" hidden data-testid="pic-replace-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; replace(f); }} />,
+        ...(panel === 'shape' ? [<div key="shapes" className="pb-picbar-row" role="group" aria-label="Crop and shape">
+          {PIC_SHAPES.map(([k, tip, t, v]) => <Btn key={k} mainTooltip={tip} icon={tag(t)} isSelected={shapeOn === k} onClick={() => set({ name: v })} />)}
+          <Btn key="crop" mainTooltip="Crop, rotate or flip this picture" icon={<Crop size={15} />} onClick={() => window.dispatchEvent(new CustomEvent('pb-media', { detail: { act: 'crop', id: b.id } }))} />
+        </div>] : []),
+      ]}
+    </FormattingToolbar>
   );
 }
 // Comment on the selected words, or suggest new words for them (the comments drawer opens with the words attached).
+
 const CommentsOn = createContext(false);
 function CommentTools() {
   const on = useContext(CommentsOn);
@@ -296,7 +343,80 @@ function AskTool() {
     </div>
   );
 }
-const Toolbar = () => <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it)), <ImageTools key="imagetools" />, <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+// Which block is selected (one block only), and its picture on screen.
+const oneBlock = (editor) => {
+  try {
+    const sel = editor.getSelection();
+    const blocks = sel ? sel.blocks : [editor.getTextCursorPosition().block];
+    return blocks.length === 1 ? blocks[0] : null;
+  } catch { return null; }
+};
+// The nearest ancestor that scrolls the note (the panel the toolbar must stay inside); null means the page itself.
+const scrollerOf = (el) => {
+  for (let p = el; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === 'auto' || o === 'scroll') && p.clientHeight > 0) return p;
+  }
+  return null;
+};
+// Floating-ui middleware for the selection toolbar: placed above the selection (above, and centred on, a picture), flipped below the
+// selection when there is no room above, shifted into the note panel, and hidden when the selection has scrolled out of the panel.
+// A picture at the top of the note puts the bar on the picture itself, so it never covers the lines below.
+const boundedToolbar = (editor) => ({
+  name: 'pbBounded',
+  fn({ rects, elements }) {
+    const fl = elements.floating; const dom = editor.domElement;
+    if (!fl || !dom) return {};
+    const b = oneBlock(editor);
+    const img = b && b.type === 'image' ? dom.querySelector(`.bn-block-outer[data-id="${b.id}"] .bn-visual-media-wrapper, .bn-block-outer[data-id="${b.id}"] img.bn-visual-media`) : null;
+    const sc = scrollerOf(dom.closest('.block-editor-container')?.parentElement); const box = sc ? sc.getBoundingClientRect() : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+    const vb = { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, window.innerHeight), left: Math.max(box.left, 0), right: Math.min(box.right, window.innerWidth) };
+    const r = img ? img.getBoundingClientRect() : { top: rects.reference.y, left: rects.reference.x, bottom: rects.reference.y + rects.reference.height, width: rects.reference.width };
+    fl.style.maxWidth = `${Math.max(160, vb.right - vb.left - 16)}px`;
+    const fw = rects.floating.width; const fh = rects.floating.height;
+    const gap = img ? 8 : 10;
+    let y = r.top - fh - gap;
+    if (y < vb.top + 6) y = img ? Math.max(r.top, vb.top) + 8 : r.bottom + gap;
+    y = Math.min(Math.max(y, vb.top + 6), vb.bottom - fh - 6);
+    let x = img ? r.left + r.width / 2 - fw / 2 : r.left;
+    x = Math.min(Math.max(x, vb.left + 8), vb.right - fw - 8);
+    // words under a picture: put the bar below the words rather than over the picture above them
+    if (!img) {
+      const pics = Array.from(dom.querySelectorAll('.bn-visual-media-wrapper, img.bn-visual-media')).map((n) => n.getBoundingClientRect());
+      const hits = (yy) => pics.some((q) => q.width > 0 && q.left < x + fw && q.right > x && q.top < yy + fh && q.bottom > yy);
+      const below = r.bottom + gap;
+      if (hits(y) && !hits(below) && below + fh < vb.bottom - 6) y = below;
+    }
+    fl.style.visibility = r.bottom < vb.top + 4 || r.top > vb.bottom - 4 ? 'hidden' : '';
+    return { x, y };
+  },
+});
+// Keeps the toolbar following the picture or words while the note scrolls, the window resizes or the picture changes size.
+const followSelection = (editor) => (reference, floating, update) => {
+  const on = () => update();
+  document.addEventListener('scroll', on, true);
+  window.addEventListener('resize', on);
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(on) : null;
+  if (ro && editor.domElement) ro.observe(editor.domElement);
+  const mo = new MutationObserver(on);
+  if (editor.domElement) mo.observe(editor.domElement, { subtree: true, attributes: true, attributeFilter: ['data-preview-width', 'style'] });
+  return () => { document.removeEventListener('scroll', on, true); window.removeEventListener('resize', on); ro?.disconnect(); mo.disconnect(); };
+};
+const Toolbar = () => {
+  const editor = useBlockNoteEditor();
+  const b = oneBlock(editor);
+  if (b && b.type === 'image') return <PictureBar b={b} />;
+  // the Picture entry of the block menu: pick a file, store it, and put it under the selected block
+  const pickPicture = (after) => {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files && input.files[0]; if (!f) return;
+      try { const url = await uploadFile(f); editor.insertBlocks([{ type: 'image', props: { url, name: '' } }], after || editor.getTextCursorPosition().block, 'after'); } catch { /* the notice says why */ }
+    };
+    input.click();
+  };
+  return <FormattingToolbar>{[...getFormattingToolbarItems().map((it) => (it.key === 'colorStyleButton' ? <ColorTool key="colors" /> : it.key === 'blockTypeSelect' ? <ToolbarBlockMenu key="blocks" onPicture={pickPicture} /> : it)), <CommentTools key="comments" />, <AskTool key="ask" />]}</FormattingToolbar>;
+};
 
 // Ready-made starting points, offered in the slash menu.
 const TEMPLATES = {
@@ -315,7 +435,16 @@ const clean = (l) => l.replace(/^\s*(?:[-*•]\s*(?:\[[ xX]?\]\s*)?|\d+[.)]\s+)/
 
 const CHANGE_DEBOUNCE_MS = 200; // quiet time before the typed text is turned into Markdown (see handleChange)
 
-function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
+/** Every slash item once, and each group in one run: a group split in two prints its heading twice. */
+export function uniqueSlashItems(items) {
+  const seen = new Set();
+  const once = items.filter((i) => { const k = `${i.group}|${String(i.title).toLowerCase()}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  const order = [];
+  for (const i of once) if (!order.includes(i.group)) order.push(i.group);
+  return order.flatMap((g) => once.filter((i) => i.group === g));
+}
+
+function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable = true, formattingToolbar = true, noteId, guest = false, focusMode = false, typewriter = null, mentions = true, fullPage = false, themeOverride, collab, onCollabFail, onCollabState }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const linkCache = useRef({ at: 0, notes: [] });
@@ -335,26 +464,92 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     window.addEventListener('pb-identity', on);
     return () => window.removeEventListener('pb-identity', on);
   }, [rt]);
+  // The caret other people see. Your own second window (same name and colour) is not drawn, so you never meet yourself in the note.
+  const renderCursor = (u) => {
+    const dark = (() => { const m = /^#([0-9a-f]{6})$/i.exec(u.color || ''); if (!m) return false; const v = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] <= 0.179; })();
+    const css = `background-color: ${u.color}; color: ${dark ? 'white' : 'black'}`;
+    const base = document.createElement('span'); base.classList.add('bn-collaboration-cursor__base');
+    if (rt && u.name === rt.user.name && u.color === rt.user.color) { base.style.display = 'none'; base.setAttribute('data-self', ''); return base; }
+    const caret = document.createElement('span'); caret.setAttribute('contentedEditable', 'false'); caret.classList.add('bn-collaboration-cursor__caret'); caret.setAttribute('style', css);
+    const label = document.createElement('span'); label.classList.add('bn-collaboration-cursor__label'); label.setAttribute('style', css); label.appendChild(document.createTextNode(u.name));
+    caret.appendChild(label); base.appendChild(document.createTextNode('⁠')); base.appendChild(caret); base.appendChild(document.createTextNode('⁠'));
+    return base;
+  };
   const [live, setLive] = useState({ connected: false, ready: false });
-  const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin()] }));
+  // The note's text is shown at once (plain, read only) while the editor parses it or the live copy connects, so opening a note is never blank.
+  const [parsing, setParsing] = useState(!rt && !!initialContent);
+  const [warmGaveUp, setWarmGaveUp] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setWarmGaveUp(true), 15000); return () => clearTimeout(t); }, []);
+  const warming = !!initialContent && !warmGaveUp && (rt ? !live.ready : parsing);
+  const [metaStore] = useState(() => createMetaStore(rt?.doc)); // table settings Markdown cannot hold; shared with everyone in a live note
+  const [decoExt] = useState(() => ({ key: 'pb-callouts', prosemirrorPlugins: [makeDecoPlugin(), makeTablePlugin(metaStore)] }));
   const editor = useCreateBlockNote({
     schema,
     uploadFile,
     extensions: [decoExt],
-    ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity' } } : {}),
+    ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity', renderCursor } } : {}),
   });
   useMemo(() => keepUndo(editor), [editor]);
   useEffect(() => { keepUndo(editor); }, [editor, rt]);
+  // "Jump to the line": /notes/<id>?line=14 scrolls to the 14th block and marks it for a moment (a task opened from "where it came from").
+  useEffect(() => {
+    const line = Number(new URLSearchParams(window.location.search).get('line'));
+    if (!line || line < 1) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      const block = editor.document[line - 1];
+      const el = block ? document.querySelector(`.bn-block-outer[data-id="${block.id}"]`) : null;
+      if (el) {
+        clearInterval(timer);
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.classList.add('pb-jump');
+        setTimeout(() => el.classList.remove('pb-jump'), 2600);
+      } else if (tries > 25) clearInterval(timer);
+    }, 200);
+    return () => clearInterval(timer);
+  }, [editor, noteId]);
   const { theme } = useAuth();
   const loadingRef = useRef(!!rt); // a live document is not edited until it is in step with the server
   const changeSequenceRef = useRef(0);
   const [card, setCard] = useState(null); // the AI result card
   const aiBusyRef = useRef(false);
   const rootRef = useRef(null);
+  // the selection toolbar is kept inside the note panel and follows its picture or words (see boundedToolbar)
+  const toolbarFloat = useMemo(() => ({ useFloatingOptions: { strategy: 'fixed', middleware: [boundedToolbar(editor)], whileElementsMounted: followSelection(editor) } }), [editor]);
   const [fitRoot, setFitRoot] = useState(null);
   useEffect(() => { if (rootRef.current !== fitRoot) setFitRoot(rootRef.current); });
-  // A picture saved at a width that is nearly the whole column (or leaves too little room beside it in a narrower column,
-  // such as a shared page) is shown full width instead of floating, so the text next to it never shrinks to a sliver.
+  // A picture copied out of another web page (claude.ai, a chat) often arrives as <img src="blob:..."> that only works inside that tab.
+  // When the clipboard also holds the real picture file, that file is stored on the server instead; if it does not, say so.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const paste = (e) => {
+      const dt = e.clipboardData; if (!dt) return;
+      let html = ''; try { html = dt.getData('text/html') || ''; } catch { return; }
+      if (!/<img[^>]+src=["']blob:/i.test(html)) return;
+      e.preventDefault(); e.stopPropagation();
+      const files = [...(dt.files || [])].filter((f) => /^image\//.test(f.type));
+      if (!files.length) {
+        tell('error', 'That picture only lives in the other tab. Save the picture, then drag it in.');
+        const text = dt.getData('text/plain'); if (text) { try { editor.pasteText(text); } catch { /* nothing to paste */ } }
+        return;
+      }
+      (async () => {
+        for (const f of files) {
+          try {
+            const url = await uploadFile(f);
+            const cur = editor.getTextCursorPosition().block;
+            editor.insertBlocks([{ type: 'image', props: { url, name: '' } }], cur, 'after');
+          } catch { /* the notice says why */ }
+        }
+      })();
+    };
+    root.addEventListener('paste', paste, true);
+    return () => root.removeEventListener('paste', paste, true);
+  }, [editor, fitRoot]);
+  // A picture keeps the proportions it was given in the owner's column when the column here is narrower or wider (a shared page,
+  // a phone). Pictures never float (blockEditor.css), so nothing can sit beside one.
   // BlockNote rewrites the classes of a block, so the blocks are named in a style sheet of their own.
   useEffect(() => {
     const root = fitRoot; if (!root) return undefined;
@@ -375,20 +570,9 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         const rc = Number.isFinite(rcN) && rcN > 0 && rcN < 20000 ? rcN : (guest ? 1090 : 0);
         const w = rc > 0 && Math.abs(rc - col) > 8 ? Math.floor(Math.min(col, w0 * col / rc) * 0.92) : w0;
         const sel = `.block-editor-container .bn-block-outer[data-id="${id}"]`;
-        if (w >= col * 0.66 || col - w < 295) parts.push(`${sel} { float: none !important; max-width: 100% !important; padding: 0 !important; clear: both; }`);
-        else if (w !== w0) parts.push(`${sel} .bn-visual-media-wrapper, ${sel} .bn-file-block-content-wrapper, ${sel} img.bn-visual-media { width: ${w}px !important; max-width: 100% !important; }`);
-      });
-      // text that comes right after a row of pictures starts below them when the pictures leave it too little room beside them
-      root.querySelectorAll('.bn-editor > .bn-block-group > .bn-block-outer').forEach((o) => {
-        const prev = o.previousElementSibling;
-        const isPic = (e) => !!e?.querySelector(':scope > .bn-block > .bn-block-content[data-content-type="image"]');
-        if (isPic(o) || !isPic(prev)) return;
-        const tops = []; let e = prev;
-        while (isPic(e)) { const r = e.getBoundingClientRect(); tops.push(r); e = e.previousElementSibling; }
-        const rowTop = tops[0].top; const row = tops.filter((r) => Math.abs(r.top - rowTop) < 4);
-        const used = row.reduce((a, r) => a + r.width, 0);
-        const fl = getComputedStyle(prev).float;
-        if (fl !== 'none' && col - used < 260) parts.push(`.block-editor-container .bn-block-outer[data-id="${o.getAttribute('data-id')}"] { clear: both; }`);
+        // a picture nearly as wide as the column keeps its saved width (the column caps it); only a clearly narrower one is rescaled
+        if (w >= col * 0.66 || col - w < 295) return;
+        if (w !== w0) parts.push(`${sel} .bn-visual-media-wrapper, ${sel} .bn-file-block-content-wrapper, ${sel} img.bn-visual-media { width: ${w}px !important; max-width: 100% !important; }`);
       });
       const text = parts.join('\n');
       if (text !== last) { last = text; sheet.textContent = text; if (again < 4) { again += 1; timer = setTimeout(fit, 60); } } else again = 0; // the new sizes move other pictures, so look once more
@@ -399,8 +583,30 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     queue();
     return () => { mo.disconnect(); ro.disconnect(); if (timer) clearTimeout(timer); sheet.remove(); };
   }, [fitRoot, guest]);
+  // A picture smaller than the column leaves empty room on its row. Clicking that room puts the caret on the line below the picture
+  // (a new empty line is added when the next block is not text), so typing there is never lost.
+  useEffect(() => {
+    const root = fitRoot; if (!root || editable === false) return undefined;
+    const down = (e) => {
+      if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
+      const content = e.target?.closest?.('.bn-block-content[data-content-type="image"]');
+      if (!content || !root.contains(content) || content.hasAttribute('data-gl')) return;
+      if (e.target.closest('.bn-visual-media-wrapper, .bn-file-block-content-wrapper, .bn-add-file-button, button, input, a')) return;
+      const id = content.closest('.bn-block-outer')?.getAttribute('data-id'); if (!id) return;
+      try {
+        const blk = editor.getBlock(id); if (!blk) return;
+        e.preventDefault(); e.stopPropagation();
+        let next = editor.getNextBlock(blk);
+        if (!next || !Array.isArray(next.content)) { editor.insertBlocks([{ type: 'paragraph' }], blk, 'after'); next = editor.getNextBlock(blk); }
+        if (next) { editor.setTextCursorPosition(next, 'start'); editor.focus(); }
+      } catch { /* leave the click alone */ }
+    };
+    root.addEventListener('mousedown', down, true);
+    return () => root.removeEventListener('mousedown', down, true);
+  }, [fitRoot, editable, editor]);
   const [notice, setNotice] = useState(null); // {state, message} about a picture being added
   const [lightbox, setLightbox] = useState(null); // address of the picture shown full size
+  const [lbCopied, setLbCopied] = useState(''); // what the Copy picture button just did: image, link, failed
   const [findOpen, setFindOpen] = useState(false);
   const [findReplace, setFindReplace] = useState(false);
 
@@ -440,20 +646,23 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   }, [lightbox, editable, editor]);
 
   // Typewriter focus: the block you are writing in stays bright and centred, the rest fades.
+  // focusMode fades every block but the one being written in; typewriter keeps that block centred (when typewriter is not given, focusMode does both)
+  const centre = typewriter === null ? focusMode : !!typewriter;
   const [curId, setCurId] = useState(null);
   useEffect(() => {
-    if (!focusMode) { setCurId(null); return undefined; }
+    if (!focusMode && !centre) { setCurId(null); return undefined; }
     const mark = () => {
       try {
         const id = editor.getTextCursorPosition().block.id;
-        setCurId(id);
-        rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (focusMode) setCurId(id);
+        if (centre) rootRef.current?.querySelector(`.bn-block-outer[data-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       } catch { /* no cursor yet */ }
     };
+    if (!focusMode) setCurId(null);
     mark();
     const off = editor.onSelectionChange(mark);
     return () => { if (typeof off === 'function') off(); };
-  }, [focusMode, editor]);
+  }, [focusMode, centre, editor]);
 
   useEffect(() => {
     try { if (localStorage.getItem('peblo-debug') === '1') window.__pebloEditor = editor; } catch { /* ignore */ }
@@ -477,7 +686,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     // Tell the page the text the shared document holds now (after a reset, or after a dropped connection came back).
     const flush = async () => {
       if (dead || !onChangeRef.current) return;
-      try { const md = await editor.blocksToMarkdownLossy(toStorage(editor.document)); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
+      try { const mc = newMarks(); const md = insertMarkers(await editor.blocksToMarkdownLossy(toStorage(editor.document, mc, metaStore)), mc); if (dead) return; rt.announce(md); onChangeRef.current?.(md); } catch { /* the next edit tells it */ }
     };
     let everReady = false;
     let pushedExternal = false;
@@ -499,7 +708,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (text === null) return;
       clearExternalEdit(noteId);
       loadingRef.current = true;
-      const blocks = text.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(text)) : [];
+      const blocks = text.trim() ? await parseMd(editor, text, metaStore) : [];
       if (dead || !blocks.length) return;
       editor.replaceBlocks(editor.document, blocks);
       pushedExternal = true;
@@ -519,7 +728,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       busy = true;
       try {
         loadingRef.current = true;
-        const blocks = seedText.trim() ? fromStorage(await editor.tryParseMarkdownToBlocks(seedText)) : null;
+        const blocks = seedText.trim() ? await parseMd(editor, seedText, metaStore) : null;
         if (dead) return;
         if (meta.get('seeded') !== true) {
           if (blocks && blocks.length) editor.replaceBlocks(editor.document, blocks);
@@ -582,12 +791,15 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (noteId) clearExternalEdit(noteId); // no room to put outside text into: initialContent already has it
       if (!initialContent) return;
       try {
-        const parsed = await editor.tryParseMarkdownToBlocks(initialContent);
-        loadingRef.current = true;
-        editor.replaceBlocks(editor.document, fromStorage(parsed));
+        loadingRef.current = true; // reading a note in is not an edit to save
+        const parsed = await parseMd(editor, initialContent, metaStore);
+        editor.replaceBlocks(editor.document, parsed);
         setTimeout(() => { loadingRef.current = false; }, 0);
       } catch (err) {
+        loadingRef.current = false;
         console.error('Failed to parse markdown:', err);
+      } finally {
+        setParsing(false);
       }
     }
     loadContent();
@@ -623,9 +835,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     if (rt && !connRef.current) return;
     const sequence = ++changeSequenceRef.current;
     // take the document now (not after the await) so an edit made while converting is a new change of its own
-    const blocks = toStorage(editor.document);
+    const marksCtx = newMarks();
+    const blocks = toStorage(editor.document, marksCtx, metaStore);
     void (async () => {
-      const markdown = await editor.blocksToMarkdownLossy(blocks); // may be synchronous or a promise depending on the BlockNote version
+      const markdown = insertMarkers(await editor.blocksToMarkdownLossy(blocks), marksCtx); // may be synchronous or a promise depending on the BlockNote version
       // Markdown conversion is asynchronous. Ignore an older conversion that
       // finishes after a newer edit, otherwise autosave can roll content back.
       if (sequence !== changeSequenceRef.current) return;
@@ -633,8 +846,10 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       deliver(markdown);
     })().catch(() => { /* the next edit converts again */ });
   };
+  useEffect(() => metaStore.subscribe((mine) => { if (mine && !loadingRef.current) handleChangeRef.current?.(); }), [metaStore]); // a table setting changed: save it like a typed edit
   const flushRef = useRef(flushChange);
   flushRef.current = flushChange;
+  const handleChangeRef = useRef(null);
   const handleChange = () => {
     checkDoubleBracket();
     if (!onChange || loadingRef.current || aiBusyRef.current) return;
@@ -646,6 +861,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
     changeTimerRef.current = setTimeout(() => flushRef.current(), CHANGE_DEBOUNCE_MS);
   };
+  handleChangeRef.current = handleChange;
   useEffect(() => {
     const flush = () => flushRef.current();
     const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -763,7 +979,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const fileItems = editable === false || guest ? [] : [
       { title: 'Presentation', onItemClick: () => doc('ppt'), aliases: ['ppt', 'pptx', 'powerpoint', 'slides', 'deck', 'keynote'], badge: '/ppt', group: 'Files', icon: <Presentation size={16} style={{ color: '#c4441c' }} />, subtext: 'Show its slides right in the note' },
       { title: 'Document', onItemClick: () => doc('doc'), aliases: ['doc', 'docx', 'word', 'letter', 'contract'], badge: '/doc', group: 'Files', icon: <FileText size={16} style={{ color: '#1f5a8c' }} />, subtext: 'Read a Word file in place' },
-      { title: 'Spreadsheet', onItemClick: () => doc('xls'), aliases: ['xls', 'xlsx', 'excel', 'sheet', 'csv', 'table'], badge: '/xls', group: 'Files', icon: <FileSpreadsheet size={16} style={{ color: '#1e8e4e' }} />, subtext: 'Look through an Excel sheet' },
+      { title: 'Spreadsheet', onItemClick: () => doc('xls'), aliases: ['xls', 'xlsx', 'excel', 'sheet', 'csv', 'spreadsheet'], badge: '/xls', group: 'Files', icon: <FileSpreadsheet size={16} style={{ color: '#1e8e4e' }} />, subtext: 'Look through an Excel sheet' },
       { title: 'PDF', onItemClick: () => doc('pdf'), aliases: ['pdf', 'paper', 'report'], badge: '/pdf', group: 'Files', icon: <FileGlyph size={16} style={{ color: '#a5281b' }} />, subtext: 'Read pages, or show just a few' },
       { title: 'Any other file', onItemClick: () => doc('any'), aliases: ['file', 'attach', 'attachment', 'upload', 'zip'], badge: '/file', group: 'Files', icon: <FileGlyph size={16} />, subtext: 'Keep it with the note to download' },
     ];
@@ -782,7 +998,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       if (made) editor.setTextCursorPosition(made, 'end');
     };
     const insertTemplate = async (md) => {
-      const blocks = fromStorage(await editor.tryParseMarkdownToBlocks(md));
+      const blocks = await parseMd(editor, md, metaStore);
       const cur = editor.getTextCursorPosition().block;
       const empty = cur.type === 'paragraph' && !textOf(cur.content).trim();
       editor.insertBlocks(blocks, cur, 'after');
@@ -801,16 +1017,48 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         const prev = editor.getTextCursorPosition().prevBlock;
         const text = (textOf(cur.content).trim() || textOf(prev?.content).trim()).slice(0, 200);
         if (!text) return;
-        try { await todosAPI.create({ text, priority: 'medium', noteId }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
+        const line = editor.document.findIndex((b) => b.id === (textOf(cur.content).trim() ? cur.id : prev?.id)) + 1;
+        try { await todosAPI.create({ text, priority: 'medium', noteId, meta: { source: { noteId, quote: text, ...(line ? { line } : {}) } } }); queryClient.invalidateQueries({ queryKey: ['todos'] }); window.dispatchEvent(new CustomEvent('pb-upload', { detail: { state: 'done', message: 'Task added' } })); } catch { /* nothing to do */ }
       }, aliases: ['task', 'todo', 'to-do'], group: 'Insert', icon: <CheckSquare size={16} />, subtext: 'Turn this line (or the one above) into a task linked to this note.' }]),
       { title: 'Current time', onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} `]), aliases: ['time', 'now', 'clock'], group: 'Insert', icon: <Clock size={16} />, subtext: 'Type the time as text.' },
       { title: "Today's date", onItemClick: () => editor.insertInlineContent([`${new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} `]), aliases: ['date', 'today', 'now'], group: 'Insert', icon: <CalendarDays size={16} />, subtext: 'Type today as text.' },
       ...(guest ? [] : [{ title: 'Link to a note', onItemClick: () => editor.getExtension(SuggestionMenu)?.openSuggestionMenu('@'), aliases: ['link', 'note', 'mention', 'wiki'], group: 'Insert', icon: <Link2 size={16} />, subtext: 'Pick one of your notes (or type [[).' }]),
       ...Object.entries(TEMPLATES).map(([name, md]) => ({ title: `Template: ${name}`, onItemClick: () => insertTemplate(md), aliases: ['template', name.toLowerCase()], group: 'Templates', icon: <LayoutTemplate size={16} />, subtext: 'A ready layout to fill in.' })),
     ];
-    const all = [...mediaItems, ...fileItems, ...defaultItems.filter((i) => i.group === 'Media'), ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)].map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
+    const all = uniqueSlashItems([...mediaItems, ...defaultItems.filter((i) => i.group === 'Media'), ...fileItems, ...defaultItems.filter((i) => i.group !== 'Media'), ...extra, ...(guest ? [] : aiItems)]).map((it) => ({ ...it, onItemClick: () => { remember(it.title); it.onItemClick(); } }));
     const recent = query ? [] : readRecent().map((t) => all.find((i) => i.title === t)).filter(Boolean).map((i) => ({ ...i, group: 'Recent' }));
-    return filterSuggestionItems([...recent, ...all], query);
+    const recentTitles = new Set(recent.map((i) => i.title)); // a recent item moves up, it is not listed a second time below
+    const found = filterSuggestionItems([...recent, ...all.filter((i) => !recentTitles.has(i.title))], query);
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return found;
+    const rank = (i) => (i.group !== 'Media' && i.group !== 'Files' && String(i.title).toLowerCase() === q ? 0 : 1); // "/table" finds Table before anything that merely mentions it
+    return found.map((i, n) => [i, n]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
+  };
+
+  // Hashtags: type # to pick an existing tag or make a new one. The tag is written in the text and added to the note.
+  const tagCache = useRef({ at: 0, tags: [] });
+  const getTagItems = async (query) => {
+    if (Date.now() - tagCache.current.at > 5000) {
+      try { const { data } = await tagsAPI.list(); tagCache.current = { at: Date.now(), tags: (data.tags || []).filter((t) => t.name !== 'private') }; } catch { /* keep the last list */ }
+    }
+    const raw = String(query || '').trim().replace(/^#/, '');
+    const q = raw.toLowerCase();
+    const pick = async (name) => {
+      editor.insertInlineContent([{ type: 'text', text: `#${name}`, styles: { bold: true } }, ' ']);
+      if (!noteId) return;
+      try {
+        const { data } = await notesAPI.get(noteId);
+        const have = data.note?.tags || data.tags || [];
+        if (!have.includes(name)) await notesAPI.update(noteId, { tags: [...have, name] });
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: ['tags'] });
+      } catch { /* the tag stays in the text */ }
+    };
+    const items = tagCache.current.tags.filter((t) => t.name.toLowerCase().includes(q)).sort((a, b) => (b.name.toLowerCase().startsWith(q) - a.name.toLowerCase().startsWith(q)) || ((b.notes || 0) + (b.todos || 0)) - ((a.notes || 0) + (a.todos || 0))).slice(0, 7)
+      .map((t) => ({ title: `#${t.name}`, group: 'Tags', subtext: `${t.notes || 0} note${t.notes === 1 ? '' : 's'}${t.todos ? ` · ${t.todos} task${t.todos === 1 ? '' : 's'}` : ''}`, onItemClick: () => pick(t.name) }));
+    const clean = raw.toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+    if (clean && !tagCache.current.tags.some((t) => t.name.toLowerCase() === clean)) items.push({ title: `Create tag #${clean}`, group: 'Tags', subtext: 'New tag, added to this note', onItemClick: () => pick(clean) });
+    return items;
   };
 
   const getNoteLinkItems = async (query) => {
@@ -906,6 +1154,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       {rt && <Pointers rt={rt} rootRef={rootRef} ready={live.ready && live.connected} />}
       {rt && editable && <EditedBy rt={rt} editor={editor} ready={live.ready && live.connected} />}
       {rt && <Reactions rt={rt} editor={editor} rootRef={rootRef} ready={live.ready && live.connected} canReact={editable} dark={dark} />}
+      {warming && <NotePreview markdown={initialContent} />}
       <CommentsOn.Provider value={!!target}>
       <BlockNoteView
         editor={editor}
@@ -920,22 +1169,26 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
         <SideMenuController sideMenu={(props) => <SideMenu {...props} dragHandleMenu={BlockMenu} />} />
         <SuggestionMenuController triggerCharacter={'/'} getItems={async (query) => getCustomSlashMenuItems(query)} />
         {!guest && <SuggestionMenuController triggerCharacter={'@'} getItems={getNoteLinkItems} />}
-        {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} />}
+        {!guest && editable && <SuggestionMenuController triggerCharacter={'#'} getItems={getTagItems} />}
+        {formattingToolbar && editable && <FormattingToolbarController formattingToolbar={Toolbar} floatingUIOptions={toolbarFloat} />}
         {editable && <TableHandlesController tableHandle={(p) => <TableHandle {...p} tableHandleMenu={TableMenu} />} />}
       </BlockNoteView>
+      <TableTools editor={editor} rootRef={rootRef} store={metaStore} editable={editable !== false && (!rt || live.ready)} dark={dark} onEdited={() => handleChangeRef.current?.()} />
       </CommentsOn.Provider>
       {!guest && <Backlinks noteId={noteId} mentions={mentions} />}
 
       {focusMode && curId && <style>{`.pb-focus .bn-block-outer:not([data-id="${curId}"]):not(:has([data-id="${curId}"])) { opacity: .28; transition: opacity .2s; }`}</style>}
-      {rt && (!live.ready || !live.connected) && <div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div>}
-      {notice && <div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div>}
+      {rt && (!live.ready || !live.connected) && <Toast><div className="pb-notice working" role="status" data-testid="collab-status">{live.ready ? 'Reconnecting… your changes are kept and will sync.' : 'Connecting to live editing…'}</div></Toast>}
+      {notice && <Toast><div className={`pb-notice ${notice.state}`} role={notice.state === 'error' ? 'alert' : 'status'}>{notice.message}</div></Toast>}
       <MediaTools editor={editor} rootRef={rootRef} uploadFile={uploadFile} editable={editable !== false} />
+      {!guest && editable !== false && <VoicePill editor={editor} />}
       <FileTools editor={editor} rootRef={rootRef} editable={editable !== false && !guest} />
       {findOpen && <FindBar key={findReplace ? 'r' : 'f'} root={rootRef} editor={editor} editable={editable !== false} withReplace={findReplace} onClose={() => { setFindOpen(false); try { editor.focus(); } catch { /* none */ } }} />}
       {lightbox && (
         <div className="pb-lightbox" role="dialog" aria-label="Picture" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" />
           <button type="button" aria-label="Close picture" onClick={() => setLightbox(null)}><X size={18} /></button>
+          <button type="button" className="pb-lb-copy" data-testid="lightbox-copy" aria-label="Copy picture" title="Copy picture" onClick={(e) => { e.stopPropagation(); copyImage(lightbox).then((r) => { setLbCopied(r); setTimeout(() => setLbCopied(''), 1800); }); }}>{lbCopied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}<span>{lbCopied === 'link' ? 'Link copied' : lbCopied === 'failed' ? 'Could not copy' : lbCopied ? 'Copied' : 'Copy picture'}</span></button>
         </div>
       )}
 

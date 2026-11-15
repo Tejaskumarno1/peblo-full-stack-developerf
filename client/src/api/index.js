@@ -5,6 +5,8 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   changePassword: (data) => api.post('/auth/change-password', data),
   logoutAll: () => api.post('/auth/logout-all'),
+  logoutOthers: () => api.post('/auth/logout-others'),
+  scheduleDeletion: (data) => api.post('/auth/schedule-deletion', data),
   deleteAccount: (data) => api.post('/auth/delete-account', data),
   sendVerification: () => api.post('/auth/send-verification'),
   verifyEmail: (token) => api.post('/auth/verify-email', { token }),
@@ -20,9 +22,12 @@ export const profileAPI = {
 
 export const notesAPI = {
   getAll: (params) => api.get('/notes', { params }),
-  get: (id) => api.get(`/notes/${id}`),
+  get: (id, opts) => api.get(`/notes/${id}`, opts && opts.deleted ? { params: { deleted: 1 } } : undefined),
   backlinks: (id) => api.get(`/notes/${id}/backlinks`),
   daily: (date) => api.post('/notes/daily', { date }),
+  move: (id, to, space) => api.post(`/notes/${id}/move`, { to }, space !== undefined ? { headers: { 'x-peblo-space': space || 'personal' } } : undefined),
+  copy: (id, to) => api.post(`/notes/${id}/copy`, { to }),
+  teamShare: (id, data) => api.post(`/notes/${id}/team-share`, data, { headers: { 'x-peblo-space': 'personal' } }),
   create: (data) => api.post('/notes', data),
   update: (id, data) => api.patch(`/notes/${id}`, data),
   // Without { permanent: true } a note is only moved to the trash (and a repeat call on a trashed note does nothing).
@@ -38,6 +43,8 @@ export const notesAPI = {
   linkMention: (id, otherId) => api.post(`/notes/${id}/mentions/${otherId}/link`)
 };
 
+export const mediaSearchAPI = { search: (q) => api.get('/media/search', { params: { q } }) };
+
 export const aiAPI = {
   localStatus: () => api.get('/ai/local/status'),
   localPull: (model) => api.post('/ai/local/pull', { model }),
@@ -51,6 +58,7 @@ export const aiAPI = {
   title: (id, data, config) => api.post(`/notes/${id}/ai/title`, data, config),
   suggestTag: (id, data, config) => api.post(`/notes/${id}/ai/tags`, data, config),
   linkPreview: (url) => api.get('/ai/link-preview', { params: { url } }),
+  taskSteps: (text, details) => api.post('/ai/task-steps', { text, details }),
   ollamaCheck: (url) => api.get('/ai/ollama/check', { params: { url } }),
   chat: (data, config) => api.post('/ai/chat', data, config),
   smartIntake: (data, config) => api.post('/ai/smart-intake', data, config),
@@ -69,9 +77,14 @@ export const dashboardAPI = {
 export const todosAPI = {
   getAll: (params) => api.get('/todos', { params }),
   getToday: () => api.get('/todos/today'),
+  board: () => api.get('/todos/board'),
+  saveBoard: (columns) => api.put('/todos/board', { columns }),
+  thread: (id) => api.get(`/todos/${id}/thread`),
+  comment: (id, body, mentions = []) => api.post(`/todos/${id}/comments`, { body, mentions }),
+  requestReview: (id, to, note) => api.post(`/todos/${id}/review`, { to, note }),
   getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-  update: (id, data) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  update: (id, data, space) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, space ? { headers: { 'x-peblo-space': space } } : undefined),
   delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined })
 };
 
@@ -87,6 +100,7 @@ export const transferAPI = {
 // Any number of AI providers per person: paste a key and Peblo works out whose it is
 export const aiConnectionsAPI = {
   list: () => api.get('/ai/connections'),
+  usage: () => api.get('/ai/connections/usage'),
   detect: (data) => api.post('/ai/connections/detect', data),
   add: (data) => api.post('/ai/connections', data),
   models: (id) => api.get(`/ai/connections/${id}/models`),
@@ -142,4 +156,74 @@ export const backupAPI = {
   restore: (data) => api.post('/restore', data),
   addExample: () => api.post('/example'),
   clearExample: () => api.post('/example/clear'),
+};
+
+export const calSyncAPI = {
+  get: () => api.get('/calendar-sync'),
+  addFeed: (data) => api.post('/calendar-sync/feeds', data),
+  patchFeed: (id, data) => api.patch(`/calendar-sync/feeds/${id}`, data),
+  removeFeed: (id) => api.delete(`/calendar-sync/feeds/${id}`),
+  refreshFeed: (id) => api.post(`/calendar-sync/feeds/${id}/refresh`),
+  events: (from, to) => api.get('/calendar-sync/events', { params: { from, to } }),
+  share: (data) => api.put('/calendar-sync/share', data),
+};
+
+export const workspacesAPI = {
+  list: () => api.get('/workspaces'),
+  createOrg: (data) => api.post('/workspaces/orgs', data),
+  sharedFolders: (spaceId) => api.get(`/workspaces/${spaceId}/shared`),
+  feed: (spaceId) => api.get(`/workspaces/${spaceId}/feed`),
+  workload: (spaceId) => api.get(`/workspaces/${spaceId}/workload`),
+  templates: (spaceId) => api.get(`/workspaces/${spaceId}/templates`),
+  saveTemplate: (spaceId, data) => api.post(`/workspaces/${spaceId}/templates`, data),
+  deleteTemplate: (spaceId, id) => api.delete(`/workspaces/${spaceId}/templates/${id}`),
+  projects: (spaceId) => api.get(`/workspaces/${spaceId}/projects`),
+  openTasks: (spaceId, userId) => api.get(`/workspaces/${spaceId}/people/${userId}/open`),
+  handover: (spaceId, data) => api.post(`/workspaces/${spaceId}/handover`, data),
+  setAvailability: (spaceId, data) => api.put(`/workspaces/${spaceId}/availability`, data),
+  sharedFolder: (spaceId, userId) => api.get(`/workspaces/${spaceId}/shared/${userId}`),
+  createSpace: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/spaces`, data),
+  teamRange: (from, to) => api.get('/workspaces/team-range', { params: { from, to, tz: Intl.DateTimeFormat().resolvedOptions().timeZone } }),
+  announcements: (spaceId) => api.get(`/workspaces/spaces/${spaceId}/announcements`),
+  postAnnouncement: (spaceId, data) => api.post(`/workspaces/spaces/${spaceId}/announcements`, data),
+  editAnnouncement: (spaceId, id, data) => api.patch(`/workspaces/spaces/${spaceId}/announcements/${id}`, data),
+  retractAnnouncement: (spaceId, id) => api.post(`/workspaces/spaces/${spaceId}/announcements/${id}/retract`),
+  approveAnnouncement: (spaceId, id) => api.post(`/workspaces/spaces/${spaceId}/announcements/${id}/approve`),
+  declineAnnouncement: (spaceId, id) => api.post(`/workspaces/spaces/${spaceId}/announcements/${id}/decline`),
+  myDay: () => api.get('/workspaces/my-day'),
+  members: (orgId) => api.get(`/workspaces/orgs/${orgId}/members`),
+  invite: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/invites`, data),
+  revokeInvite: (orgId, id) => api.delete(`/workspaces/orgs/${orgId}/invites/${id}`),
+  setMember: (orgId, userId, data) => api.patch(`/workspaces/orgs/${orgId}/members/${userId}`, data),
+  removeMember: (orgId, userId, reassignTo) => api.delete(`/workspaces/orgs/${orgId}/members/${userId}`, { params: reassignTo ? { reassignTo } : undefined }),
+  leave: (orgId) => api.post(`/workspaces/orgs/${orgId}/leave`),
+  setSpaceRole: (spaceId, userId, role) => api.put(`/workspaces/spaces/${spaceId}/members/${userId}`, { role }),
+  policy: (orgId) => api.get(`/workspaces/orgs/${orgId}/policy`),
+  setPolicy: (orgId, data) => api.patch(`/workspaces/orgs/${orgId}/policy`, data),
+  exportOrg: (orgId) => api.get(`/workspaces/orgs/${orgId}/export`),
+  updateSpace: (spaceId, data) => api.patch(`/workspaces/spaces/${spaceId}`, data),
+  leaveSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/leave`),
+  closeSpace: (spaceId) => api.post(`/workspaces/spaces/${spaceId}/close`),
+  audit: (orgId) => api.get(`/workspaces/orgs/${orgId}/audit`),
+  aiKeys: (orgId) => api.get(`/workspaces/orgs/${orgId}/ai-keys`),
+  setAiKey: (orgId, provider, key) => api.put(`/workspaces/orgs/${orgId}/ai-keys/${provider}`, { key }),
+  removeAiKey: (orgId, provider) => api.delete(`/workspaces/orgs/${orgId}/ai-keys/${provider}`),
+  seats: (orgId) => api.get(`/workspaces/orgs/${orgId}/seats`),
+  exports: (orgId) => api.get(`/workspaces/orgs/${orgId}/exports`),
+  lookupInvite: (token) => api.get('/workspaces/invites/lookup', { params: { token } }),
+  acceptInvite: (token) => api.post('/workspaces/invites/accept', { token }),
+  remindInviter: (token) => api.post('/workspaces/invites/remind', { token }),
+  // Expiring join links for an Office. create({ expiresInDays, maxUses, spaceRole, spaceId }) -> { id, link, expiresAt, ... }
+  joinLinks: (orgId) => api.get(`/workspaces/orgs/${orgId}/join-links`),
+  createJoinLink: (orgId, data) => api.post(`/workspaces/orgs/${orgId}/join-links`, data || {}),
+  revokeJoinLink: (orgId, id) => api.delete(`/workspaces/orgs/${orgId}/join-links/${id}`),
+  lookupJoinLink: (token) => api.get('/workspaces/join-links/lookup', { params: { token } }),
+  acceptJoinLink: (token) => api.post('/workspaces/join-links/accept', { token }),
+};
+
+// Who can see a note written in an Office. set({ everyone: null | 'view' | 'edit', people: [{ userId, level: 'view' | 'edit' }] }) -- send either or both.
+export const notesAccessAPI = {
+  get: (id) => api.get(`/notes/${id}/access`),
+  set: (id, data) => api.put(`/notes/${id}/access`, data),
+  remove: (id, userId) => api.delete(`/notes/${id}/access/${userId}`),
 };
