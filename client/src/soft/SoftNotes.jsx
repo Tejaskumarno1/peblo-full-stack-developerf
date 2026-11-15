@@ -59,12 +59,22 @@ const snippetOfNote = (n) => { let v = rowSnippets.get(n); if (v === undefined) 
 
 // One row of the notes list. Memoised so that typing in the open note (which re-renders the whole page on every pause) does not
 // rebuild thousands of rows that did not change.
-const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels, dq, fdef, onPick, onLeave }) {
+const NoteRow = memo(function NoteRow({ n, on, selectMode, sel, preview, labels, dq, fdef, onPick, onLeave, onCtx, onDrag }) {
   const w = wordsOfNote(n);
   const untitled = !n.title || n.title === 'Untitled';
   const first = untitled ? firstOfNote(n) : '';
   return (
-      <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id); } else onLeave(); }}>
+      <Link key={n.id} to={`/notes/${n.id}`} className={`s-note-row${on && !selectMode ? ' on' : ''}${selectMode ? ` pick${sel ? ' sel' : ''}` : ''}`} onClick={(e) => { if (selectMode) { e.preventDefault(); onPick(n.id); } else onLeave(); }}
+        draggable={!selectMode && !(n.access && n.access !== 'owner')}
+        onDragStart={(e) => { e.dataTransfer.setData('application/x-peblo-note', n.id); e.dataTransfer.effectAllowed = 'move'; if (onDrag) setTimeout(() => onDrag(n.id), 0); }}
+        onDragEnd={() => { if (onDrag) setTimeout(() => onDrag(null), 0); }}
+        onContextMenu={(e) => { if (onCtx) { e.preventDefault(); onCtx(e, n); } }}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+          const rows = [...document.querySelectorAll('.s-notes-rows .s-note-row')];
+          const nx = rows[rows.indexOf(e.currentTarget) + (e.key === 'ArrowDown' ? 1 : -1)];
+          if (nx) { e.preventDefault(); nx.focus(); }
+        }}>
         {selectMode && <span className={`np-ck${sel ? ' on' : ''}`} role="checkbox" aria-checked={sel} aria-label={`Select ${n.title || 'Untitled'}`}>{sel && <Check size={14} strokeWidth={2.6} />}</span>}
         <span className="txt">
           <span className={`t${n.meta?.pinned ? ' pin' : ''}${untitled && first ? ' fb' : ''}`}><LiveDot id={n.id} />{n.meta?.pinned && <Pin size={12} strokeWidth={2.6} aria-label="Pinned" />}{untitled ? first || 'Untitled' : n.title}</span>
@@ -509,10 +519,10 @@ export default function SoftNotes() {
     queryClient.invalidateQueries({ queryKey: ['notes', 'backups', doc.id] });
   };
 
-  const moveTo = async (name) => {
+  const moveTo = async (name, only) => {
     setSheet(null);
-    const ids = selectMode && picked.length ? picked : doc ? [doc.id] : [];
-    if (!selectMode && doc?.isDraft) { // not saved yet: the folder is used when the note is first saved
+    const ids = only ? [only] : selectMode && picked.length ? picked : doc ? [doc.id] : [];
+    if (!only && !selectMode && doc?.isDraft) { // not saved yet: the folder is used when the note is first saved
       patch({ meta: name ? { ...(doc.meta || {}), folder: name } : undefined });
       flash(name ? `Will be saved in ${name}` : 'No folder');
       setPicked([]); setSelectMode(false);
@@ -528,7 +538,7 @@ export default function SoftNotes() {
         drop.forEach((t) => dropped.add(t));
         return notesAPI.update(id, { meta: { folder: name || '' }, ...(drop.length ? { tags: (n.tags || []).filter((t) => !drop.includes(t)) } : {}) });
       }));
-      if (!selectMode && doc) {
+      if (!selectMode && doc && (!only || only === doc.id)) {
         const drop = collecting(doc);
         patch({ meta: { ...(doc.meta || {}), folder: name || '' }, ...(drop.length ? { tags: (doc.tags || []).filter((t) => !drop.includes(t)) } : {}) });
       }
@@ -537,6 +547,49 @@ export default function SoftNotes() {
     } catch { flash('Could not move'); }
     setPicked([]); setSelectMode(false);
   };
+  // ---- right-click menu on a note row, and dropping a note on a folder
+  const [rowMenu, setRowMenu] = useState(null); // { n, x, y }
+  const [dragId, setDragId] = useState(null); // the note being dragged: a tray of folders shows meanwhile
+  const openRowMenu = useCallback((e, n) => setRowMenu({ n, x: e.clientX, y: e.clientY }), []);
+  useEffect(() => {
+    if (!rowMenu) return undefined;
+    const off = () => setRowMenu(null);
+    const esc = (e) => { if (e.key === 'Escape') setRowMenu(null); };
+    window.addEventListener('pointerdown', off); window.addEventListener('keydown', esc); window.addEventListener('scroll', off, true);
+    return () => { window.removeEventListener('pointerdown', off); window.removeEventListener('keydown', esc); window.removeEventListener('scroll', off, true); };
+  }, [rowMenu]);
+  const rowAct = async (fn, fail) => { setRowMenu(null); try { await fn(); } catch { flash(fail); } };
+  const rowPin = (n) => rowAct(async () => {
+    const next = !n.meta?.pinned;
+    if (next && pinnedCount >= 3) { flash('You can pin up to 3 notes. Unpin one first.'); return; }
+    await notesAPI.update(n.id, { meta: { pinned: next } });
+    refreshLists(); flash(next ? 'Pinned to Home' : 'Unpinned');
+  }, 'Could not change the pin');
+  const rowArchive = (n) => rowAct(async () => { await notesAPI.archive(n.id); refreshLists(); if (doc?.id === n.id) closeDoc(); flash('Archived'); }, 'Could not archive the note');
+  const rowTrash = (n) => rowAct(async () => {
+    await notesAPI.delete(n.id);
+    refreshLists(); if (doc?.id === n.id) closeDoc();
+    flash('Moved to the Trash', { label: 'Undo', run: async () => { await notesAPI.restore(n.id); refreshLists(); } });
+  }, 'Could not delete the note');
+  const rowRestore = (n) => rowAct(async () => { await notesAPI.restore(n.id); refreshLists(); flash('Restored'); }, 'Could not restore the note');
+  const rowDeleteForever = (n) => rowAct(async () => {
+    if (!window.confirm('Delete this note forever? This cannot be undone.')) return;
+    await notesAPI.delete(n.id, { permanent: true }); refreshLists(); if (doc?.id === n.id) closeDoc();
+  }, 'Could not delete the note');
+  const rowMove = (n) => { setRowMenu(null); setSelectMode(true); setPicked([n.id]); setSheet('move'); };
+  const rowCopyLink = (n) => rowAct(async () => { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${n.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); }, 'Could not copy');
+  const dropProps = (d) => (d.smart ? {} : {
+    onDragOver: (e) => { if (e.dataTransfer.types.includes('application/x-peblo-note')) { e.preventDefault(); e.currentTarget.classList.add('drop'); } },
+    onDragLeave: (e) => e.currentTarget.classList.remove('drop'),
+    onDrop: (e) => {
+      e.preventDefault(); e.currentTarget.classList.remove('drop'); setDragId(null);
+      const id = e.dataTransfer.getData('application/x-peblo-note');
+      const n = allNotes.find((x) => x.id === id);
+      if (!id || !n) return;
+      if (n.access && n.access !== 'owner') { flash('Only the owner can move this note'); return; }
+      moveTo(d.name, id);
+    },
+  });
   const saveDefs = (next) => updateSettings({ noteFolders: next });
   const saveFolder = async (def) => {
     const old = defs.find((d) => d.id === def.id);
@@ -755,6 +808,31 @@ export default function SoftNotes() {
       {teamOpen && doc && !doc.isDraft && <ShareToTeam noteId={doc.id} title={doc.title} onClose={() => setTeamOpen(false)} onDone={({ team, tasks }) => flash(`Shared with ${team.name}${tasks ? ` with ${tasks} task${tasks === 1 ? '' : 's'}` : ''}`)} />}
       {shareOpen && doc && !doc.isDraft && <ShareDialog kind="note" id={doc.id} title={doc.title} onClose={() => setShareOpen(false)} />}
       {/* ---------- list ---------- */}
+      {dragId && (
+        <div className="np-droptray" data-testid="drop-tray" role="group" aria-label="Drop the note on a folder">
+          <span className="lab">Drop on a folder</span>
+          {[...normalDefs.filter((d) => !d.parent), ...normalDefs.filter((d) => d.parent)].map((d) => (
+            <span key={d.id} className="np-drop" data-testid="drop-folder" {...dropProps(d)}><span className="np-dot" style={{ background: colorOf(d.color)[2] }} />{d.name}</span>
+          ))}
+          <span className="np-drop none" data-testid="drop-none" {...dropProps({ name: '' })}>No folder</span>
+        </div>
+      )}
+      {rowMenu && (() => {
+        const n = rowMenu.n; const mine = !n.access || n.access === 'owner';
+        return (
+          <div className="s-tab-menu s-row-menu" role="menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
+            <button type="button" role="menuitem" onClick={() => { setRowMenu(null); navigate(`/notes/${n.id}`); }}>Open</button>
+            {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-pin" onClick={() => rowPin(n)}>{n.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
+            {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-move" onClick={() => rowMove(n)}>Move to folder…</button>}
+            {!n.isDeleted && <button type="button" role="menuitem" data-testid="rm-dup" onClick={() => { setRowMenu(null); duplicateTab(n.id); }}>Duplicate</button>}
+            <button type="button" role="menuitem" onClick={() => rowCopyLink(n)}>Copy link</button>
+            {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-archive" onClick={() => rowArchive(n)}>Archive</button>}
+            {mine && !n.isDeleted && <button type="button" role="menuitem" className="danger" data-testid="rm-trash" onClick={() => rowTrash(n)}>Move to Trash</button>}
+            {mine && n.isDeleted && <button type="button" role="menuitem" data-testid="rm-restore" onClick={() => rowRestore(n)}>Restore</button>}
+            {mine && n.isDeleted && <button type="button" role="menuitem" className="danger" onClick={() => rowDeleteForever(n)}>Delete forever</button>}
+          </div>
+        );
+      })()}
       <aside className={`s-notes-list np lay-${layout}${view.density === 'compact' ? ' compact' : ''}${selectMode ? ' selecting' : ''}`} aria-label="Notes">
         {selectMode ? (
           <div className="np-selhead"><button type="button" onClick={() => { setSelectMode(false); setPicked([]); setSheet(null); }}>Cancel</button><b>{picked.length} selected</b><button type="button" onClick={() => setPicked(picked.length === shownList.length ? [] : shownList.map((n) => n.id))}>{picked.length && picked.length === shownList.length ? 'Clear' : 'Select all'}</button></div>
@@ -808,7 +886,7 @@ export default function SoftNotes() {
           const top = parent && parent.parent ? normalDefs.find((d) => d.id === parent.parent) : null;
           const list = fSel ? (parent ? normalDefs.filter((k) => k.parent === parent.id) : []) : [...normalDefs.filter((d) => !d.parent), ...smartDefs];
           const card = (d) => (
-            <button key={d.id} type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} title="Click to open, double-click to edit">
+            <button key={d.id} type="button" className={`np-card${d.smart ? ' sm' : ''}`} onClick={() => { setFilter('all'); setFSel({ kind: d.smart ? 'smart' : 'folder', id: d.id }); }} onDoubleClick={() => openEdit(d)} onContextMenu={(e) => { e.preventDefault(); openEdit(d); }} {...dropProps(d)} title="Click to open, double-click to edit">
               <span className="np-card-ic" style={{ background: d.smart ? undefined : colorOf(d.color)[1], color: d.smart ? undefined : colorOf(d.color)[2] }}>{d.smart ? <Zap size={20} strokeWidth={1.8} /> : <Folder size={20} strokeWidth={1.8} />}</span>
               <b>{d.name}</b><i>{folderCount(d)} {folderCount(d) === 1 ? 'note' : 'notes'}</i>
             </button>
@@ -856,7 +934,7 @@ export default function SoftNotes() {
               <div className="np-recent" aria-label="Recent notes">
                 <h3>Recent</h3>
                 {[...shownList].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).slice(0, 3).map((n) => (
-                  <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={false} sel={false} preview={view.preview} labels={view.labels} dq="" fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
+                  <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={false} sel={false} preview={view.preview} labels={view.labels} dq="" fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} onCtx={openRowMenu} onDrag={setDragId} />
                 ))}
               </div>
             )}
@@ -870,7 +948,7 @@ export default function SoftNotes() {
           {shownList.length === 0 && filter !== 'trash' && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
           {shownList.length === 0 && !dq && filter !== 'trash' && filter !== 'archive' && selDef && !selDef.smart && <div style={{ padding: '4px 12px' }}><button type="button" className="s-accent-btn" data-testid="empty-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} /> New note in {selDef.name}</button></div>}
           {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
-            <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} />
+            <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} onCtx={openRowMenu} onDrag={setDragId} />
           ))}</div>))}
         </div>}
         {selectMode ? (

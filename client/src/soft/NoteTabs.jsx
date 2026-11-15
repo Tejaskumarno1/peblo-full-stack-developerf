@@ -141,11 +141,13 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onE
       if (e.ctrlKey && e.shiftKey && (k === 't' || k === 'T')) { e.preventDefault(); reopen(); }
       else if (e.ctrlKey && k === 'Tab') { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
       else if (e.ctrlKey && (k === 'PageDown' || k === 'PageUp')) { e.preventDefault(); cycle(k === 'PageDown' ? 1 : -1); }
+      else if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (k === 'w' || k === 'W') && docId) { e.preventDefault(); close(docId); }
+      else if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (k === 'n' || k === 'N')) { e.preventDefault(); onNew && onNew(); }
       else if (e.altKey && !e.ctrlKey && !e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight')) { e.preventDefault(); step(k === 'ArrowLeft' ? -1 : 1); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [reopen, cycle, step]);
+  }, [reopen, cycle, step, close, docId, onNew]);
 
   useEffect(() => {
     if (!menu) return undefined;

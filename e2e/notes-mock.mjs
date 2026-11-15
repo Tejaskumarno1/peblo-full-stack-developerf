@@ -163,6 +163,32 @@ try {
   const rowTexts = await page.locator('.s-note-row .t').allInnerTexts();
   check('an untitled note is named by its first line', rowTexts.some((x) => x.includes('Plan for Monday')), rowTexts.join('|'));
 
+  // 7b. right-click menu, arrow keys, tab shortcut, drag a note onto a folder
+  await page.locator('.s-note-row').first().click({ button: 'right' }); await wait(300);
+  check('right-clicking a note row opens its menu', await page.locator('[data-testid="row-menu"]').isVisible());
+  const menuText = await page.locator('[data-testid="row-menu"]').innerText();
+  for (const w of ['Open', 'Move to folder', 'Duplicate', 'Archive', 'Move to Trash']) check(`row menu has "${w}"`, menuText.includes(w), menuText);
+  await page.locator('[data-testid="rm-pin"]').click(); await wait(600);
+  check('Pin from the row menu pins that note', reqs.some((r) => r.method === 'PATCH' && r.body?.meta?.pinned === true));
+  await page.keyboard.press('Escape');
+  await page.locator('.s-notes-rows .s-note-row').first().focus();
+  await page.keyboard.press('ArrowDown'); await wait(150);
+  check('ArrowDown moves from one note row to the next', await page.evaluate(() => { const r = [...document.querySelectorAll('.s-notes-rows .s-note-row')]; return r.indexOf(document.activeElement) === 1; }));
+  await page.goto(`${base}/notes/n1`); await page.locator('[data-testid="note-tabs"]').waitFor(TO); await wait(600);
+  const tabsBefore = (await tabs()).length;
+  await page.keyboard.press('Alt+w'); await wait(700);
+  check('Alt+W closes the open tab', (await tabs()).length === tabsBefore - 1, `${tabsBefore} -> ${(await tabs()).length}`);
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO);
+  const bio = page.locator('.s-notes-rows .s-note-row', { hasText: 'Biology revision' }).first();
+  await bio.waitFor(TO);
+  const box = await bio.boundingBox();
+  await page.mouse.move(box.x + 30, box.y + 20); await page.mouse.down(); await page.mouse.move(box.x + 60, box.y + 60, { steps: 6 });
+  await page.locator('[data-testid="drop-tray"]').waitFor(TO);
+  check('dragging a note shows a tray of folders', (await page.locator('[data-testid="drop-folder"]').count()) >= 2);
+  const target = await page.locator('[data-testid="drop-folder"]', { hasText: 'Ideas' }).first().boundingBox();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 }); await page.mouse.up(); await wait(900);
+  check('dragging a note onto a folder moves it there', notes.find((n) => n.id === 'n3').meta.folder === 'Ideas', JSON.stringify(notes.find((n) => n.id === 'n3').meta));
+
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);
   check('going offline shows the offline bar', await page.locator('[data-testid="offline-bar"]').isVisible());

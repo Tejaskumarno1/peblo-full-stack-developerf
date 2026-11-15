@@ -450,3 +450,9 @@ Hints shown in UI: "New note (Ctrl+Alt+N)" tooltip (`NotesSidebar.jsx:85`, wrong
 ### Merge note (notes-ux-fixes + supabase)
 - Tabs are stored per account and per space: `peblo-note-tabs:<userId>[:<spaceId>]`; `MAX_TABS` (8) still applies. `NoteTabs` is mounted above the empty / denied / loading / note states, with `onEmpty` (`closeDoc`).
 - `e2e/notes-mock.mjs` fakes `/workspaces` (`{ me, orgs: [], invites: [] }`) and sets `noteLayout: 'classic'`; the default layout (`cards`) shows only 3 recent rows. Needs `playwright-core` (in `e2e/node_modules`) and `client/dist` built.
+
+### Soft notes list: row menu, drag to folder, keyboard (round 4: N7, N19, N43, N44 partly)
+- **Right-click a note row** opens a menu (Open, Pin, Move to folder, Duplicate, Copy link, Archive, Move to Trash; Restore / Delete forever in the Trash). Notes owned by someone else only get Open, Duplicate and Copy link.
+- **Drag a note** (rows are `draggable` for notes you own): a tray of folders ("Drop on a folder", plus "No folder") appears while dragging, so it works in every list layout, including Folder cards. `moveTo(name, id)` does the move (and drops a collecting tag when taking a note out).
+- **Keys**: Up / Down move between note rows; Alt+W closes the open tab, Alt+N starts a new note.
+- Tests: `e2e/notes-mock.mjs` has checks for the row menu, pin from it, arrow keys, Alt+W and the drag tray.

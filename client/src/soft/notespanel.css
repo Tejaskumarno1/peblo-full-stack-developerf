@@ -184,3 +184,14 @@
 .np-card.mini { flex-direction: row; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 999px; }
 .np-card.mini.on { background: var(--s-ink, #2a1f17); color: var(--s-bg, #fff); }
 .np-card.mini i { opacity: .7; }
+
+/* dragging a note onto a folder */
+.soft .s-note-row[draggable="true"] { cursor: grab; }
+.soft .np-card.drop, .soft .np-chip.drop { outline: 2px dashed var(--s-accent); outline-offset: 2px; background: var(--s-accent-soft); }
+.soft .s-row-menu .danger { color: var(--s-accent-ink); }
+
+/* tray of folders shown while a note is being dragged */
+.soft .np-droptray { position: fixed; left: 64px; bottom: 112px; width: 340px; max-height: 40vh; overflow: auto; z-index: 60; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-radius: 18px; background: var(--s-surface); border: 1px solid var(--s-line); box-shadow: var(--s-shadow); }
+.soft .np-droptray .lab { flex: 1 0 100%; font-size: 12px; font-weight: 700; color: var(--s-fg3); }
+.soft .np-drop { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; border: 1.5px dashed var(--s-dash); font-size: 13px; font-weight: 700; color: var(--s-fg); }
+.soft .np-drop.drop { outline: 2px solid var(--s-accent); background: var(--s-accent-soft); }

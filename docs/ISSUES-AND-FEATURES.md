@@ -22,7 +22,7 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [ ] N4. Folders are linked to notes by name; renaming sends one request per note and a failure leaves notes split between old and new names.
 - [ ] N5. Subfolders go one level deep; "Include sub-folders" is off by default so a parent does not show its children's notes.
 - [ ] N6. Folder row is one sideways-scrolling strip of chips; no search, collapse or reorder; breaks down past about 8 folders.
-- [ ] N7. No drag-and-drop of a note onto a folder; only menu "Move to folder" or select mode.
+- [x] N7. No drag-and-drop of a note onto a folder; only menu "Move to folder" or select mode.
 - [x] N8. Folder rename/delete had no visible control (double-click or right-click only). Fixed: the open-folder header has Edit (and a New note button).
 - [x] N9. Opening a folder gave no way to create a note in it, and new notes did not land in it. Fixed.
 - [x] N10. Archive and Trash stayed filtered by the last open folder and looked empty. Fixed.
@@ -36,7 +36,7 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [x] N16. Back/forward history and the "reopen closed tab" list live in memory only; a refresh wipes them.
 - [x] N17. Open tabs are saved per browser, not per account; another account on the same machine inherits them.
 - [x] N18. A draft has no tab; an unsaved "New note" is invisible in the strip and the list.
-- [ ] N19. No Ctrl+W (close tab) and no Ctrl+N (new note) in this page's code.
+- [x] N19. No Ctrl+W (close tab) and no Ctrl+N (new note) in this page's code.
 - [x] N20. Many tabs: no overflow menu, no drag to reorder, no "close to the right" or "close all".
 - [x] N21. Tab accessibility: nested close button inside the tab; arrow keys do not move between tabs.
 
@@ -66,8 +66,8 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [ ] N40. Every note's full text is loaded into the list (sidebar and list both fetch all notes with content); slow for large accounts, no virtualisation.
 - [x] N41. Date grouping stops at Today / This week / Earlier; no month or year.
 - [ ] N42. Group by tag uses only a note's first tag.
-- [ ] N43. Rows have no right-click menu or hover actions (pin, move, duplicate, delete).
-- [ ] N44. No arrow-key navigation in the list; no shift-click range select in select mode.
+- [x] N43. Rows have no right-click menu or hover actions (pin, move, duplicate, delete).
+- [~] N44 (arrow keys done; shift-click range still open). No arrow-key navigation in the list; no shift-click range select in select mode.
 - [ ] N45. Rows show only one tag and a relative time; the created date is shown nowhere.
 - [ ] N46. Saved searches are per browser and capped at 8.
 - [ ] N47. Tag filtering is hard to find; the any/all setting is never changed in `SoftNotes.jsx`. *(check)*
