@@ -1,4 +1,5 @@
 import './env.js';
+import './utils/asyncErrors.js';
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';

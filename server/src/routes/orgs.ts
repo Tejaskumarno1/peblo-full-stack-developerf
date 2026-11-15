@@ -72,6 +72,7 @@ router.post('/orgs/:orgId/invites', async (req, res) => {
   const pol = (await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${orgId}`)[0]?.policy ?? {};
   if (orgRole === 'guest' && pol.guests !== true) return res.status(403).json({ error: 'Guests are turned off in this organization.' });
   if (orgRole === 'owner' && org.role !== 'owner') return res.status(403).json({ error: 'Only an owner can invite another owner.' });
+  if (orgRole === 'owner') return res.status(400).json({ error: 'Invite them as an admin, then make them an owner from the member list.' }); // org_invites only stores admin, member or guest (035)
   const wanted: string[] = Array.isArray(req.body?.spaceIds) ? req.body.spaceIds.filter((x: unknown) => typeof x === 'string') : [];
   const valid = wanted.length ? await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM spaces WHERE org_id = ${orgId} AND closed_at IS NULL AND id = ANY(${wanted}::text[])` : [];
   const spaceIds = valid.map((v) => v.id);

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
+  if (res.headersSent) { console.error(`Error after the reply was sent on ${req.method} ${req.originalUrl}:`, err?.message || err); return; }
   // Prisma unique constraint violation
   if (err.code === 'P2002') {
     console.error(`Unique clash on ${req.method} ${req.originalUrl}:`, JSON.stringify(err.meta?.target ?? err.meta ?? null));
