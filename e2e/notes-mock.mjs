@@ -30,9 +30,15 @@ const notes = [
   mk('Biology revision', 'Cell structure', {}),
   mk('', '# Plan for Monday\nbuy milk', {}),
 ];
+// two team notes, reachable by address only (kept out of the list so the checks above count the same rows)
+const teamNote = mk('Team roadmap', 'Q3 goals for the whole team', { id: 't1', hidden: true });
+const lockedNote = mk('Locked roadmap', 'Nobody may see this history', { id: 't2', hidden: true });
+notes.push(teamNote, lockedNote);
+const light = (n) => { const { content, ...rest } = n; return { ...rest, snippet: content.replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140), wordCount: content.split(/\s+/).filter(Boolean).length, light: true }; };
 const user = { id: 'u1', email: 'tester@peblo.test', name: 'Tester', settings: { uiStyle: 'soft', noteLayout: 'classic', noteFolders: [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }] } };
 const reqs = [];
 let failPatches = 0;
+let withTeam = false; // the fake account belongs to a team once a check turns this on
 
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function handle(route) {
@@ -45,12 +51,12 @@ async function handle(route) {
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
-  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: [], invites: [] });
+  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: withTeam ? [{ id: 'o1', name: 'Acme', kind: 'org', role: 'member', spaces: [{ id: 'team-x', name: 'Team X', kind: 'team', role: 'member' }] }] : [], invites: [] });
   if (p === '/notes' && method === 'GET') {
     const q = Object.fromEntries(url.searchParams);
-    let list = notes.filter((n) => (q.deleted ? n.isDeleted : !n.isDeleted) && (q.archived ? n.isArchived : !n.isArchived));
+    let list = notes.filter((n) => !n.hidden && (q.deleted ? n.isDeleted : !n.isDeleted) && (q.archived ? n.isArchived : !n.isArchived));
     if (q.search) list = list.filter((n) => (n.title + n.content).toLowerCase().includes(q.search.toLowerCase()));
-    return json(route, { notes: list });
+    return json(route, { notes: q.fields === 'list' ? list.map(light) : list });
   }
   if (p === '/notes' && method === 'POST') { const n = mk(body.title || 'Untitled', body.content || '', { tags: body.tags || [], meta: body.meta || {} }); notes.unshift(n); return json(route, { note: n }, 201); }
   let m = /^\/notes\/([^/]+)$/.exec(p);
@@ -70,7 +76,10 @@ async function handle(route) {
   }
   m = /^\/notes\/([^/]+)\/restore$/.exec(p);
   if (m && method === 'POST') { const n = notes.find((x) => x.id === m[1]); if (n) n.isDeleted = false; return json(route, { note: n }); }
+  if (/^\/notes\/t1\/backups$/.test(p)) return json(route, { backups: [{ id: 'b1', createdAt: now(), size: 20, preview: 'Q2 goals', label: null, savedBy: 'Mate' }, { id: 'b2', createdAt: now(), size: 18, preview: 'Q1 goals', label: 'Kickoff', savedBy: 'Tester' }] });
+  if (/^\/notes\/t2\/backups$/.test(p)) return json(route, { error: 'This note is private. Ask the author to share it with you.', code: 'no_access' }, 403);
   if (/^\/notes\/[^/]+\/backups/.test(p)) return json(route, { backups: [] });
+  if (/^\/notes\/[^/]+\/mentions$/.test(p)) return json(route, { mentions: [] });
   if (p.startsWith('/todos')) return json(route, { todos: [] });
   return json(route, {});
 }
@@ -205,6 +214,40 @@ try {
   await page.screenshot({ path: 'e2e/notes-mock-dark.png' });
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // midnight
   await page.locator('.soft-round[aria-label^="Switch to"]').first().click(); await wait(300); // back to light
+
+  // 9. light list (R34): the list carries no text, previews come from `snippet`, the open note loads whole
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  const listReqs = reqs.filter((r) => r.method === 'GET' && r.path === '/notes' && !r.q.search);
+  check('the list and the sidebar ask for the light shape', listReqs.length > 0 && listReqs.every((r) => r.q.fields === 'list'), JSON.stringify(listReqs.map((r) => r.q)));
+  const previews = await page.locator('.s-notes-rows .s-note-row .s').allInnerTexts();
+  check('row previews render from the snippet (the fake API sent no content)', previews.some((x) => x.includes('Goals for the sprint')) || previews.some((x) => x.includes('Agenda and questions')), previews.join('|'));
+  reqs.length = 0;
+  await page.locator('.s-notes-rows .s-note-row', { hasText: 'Kickoff notes' }).first().click(); await wait(1200);
+  check('opening a row loads the whole note', reqs.some((r) => r.method === 'GET' && r.path === '/notes/n2'), JSON.stringify(reqs.map((r) => r.path)));
+  check('the editor shows the text, not an empty body', (await page.locator('[contenteditable="true"]').first().innerText()).includes('Agenda and questions'));
+  await page.locator('textarea.s-note-title').fill('Kickoff notes v2'); await wait(2500);
+  check('saving keeps the full text', notes.find((n) => n.id === 'n2').content === 'Agenda and questions' && notes.find((n) => n.id === 'n2').title === 'Kickoff notes v2');
+  check('the row shows the new title without a refetch of the library', (await page.locator('.s-notes-rows .s-note-row .t', { hasText: 'Kickoff notes v2' }).count()) > 0 && reqs.filter((r) => r.method === 'GET' && r.path === '/notes').length === 0, reqs.filter((r) => r.method === 'GET' && r.path === '/notes').length);
+  // search needs two characters and shows a Searching state
+  reqs.length = 0;
+  await page.locator('.s-nsearch input, input[type="search"]').first().fill('k'); await wait(700);
+  check('one character does not search', !reqs.some((r) => r.q.search));
+  await page.locator('.s-nsearch input, input[type="search"]').first().fill('Kickoff'); await wait(900);
+  check('two or more characters search once', reqs.filter((r) => r.q.search).length === 1 && reqs.find((r) => r.q.search).q.fields === 'list');
+  await page.locator('.s-nsearch input, input[type="search"]').first().fill(''); await wait(400);
+
+  // 10. version history of a team note (R10): shown, and a refusal is explained
+  await page.addInitScript(() => { try { if (/^\/notes\/t\d/.test(location.pathname)) localStorage.setItem('peblo-space', 'team-x'); else localStorage.removeItem('peblo-space'); } catch { /* ignore */ } }); // the two team notes are opened inside a team space
+  withTeam = true; reqs.length = 0;
+  await page.goto(`${base}/notes/t1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  check('the versions list is asked for in the team space', reqs.some((r) => r.path === '/notes/t1/backups' && r.space === 'team-x'), JSON.stringify(reqs.map((r) => [r.path, r.space])));
+  check('a team note shows its kept versions', (await page.locator('.s-versions').first().innerText()).includes('2 versions kept'), await page.locator('.s-versions').first().innerText());
+  await page.locator('.s-versions').first().click(); await wait(300);
+  check('Compare is offered for a team note version', (await page.locator('.rl-ver [role="menuitem"]', { hasText: 'Compare' }).count()) === 2);
+  await page.keyboard.press('Escape');
+  await page.goto(`${base}/notes/t2`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  check('a refused history says so clearly', (await page.locator('.s-versions').first().innerText()).includes('do not have access'), await page.locator('.s-versions').first().innerText());
+  withTeam = false; await page.goto(`${base}/notes`); await wait(300);
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);

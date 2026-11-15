@@ -12,3 +12,15 @@ Commits `94ced39` and `c3f01da` (team authorization fixes) compile (`npm run bui
 8. **`spaceMembers()`.** Assign a task to an expired guest, a paused member and a member of a closed org: expect the "not in this space" 400.
 
 Known gaps left on purpose: an invite to a `read_only` org still reads as `ready`; the guest member list does not exclude people who share only a closed space; check that a last owner can actually leave (the deletion message tells them to).
+
+## Branch `feat-versions` (version history for team notes, light notes list, cheaper search)
+
+Code compiles (`npm run build:server`, client `vite build`) and the browser checks in `e2e/notes-mock.mjs` pass against a FAKE API. The server code has never run. Use a local Postgres (never `server/.env`). `scripts/smoke-test.mjs` has a new block at the end of the main `try` (light list, search) that has not been run.
+
+1. **Versions in a team space.** Team with A (author), B (member), C (viewer), D (not a member). Note N in the team, with a few edits by A. `GET /notes/N/backups` with `x-peblo-space`: A, B and C get 200 with versions; D gets 404. Without the header (Personal scope) B gets 404 for N.
+2. **Restore and name.** `POST /notes/N/backups/:id/revert`, `POST /notes/N/versions {label}` and `PATCH /notes/N/backups/:id`: B (member) succeeds; C (viewer) gets 403 "You can read this space but not change it". Share N with the team as "can view" (`meta.teamShare.level='view'`): B gets 403 code `view_only`, A still succeeds. After a restore the live room reloads; `saved_by` is kept.
+3. **Office rules.** In an Office, a private note of A: B gets 403 `no_access` on all five routes; shared "view": GET works, revert/name/rename give 403 `view_only`; shared "edit": all work.
+4. **Personal unchanged.** Own note: all five routes behave as before; another user's note id gives 404.
+5. **`GET /notes?fields=list`.** Rows have `snippet` (at most 140 chars), `wordCount`, `hasPics`, `taskCount`, `tags`, `meta`, owner/access info (Office) and no `content`, `aiGenerations` or `_count`. Without `fields` the shape is unchanged (Orbit, River, Home). Works with `archived`, `deleted`, `tag`, `sort`, `limit`/`offset`.
+6. **Search.** `search=a` returns `[]`. A title match and a tag match are found; a body-only match is still found; more than 200 matches return 200; `limit/offset` pages the result; `#private` notes stay hidden from an access token; the fuzzy title branch still adds near-misses. Time it with 3000+ notes before and after.
+7. **Client with the real server.** Open Soft Notes: the sidebar and list need one light request each; opening a note loads the text from `GET /notes/:id`; typing causes no library refetch; an edit on a second device shows up on the first within about 5 s. Gallery loads the full list only when opened. "Mentioned in" comes from `/notes/:id/mentions` (it matches the saved title).

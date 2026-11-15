@@ -48,14 +48,14 @@ const firstLine = (content) => {
   return '';
 };
 const rowFirst = new WeakMap();
-const firstOfNote = (n) => { let v = rowFirst.get(n); if (v === undefined) { v = firstLine(n.content); rowFirst.set(n, v); } return v; };
+const firstOfNote = (n) => { let v = rowFirst.get(n); if (v === undefined) { v = firstLine(typeof n.content === 'string' ? n.content : n.snippet); rowFirst.set(n, v); } return v; };
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 // Per-note numbers shown in the list rows, worked out once per note object. Without this every keystroke in the open note
 // re-scanned the text of every note in the list (about 11 MB for 3000 notes) and typing lagged by half a second or more.
 const rowWords = new WeakMap();
-const wordsOfNote = (n) => { let v = rowWords.get(n); if (v === undefined) { v = (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; rowWords.set(n, v); } return v; };
+const wordsOfNote = (n) => { let v = rowWords.get(n); if (v === undefined) { v = typeof n.wordCount === 'number' ? n.wordCount : (n.content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length; rowWords.set(n, v); } return v; }; // the light list sends wordCount and no text
 const rowSnippets = new WeakMap();
-const snippetOfNote = (n) => { let v = rowSnippets.get(n); if (v === undefined) { v = snippetOf(n.content); rowSnippets.set(n, v); } return v; };
+const snippetOfNote = (n) => { let v = rowSnippets.get(n); if (v === undefined) { v = typeof n.snippet === 'string' ? n.snippet : snippetOf(n.content); rowSnippets.set(n, v); } return v; };
 
 // One row of the notes list. Memoised so that typing in the open note (which re-renders the whole page on every pause) does not
 // rebuild thousands of rows that did not change.
@@ -186,19 +186,28 @@ export default function SoftNotes() {
 
   // ---------- data ----------
   const { data: allNotes = [] } = useQuery({
-    queryKey: ['notes', 'sidebar'],
-    queryFn: () => notesAPI.getAll({ sort: 'updated' }).then((r) => r.data.notes || []),
+    queryKey: ['notes', 'soft-sidebar'], // not 'sidebar': other screens share that key and expect full text
+    queryFn: () => notesAPI.getAll({ sort: 'updated', fields: 'list' }).then((r) => r.data.notes || []),
   });
   const listParams = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
   const { data: listed = [] } = useQuery({
     queryKey: ['notes', 'soft', filter],
-    queryFn: () => notesAPI.getAll({ sort: 'updated', ...listParams }).then((r) => r.data.notes || []),
+    queryFn: () => notesAPI.getAll({ sort: 'updated', fields: 'list', ...listParams }).then((r) => r.data.notes || []),
   });
-  useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 250); return () => clearTimeout(t); }, [q]);
-  const { data: found = [] } = useQuery({
-    queryKey: ['notes', 'find', dq, filter],
-    enabled: dq.length > 0,
-    queryFn: () => notesAPI.getAll({ search: dq, snippet: '1', ...listParams }).then((r) => r.data.notes || []),
+  useEffect(() => { const t = setTimeout(() => { const v = q.trim(); setDq(v.length >= 2 ? v : ''); /* the server wants two characters */ }, 250); return () => clearTimeout(t); }, [q]);
+  const searchOn = dq.length >= 2;
+  const typing = q.trim().length >= 2 && q.trim() !== dq; // waiting for the 250 ms pause
+  const { data: found = [], isFetching: searching } = useQuery({
+    queryKey: ['notes', 'find-soft', dq, filter],
+    enabled: searchOn,
+    queryFn: () => notesAPI.getAll({ search: dq, fields: 'list', ...listParams }).then((r) => r.data.notes || []),
+  });
+  // The Gallery reads picture links out of the text, which the light list does not carry: fetch the full list only while it is open
+  const { data: galleryNotes = [] } = useQuery({
+    queryKey: ['notes', 'gallery'],
+    queryFn: () => notesAPI.getAll({ sort: 'updated' }).then((r) => r.data.notes || []),
+    enabled: galleryOpen,
+    staleTime: 60000,
   });
   const noteId = doc && !doc.isDraft ? doc.id : null;
   const { data: linked = [] } = useQuery({
@@ -206,11 +215,15 @@ export default function SoftNotes() {
     queryFn: () => todosAPI.getAll({ noteId }).then((r) => r.data.todos || []),
     enabled: !!noteId,
   });
-  const { data: versions = [] } = useQuery({
+  const versionsQ = useQuery({
     queryKey: ['notes', 'backups', noteId],
     queryFn: () => notesAPI.getBackups(noteId).then((r) => r.data.backups || r.data || []),
     enabled: !!noteId,
+    retry: (n, e) => ![403, 404].includes(e?.response?.status) && n < 2, // no access / not found will not get better by asking again
   });
+  const versions = versionsQ.data || [];
+  const vErr = versionsQ.error?.response?.status;
+  const vErrText = vErr === 403 ? "You do not have access to this note's history" : vErr === 404 ? 'History is not available for this note' : '';
 
   const tagCounts = useMemo(() => {
     const m = new Map();
@@ -314,6 +327,7 @@ export default function SoftNotes() {
 
   // set when the person closed every tab on purpose: the list must not open a note again by itself
   const noAuto = useRef(false);
+  const loadingId = useRef(null); // the note whose full text is being fetched for the editor
   const closeDoc = useCallback(() => { noAuto.current = true; setDoc(null); setEditorKey('none'); navigate('/notes', { replace: true }); }, [navigate]);
   useEffect(() => { if (doc?.id && !doc.isDraft && params.get('view') === 'reader') setPreview(true); }, [doc?.id, params.get('view')]); // eslint-disable-line react-hooks/exhaustive-deps -- Open as > Reader view
 
@@ -341,8 +355,11 @@ export default function SoftNotes() {
     if (doc?.id === routeId) return;
     noAuto.current = false;
     const found = allNotes.find((n) => n.id === routeId) || listed.find((n) => n.id === routeId);
-    if (found) open(found);
-    else notesAPI.get(routeId).then((r) => open(r.data.note)).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else { flash(e.response?.status === 404 ? 'That note is not here. It may be in another space, in the Trash, or deleted.' : 'Could not open that note.'); navigate('/notes', { replace: true }); } });
+    if (found && typeof found.content === 'string') open(found);
+    else if (loadingId.current !== routeId) { // a list entry has no text (light list), or the note is not in the list: load it whole
+      loadingId.current = routeId;
+      notesAPI.get(routeId, { deleted: !!found?.isDeleted }).then((r) => { if (loadingId.current === routeId) open(r.data.note); }).finally(() => { if (loadingId.current === routeId) loadingId.current = null; }).catch((e) => { if (e.response?.status === 403 && e.response?.data?.code === 'no_access') setDenied({ owner: e.response.data.owner }); else { flash(e.response?.status === 404 ? 'That note is not here. It may be in another space, in the Trash, or deleted.' : 'Could not open that note.'); navigate('/notes', { replace: true }); } });
+    }
   }, [routeId, allNotes, listed, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- saving ----------
@@ -368,8 +385,17 @@ export default function SoftNotes() {
     const res = await saveNoteSafe(id, { ...payload, title: payload.title || 'Untitled' });
     const now = res?.updatedAt ? new Date(res.updatedAt).toISOString() : new Date().toISOString();
     setDoc((d) => (d && d.id === id ? { ...d, updatedAt: now } : d));
+    // the cached list entry is updated in place; a light entry (no text) gets a fresh snippet and word count instead of the text
     queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old)
-      ? old.map((n) => (n.id === id ? { ...n, ...payload, title: payload.title || 'Untitled', updatedAt: now } : n))
+      ? old.map((n) => {
+        if (n.id !== id) return n;
+        if (n.light) {
+          const { content: text, ...rest } = payload;
+          const hasText = typeof text === 'string';
+          return { ...n, ...rest, title: payload.title || 'Untitled', updatedAt: now, ...(hasText ? { snippet: snippetOf(text, 140), wordCount: text.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length, hasPics: /!\[|<figure>/.test(text) } : {}) };
+        }
+        return { ...n, ...payload, title: payload.title || 'Untitled', updatedAt: now };
+      })
       : old));
   }, [navigate, queryClient]);
 
@@ -415,10 +441,16 @@ export default function SoftNotes() {
     if (isNoteLive(d.id)) return; // the live room already has it
     const f = allNotes.find((n) => n.id === d.id);
     const base = getNoteBase(d.id);
-    if (!f || !base || typeof f.content !== 'string' || f.content === d.content || d.content !== base.content) return; // only when nothing was typed since the last load or save
+    if (!f || !base || d.content !== base.content) return; // only when nothing was typed since the last load or save
     if (new Date(f.updatedAt).getTime() <= new Date(base.updatedAt).getTime()) return;
-    setDoc((cur) => ({ ...cur, content: f.content, updatedAt: f.updatedAt }));
-    setEditorKey(`remote-${Date.now()}`);
+    const apply = (content, updatedAt) => {
+      const cur = docRef.current;
+      if (!cur || cur.id !== d.id || cur.content !== d.content || content === cur.content) return; // typed, or switched note, meanwhile
+      setDoc((c) => ({ ...c, content, updatedAt }));
+      setEditorKey(`remote-${Date.now()}`);
+    };
+    if (typeof f.content === 'string') { if (f.content !== d.content) apply(f.content, f.updatedAt); return; }
+    notesAPI.get(d.id).then((r) => apply(r.data.note.content || '', r.data.note.updatedAt)).catch(() => {}); // a light list entry has no text: fetch the note
   }, [allNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p) => setDoc((d) => (d ? { ...d, ...p } : d));
@@ -516,7 +548,11 @@ export default function SoftNotes() {
     } catch { flash('Could not save a separate note'); return null; }
   };
   const restoreVersion = async (v) => {
-    await notesAPI.revertBackup(doc.id, v.id);
+    try { await notesAPI.revertBackup(doc.id, v.id); } catch (e) {
+      const st = e.response?.status;
+      flash(st === 403 ? (e.response?.data?.error || 'You do not have permission to restore versions of this note.') : st === 404 ? 'That version or note is no longer there.' : 'Could not restore that version');
+      return;
+    }
     const { data } = await notesAPI.get(doc.id, { deleted: !!doc.isDeleted });
     open(data.note);
     refreshLists();
@@ -658,9 +694,10 @@ export default function SoftNotes() {
   };
   const duplicateTab = async (id) => {
     forceSave();
-    const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
+    let n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
     if (!n) return;
     try {
+      if (typeof n.content !== 'string') n = (await notesAPI.get(id)).data.note; // the list has no text
       const { data } = await notesAPI.create({ title: `Copy of ${n.title || 'Untitled'}`, content: n.content || '', tags: n.tags || [], ...(n.meta?.folder ? { meta: { folder: n.meta.folder } } : {}) });
       refreshLists();
       navigate(`/notes/${data.note.id}`);
@@ -739,11 +776,16 @@ export default function SoftNotes() {
 
   // Notes that mention this note's title
   const deferredTitle = useDeferredValue(doc?.title); // a title keystroke should not wait for a scan of every note
-  const mentions = useMemo(() => {
-    const title = (deferredTitle || '').trim().toLowerCase();
-    if (!doc || title.length < 4) return []; // the deferred title can outlive the note for one render
-    return allNotes.filter((n) => n.id !== doc.id && (n.content || '').toLowerCase().includes(title)).slice(0, 4);
-  }, [allNotes, doc?.id, deferredTitle]);
+  // The list has no note text any more, so the server finds them (it matches the saved title; refetched when the lists refresh).
+  const mentionTitleOk = (deferredTitle || '').trim().length >= 4;
+  const { data: mentionRows = [] } = useQuery({
+    queryKey: ['notes', 'mentions', noteId],
+    queryFn: () => notesAPI.mentions(noteId).then((r) => r.data.mentions || []),
+    enabled: !!noteId && mentionTitleOk,
+    staleTime: 30000,
+    retry: false,
+  });
+  const mentions = useMemo(() => (doc && mentionTitleOk ? mentionRows.filter((n) => n.id !== doc.id).slice(0, 4) : []), [mentionRows, doc?.id, mentionTitleOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const crumb = doc?.isDeleted ? 'Trash' : doc?.isArchived ? 'Archive' : doc?.meta?.folder ? doc.meta.folder : doc?.tags?.[0] ? cap(doc.tags[0]) : null;
   const saved = saveStatus === 'saving' ? { text: 'Saving…', icon: <Loader2 size={14} className="s-spin" /> }
@@ -793,7 +835,7 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={() => { const n = FONTS[(FONTS.indexOf(font) + 1) % FONTS.length]; setFont(n); keep('peblo-note-font', n); }}><Type size={15} />Text size: {FONT_NAME[font]}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
-                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions'}</button>}
+                    {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{vErrText || (versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions')}</button>}
 {!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
           <div className="s-menu-sep" role="separator" />
       <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>
@@ -949,7 +991,8 @@ export default function SoftNotes() {
           {shownList.length === 0 && filter === 'trash' && (
             <div className="np-empty"><span className="np-empty-ic"><Trash2 size={22} strokeWidth={1.8} /></span><b>The Trash is empty</b><small>Deleted notes wait here until you remove them for good.</small></div>
           )}
-          {shownList.length === 0 && filter !== 'trash' && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? `Nothing matches “${dq}”.` : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length === 0 && filter !== 'trash' && <p className="s-empty" style={{ padding: '8px 12px' }}>{filter === 'trash' ? 'The Trash is empty.' : filter === 'archive' ? 'Nothing archived.' : dq ? (typing || searching ? 'Searching…' : `Nothing matches “${dq}”.`) : selDef ? (selDef.smart ? 'No notes match this smart folder yet.' : 'This folder is empty.') : 'No notes here yet.'}</p>}
+          {shownList.length > 0 && (typing || searching) && <p className="s-empty small" style={{ padding: '4px 12px' }} data-testid="searching" role="status">Searching…</p>}
           {shownList.length === 0 && !dq && filter !== 'trash' && filter !== 'archive' && selDef && !selDef.smart && <div style={{ padding: '4px 12px' }}><button type="button" className="s-accent-btn" data-testid="empty-new-note" onClick={startDraft}><Plus size={14} strokeWidth={2.4} /> New note in {selDef.name}</button></div>}
           {shownGroups.map((g) => (<div key={g.key} className="s-grp" data-gk={g.key}>{g.label && !fSel && !gSel && <button type="button" className="s-grp-h s-grp-toggle" aria-expanded={!collapsed[`${group}:${g.key}`]} onClick={() => toggleGroup(`${group}:${g.key}`)}><ChevronDown size={14} className={`chev${collapsed[`${group}:${g.key}`] ? ' shut' : ''}`} aria-hidden="true" /><span className="nm">{g.label}</span><span className="cnt">{g.notes.length}</span></button>}{!collapsed[`${group}:${g.key}`] && g.notes.map((n) => (
             <NoteRow key={n.id} n={n} on={doc?.id === n.id} selectMode={selectMode} sel={selectMode && picked.includes(n.id)} preview={view.preview} labels={view.labels} dq={dq} fdef={n.meta?.folder ? normalDefs.find((d) => d.name === n.meta.folder) : null} onPick={pickNote} onLeave={leaveNote} onCtx={openRowMenu} onDrag={setDragId} />
@@ -977,7 +1020,7 @@ export default function SoftNotes() {
         {sheet === 'tag' && <TagSheet tags={tagCounts} count={picked.length} bare onApply={tagPicked} onClose={() => setSheet(null)} />}
         {sheet === 'folder' && folderEdit && <NewFolderSheet defs={allDefs} notes={allNotes} initial={folderEdit} onSave={saveFolder} onSmart={(nm) => { setSheet(null); setFolderEdit(null); setSmartPage({ startName: nm }); }} onDelete={() => deleteFolder(folderEdit)} onClose={() => { setSheet(null); setFolderEdit(null); setMoveAfter(false); }} />}
         {smartPage && <SmartFolderPage defs={allDefs} notes={allNotes} tags={tagCounts} folderNames={folders} initial={smartPage.initial} startName={smartPage.startName} onSave={saveFolder} onKind={(nm) => { setSmartPage(null); setFolderEdit({ name: nm || '' }); setSheet('folder'); }} onDelete={() => deleteFolder(smartPage.initial)} onClose={() => setSmartPage(null)} />}
-        {galleryOpen && <Gallery notes={allNotes} onClose={() => setGalleryOpen(false)} onOpen={(id) => { setGalleryOpen(false); navigate(`/notes/${id}`); }} />}
+        {galleryOpen && <Gallery notes={galleryNotes} onClose={() => setGalleryOpen(false)} onOpen={(id) => { setGalleryOpen(false); navigate(`/notes/${id}`); }} />}
         {tagsOpen && <TagManager onClose={() => setTagsOpen(false)} onChanged={() => refreshLists()} />}
       </aside>
 
@@ -1143,7 +1186,7 @@ export default function SoftNotes() {
         {noteId && (
           <div className="s-menu-wrap rl-ver" ref={outsideHist}>
             <button type="button" className="s-versions" onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
-              <History size={15} strokeWidth={2.2} /> {versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'} kept` : 'No earlier versions'}
+              <History size={15} strokeWidth={2.2} /> {vErrText || (versions.length ? `${versions.length} version${versions.length === 1 ? '' : 's'} kept` : 'No earlier versions')}
             </button>
             {historyOpen && versions.length > 0 && (
               <div className="s-menu up" role="menu">

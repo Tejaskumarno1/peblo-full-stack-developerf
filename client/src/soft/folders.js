@@ -20,7 +20,7 @@ export const newId = () => `f${Date.now().toString(36)}${Math.random().toString(
 /** The tag a folder can also collect: the first word of its name. */
 export const tagFor = (name) => String(name || '').trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9_-]/g, '');
 
-const hasPics = (n) => /!\[|<figure>/.test(n.content || '');
+const hasPics = (n) => (typeof n.hasPics === 'boolean' ? n.hasPics : /!\[|<figure>/.test(n.content || '')); // the light list sends hasPics, not the text
 
 export function ruleMatch(n, r) {
   switch (r.f) {
