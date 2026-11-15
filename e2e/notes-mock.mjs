@@ -407,7 +407,7 @@ try {
   await page.locator('.s-nsearch input, input[type="search"]').first().fill(''); await wait(400);
 
   // 10. version history of a team note (R10): shown, and a refusal is explained
-  await page.addInitScript(() => { try { if (/^\/notes\/t\d/.test(location.pathname)) localStorage.setItem('peblo-space', 'team-x'); else localStorage.removeItem('peblo-space'); } catch { /* ignore */ } }); // the two team notes are opened inside a team space
+  await page.addInitScript(() => { try { if (localStorage.getItem('e2e-keep-space')) return; if (/^\/notes\/t\d/.test(location.pathname)) localStorage.setItem('peblo-space', 'team-x'); else localStorage.removeItem('peblo-space'); } catch { /* ignore */ } }); // the two team notes are opened inside a team space
   withTeam = true; reqs.length = 0;
   await page.goto(`${base}/notes/t1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
   check('the versions list is asked for in the team space', reqs.some((r) => r.path === '/notes/t1/backups' && r.space === 'team-x'), JSON.stringify(reqs.map((r) => [r.path, r.space])));
@@ -418,6 +418,7 @@ try {
   await page.goto(`${base}/notes/t2`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
   check('a refused history says so clearly', (await page.locator('.s-versions').first().innerText()).includes('do not have access'), await page.locator('.s-versions').first().innerText());
   withTeam = false; await page.goto(`${base}/notes`); await wait(300);
+  await page.evaluate(() => { localStorage.setItem('e2e-keep-space', '1'); localStorage.removeItem('peblo-space'); }); // from here on the init script above leaves the space alone (later sections pick their own)
   // 7k. text that never reached the server is kept in localStorage and put back (and saved) on the next open
   const n3 = notes.find((n) => n.id === 'n3');
   const copyKey = 'peblo-unsaved:n3';
