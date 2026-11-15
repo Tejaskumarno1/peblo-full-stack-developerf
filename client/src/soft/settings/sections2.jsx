@@ -17,6 +17,7 @@ import UninstallApp from './UninstallApp';
 import { exportCalendar, importCalendar } from '../../river/calendarIO';
 import SoftConnections from '../SoftConnections';
 import { Card, Row, Switch, Seg, CopyButton, Confirm, useSave, isDesktopApp } from './ui';
+import TeamMuteCard from './TeamMute';
 
 const FEATURES = [
   { id: 'ask', name: 'Ask your notes', desc: 'Chat answers in the AI Hub and inside a note.' },
@@ -572,6 +573,7 @@ export function NotificationsSection() {
           </div>
         </Row>
       </Card>
+      <TeamMuteCard />
       <Card title="Email">
         <p className="s-set-note">Peblo does not send reminder or digest emails. The only email it sends is the link that confirms your address (see Profile).</p>
       </Card>

@@ -9,6 +9,9 @@ import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
 import { decryptSecret, encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
 import { seatBlock, SeatLimitError } from '../utils/seats.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { revokeOrgLinks, revokeSpaceLinks } from '../utils/shareScope.js';
+import bcrypt from 'bcryptjs';
 
 /* Members, invitations and the audit trail of an organization. Tables: 035_workspaces_expand.sql. */
 const router = Router();
@@ -51,6 +54,9 @@ router.get('/orgs/:orgId/members', async (req, res) => {
   res.json({ members, invites });
 });
 
+/** The token goes after the # so it never reaches a server log or a Referer header, and the client strips it from the address bar (R13). */
+const inviteLink = (req: any, raw: string) => `${publicBase(req)}/invite#token=${raw}`;
+
 function inviteMail(to: string, orgName: string, inviter: string, link: string): Mail {
   const text = `${inviter} invited you to join ${orgName} on Peblo.\n\nOpen this link while signed in with ${to}: ${link}\n\nThe link works once and expires in ${INVITE_DAYS} days. If you were not expecting it, ignore this email.`;
   return { to, subject: `${inviter} invited you to ${orgName} on Peblo`, text };
@@ -83,12 +89,32 @@ router.post('/orgs/:orgId/invites', async (req, res) => {
     VALUES (${id}, ${orgId}, ${email}::citext, ${orgRole}, ${JSON.stringify(spaceIds)}::jsonb, ${spaceRole}, ${hash(raw)}, ${uid(req)}, now() + (${INVITE_DAYS} * interval '1 day'))`;
   await audit(orgId, uid(req), 'invite.sent', email, { orgRole, spaceIds, spaceRole });
   const names = await prisma.$queryRaw<{ org: string; me: string }[]>`SELECT (SELECT name FROM organizations WHERE id = ${orgId}) AS org, (SELECT name FROM users WHERE id = ${uid(req)}) AS me`;
-  const link = `${publicBase(req)}/invite?token=${raw}`;
+  const link = inviteLink(req, raw);
   const mailed = await sendMail(inviteMail(email, names[0]?.org ?? 'an organization', names[0]?.me ?? 'Someone', link)).catch(() => false);
-  // someone who already has a Peblo account also sees it in their notifications, with the invite page to open
+  // someone who already has a Peblo account also sees it in their notifications. It carries no token: it points at /invite, where they open it from their own pending list.
   const known = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM users WHERE lower(email) = ${email}`;
-  if (known[0]) await notifyUsers(req.app, [known[0].id], { kind: 'org_invite', title: `${names[0]?.me ?? 'Someone'} invited you to ${names[0]?.org ?? 'an organization'}`, body: `/invite?token=${raw}`, from: names[0]?.me ?? 'Someone' });
+  if (known[0]) await notifyUsers(req.app, [known[0].id], { kind: 'org_invite', title: `${names[0]?.me ?? 'Someone'} invited you to ${names[0]?.org ?? 'an organization'}`, body: '', from: names[0]?.me ?? 'Someone' });
   res.status(201).json({ id, link, mailed });
+});
+
+/** Resend an invite, or make its link again to copy. Only a hash of the token is stored, so this issues a NEW token (the old link stops working) and restarts the 7 days. `{ mail: false }` only returns the link. */
+const resendLimit = rateLimit({ windowMs: 60 * 60_000, max: 30, key: (req: any) => (req.user?.id ? `invite-resend:${req.user.id}` : ''), message: 'Too many invite links made. Try again in a while.' });
+router.post('/orgs/:orgId/invites/:id/resend', resendLimit, async (req, res) => {
+  const org = await gate(req, res, true); if (!org) return;
+  const orgId = String(req.params.orgId);
+  const raw = crypto.randomBytes(32).toString('base64url');
+  const rows = await prisma.$queryRaw<{ email: string }[]>`UPDATE org_invites SET token_hash = ${hash(raw)}, expires_at = now() + (${INVITE_DAYS} * interval '1 day'), last_reminded_at = NULL
+    WHERE id = ${req.params.id} AND org_id = ${orgId} AND accepted_at IS NULL AND revoked_at IS NULL RETURNING email::text AS email`;
+  if (!rows[0]) return res.status(404).json({ error: 'Invite not found.' });
+  const link = inviteLink(req, raw);
+  const send = req.body?.mail !== false;
+  await audit(orgId, uid(req), send ? 'invite.resent' : 'invite.link_copied', rows[0].email);
+  let mailed = false;
+  if (send) {
+    const names = await prisma.$queryRaw<{ org: string; me: string }[]>`SELECT (SELECT name FROM organizations WHERE id = ${orgId}) AS org, (SELECT name FROM users WHERE id = ${uid(req)}) AS me`;
+    mailed = await sendMail(inviteMail(rows[0].email, names[0]?.org ?? 'an organization', names[0]?.me ?? 'Someone', link)).catch(() => false);
+  }
+  res.json({ link, mailed });
 });
 
 router.delete('/orgs/:orgId/invites/:id', async (req, res) => {
@@ -99,15 +125,18 @@ router.delete('/orgs/:orgId/invites/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-/** What an invite link would do for the signed-in person, without doing it: the states of the C08 screen. */
-async function lookup(token: string, userId: string) {
+/** What an invite would do for the signed-in person, without doing it: the states of the C08 screen. The invite is named by its token (from the link) or by its id (from the person's own list, which needs the matching email). */
+async function lookup(token: string, userId: string, inviteId = '') {
+  const th = inviteId ? 'by-id' : hash(token); // never equal to a real hash, so only one of the two conditions can match
   const rows = await prisma.$queryRaw<any[]>`
     SELECT i.id, i.org_id AS "orgId", i.email::text AS email, i.org_role AS "orgRole", i.space_ids AS "spaceIds", i.space_role AS "spaceRole", i.invited_by AS "invitedBy",
            i.expires_at AS "expiresAt", i.accepted_at AS "acceptedAt", i.revoked_at AS "revokedAt", o.name AS "orgName", o.closed_at AS "orgClosed", o.status AS "orgStatus", (SELECT name FROM users WHERE id = i.invited_by) AS "inviterName"
-    FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${hash(token)}`;
+    FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${th} OR i.id = ${inviteId}`;
   const inv = rows[0];
   if (!inv) return { state: 'invalid' as const };
   const me = await prisma.$queryRaw<{ email: string; verified: boolean }[]>`SELECT email, (email_verified_at IS NOT NULL) AS verified FROM users WHERE id = ${userId}`;
+  // an id alone is not a secret: it only works for the person the invite was sent to
+  if (inviteId && (!me[0] || me[0].email.toLowerCase() !== inv.email.toLowerCase())) return { state: 'invalid' as const };
   const base = { orgName: inv.orgName, email: inv.email, inviterName: inv.inviterName ?? null, role: inv.orgRole, signedInAs: me[0]?.email ?? null };
   if (inv.revokedAt || inv.orgClosed) return { state: 'revoked' as const, ...base };
   if (inv.acceptedAt) return { state: 'used' as const, ...base };
@@ -119,20 +148,48 @@ async function lookup(token: string, userId: string) {
   return { state: 'ready' as const, ...base, inv };
 }
 
+/** The signed-in person's own pending invites (matched on their verified email), so an invite never has to be carried in a notification. */
+async function myInvites(req: any, res: any) {
+  const me = await prisma.$queryRaw<{ email: string; verified: boolean }[]>`SELECT email, (email_verified_at IS NOT NULL) AS verified FROM users WHERE id = ${uid(req)}`;
+  if (!me[0]) return res.json({ invites: [], verified: false });
+  if (!me[0].verified) return res.json({ invites: [], verified: false, email: me[0].email });
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT i.id, o.name AS "orgName", i.org_role AS "role", i.created_at AS "createdAt", i.expires_at AS "expiresAt", (i.expires_at < now()) AS expired, u.name AS "inviterName"
+    FROM org_invites i JOIN organizations o ON o.id = i.org_id AND o.closed_at IS NULL LEFT JOIN users u ON u.id = i.invited_by
+    WHERE i.email = ${me[0].email.toLowerCase()}::citext AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now() - interval '30 days'
+      AND NOT EXISTS (SELECT 1 FROM org_members m WHERE m.org_id = i.org_id AND m.user_id = ${uid(req)})
+    ORDER BY i.created_at DESC LIMIT 50`;
+  res.json({ invites: rows, verified: true, email: me[0].email });
+}
+router.get('/invites/mine', myInvites);
+router.get('/orgs/invites/mine', myInvites);
+
+const inviteKey = (b: any) => ({ token: typeof b?.token === 'string' ? b.token : '', id: typeof b?.inviteId === 'string' ? b.inviteId : '' });
+// POST keeps the token out of the URL (access logs); GET stays for older clients
+router.post('/invites/lookup', async (req, res) => {
+  const k = inviteKey(req.body);
+  const { inv: _inv, ...out }: any = await lookup(k.token, uid(req), k.id);
+  res.json(out);
+});
 router.get('/invites/lookup', async (req, res) => {
   const r: any = await lookup(String(req.query.token ?? ''), uid(req));
   const { inv: _inv, ...out } = r;
   res.json(out);
 });
 
-/** An expired invite: the person asks the one who invited them for a new one (mockup C08). It tells the inviter, and nothing else. */
+/** An expired invite: the person asks the one who invited them for a new one (mockup C08). It tells the inviter, and nothing else. One reminder per invite per 24 hours. */
 router.post('/invites/remind', async (req, res) => {
   const userId = uid(req);
-  const rows = await prisma.$queryRaw<any[]>`SELECT i.invited_by AS "invitedBy", i.email::text AS email, o.name AS "orgName" FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE i.token_hash = ${hash(String(req.body?.token ?? ''))} AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at < now()`;
+  const k = inviteKey(req.body);
+  const th = k.id ? 'by-id' : hash(k.token);
+  const rows = await prisma.$queryRaw<any[]>`SELECT i.id, i.invited_by AS "invitedBy", i.email::text AS email, o.name AS "orgName" FROM org_invites i JOIN organizations o ON o.id = i.org_id WHERE (i.token_hash = ${th} OR i.id = ${k.id}) AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at < now()`;
   const inv = rows[0];
   if (!inv) return res.status(409).json({ error: 'There is nothing to remind about.' });
   const me = await prisma.$queryRaw<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`;
   if (!me[0] || me[0].email.toLowerCase() !== String(inv.email).toLowerCase()) return res.status(403).json({ error: 'This invite is for another address.' });
+  // claim the reminder first: two quick presses (or two windows) send one notification
+  const claimed = await prisma.$executeRaw`UPDATE org_invites SET last_reminded_at = now() WHERE id = ${inv.id} AND (last_reminded_at IS NULL OR last_reminded_at < now() - interval '24 hours')`;
+  if (!claimed) return res.status(429).json({ error: 'You already asked for a new invite today. They have been told.' });
   if (inv.invitedBy) await notifyUsers(req.app, [inv.invitedBy], { kind: 'invite_reminder', title: `${await nameOf(userId)} asked for a new invite to ${inv.orgName}`, from: await nameOf(userId) });
   res.json({ ok: true });
 });
@@ -140,7 +197,8 @@ router.post('/invites/remind', async (req, res) => {
 const rooms = (req: any, ...u: string[]) => void refreshUserRooms(req.app.get('io'), ...u); // live team rooms follow membership (R11)
 router.post('/invites/accept', async (req, res) => {
   const userId = uid(req);
-  const r: any = await lookup(String(req.body?.token ?? ''), userId);
+  const k = inviteKey(req.body);
+  const r: any = await lookup(k.token, userId, k.id);
   if (r.state !== 'ready') return res.status(409).json({ error: 'This invite cannot be accepted.', state: r.state });
   const inv = r.inv;
   const spaceIds: string[] = Array.isArray(inv.spaceIds) ? inv.spaceIds : [];
@@ -375,29 +433,56 @@ router.patch('/orgs/:orgId/policy', async (req, res) => {
   for (const k of POLICY_KEYS) if (typeof req.body?.[k] === 'boolean') next[k] = req.body[k];
   await prisma.$executeRaw`UPDATE organizations SET policy = ${JSON.stringify(next)}::jsonb WHERE id = ${req.params.orgId}`;
   await audit(req.params.orgId, uid(req), 'policy.changed', null, req.body ?? {});
-  res.json({ policy: policyOf(next) });
+  // turning public links off ends every link that already exists in this organization's spaces, in this same request (R9)
+  const revoked = req.body?.publicShares === false ? await revokeOrgLinks(req.params.orgId, uid(req), 'policy.publicShares') : null;
+  res.json({ policy: policyOf(next), ...(revoked ? { revoked } : {}) });
 });
 
-/** Everything in the organization in one file (mockup C07). Owners and admins only; each export is written to the audit log. */
-router.get('/orgs/:orgId/export', async (req, res) => {
-  const org = await gate(req, res, true); if (!org) return;
-  const orgId = req.params.orgId;
-  const [o, members, spaces, notes, tasks, posts] = await Promise.all([
-    prisma.$queryRaw<any[]>`SELECT id, name, status, policy, created_at AS "createdAt" FROM organizations WHERE id = ${orgId}`,
-    prisma.$queryRaw<any[]>`SELECT u.name, u.email, m.role, m.status, m.joined_at AS "joinedAt" FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${orgId}`,
-    prisma.$queryRaw<any[]>`SELECT id, kind, name, default_role AS "defaultRole", created_at AS "createdAt", closed_at AS "closedAt" FROM spaces WHERE org_id = ${orgId}`,
-    prisma.$queryRaw<{ id: string }[]>`SELECT n.id FROM notes n JOIN spaces s ON s.id = n.space_id WHERE s.org_id = ${orgId} ORDER BY n.created_at`,
-    prisma.$queryRaw<{ id: string }[]>`SELECT t.id FROM todos t JOIN spaces s ON s.id = t.space_id WHERE s.org_id = ${orgId} ORDER BY t.created_at`,
-    prisma.$queryRaw<any[]>`SELECT a.id, a.space_id AS "spaceId", a.title, a.body, a.status, a.version, a.retracted_at AS "retractedAt", a.created_at AS "createdAt" FROM announcements a JOIN spaces s ON s.id = a.space_id WHERE s.org_id = ${orgId}`,
-  ]);
-  const spaceIds = spaces.map((s) => s.id);
-  const priv = (await prisma.$queryRaw<{ id: string }[]>`SELECT n.id FROM notes n JOIN spaces s ON s.id = n.space_id WHERE s.org_id = ${orgId} AND s.kind = 'office' AND n.office_everyone IS NULL`).map((r) => r.id);
-  const noteRows = spaceIds.length ? await prisma.note.findMany({ where: { spaceId: { in: spaceIds }, id: { notIn: priv } }, select: { id: true, spaceId: true, title: true, content: true, isDeleted: true, isArchived: true, createdAt: true, updatedAt: true } }) : [];
-  const taskRows = spaceIds.length ? await prisma.todo.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true, spaceId: true, text: true, completed: true, priority: true, deadline: true, assigneeId: true, createdAt: true } }) : [];
-  void notes; void tasks;
-  await audit(orgId, uid(req), 'org.exported', orgId, { notes: noteRows.length, tasks: taskRows.length, privateNotesWithheld: priv.length });
-  res.setHeader('Content-Disposition', `attachment; filename="organization-export.json"`);
-  res.json({ exportedAt: new Date().toISOString(), organization: o[0], members, spaces, notes: noteRows, tasks: taskRows, announcements: posts });
+/** Everything in the organization in one file (mockup C07). Owners and admins only, and only with their password again (R19). Each export is written to the audit log BEFORE it starts,
+ *  at most 3 per hour per organization, trashed notes are left out unless ?includeTrash=1, and notes are read 200 at a time so a big team does not fill the server's memory. */
+const exportPasswordLimit = rateLimit({ windowMs: 15 * 60_000, max: 8, skipSuccessful: true, key: (req: any) => (req.user?.id ? `export-pw:${req.user.id}` : ''), message: 'Too many attempts. Wait a few minutes and try again.' });
+const EXPORT_PER_HOUR = 3;
+const EXPORT_CHUNK = 200;
+router.post('/orgs/:orgId/export', exportPasswordLimit, async (req, res, next) => {
+  try {
+    const org = await gate(req, res, true); if (!org) return;
+    const orgId = String(req.params.orgId);
+    const password = String(req.body?.password || '').slice(0, 200);
+    const user = await prisma.user.findUnique({ where: { id: uid(req) }, select: { passwordHash: true } });
+    if (!user || !password || !(await bcrypt.compare(password, user.passwordHash))) return res.status(403).json({ error: 'That password is not correct.', code: 'bad_password' });
+    const recent = (await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE org_id = ${orgId} AND action = 'org.exported' AND at > now() - interval '1 hour'`)[0]?.n ?? 0;
+    if (recent >= EXPORT_PER_HOUR) return res.status(429).json({ error: `This organization can be exported ${EXPORT_PER_HOUR} times an hour. Try again later.`, code: 'export_limit' });
+    const includeTrash = req.query.includeTrash === '1' || req.body?.includeTrash === true;
+    await audit(orgId, uid(req), 'org.exported', orgId, { includeTrash }); // before anything is read
+    const [o, members, spaces, posts] = await Promise.all([
+      prisma.$queryRaw<any[]>`SELECT id, name, status, policy, created_at AS "createdAt" FROM organizations WHERE id = ${orgId}`,
+      prisma.$queryRaw<any[]>`SELECT u.name, u.email, m.role, m.status, m.joined_at AS "joinedAt" FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${orgId}`,
+      prisma.$queryRaw<any[]>`SELECT id, kind, name, default_role AS "defaultRole", created_at AS "createdAt", closed_at AS "closedAt" FROM spaces WHERE org_id = ${orgId}`,
+      prisma.$queryRaw<any[]>`SELECT a.id, a.space_id AS "spaceId", a.title, a.body, a.status, a.version, a.retracted_at AS "retractedAt", a.created_at AS "createdAt" FROM announcements a JOIN spaces s ON s.id = a.space_id WHERE s.org_id = ${orgId}`,
+    ]);
+    const spaceIds = spaces.map((s) => s.id);
+    const priv = (await prisma.$queryRaw<{ id: string }[]>`SELECT n.id FROM notes n JOIN spaces s ON s.id = n.space_id WHERE s.org_id = ${orgId} AND s.kind = 'office' AND n.office_everyone IS NULL`).map((r) => r.id);
+    const taskRows = spaceIds.length ? await prisma.todo.findMany({ where: { spaceId: { in: spaceIds } }, select: { id: true, spaceId: true, text: true, completed: true, priority: true, deadline: true, assigneeId: true, createdAt: true } }) : [];
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="organization-export.json"`);
+    res.write(`{"exportedAt":${JSON.stringify(new Date().toISOString())},"includesTrash":${includeTrash},"organization":${JSON.stringify(o[0])},"members":${JSON.stringify(members)},"spaces":${JSON.stringify(spaces)},"notes":[`);
+    let first = true; let cursor: string | undefined; let count = 0;
+    while (spaceIds.length) {
+      const page = await prisma.note.findMany({
+        where: { spaceId: { in: spaceIds }, id: { notIn: priv }, ...(includeTrash ? {} : { isDeleted: false }) },
+        select: { id: true, spaceId: true, title: true, content: true, isDeleted: true, isArchived: true, createdAt: true, updatedAt: true },
+        orderBy: { id: 'asc' }, take: EXPORT_CHUNK, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+      for (const n of page) { res.write((first ? '' : ',') + JSON.stringify(n)); first = false; }
+      count += page.length;
+      if (page.length < EXPORT_CHUNK) break;
+      cursor = page[page.length - 1].id;
+    }
+    res.write(`],"tasks":${JSON.stringify(taskRows)},"announcements":${JSON.stringify(posts)},"counts":${JSON.stringify({ notes: count, tasks: taskRows.length, privateNotesWithheld: priv.length })}}`);
+    res.end();
+  } catch (e) {
+    if (res.headersSent) res.destroy(); else next(e); // a half-written file must not look like a complete one
+  }
 });
 
 /** Team settings (mockup C11). A lead, or an owner/admin, can change them. */
@@ -420,7 +505,12 @@ router.patch('/spaces/:spaceId', async (req, res) => {
   const links = typeof req.body?.publicLinks === 'boolean' ? req.body.publicLinks : null;
   if (links !== null) await prisma.$executeRaw`UPDATE spaces SET public_links = ${links} WHERE id = ${req.params.spaceId}`;
   await audit(g.orgId, uid(req), 'space.updated', req.params.spaceId, { name: name || undefined, defaultRole: role || undefined, publicLinks: links ?? undefined });
-  res.json({ ok: true });
+  let revoked: { notes: number; tasks: number } | null = null;
+  if (links === false) {
+    revoked = await revokeSpaceLinks([req.params.spaceId]);
+    if (revoked.notes || revoked.tasks) await audit(g.orgId, uid(req), 'shares.revoked', req.params.spaceId, { why: 'space.publicLinks', ...revoked });
+  }
+  res.json({ ok: true, ...(revoked ? { revoked } : {}) });
 });
 /** Leave a team: your open tasks there become unassigned; the last lead hands over first. */
 router.post('/spaces/:spaceId/leave', async (req, res) => {

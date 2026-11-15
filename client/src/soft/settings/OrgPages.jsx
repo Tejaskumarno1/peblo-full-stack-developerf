@@ -57,6 +57,7 @@ function useRun() {
       qc.invalidateQueries({ queryKey: ['workspaces'] });
       qc.invalidateQueries({ queryKey: ['closed-spaces'] });
       qc.invalidateQueries({ queryKey: ['orphaned-notes'] });
+      qc.invalidateQueries({ queryKey: ['share-allowed'] });
       return true;
     } catch (e) { setMsg(e.response?.data?.error || 'That did not work. Try again.'); return false; }
   };
@@ -249,6 +250,7 @@ export function MembersPage() {
   const [linking, setLinking] = useState(false);
   const [menu, setMenu] = useState(null);
   const [removing, setRemoving] = useState(null);
+  const [note, setNote] = useState('');
   const { data } = useQuery({ queryKey: ['org-members', org?.id], enabled: !!org, queryFn: () => workspacesAPI.members(org.id).then((r) => r.data) });
   useEffect(() => {
     if (!menu) return undefined;
@@ -262,6 +264,7 @@ export function MembersPage() {
   return (
     <div className="og-cols" data-testid="org-members">
       <Msg msg={msg} />
+      {note && <p className="og-note" role="status" data-testid="invite-note" style={{ gridColumn: '1 / -1' }}>{note}</p>}
       <section className="og-card" aria-label="People in the organization">
         <div className="og-head"><h2>People in the organization</h2>{admin && org?.spaces.some((x) => x.kind === 'office') && <button type="button" className="og-btn" onClick={() => setLinking(true)} data-testid="joinlink-open"><Link2 size={15} /> Invite with a link</button>}{admin && <button type="button" className="og-btn pri" onClick={() => setInviting(true)} data-testid="invite-open"><UserPlus size={15} /> Invite people</button>}</div>
         <div className="og-rows" data-testid="member-list">
@@ -290,7 +293,10 @@ export function MembersPage() {
               <span className="og-tag butter">Invited</span>
               <span className="og-tag" style={{ padding: '0 14px', height: 34 }}>{cap(i.orgRole)}</span>
               {admin ? <button type="button" className="og-menu-btn" aria-label={`More for ${i.email}`} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); setMenu(menu === i.id ? null : i.id); }}><MoreHorizontal size={18} /></button> : <span style={{ width: 32 }} />}
-              {menu === i.id && <div className="og-menu" role="menu"><button type="button" role="menuitem" className="bad" onClick={() => { setMenu(null); run(() => workspacesAPI.revokeInvite(org.id, i.id)); }}>Withdraw invite</button></div>}
+              {menu === i.id && <div className="og-menu" role="menu">
+                <button type="button" role="menuitem" data-testid="invite-copy" onClick={() => { setMenu(null); run(async () => { const r = await workspacesAPI.resendInvite(org.id, i.id, false); try { await navigator.clipboard.writeText(r.data.link); setNote(`Invite link for ${i.email} copied. It works once; the earlier link no longer works.`); } catch { setNote(`Copy this link by hand: ${r.data.link}`); } }); }}>Copy invite link</button>
+                <button type="button" role="menuitem" data-testid="invite-resend" onClick={() => { setMenu(null); run(async () => { const r = await workspacesAPI.resendInvite(org.id, i.id, true); setNote(r.data.mailed ? `Invite sent again to ${i.email}.` : `The email could not be sent. Copy the link instead.`); }); }}>Resend invite</button>
+                <button type="button" role="menuitem" className="bad" onClick={() => { setMenu(null); run(() => workspacesAPI.revokeInvite(org.id, i.id)); }}>Withdraw invite</button></div>}
             </div>
           ))}
         </div>
@@ -377,8 +383,8 @@ function TeamPair({ s, admin, policy, run, org, me }) {
             </div>
             <div className="og-cap">Sharing</div>
             <div className="og-head" style={{ flexWrap: 'nowrap' }}><b style={{ fontSize: 14.5 }}>Allow public links for this team</b>
-              <button type="button" role="switch" aria-checked={links} aria-label="Allow public links for this team" disabled={!orgAllows} className={`og-sw${links ? ' on' : ''}`} onClick={() => run(() => workspacesAPI.updateSpace(s.id, { publicLinks: !links }))}><span /></button></div>
-            <p>Needs the organization setting to be on.</p>
+              <button type="button" role="switch" aria-checked={links} aria-label="Allow public links for this team" disabled={!orgAllows} className={`og-sw${links ? ' on' : ''}`} onClick={() => { if (links && !window.confirm('Turn off public links for this team? Links that already exist for its notes stop working now.')) return; run(() => workspacesAPI.updateSpace(s.id, { publicLinks: !links })); }}><span /></button></div>
+            <p>Needs the organization setting to be on. Turning it off ends the team's existing public links.</p>
             <TeamMemberList s={s} org={org} me={me} canManage={canManage} run={run} />
           </>
         ) : <p>{s.kind === 'office' ? 'The Office. Only publishers post announcements.' : 'Each team has its own notes, tasks and members.'}</p>}
@@ -450,7 +456,7 @@ const POLICY_ROWS = [
 
 export function PolicyPage() {
   const { org, admin, isLoading } = useActiveOrg();
-  const { msg, run } = useRun();
+  const { msg, run, setMsg } = useRun();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [pub, setPub] = useState(false);
@@ -461,7 +467,13 @@ export function PolicyPage() {
   if (!admin) return <Card title="Organization policy" hint="Only owners and admins can see and change the policy." />;
   const office = org.spaces.find((s) => s.kind === 'office');
   const leads = (mem?.members || []).filter((m) => m.spaces.some((s) => s.id === office?.id && s.role === 'lead'));
-  const set = (k, v) => run(async () => { await workspacesAPI.setPolicy(org.id, { [k]: v }); qc.invalidateQueries({ queryKey: ['org-policy', org.id] }); });
+  const set = (k, v) => run(async () => {
+    if (k === 'publicShares' && v === false && !window.confirm('Turn off public links? Every link that already exists for notes and tasks in this organization stops working now.')) return;
+    const r = await workspacesAPI.setPolicy(org.id, { [k]: v });
+    qc.invalidateQueries({ queryKey: ['org-policy', org.id] });
+    if (r.data?.revoked) setMsg(`${r.data.revoked.notes + r.data.revoked.tasks} public link${r.data.revoked.notes + r.data.revoked.tasks === 1 ? '' : 's'} turned off.`);
+    qc.invalidateQueries({ queryKey: ['workspaces'] });
+  });
   return (
     <div className="og-cols" data-testid="org-policy">
       <Msg msg={msg} />
@@ -624,13 +636,17 @@ export function ExportPage() {
   const { msg, run } = useRun();
   const qc = useQueryClient();
   const [plans, setPlans] = useState(false);
+  const [asking, setAsking] = useState(false); // the export asks for the password again
+  const [pw, setPw] = useState('');
+  const [trash, setTrash] = useState(false);
   const seats = useQuery({ queryKey: ['org-seats', org?.id], enabled: !!org && admin, queryFn: () => workspacesAPI.seats(org.id).then((r) => r.data) });
   const last = useQuery({ queryKey: ['org-exports', org?.id], enabled: !!org && admin, queryFn: () => workspacesAPI.exports(org.id).then((r) => r.data.exports || r.data) });
   if (isLoading) return <Loading title="Export and seats" />;
   if (!org) return <NoOrg title="Export and seats" />;
   if (!admin) return <Card title="Export and seats" hint="Only owners and admins can export the organization." />;
   const exportAll = () => run(async () => {
-    const r = await workspacesAPI.exportOrg(org.id);
+    const r = await workspacesAPI.exportOrg(org.id, pw, trash);
+    setAsking(false); setPw('');
     const url = URL.createObjectURL(new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' }));
     const a = document.createElement('a'); a.href = url; a.download = `${org.name.replace(/[^\w-]+/g, '-')}-export.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -645,11 +661,19 @@ export function ExportPage() {
       <Msg msg={msg} />
       <section className="og-card" aria-label="Organization export">
         <h2>Organization export</h2><p>One file with all team and Office content, members and settings. Owners are told when anyone exports.</p>
-        <button type="button" className="og-btn pri" style={{ alignSelf: 'flex-start' }} onClick={exportAll} data-testid="org-export"><Download size={15} /> Request export</button>
+        <button type="button" className="og-btn pri" style={{ alignSelf: 'flex-start' }} onClick={() => setAsking(true)} data-testid="org-export"><Download size={15} /> Request export</button>
         <div className="og-sub">Last exports</div>
         {list.slice(0, 3).map((x) => <div key={x.id} className="og-head" style={{ flexWrap: 'nowrap' }}><b style={{ fontSize: 14 }}>{when(x.at)} by {x.byName || 'an admin'}</b><span className="og-tag mint">Ready</span></div>)}
         {list.length === 0 && <p>No exports yet.</p>}
       </section>
+      {asking && (
+        <Dialog icon={Download} tone="butter" title="Confirm your password" narrow onClose={() => { setAsking(false); setPw(''); }}>
+          <p className="og-note">An export contains every note in your teams. Enter your password to continue. You can export 3 times an hour.</p>
+          <input type="password" autoFocus autoComplete="current-password" aria-label="Your password" data-testid="export-password" className="og-field" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && pw) exportAll(); }} />
+          <label className="og-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={trash} onChange={(e) => setTrash(e.target.checked)} data-testid="export-trash" /> Include notes in the Trash</label>
+          <div className="og-btns"><button type="button" className="og-btn pri" disabled={!pw} onClick={exportAll} data-testid="export-confirm">Export</button><button type="button" className="og-btn ghost" onClick={() => { setAsking(false); setPw(''); }}>Cancel</button></div>
+        </Dialog>
+      )}
       <section className="og-card tone" style={{ background: 'var(--s-butter)' }} aria-label="Seats">
         <h2>Seats</h2><div className="og-big">{used} of {limit}</div>
         <p>A seat is an active member. People inactive for 28 days are not counted. Guests are free.</p>

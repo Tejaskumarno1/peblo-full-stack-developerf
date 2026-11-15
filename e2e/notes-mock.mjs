@@ -51,6 +51,11 @@ let failPatches = 0;
 const failIds = new Set(); // PATCH on these notes always fails with 500
 const rate429 = new Set(); // the first PATCH on these notes answers 429 (too many requests)
 let withTeam = false; // the fake account belongs to a team once a check turns this on
+// team features: off until section 9 turns them on, so the earlier checks still run in Personal
+let teamOn = false;
+let shareVerdict = { allowed: true };
+const prefs = { muted: false };
+const people = [{ id: 'u2', name: 'Ana Lee', avatar: null }, { id: 'u3', name: 'Bo Chen', avatar: null }];
 
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function handle(route) {
@@ -63,7 +68,14 @@ async function handle(route) {
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
-  if (p === '/workspaces') return json(route, { me: { id: 'u1' }, orgs: [...(withTeam ? [{ id: 'o1', name: 'Acme', kind: 'org', role: 'member', spaces: [{ id: 'team-x', name: 'Team X', kind: 'team', role: 'member' }] }] : []), ...wsOrgs], invites: [] });
+  const orgTeamShare = { id: 'org1', name: 'Acme', status: 'active', role: 'owner', spaces: [{ id: 'team-x', kind: 'team', name: 'Design', role: 'lead', members: 3, defaultRole: 'member', publicLinks: true }] };
+  const orgTeamVersions = { id: 'o1', name: 'Acme', kind: 'org', role: 'member', spaces: [{ id: 'team-x', name: 'Team X', kind: 'team', role: 'member' }] };
+  if (p === '/workspaces') return json(route, { me: { id: 'u1', name: 'Tester' }, orgs: [...(teamOn ? [orgTeamShare] : withTeam ? [orgTeamVersions] : []), ...wsOrgs], invites: [] });
+  if (p === '/workspaces/spaces/team-x/people-lite') return json(route, { people });
+  if (p === '/workspaces/spaces/team-x/prefs') { if (method === 'PUT') prefs.muted = body.muted === true; return json(route, { muted: prefs.muted }); }
+  if (p === '/workspaces/invites/lookup' && method === 'POST') return json(route, { state: 'ready', orgName: 'Acme', email: 'tester@peblo.test', inviterName: 'Ana Lee', role: 'member', signedInAs: 'tester@peblo.test' });
+  if (p === '/workspaces/invites/mine') return json(route, { invites: [{ id: 'inv1', orgName: 'Acme', role: 'member', inviterName: 'Ana Lee', expiresAt: new Date(Date.now() + 5 * 86400000).toISOString(), expired: false }], verified: true, email: 'tester@peblo.test' });
+  if (/^\/share\/note\/[^/]+\/allowed$/.test(p)) return json(route, shareVerdict);
   if (p === '/notes' && method === 'GET') {
     const q = Object.fromEntries(url.searchParams);
     const pool = req.headers()['x-peblo-space'] === 'team-ro' ? teamNotes : notes;
@@ -477,8 +489,52 @@ try {
   await ctx.setOffline(false); await wait(500);
   await wait(3500);
   check('coming back clears the offline bar', !(await page.locator('[data-testid="offline-bar"]').count()));
+
+  // 9. a team space: @ offers people, a mention is stored as a link; mute is in the space menu; "Share link" is replaced by a reason when sharing is not allowed
+  teamOn = true;
+  await page.goto(`${base}/notes/n1`);
+  await page.evaluate(() => localStorage.setItem('peblo-space', 'team-x'));
+  await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  await page.locator('.bn-editor[contenteditable="true"]').first().click(); await page.keyboard.press('End'); await page.keyboard.type(' @An'); await wait(900);
+  const menuTxt = await page.locator('.bn-suggestion-menu').innerText().catch(() => '');
+  check('typing @ in a team note lists the people of the team', menuTxt.includes('Ana Lee') && !menuTxt.includes('Bo Chen'), menuTxt);
+  check('the people come under "Mention a person"', /mention a person/i.test(menuTxt), menuTxt);
+  await page.keyboard.press('Enter'); await wait(2800);
+  check('the mention shows as a chip in the editor', (await page.locator('.bn-editor a[href="peblo-user:u2"]').count()) === 1);
+  check('the note is saved with the mention as a markdown link', notes.find((n) => n.id === 'n1').content.includes('[@Ana Lee](peblo-user:u2)'), notes.find((n) => n.id === 'n1').content);
+  await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(1200);
+  check('the mention is still a chip after reopening the note', (await page.locator('.bn-editor a[href="peblo-user:u2"]').count()) === 1);
+  // mute in the space pill menu
+  await page.locator('[data-testid="space-pill"]').click(); await wait(300);
+  await page.locator('[data-testid="space-mute"]').click(); await wait(500);
+  check('"Mute this team" saves the preference', prefs.muted === true && reqs.some((r) => r.method === 'PUT' && r.path === '/workspaces/spaces/team-x/prefs' && r.body?.muted === true));
+  await page.locator('[data-testid="space-pill"]').click(); await wait(300);
+  check('the menu then offers to unmute', (await page.locator('[data-testid="space-mute"]').innerText()).includes('Unmute'));
+  await page.keyboard.press('Escape');
+  // share not allowed
+  await page.getByRole('button', { name: 'More' }).click(); await wait(300);
+  check('"Share link" is offered when sharing is allowed', (await page.locator('.s-menu').getByText('Share link').count()) > 0);
+  await page.keyboard.press('Escape');
+  shareVerdict = { allowed: false, code: 'org_policy', reason: 'Your organization has turned public links off.' };
+  await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(1200);
+  await page.getByRole('button', { name: 'More' }).click(); await wait(300);
+  check('"Share link" is hidden when sharing is not allowed', (await page.locator('.s-menu').getByText('Share link').count()) === 0);
+  check('and the reason is shown instead', (await page.locator('[data-testid="share-blocked"]').innerText()).includes('turned public links off'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => localStorage.removeItem('peblo-space')); teamOn = false;
+
+  // 10. invites: the token is read from the URL fragment and removed from the address bar; an invite is also opened from the person's own list (no token anywhere)
+  await page.goto(`${base}/invite#token=secret-token-123`); await page.locator('[data-testid="invite-accept"]').waitFor(TO); await wait(300);
+  check('the invite token is removed from the address bar', !page.url().includes('secret-token-123'), page.url());
+  const look = reqs.filter((r) => r.path === '/workspaces/invites/lookup').pop();
+  check('the token goes in the request body, never in the query string', look?.body?.token === 'secret-token-123' && !Object.keys(look.q).length, JSON.stringify(look));
+  await page.goto(`${base}/invite`); await page.locator('[data-testid="invite-list"]').waitFor(TO);
+  check('/invite lists the invites waiting for the signed-in email', (await page.locator('[data-testid="invite-item"]').count()) === 1);
+  await page.locator('[data-testid="invite-open-one"]').click(); await page.locator('[data-testid="invite-accept"]').waitFor(TO);
+  const byId = reqs.filter((r) => r.path === '/workspaces/invites/lookup').pop();
+  check('opening it from the list names the invite by id, not by token', byId?.body?.inviteId === 'inv1' && !byId.body.token, JSON.stringify(byId?.body));
 } catch (e) {
-  failures++; console.log('FAIL  test crashed:', e.message.split('\n')[0]);
+  failures++; console.log('FAIL  test crashed:', e.message.split(String.fromCharCode(10)).slice(0, 5).join(' | '));
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));
   try { await page.screenshot({ path: 'e2e/notes-mock-crash.png' }); } catch { /* ignore */ }
 }

@@ -7,6 +7,7 @@ import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, M
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
+import { useShareAllowed, ShareBlocked } from './useShareAllowed';
 import MoveNote from './MoveNote';
 import ShareToTeam, { useShareTargets } from './ShareToTeam';
 import TeamNoteStrip from './TeamNoteStrip';
@@ -135,6 +136,7 @@ export default function SoftNotes() {
   const shareTargets = useShareTargets();
   const [wide, setWide] = useState(() => store('peblo-focus-width', 'wide'));
   const [doc, setDoc] = useState(null); // the open note (local copy while editing)
+  const shareOk = useShareAllowed(doc?.id, !!doc && !doc.isDraft); // hides "Share link" with a reason where the policy or the team does not allow it
   const [editorKey, setEditorKey] = useState('none');
   const [preview, setPreview] = useState(false);
   const [tagDraft, setTagDraft] = useState(null);
@@ -892,7 +894,7 @@ export default function SoftNotes() {
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{vErrText || (versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions')}</button>}
 {!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
           <div className="s-menu-sep" role="separator" />
-      {manageable && <button type="button" role="menuitem" data-testid="menu-share" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button>}
+      {manageable && (shareOk.allowed ? <button type="button" role="menuitem" data-testid="menu-share" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button> : <ShareBlocked reason={shareOk.reason} />)}
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
@@ -1151,7 +1153,7 @@ export default function SoftNotes() {
                 ...(fsParts ? [{ id: 'live', label: 'Who is here', node: fsParts.live }] : []),
               ]}
               noteNode={renderMenuItems()}
-              shareNode={<>{fsParts ? fsParts.full : <p className="fsx-muted">This note is not shared yet.</p>}<button type="button" className="fsx-wide" data-testid="fs-share-open" onClick={() => setShareOpen(true)}><Share2 size={15} />Share link</button></>}
+              shareNode={<>{fsParts ? fsParts.full : <p className="fsx-muted">This note is not shared yet.</p>}{shareOk.allowed ? <button type="button" className="fsx-wide" data-testid="fs-share-open" onClick={() => setShareOpen(true)}><Share2 size={15} />Share link</button> : <ShareBlocked reason={shareOk.reason} className="fsx-muted" />}</>}
               onQuickTask={quickTask} />
             <div className="ph-chips" role="group" aria-label="About this note">
               <button type="button" onClick={() => setPhRail('ask')}><Sparkles size={14} strokeWidth={2} />Ask</button>

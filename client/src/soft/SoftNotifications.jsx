@@ -8,6 +8,7 @@ import { todosAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Switch, Seg } from './settings/ui';
 import { useSwitchSpace } from './spaces';
+import { useSpaceMuted } from './spacePrefs';
 import { buildNotifications, applyFilter, FILTERS, readDerived, saveDerived, whenLabel, groupOf } from './notifUtils';
 import './notifications.css';
 
@@ -15,6 +16,12 @@ const ICON = { meeting: Calendar, task: CheckSquare, mention: AtSign, note: File
 const TONE = { meeting: 'butter', task: 'peach', mention: 'lilac', note: 'sky', office_post: 'peach', office_suggestion: 'butter', assigned: 'sky', comment: 'lilac', review: 'butter', status: 'sky', done: 'mint', member_joined: 'mint', org_invite: 'mint' };
 
 /** Soft Studio · Notification centre (mockup: NotifCentre). One list: mentions, meetings and tasks that need you. */
+/** One team's switch in Settings > Notifications: on = you hear from it, off = muted (kept on the server, so it also stops stored notifications). */
+function MuteRow({ space }) {
+  const { muted, loading, setMuted } = useSpaceMuted(space.id);
+  return <div className="row" data-testid="mute-row"><span>{space.name}</span><Switch label={`Notifications from ${space.name}`} checked={!muted} onChange={(v) => { if (!loading) void setMuted(!v).catch(() => {}); }} /></div>;
+}
+
 export default function SoftNotifications() {
   const navigate = useNavigate();
   const switchTo = useSwitchSpace();
@@ -49,7 +56,6 @@ export default function SoftNotifications() {
 
   const { data: ws } = useWorkspaces();
   const spaces = (ws?.orgs || []).flatMap((o) => o.spaces);
-  const muted = settings?.spaceMute || {};
   const q = settings?.quietHours || { on: false, from: '22:00', to: '07:00' };
   const setQuiet = (patch) => updateSettings({ quietHours: { ...q, ...patch } });
   const groups = ['Today', 'Earlier'].map((g) => [g, shown.filter((n) => groupOf(n.at) === g)]).filter(([, l]) => l.length);
@@ -103,8 +109,9 @@ export default function SoftNotifications() {
         {spaces.length > 0 && (
           <div className="s-notif-card sky" data-testid="per-space">
             <b>Per space</b>
+            <p>Turn a team off to mute it: no notifications or pop-ups from it, except when someone @mentions you or gives you a task.</p>
             {spaces.map((sp) => (
-              <div key={sp.id} className="row"><span>{sp.name}</span><Switch label={`Pop-ups from ${sp.name}`} checked={!muted[sp.id]} onChange={(v) => updateSettings({ spaceMute: { ...muted, [sp.id]: !v } })} /></div>
+              <MuteRow key={sp.id} space={sp} />
             ))}
           </div>
         )}

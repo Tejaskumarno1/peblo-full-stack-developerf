@@ -36,6 +36,7 @@ import { calendarSyncRoutes, calendarPublicRoutes } from './routes/calendarSync.
 import workspaceRoutes from './routes/workspaces.js';
 import orgRoutes from './routes/orgs.js';
 import teamAdminRoutes from './routes/teamAdmin.js';
+import spacePrefsRoutes from './routes/spacePrefs.js';
 import announcementRoutes from './routes/announcements.js';
 import filesRoutes from './routes/files.js';
 import { wellKnown, oauthRoutes, oauthApi, mcpRoutes } from './routes/oauth.js';
@@ -170,6 +171,7 @@ app.use('/api/calendar-sync', calendarSyncRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/workspaces', orgRoutes);
 app.use('/api/workspaces', teamAdminRoutes);
+app.use('/api/workspaces', spacePrefsRoutes);
 app.use('/api/workspaces', announcementRoutes);
 app.use('/api/public', publicRoutes);
   app.use('/api', transferRoutes);

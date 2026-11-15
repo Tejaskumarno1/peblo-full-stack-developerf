@@ -7,6 +7,7 @@ import { getSpace, setSpace, SPACE_EVENT } from '../api/space';
 import { flushOpenNote } from '../utils/noteSync';
 import './spaces.css';
 import Toast from '../components/Toast';
+import { MuteMenuItem } from './spacePrefs';
 
 /** The person's spaces: Personal always, plus the teams and Office of every organization they belong to. */
 export function useWorkspaces() {
@@ -129,6 +130,7 @@ export function SpacePill() {
           {teams.length > 0 && <button type="button" className="s-space-row plain" data-testid="space-shared" onClick={() => { setOpen(false); if (!here || here.kind !== 'team') switchTo(teams[0].id); navigate('/team-shared'); }}><FolderOpen size={15} /> Shared by members</button>}
           {teams.length > 0 && <button type="button" className="s-space-row plain" data-testid="space-activity" onClick={() => { setOpen(false); if (!here || here.kind !== 'team') switchTo(teams[0].id); navigate('/team-activity'); }}><Activity size={15} /> Team activity</button>}
           {teams.length > 0 && <button type="button" className="s-space-row plain" data-testid="space-projects" onClick={() => { setOpen(false); if (!here || here.kind !== 'team') switchTo(teams[0].id); navigate('/team-projects'); }}><FolderKanban size={15} /> Projects</button>}
+          {here && <MuteMenuItem spaceId={here.id} name={here.name} onDone={() => setOpen(false)} />}
           <button type="button" className="s-space-row plain" onClick={() => { setOpen(false); setCreating(orgs.filter((o) => o.role === 'owner' || o.role === 'admin' || o.role === 'member')); }}><Plus size={15} /> Create a team</button>
         </div>
       )}

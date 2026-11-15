@@ -23,8 +23,8 @@ export function buildNotifications({ server = [], todos = [], derivedRead = new 
   const today = dayOf(now);
   for (const n of server) {
     const mention = /mention/i.test(n.kind) || /mention/i.test(n.title || '');
-    const ws = ['office_post', 'office_suggestion', 'assigned', 'comment', 'review', 'status', 'done', 'member_joined', 'org_invite'].includes(n.kind) ? n.kind : null;
-    out.push({ id: 's:' + n.id, server: n.id, kind: ws || (mention ? 'mention' : 'note'), spaceId: n.spaceId || null, todoId: n.todoId || undefined, title: n.title, sub: n.kind === 'org_invite' ? 'Open to accept or decline' : n.body || (n.from ? 'From ' + n.from : ''), at: new Date(n.createdAt), read: !!n.read, noteId: n.noteId, path: n.kind === 'org_invite' && /^\/invite\?token=/.test(n.body || '') ? n.body : undefined });
+    const ws = ['office_post', 'office_suggestion', 'assigned', 'comment', 'review', 'status', 'done', 'member_joined', 'org_invite', 'note_mention'].includes(n.kind) ? n.kind : null;
+    out.push({ id: 's:' + n.id, server: n.id, kind: ws || (mention ? 'mention' : 'note'), spaceId: n.spaceId || null, todoId: n.todoId || undefined, title: n.title, sub: n.kind === 'org_invite' ? 'Open to accept or decline' : n.body || (n.from ? 'From ' + n.from : ''), at: new Date(n.createdAt), read: !!n.read, noteId: n.noteId, path: n.kind === 'org_invite' ? '/invite' : undefined }); // the notification never carries the invite token: /invite lists the person's own pending invites
   }
   for (const t of todos) {
     if (t.completed || !t.deadline) continue;

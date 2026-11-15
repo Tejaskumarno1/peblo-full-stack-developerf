@@ -11,6 +11,7 @@ import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
 import { PRIVATE_TAG } from '../utils/aiAccess.js';
 import { aadOf, decryptText } from '../dataCrypto.js';
+import { notifyMentions } from '../services/mentions.js';
 
 // prisma imported from db.js
 
@@ -445,6 +446,7 @@ export async function createNote(req: any, res: any, next: any) {
     }
 
     await syncLinks(req.user.id, note.id, content || '');
+    if (typeof content === 'string' && content.includes('(peblo-user:')) void notifyMentions(req.app, req.user.id, note.id, '', content);
 
     // Re-fetch with tags
     const updated = await prisma.note.findUnique({
@@ -484,6 +486,9 @@ export async function updateNote(req: any, res: any, next: any) {
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
     // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.
     const force = req.body.force || collab === true;
+    // @mentions: only a save whose text contains a mention link can add one, so only then is the earlier text read (to tell who is new)
+    const mentionPrev = typeof content === 'string' && content.includes('(peblo-user:')
+      ? ((await prisma.note.findFirst({ where: { id: req.params.id, ...own }, select: { content: true } }))?.content ?? '') : null;
 
     // An editor that tells us what it started from gets a safe save: if the note changed elsewhere meanwhile
     // (another window, a shared-link editor), the changes are merged instead of one side being overwritten.
@@ -535,6 +540,8 @@ export async function updateNote(req: any, res: any, next: any) {
     if (tags !== undefined) {
       await syncTags(req.user.id, req.params.id, tags);
     }
+
+    if (mentionPrev !== null) void notifyMentions(req.app, req.user.id, req.params.id, mentionPrev, merged ? merged.content : content);
 
     notify(req, 'notes_changed');
     // Return early to save an extra sequential database lookup

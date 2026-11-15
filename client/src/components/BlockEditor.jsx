@@ -14,7 +14,9 @@ import { Sparkles, CheckSquare, Wand2, X, Loader2, HelpCircle, SpellCheck, Minus
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { aiAPI, notesAPI, tagsAPI, todosAPI } from '../api/index';
+import { aiAPI, notesAPI, tagsAPI, todosAPI, workspacesAPI } from '../api/index';
+import { getSpace } from '../api/space';
+import { mentionText } from '../utils/mentions';
 import { fileToAttachment } from '../utils/imageData';
 import { copyImage } from '../utils/copyImage';
 import { Copy as CopyIcon, Check as CheckIcon } from 'lucide-react';
@@ -43,6 +45,7 @@ import { commentTarget } from '../utils/comments';
 import { setNoteLive, peekExternalEdit, clearExternalEdit, markExternalEdit } from '../utils/noteSync';
 import { readUnsaved, writeUnsaved, clearUnsaved, decideRestore } from '../utils/unsavedCopy';
 import Backlinks from './Backlinks';
+const LINK_OK = /^(?:(?:http|https|ftp|ftps|mailto|tel|callto|sms|cid|xmpp|peblo-user):|[^a-z]|[a-z0-9+.\-]+(?:[^a-z+.\-:]|$))/i;
 import { useAuth } from '../context/AuthContext';
 import './blockEditor.css';
 import './editorChrome.css';
@@ -487,6 +490,8 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   const editor = useCreateBlockNote({
     schema,
     uploadFile,
+    // the usual link schemes, plus peblo-user: (an @mention chip is a link to a person, stored as [@Name](peblo-user:<id>))
+    links: { isValidLink: (href) => LINK_OK.test(String(href || '').replace(/\s+/g, '')) },
     extensions: [decoExt],
     ...(rt ? { collaboration: { provider: rt.provider, fragment: rt.doc.getXmlFragment('document-store'), user: rt.user, showCursorLabels: 'activity', renderCursor } } : {}),
   });
@@ -1098,6 +1103,19 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     return items;
   };
 
+  // the other members of the current team or Office, for @mentions (not in Personal, not on a shared page)
+  const peopleCache = useRef({ at: 0, key: '', people: [] });
+  const getMentionPeople = async () => {
+    const sp = getSpace();
+    if (!sp || guest || !editable) return [];
+    const key = `${sp}:${noteId || ''}`;
+    if (peopleCache.current.key !== key || Date.now() - peopleCache.current.at > 30000) {
+      try { const { data } = await workspacesAPI.peopleLite(sp, noteId); peopleCache.current = { at: Date.now(), key, people: data.people || [] }; }
+      catch { peopleCache.current = { at: Date.now(), key, people: [] }; }
+    }
+    return peopleCache.current.people;
+  };
+
   const getNoteLinkItems = async (query) => {
     if (Date.now() - linkCache.current.at > 5000) {
       try {
@@ -1109,11 +1127,20 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const q = raw.toLowerCase();
     const mine = linkCache.current.notes.filter((n) => n.id !== noteId && (n.title || 'Untitled').toLowerCase().includes(q));
     mine.sort((a, b) => ((b.title || '').toLowerCase().startsWith(q) ? 1 : 0) - ((a.title || '').toLowerCase().startsWith(q) ? 1 : 0));
+    // people of the team or Office this note is in (empty in Personal): typing @ offers them first, as a chip stored as [@Name](peblo-user:<id>)
+    const people = await getMentionPeople();
+    const who = people.filter((p) => (p.name || '').toLowerCase().includes(q)).slice(0, 6).map((p) => ({
+      title: mentionText(p.name),
+      group: 'Mention a person',
+      subtext: 'They get one notification',
+      onItemClick: () => editor.insertInlineContent([{ type: 'link', href: `peblo-user:${p.id}`, content: mentionText(p.name) }, ' ']),
+    }));
     const items = mine.slice(0, 8).map((n) => ({
       title: n.title || 'Untitled',
       group: 'Link to a note',
       onItemClick: () => editor.insertInlineContent([{ type: 'link', href: `/notes/${n.id}`, content: n.title || 'Untitled' }, ' ']),
     }));
+    items.unshift(...who);
     if (raw && !linkCache.current.notes.some((n) => (n.title || '').toLowerCase() === q)) {
       items.push({
         title: `Create a note called “${raw}”`,
@@ -1173,6 +1200,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
     const pic = e.target?.closest?.('img.bn-visual-media');
     if (pic && !editable) { e.preventDefault(); setLightbox(pic.currentSrc || pic.src); return; }
     const a = e.target?.closest?.('a');
+    if (a && /^peblo-user:/.test(a.getAttribute('href') || '')) { e.preventDefault(); e.stopPropagation(); return; } // a mention chip is not a link to open
     const m = a && /^\/notes\/([\w-]+)$/.exec(a.getAttribute('href') || '');
     if (m) { e.preventDefault(); e.stopPropagation(); navigate(`/notes/${m[1]}`); }
   };

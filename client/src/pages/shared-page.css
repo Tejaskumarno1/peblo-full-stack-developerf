@@ -1284,3 +1284,6 @@ html[data-fs-drawer="1"] .pb-shared.is-fs .stage.note-stage > article { right: 2
 /* the share page is its own stacking layer: it paints the soft canvas itself */
 html[data-fs]:has(.pb-shared.is-fs)::before { display: none; }
 .pb-shared.is-fs { background: var(--fs-canvas); }
+
+/* @mention chip in a shared note */
+.doc .pb-mention { display: inline-block; padding: 0 7px; border-radius: 999px; font-weight: 600; background: var(--lilac); color: var(--fg); white-space: nowrap; }

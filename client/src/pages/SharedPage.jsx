@@ -25,6 +25,7 @@ import useFileFrames from '../components/useFileFrames';
 import { splitMarkers, applyMarksToHtml } from '../utils/tableMeta';
 import '../components/tableMeta.css';
 import './shared-page.css';
+import { mentionsToHtml } from '../utils/mentions';
 
 const BlockEditor = lazy(() => import('../components/BlockEditor'));
 const PictureView = lazy(() => import('../components/PictureView'));
@@ -79,7 +80,7 @@ function decorateBlocks(parsed) {
 
 const toHtml = (md0) => {
   const { text: md, marks } = splitMarkers(md0); // the table settings Markdown cannot hold (widths, colours, merged cells) ride in hidden comment lines
-  let html = marked.parse(md || '');
+  let html = marked.parse(mentionsToHtml(md || ''));
   html = html.replace(/<figure>\s*<img src="(data:(video|audio)\/[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, kind, cap) => `<figure><${kind} controls src="${src}"></${kind}>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`);
   html = html.replace(/<figure>\s*<img src="(data:(?!image\/)[^\"]+)">\s*(?:<figcaption>([\s\S]*?)<\/figcaption>)?\s*<\/figure>/g, (_m, src, cap) => `<p><a href="${src}" download="${(cap || 'file').replace(/"/g, '')}">${cap || 'Download file'}</a></p>`);
   const safe = DOMPurify.sanitize(html, { ADD_TAGS: ['video', 'audio'], ADD_ATTR: ['controls', 'download'] });
