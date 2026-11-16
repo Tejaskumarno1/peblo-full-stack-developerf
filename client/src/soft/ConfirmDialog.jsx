@@ -30,7 +30,8 @@ export function confirmDialog({ title, body = '', confirmLabel = 'OK', cancelLab
     const host = document.createElement('div');
     (document.querySelector('.soft, .river, .orbit') || document.body).appendChild(host);
     const root = createRoot(host);
-    const done = (v) => { root.unmount(); host.remove(); resolve(v); };
+    let over = false;
+    const done = (v) => { if (over) return; over = true; resolve(v); setTimeout(() => { try { root.unmount(); } catch { /* already gone */ } host.remove(); }, 0); }; // unmounted after the click handler has finished
     root.render(<Confirm title={title} body={body} confirmLabel={confirmLabel} cancelLabel={cancelLabel} danger={danger} onDone={done} />);
   });
 }

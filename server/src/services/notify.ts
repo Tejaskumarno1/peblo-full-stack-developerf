@@ -3,7 +3,7 @@ import prisma from '../db.js';
 import { encField } from '../dataCrypto.js';
 
 /** Kinds aimed at one person: a muted team does not silence these. */
-const DIRECT_KINDS = new Set(['mention', 'note_mention', 'assigned']);
+const DIRECT_KINDS = new Set(['mention', 'note_mention', 'assigned', 'member_removed', 'org_deleted']);
 
 /** A stored notification for people in a workspace (one per person per event) plus a live nudge to their open windows. */
 export async function notifyUsers(app: any, userIds: string[], n: { kind: string; title: string; body?: string; from: string; spaceId?: string | null; todoId?: string | null; noteId?: string | null }) {

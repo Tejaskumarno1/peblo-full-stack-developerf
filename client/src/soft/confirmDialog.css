@@ -1,4 +1,4 @@
-.cd-back { position: fixed; inset: 0; background: var(--s-backdrop, rgba(58, 42, 26, .32)); display: grid; place-items: center; z-index: 900; }
+.cd-back { position: fixed; inset: 0; background: var(--s-backdrop, rgba(58, 42, 26, .32)); display: grid; place-items: center; z-index: 10000; }
 .cd-box { width: min(420px, calc(100vw - 32px)); background: var(--s-surface, #fff); color: var(--s-fg, #241f1a); border: 1px solid var(--s-line, #eadfd0); border-radius: 22px; box-shadow: var(--s-capture-shadow, 0 24px 60px rgba(60, 40, 20, .3)); padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; font-family: inherit; outline: none; }
 .cd-title { font-size: 17px; font-weight: 800; }
 .cd-body { margin: 0; font-size: 14px; line-height: 1.5; color: var(--s-fg2, #564d43); font-weight: 600; white-space: pre-line; }

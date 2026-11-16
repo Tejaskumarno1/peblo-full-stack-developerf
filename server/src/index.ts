@@ -286,8 +286,16 @@ if (isDirectRun) {
     accountSweep?.unref?.();
     if (accountSweep) setTimeout(sweepAccounts, 45_000).unref();
     // Deleted organizations past their 30-day purge_after are removed for good. OFF unless PEBLO_PURGE_ORGS=1 (docs/SERVER-TESTS-TO-RUN.md).
-    const sweepOrgs = () => { purgeClosedOrgs().catch((e) => console.error('[orgs] purge:', e)); };
-    const orgSweep = process.env.PEBLO_PURGE_ORGS === '1' ? setInterval(sweepOrgs, 6 * 60 * 60 * 1000) : null;
+    // PEBLO_PURGE_ORGS=dry only logs how many organizations are due and deletes nothing.
+    const orgMode = process.env.PEBLO_PURGE_ORGS;
+    const sweepOrgs = () => {
+      try {
+        purgeClosedOrgs({ dryRun: orgMode === 'dry' })
+          .then((r) => { if (orgMode === 'dry') console.log(`[orgs] dry run: ${r.orgs.length} organization(s) due`); })
+          .catch((e) => console.error('[orgs] purge:', (e as Error)?.message ?? 'error'));
+      } catch (e) { console.error('[orgs] purge:', (e as Error)?.message ?? 'error'); }
+    };
+    const orgSweep = orgMode === '1' || orgMode === 'dry' ? setInterval(sweepOrgs, 6 * 60 * 60 * 1000) : null;
     orgSweep?.unref?.();
     if (orgSweep) setTimeout(sweepOrgs, 60_000).unref();
     // Hosting platforms stop the app with SIGTERM: save the open live documents and let the database connections go first.

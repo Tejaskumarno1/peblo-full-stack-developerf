@@ -43,26 +43,46 @@ async function whileWaiting(id) {
 }
 
 // Saves of one note run one after another: a last save sent while an earlier one is still on its way (the editor leaving a
-// note) must be built from the base that earlier save leaves, and must reach the server after it.
+// note) must be built from the base that earlier save leaves, and must reach the server after it. A request that hangs does
+// not block the next one for more than CHAIN_WAIT_MS, and a failed save never blocks it.
+const CHAIN_WAIT_MS = 30000;
 const chains = new Map();
 export function saveNoteSafe(id, payload) {
-  const prev = chains.get(id) || Promise.resolve();
-  const run = prev.then(() => saveNoteSafeNow(id, payload));
+  const prev = chains.get(id);
+  const run = (prev ? Promise.race([prev, new Promise((r) => setTimeout(r, CHAIN_WAIT_MS))]) : Promise.resolve()).then(() => saveNoteSafeNow(id, payload));
   const mine = run.catch(() => {});
   chains.set(id, mine);
   mine.then(() => { if (chains.get(id) === mine) chains.delete(id); });
   return run;
 }
 
+// Final texts that are on their way (id -> text), and when each note last had one saved.
+const finalPending = new Map();
+const finalDone = new Map();
+/** The text of a note that was typed just before leaving it and is not saved yet: reopening the note shows it, not the older cached text. */
+export const peekFinalText = (id) => finalPending.get(id);
+/** True when a final text for this note reached the server after `since` (an older retry must then not be sent). */
+export const finalSavedSince = (id, since) => (finalDone.get(id) || 0) >= since;
+
 /** The text typed in the last moments before the editor left a note (its change timer never ran). Saved in that note's own space
- * and the cached lists are told, so reopening the note at once shows it. Content only: the title and tags are left alone. */
+ * and the cached lists are told, so reopening the note at once shows it. Content only: the title and tags are left alone.
+ * Returns true (saved), 'rejected' (the server refused: no access, gone; nothing to keep) or false (not sent: keep a local copy).
+ * Never sent without a base: a save that does not say what it started from would overwrite newer server text. */
 export async function saveFinalText(id, content) {
   if (!id || id === '__draft__' || typeof content !== 'string') return false;
+  if (!bases.has(id) || live.has(id)) return false; // no base to merge against, or a live room owns the text
+  finalPending.set(id, content);
   try {
     const data = await saveNoteSafe(id, { content });
+    finalDone.set(id, Date.now());
     window.dispatchEvent(new CustomEvent('pb-note-final', { detail: { id, content, updatedAt: data?.updatedAt } }));
     return true;
-  } catch { return false; }
+  } catch (e) {
+    const st = e?.response?.status;
+    return st === 401 || st === 403 || st === 404 || st === 410 ? 'rejected' : false;
+  } finally {
+    if (finalPending.get(id) === content) finalPending.delete(id);
+  }
 }
 
 async function saveNoteSafeNow(id, payload) {

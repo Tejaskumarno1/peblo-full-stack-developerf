@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { writeUnsaved, clearUnsaved } from '../utils/unsavedCopy';
+import { finalSavedSince } from '../utils/noteSync';
 
 export function useDebounce(value, delay = 500) {
   const [debounced, setDebounced] = useState(value);
@@ -83,10 +84,11 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
       if (!id || !pending) return;
       const snapshot = JSON.stringify(pending);
       if (snapshot === lastSavedRef.current) return;
+      const startedAt = Date.now();
       const flush = (n) => saveFnRef.current(id, pending).then(() => clearUnsaved(id, pending?.content)).catch((err) => { // saved: drop the local safety copy too
         console.error('Flush save failed:', err);
         const st = err?.response?.status;
-        if (n < 3 && st !== 403 && st !== 404 && st !== 401) setTimeout(() => flush(n + 1), 3000 * (n + 1)); // network, 5xx or 429: try again
+        if (n < 3 && st !== 403 && st !== 404 && st !== 401) setTimeout(() => { if (!finalSavedSince(id, startedAt)) flush(n + 1); }, 3000 * (n + 1)); // a newer text saved meanwhile (typing flushed on leaving) must not be overwritten by this older retry // network, 5xx or 429: try again
       });
       flush(0);
     };

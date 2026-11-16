@@ -891,7 +891,7 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
       // The person has already moved to another note (a keyboard switch; the conversion above is asynchronous): the page's
       // onChange would write this text into the note that is open now. Save it straight to the note it was typed in instead.
       if (goneRef.current || (forNote !== '__draft__' && noteIdRef.current !== forNote)) {
-        if (!rt && forNote && forNote !== '__draft__') void saveFinalText(forNote, markdown).then((ok) => { if (!ok) writeUnsaved(forNote, { content: markdown, baseContent: initialContent }); });
+        if (!rt && editable && !guest && forNote && forNote !== '__draft__') void finishFinal(forNote, markdown, initialContent);
         return;
       }
       deliver(markdown);
@@ -945,26 +945,35 @@ function BlockEditorInner({ resetEpoch = 0, initialContent, onChange, editable =
   // switch gives no blur first): the parent's onChange writes into whichever note is current by then, so it is NOT used. The last
   // text is taken from the editor at once and saved straight to the note it was typed in (after any save already on its way).
   const finalRef = useRef(null);
-  finalRef.current = (id) => {
+  // Save text typed in a note this editor is leaving, straight to that note. A copy is kept on this device only when the save
+  // could not be sent (offline); a copy older than the text just saved is removed, a newer one stays.
+  const finishFinal = (id, markdown, base) => {
+    const t0 = Date.now();
+    return saveFinalText(id, markdown).then((ok) => {
+      if (ok === false) { writeUnsaved(id, { content: markdown, baseContent: base }); return; }
+      if (ok === true) {
+        const c = readUnsaved(id);
+        if (c && c.at <= t0) clearUnsaved(id);
+        queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old) ? old.map((n) => (n.id === id && typeof n.content === 'string' ? { ...n, content: markdown } : n)) : old));
+      }
+    });
+  };
+  finalRef.current = (id, base) => {
     if (!id || id === '__draft__') return; // a draft gets its id while this editor stays: its timer goes on (the unmount clears it)
     if (changeTimerRef.current) { clearTimeout(changeTimerRef.current); changeTimerRef.current = null; }
     if (!dirtyRef.current) return;
     dirtyRef.current = false;
-    if (loadingRef.current || rt || !onChange) return; // live rooms keep their own copy
+    if (loadingRef.current || rt || !onChange || !editable || guest) return; // live rooms keep their own copy; a read-only editor saves nothing
     try {
       const mc = newMarks();
       const blocks = toStorage(editor.document, mc, metaStore);
       Promise.resolve(editor.blocksToMarkdownLossy(blocks)).then((md) => {
         const markdown = insertMarkers(md, mc);
-        if (markdown === initialContent) return;
-        return saveFinalText(id, markdown).then((ok) => {
-          if (!ok) { writeUnsaved(id, { content: markdown, baseContent: initialContent }); return; }
-          queryClient.setQueriesData({ queryKey: ['notes'] }, (old) => (Array.isArray(old) ? old.map((n) => (n.id === id && typeof n.content === 'string' ? { ...n, content: markdown } : n)) : old));
-        });
+        return finishFinal(id, markdown, base);
       }).catch(() => { /* the page's own copy is still there */ });
     } catch { /* the editor is already gone: the autosave copy stays */ }
   };
-  useEffect(() => { goneRef.current = false; const id = noteId; return () => { goneRef.current = true; finalRef.current?.(id); }; }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goneRef.current = false; const id = noteId; const base = initialContent; return () => { goneRef.current = true; finalRef.current?.(id, base); }; }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- AI: the result lands in a card; nothing in the note changes until you pick what to do ----------
   const sourceFor = (kind) => {

@@ -30,7 +30,7 @@ import TaskLinker from './TaskLinker';
 import { notesAPI, todosAPI } from '../api';
 import { usePublicUrl } from '../api/publicUrl';
 import { useAutoSave } from '../hooks';
-import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive, rememberNoteSpace, noteSpaceCfg, setNoteFlusher } from '../utils/noteSync';
+import { saveNoteSafe, saveNoteOnUnload, setNoteBase, getNoteBase, isNoteLive, rememberNoteSpace, noteSpaceCfg, setNoteFlusher, peekFinalText } from '../utils/noteSync';
 import BlockEditor from '../components/BlockEditor';
 import { confirmDialog } from './ConfirmDialog';
 import { mentionsToText } from '../utils/mentions';
@@ -339,7 +339,7 @@ export default function SoftNotes() {
   // ---------- open a note ----------
   const open = useCallback((note) => {
     rememberNoteSpace(note.id);
-    setDoc({ ...note, title: editable(note.title), content: note.content || '', tags: note.tags || [] });
+    setDoc({ ...note, title: editable(note.title), content: peekFinalText(note.id) ?? (note.content || ''), tags: note.tags || [] }); // peekFinalText: text typed a moment ago that is still on its way to the server
     setEditorKey(`${note.id}-${Date.now()}`);
     setPreview(!!note.isDeleted || new URLSearchParams(window.location.search).get('view') === 'reader'); // Open as > Reader view
     setTagDraft(null);
@@ -503,11 +503,11 @@ export default function SoftNotes() {
   const trash = async () => {
     setMenuOpen(false);
     const perm = !!doc.isDeleted;
+    const id = doc.id; // read before the question: the person may open another note meanwhile
     if (perm && !(await confirmDialog({ title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return; // only the final delete asks; the Trash can be undone
-    const id = doc.id;
     await notesAPI.delete(id, { permanent: perm });
     refreshLists();
-    closeDoc();
+    if (docRef.current?.id === id) closeDoc();
     if (!perm) flash('Moved to the Trash', { label: 'Undo', run: async () => { await notesAPI.restore(id); refreshLists(); navigate(`/notes/${id}`); } });
   };
   const restore = async () => {
