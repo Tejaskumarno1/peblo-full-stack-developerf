@@ -1606,6 +1606,24 @@ async function prismaOffUser() {
   nm = await prismaDel.$queryRaw`SELECT 1 FROM user_notifications WHERE user_id = ${M.id} AND kind = 'note_mention'`;
   check('mentions: mentioned again within 24 h gives no second notification', nm.length === 1, nm.length);
 
+  // (added UNRUN, N50) the 3-pin limit is also enforced by the server
+  {
+    const mkNote = async (t) => (await inSpace(null, O.tok, 'POST', '/api/notes', { title: t, content: t })).json.note.id;
+    const pins = [await mkNote('pin 1'), await mkNote('pin 2'), await mkNote('pin 3'), await mkNote('pin 4')];
+    for (const id of pins.slice(0, 3)) { const r = await inSpace(null, O.tok, 'PATCH', `/api/notes/${id}`, { meta: { pinned: true } }); check('pin limit: the first three pins work', r.status === 200, r); }
+    const over = await inSpace(null, O.tok, 'PATCH', `/api/notes/${pins[3]}`, { meta: { pinned: true } });
+    check('pin limit: a 4th pin is refused with 409 pin_limit', over.status === 409 && over.json.code === 'pin_limit' && /3 notes/.test(over.json.error), over);
+    const again = await inSpace(null, O.tok, 'PATCH', `/api/notes/${pins[0]}`, { meta: { pinned: true } });
+    check('pin limit: pinning an already pinned note is not counted twice', again.status === 200, again);
+    const folder = await inSpace(null, O.tok, 'PATCH', `/api/notes/${pins[3]}`, { meta: { folder: 'x', favourite: true, locked: true } });
+    check('pin limit: other meta keys (folder, favourite, locked) are not affected', folder.status === 200, folder);
+    await inSpace(null, O.tok, 'PATCH', `/api/notes/${pins[0]}`, { meta: { pinned: false } });
+    const ok4 = await inSpace(null, O.tok, 'PATCH', `/api/notes/${pins[3]}`, { meta: { pinned: true } });
+    check('pin limit: after an unpin the 4th note can be pinned', ok4.status === 200, ok4);
+    const wc = (await inSpace(null, O.tok, 'GET', '/api/notes?fields=list')).json.notes.find((n) => n.id === pins[0]);
+    check('light list wordCount counts words (2 in "pin 1"), not symbols', wc && wc.wordCount === 2, wc && wc.wordCount);
+  }
+
   await prismaDel.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
   token = sSave;
   await prismaDel.user.deleteMany({ where: { id: { in: [O.id, M.id] } } });

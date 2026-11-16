@@ -201,3 +201,25 @@
 .np-cardw > .np-card { flex: 1; min-width: 0; }
 .np-card-more { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 999px; background: transparent; color: inherit; opacity: .6; cursor: pointer; }
 .np-card-more:hover, .np-card-more:focus-visible { opacity: 1; background: var(--s-chip-solid, rgba(120,120,140,.18)); outline: none; box-shadow: 0 0 0 2px var(--s-fg, currentColor); }
+
+/* ---- fixes3: folder colours with derived dark variants, folder icons, inbox help, smart-folder mode, lock and favourite ---- */
+.soft .fc { background: var(--fc-bg); color: var(--fc-fg); }
+.theme-dark .soft .fc { background: var(--fc-dbg); color: var(--fc-dfg); }
+.soft .np .np-cols { flex-wrap: wrap; }
+.soft .np .np-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 6px; margin-top: 8px; }
+.soft .np .np-icons button { height: 34px; border: 0; border-radius: 10px; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.soft .np .np-icons button.on { outline: 2.5px solid var(--s-fg); outline-offset: 1px; }
+.soft .np .np-help { margin: 2px 14px 6px; font-size: 12px; line-height: 1.4; color: var(--s-fg2); }
+.soft .np .np-modes { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
+.soft .np .np-modes .np-pick { min-width: 150px; }
+.soft .np .np-rule input.np-pick.v { min-width: 0; flex: 1; }
+.soft .np .np-also { font-size: 11px; font-weight: 600; color: var(--s-fg3); margin-left: 6px; }
+.soft .np .np-lockb { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; color: var(--s-fg2); vertical-align: -2px; }
+.soft .s-note-head .s-lockb { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--s-fg2); background: var(--s-chip-solid); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.soft .s-note-head .s-lockb button { border: 0; background: transparent; color: var(--s-accent-ink); font: inherit; font-weight: 700; cursor: pointer; padding: 0 0 0 4px; text-decoration: underline; }
+.soft .s-note-head .s-fav.on { color: var(--s-accent-ink); }
+.soft .s-note-head .s-fav.on svg { fill: currentColor; }
+
+/* T17 / FT19: pictures are a little dimmer in the dark themes so they do not glare; hover (or focus) on one restores it */
+.theme-dark .soft .s-note-body img, .theme-dark .soft .s-note-body video { filter: brightness(.9) contrast(1.05); transition: filter .15s; }
+.theme-dark .soft .s-note-body img:hover, .theme-dark .soft .s-note-body video:hover, .theme-dark .soft .s-note-body figure:focus-within img { filter: none; }

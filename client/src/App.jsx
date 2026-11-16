@@ -5,6 +5,7 @@ import AppShell from './components/shell/AppShell';
 import AuthScreen from './components/AuthScreen';
 import SeriesScopeDialog from './components/SeriesScopeDialog';
 import HelpDialog from './components/HelpDialog';
+import ThemeShortcut from './components/ThemeShortcut';
 import TaskReminders from './components/TaskReminders';
 import { NotesSkeleton } from './soft/Skeletons';
 
@@ -116,6 +117,7 @@ function ShellLayout() {
         <SeriesScopeDialog />
         <CommandPalette />
         <HelpDialog />
+        <ThemeShortcut />
         <LiveEditors />
         <NotificationPill />
         <TaskReminders />

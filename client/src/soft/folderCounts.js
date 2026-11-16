@@ -18,7 +18,7 @@ export function folderCounts(notes, defs, withSub) {
     if (own) (byName.get(own) || []).forEach((id) => hit.add(id)); // a note in a folder belongs to that folder only
     else for (const t of n.tags || []) (byTag.get(t) || []).forEach((id) => hit.add(id)); // a tag collects only notes with no folder
     hit.forEach((id) => counts.set(id, counts.get(id) + 1));
-    for (const d of smart) if (smartMatch(n, d.smart)) counts.set(d.id, counts.get(d.id) + 1);
+    for (const d of smart) if (smartMatch(n, d.smart, d.smartMode)) counts.set(d.id, counts.get(d.id) + 1);
   }
   return counts;
 }

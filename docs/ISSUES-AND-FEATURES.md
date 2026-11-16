@@ -20,16 +20,16 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [x] N2. Folders collect notes you never put in them: "Project Alpha" and "Project Beta" both collect `#project`, so one note shows in both and counts disagree.
 - [ ] N3. A note can be in only one folder.
 - [ ] N4. Folders are linked to notes by name; renaming sends one request per note and a failure leaves notes split between old and new names.
-- [ ] N5. Subfolders go one level deep; "Include sub-folders" is off by default so a parent does not show its children's notes.
+- [x] N5. Subfolders go one level deep; "Include sub-folders" is off by default so a parent does not show its children's notes.
 - [ ] N6. Folder row is one sideways-scrolling strip of chips; no search, collapse or reorder; breaks down past about 8 folders.
 - [x] N7. No drag-and-drop of a note onto a folder; only menu "Move to folder" or select mode.
 - [x] N8. Folder rename/delete had no visible control (double-click or right-click only). Fixed: the open-folder header has Edit (and a New note button).
 - [x] N9. Opening a folder gave no way to create a note in it, and new notes did not land in it. Fixed.
 - [x] N10. Archive and Trash stayed filtered by the last open folder and looked empty. Fixed.
 - [ ] N11. The open folder is not in the URL; refresh or Back loses it; cannot link to a folder.
-- [ ] N12. Smart folders support AND only; no OR, no text/content rule, cannot be made from a search.
-- [ ] N13. Only six folder colours; no icons.
-- [ ] N14. Inbox is a hidden `inbox` tag shown as a folder; behaviour not explained.
+- [x] N12. Smart folders support AND only; no OR, no text/content rule, cannot be made from a search.
+- [x] N13. Only six folder colours; no icons.
+- [x] N14. Inbox is a hidden `inbox` tag shown as a folder; behaviour not explained.
 
 ### B. Tabs
 - [x] N15. Closing the last tab left the last note showing. Fixed (also stops the list reopening a note by itself, keeps the tab strip visible, drops tabs of deleted/trashed/archived notes).
@@ -55,27 +55,27 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [x] N31. Untitled notes pile up; placeholder says "Untitled note", list says "Untitled"; no title suggested from the first line.
 - [ ] N32. Text size and page width change by cycling through "···" menu items; options are not visible first.
 - [x] N33. The "···" menu has about 16 items in one flat list with no separators.
-- [ ] N34. "Preview" is redundant in a WYSIWYG editor (only makes the note read-only).
+- [x] N34. "Preview" is redundant in a WYSIWYG editor (only makes the note read-only).
 - [ ] N35. Text colour, alignment and background may not survive: notes are stored as Markdown and callouts are encoded as quotes. *(check)*
 - [x] N36. Outline treats `#` lines inside code blocks as headings, stops at three levels and 20 items; jump-to-heading finds the first heading with the same text.
 - [ ] N37. The Outline card only appears with two or more headings.
-- [ ] N38. Word count counts symbols (Markdown characters, table borders).
-- [ ] N39. Soft has no read-only lock, icon, or favourites, which Orbit has; styles are unequal.
+- [x] N38. Word count counts symbols (Markdown characters, table borders).
+- [x] N39. Soft has no read-only lock, icon, or favourites, which Orbit has; styles are unequal.
 
 ### E. The notes list
 - [ ] N40. Every note's full text is loaded into the list (sidebar and list both fetch all notes with content); slow for large accounts, no virtualisation.
 - [x] N41. Date grouping stops at Today / This week / Earlier; no month or year.
-- [ ] N42. Group by tag uses only a note's first tag.
+- [x] N42. Group by tag uses only a note's first tag.
 - [x] N43. Rows have no right-click menu or hover actions (pin, move, duplicate, delete).
 - [~] N44 (arrow keys done; shift-click range still open). No arrow-key navigation in the list; no shift-click range select in select mode.
-- [ ] N45. Rows show only one tag and a relative time; the created date is shown nowhere.
-- [ ] N46. Saved searches are per browser and capped at 8.
+- [x] N45. Rows show only one tag and a relative time; the created date is shown nowhere.
+- [x] N46. Saved searches are per browser and capped at 8.
 - [ ] N47. Tag filtering is hard to find; the any/all setting is never changed in `SoftNotes.jsx`. *(check)*
 
 ### F. Deleting, pinning, sharing and extras
 - [x] N48. Deleting uses `window.confirm`; the project already has an Undo toast for deletes that this page does not use.
 - [ ] N49. "Empty Trash" sends one delete per note; no restore-all; no note of how long the Trash keeps notes.
-- [ ] N50. The 3-pin limit is enforced only on this screen.
+- [x] N50. The 3-pin limit is enforced only on this screen.
 - [x] N51. "Copy link to note" uses `window.location.origin`; in the desktop app that is a private 127.0.0.1 address with a random port.
 - [ ] N52. Smaller: "Ask about this note" leaves the page; "Linked tasks" shows 8 with no "show more"; "Mentioned in" is title-text matching and rescans every note on each title keystroke; version history lists 8; toasts share one timer; PDF export uses a screenshot approach that can blur or split long notes *(check)*.
 
@@ -98,7 +98,7 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [ ] T14. River and Orbit settings are the Soft page re-coloured, not native.
 - [ ] T15. Desktop screens are a fixed 1440x900 canvas that is scaled: tiny text in small windows, huge in big ones.
 - [ ] T16. Midnight is pure black with no step between page and card. *(check)*
-- [ ] T17. White-background images glare in dark notes; nothing dims them. *(check)*
+- [x] T17. White-background images glare in dark notes; nothing dims them. *(check)*
 - [ ] T18. Editor dark detection (`dark` / `themeOverride`) is separate from the page and can disagree. *(check)*
 - [ ] T19. Names differ: code says Paper/Graphite/Midnight, UI says Light/Dark/Midnight.
 - [ ] T20. No preview before applying a theme.
@@ -159,9 +159,9 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - [ ] FT15. UI zoom or scale control.
 - [ ] FT16. Remember sidebar width and collapsed state.
 - [ ] FT17. Code-block syntax themes.
-- [ ] FT18. Folder colours that adapt to dark mode.
-- [ ] FT19. Dim images in dark mode.
-- [ ] FT20. Keyboard shortcut to toggle dark mode.
+- [x] FT18. Folder colours that adapt to dark mode.
+- [x] FT19. Dim images in dark mode.
+- [x] FT20. Keyboard shortcut to toggle dark mode.
 - [ ] FT21. Custom note cover or colour.
 - [ ] FT22. Import and export a theme.
 - [ ] FT23. A theme for printing and exporting.
@@ -205,3 +205,5 @@ Key finding: there is no team, workspace, member, role or invite model in the da
 - Earlier list: N1, N2, N8, N9, N10, N15, N22, N23, N24, N29, N30, N31, N48, N51 (files: `client/src/soft/SoftNotes.jsx`, `NoteTabs.jsx`, `notespanel.css`). Built, not yet tested in a browser.
 
 - Fixes round 2 (branch feat-fixes2): R24 last typing on keyboard note switch, R38 dialogs in spaces.jsx and org dialogs, R39 folder card "..." menu, R41 in-app confirm in the Soft notes page, R46 hard-coded colours in soft2/dialogs/orgpages css, accent text colour on River and Orbit, mention chips in compare and exports, editor dark flag with Auto theme, own notification kinds (member_removed, team_reopened, org_deleted), org purge job (off by default, not run). See docs/memory/03-client.md and 04-ui-styles.md.
+
+- Fixed on branch feat-fixes3 (unit tests plus `e2e/notes-mock.mjs` section 7n; server pin limit compiled only, not run): N5, N12, N13, N14, N34, N38, N39, N42, N45, N46, N50, T17, FT18, FT19, FT20. T20 (theme preview before applying) is a different item and is still open.

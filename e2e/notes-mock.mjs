@@ -50,6 +50,7 @@ const reqs = [];
 let failPatches = 0;
 const failIds = new Set(); // PATCH on these notes always fails with 500
 const rate429 = new Set(); // the first PATCH on these notes answers 429 (too many requests)
+let pin409 = false; // a PATCH that pins a note answers the server's 409 pin_limit
 let withTeam = false; // the fake account belongs to a team once a check turns this on
 // team features: off until section 9 turns them on, so the earlier checks still run in Personal
 let teamOn = false;
@@ -92,6 +93,7 @@ async function handle(route) {
     if (method === 'PATCH') {
       if (failIds.has(n.id)) return json(route, { error: 'Server said no' }, 500);
       if (rate429.has(n.id)) { rate429.delete(n.id); return json(route, { error: 'Too many requests' }, 429); }
+      if (pin409 && body.meta?.pinned === true) return json(route, { error: 'You can pin up to 3 notes. Unpin one first.', code: 'pin_limit' }, 409);
       if (failPatches > 0) { failPatches--; return json(route, { error: 'boom' }, 500); }
       for (const k of ['title', 'content', 'tags']) if (k in body) n[k] = body[k];
       if (body.meta) for (const [k, v] of Object.entries(body.meta)) { if (v === '' || v === false || v == null) delete n.meta[k]; else n.meta[k] = v; }
@@ -497,6 +499,131 @@ try {
   await closeMenu();
   await page.evaluate(() => localStorage.removeItem('peblo-space'));
   wsOrgs = [];
+
+
+  // 7n. fixes3: smart folder OR + text rule, folder icon, multi-tag grouping, row tags and dates, lock, favourites, saved searches, inbox, Read mode, word count, shortcuts
+  await page.evaluate(() => { localStorage.setItem('e2e-keep-space', '1'); localStorage.removeItem('peblo-space'); localStorage.removeItem('peblo-notes-view'); });
+  const nByTitle = (t) => notes.find((n) => n.title === t);
+  const n4 = notes.find((n) => n.id === 'n4');
+  n4.tags = ['inbox'];
+  user.settings.noteFolders = [{ id: 'f1', name: 'Project Alpha', color: 'mint' }, { id: 'f2', name: 'Ideas', color: 'lilac' }, { id: 's1', name: 'Mixed', color: 'lilac', smart: [{ f: 'tag', v: 'alpha' }, { f: 'text', v: 'biology' }], smartMode: 'any' }];
+  delete user.settings.savedSearches;
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(600);
+  const rowsText = async () => (await page.locator('.s-notes-rows .s-note-row .t').allInnerTexts()).map((x) => x.trim());
+  // smart folder: any of the rules (tag alpha OR text "biology")
+  await page.locator('.np-chip.fold').click(); await wait(300);
+  await page.locator('.np-card.sm', { hasText: 'Mixed' }).click(); await wait(500);
+  let rr = await rowsText();
+  check('a smart folder in "any" mode holds notes that match one rule (tag or text)', rr.some((x) => x.includes('Sprint plan')) && rr.some((x) => x.includes('Biology revision')) && !rr.some((x) => x.includes('Plan for Monday')), rr.join('|'));
+  await page.locator('button[aria-label="Edit this folder"]').first().click(); await page.locator('.np-page').waitFor(TO); await wait(300);
+  check('the smart folder page offers a match mode and a "Text contains" rule', (await page.locator('select[aria-label="Match mode"]').inputValue()) === 'any' && (await page.locator('select[aria-label="Rule field"] option', { hasText: 'Text contains' }).count()) >= 1);
+  check('the OR word shows between rules in any mode', (await page.locator('.np-and').first().innerText()).trim() === 'OR');
+  await page.locator('select[aria-label="Match mode"]').selectOption('all'); await wait(300);
+  check('"all" mode: tag alpha AND text biology matches nothing', /0 notes match/.test(await page.locator('.np-pv header').innerText()), await page.locator('.np-pv header').innerText());
+  await page.locator('select[aria-label="Match mode"]').selectOption('any');
+  await page.locator('.np-addrule').click(); await page.locator('select[aria-label="Rule field"]').last().selectOption('text'); await page.locator('input[aria-label="Rule text"]').last().fill('milk'); await wait(300);
+  check('a text rule matches the title or the start of the text', /4 notes match/.test(await page.locator('.np-pv header').innerText()), await page.locator('.np-pv header').innerText());
+  await page.locator('.np-btns .go').click(); await wait(900);
+  const savedSmart = user.settings.noteFolders.find((d) => d.id === 's1');
+  check('saving keeps the mode and the text rule on the account', savedSmart?.smartMode === 'any' && savedSmart.smart.some((r) => r.f === 'text' && r.v === 'milk'), JSON.stringify(savedSmart));
+  // folder icon + colours
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  await page.locator('.np-chip.fold').click(); await wait(300);
+  await page.locator('.np-card', { hasText: 'Ideas' }).first().click({ button: 'right' }); await page.locator('.np-sheet').waitFor(TO); await wait(300);
+  check('the folder sheet offers 12 colours and an icon set', (await page.locator('.np-cols button').count()) >= 12 && (await page.locator('[data-testid="folder-icons"] button').count()) >= 12);
+  await page.locator('[data-testid="folder-icons"] button[aria-label="Work"]').click();
+  await page.locator('.np-sheet .go').click(); await wait(900);
+  check('the chosen icon is stored in the folder definition', user.settings.noteFolders.find((d) => d.id === 'f2')?.icon === 'briefcase', JSON.stringify(user.settings.noteFolders.find((d) => d.id === 'f2')));
+  // include sub-folders defaults to on
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  await page.locator('button[aria-label="View options"]').click(); await wait(250);
+  check('"Include sub-folders" is on by default', (await page.locator('.np-pop [role="switch"]', { hasText: 'Include sub-folders' }).getAttribute('aria-checked')) === 'true');
+  // group by tag: a note shows under each of its tags
+  await page.locator('.np-pop [aria-label="Group by"] button', { hasText: 'Tag' }).click(); await wait(300);
+  await page.keyboard.press('Escape'); await wait(400);
+  const heads = (await page.locator('.s-grp-h .nm').allTextContents()).map((x) => x.trim());
+  check('grouping by tag makes a group for each tag and one for notes without a tag', heads.includes('#alpha') && heads.includes('#beta') && heads.includes('Untagged'), heads.join('|'));
+  check('a note with two tags is listed under both', (await page.locator('.s-notes-rows .s-note-row', { hasText: 'Kickoff notes' }).count()) === 2);
+  check('and says which other tag it is in', (await page.locator('[data-testid="also-in"]').allInnerTexts()).some((x) => /also in #(alpha|beta)/.test(x)));
+  // rows: up to two tags, the created date in the tooltip, created time when sorted by created
+  const metaK = await page.locator('.s-note-row', { hasText: 'Kickoff notes' }).first().locator('[data-testid="row-meta"]').innerText();
+  check('a row shows up to two tags', /#alpha #beta/.test(metaK), metaK);
+  check('the row tooltip has the created and edited dates', /Created .*Edited /.test((await page.locator('.s-note-row', { hasText: 'Kickoff notes' }).first().getAttribute('title')) || ''));
+  await page.locator('button[aria-label="View options"]').click(); await wait(250);
+  await page.locator('.np-pop [aria-label="Sort by"] button', { hasText: 'Created' }).click(); await wait(300);
+  await page.locator('.np-pop [aria-label="Group by"] button', { hasText: 'None' }).click(); await wait(300);
+  await page.keyboard.press('Escape'); await wait(400);
+  check('sorted by created, the row shows the created time', /Created /.test(await page.locator('.s-note-row').first().locator('[data-testid="row-meta"]').innerText()));
+  await page.locator('button[aria-label="View options"]').click(); await wait(250);
+  await page.locator('.np-pop [aria-label="Sort by"] button', { hasText: 'Edited' }).click();
+  await page.locator('.np-pop [aria-label="Group by"] button', { hasText: 'Date' }).click(); await wait(300);
+  await page.keyboard.press('Escape'); await wait(300);
+  // Read mode (was Preview)
+  await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  check('the Preview toggle is now called Read mode', (await page.locator('button[aria-label="Read mode"]').count()) === 1 && (await page.locator('button[aria-label="Preview"]').count()) === 0);
+  await page.locator('[data-testid="read-mode"]').click(); await wait(400);
+  check('Read mode makes the note read only and the button offers Edit', (await page.locator('[contenteditable="true"]').count()) === 0 && (await page.locator('[data-testid="read-mode"]').getAttribute('aria-label')) === 'Edit');
+  await page.locator('[data-testid="read-mode"]').click(); await wait(300);
+  // favourite and lock
+  await page.locator('[data-testid="fav-btn"]').click(); await wait(700);
+  check('the star makes the note a favourite (meta.favourite, the key Orbit uses)', n3.meta.favourite === true, JSON.stringify(n3.meta));
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  check('the Favourites chip counts it', /1/.test(await page.locator('[data-testid="chip-fav"]').innerText()), await page.locator('[data-testid="chip-fav"]').innerText());
+  await page.locator('[data-testid="chip-fav"]').click(); await wait(400);
+  rr = await rowsText();
+  check('the Favourites chip shows only favourite notes', rr.length === 1 && rr[0].includes(n3.title), rr.join('|'));
+  await page.locator('[data-testid="chip-fav"]').click(); await wait(300);
+  await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  await openMenu(); await page.locator('[data-testid="menu-lock"]').click(); await wait(800);
+  check('Lock saves meta.locked', n3.meta.locked === true, JSON.stringify(n3.meta));
+  check('a locked note shows a Locked badge, a disabled title and no typing', await page.locator('[data-testid="lock-badge"]').isVisible() && await page.locator('textarea.s-note-title').isDisabled() && (await page.locator('[contenteditable="true"]').count()) === 0);
+  await page.locator('[data-testid="unlock-btn"]').click(); await wait(800);
+  check('Unlock makes it editable again', !n3.meta.locked && !(await page.locator('textarea.s-note-title').isDisabled()) && (await page.locator('[contenteditable="true"]').count()) > 0);
+  await page.locator('[data-testid="fav-btn"]').click(); await wait(600);
+  // pin limit from the server
+  delete n3.meta.pinned; await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(700);
+  pin409 = true; await openMenu(); await page.locator('[data-testid="menu-pin"]').click(); await wait(700);
+  check('the server pin limit (409 pin_limit) is explained in a message', /up to 3 notes/.test(await page.locator('.s-toast').innerText().catch(() => '')), await page.locator('.s-toast').innerText().catch(() => 'no toast'));
+  pin409 = false;
+  // saved searches sync to the account (and the old device list moves up once)
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(400);
+  reqs.length = 0;
+  await page.locator('.s-nsearch input').fill('Kickoff'); await wait(600);
+  await page.locator('button[aria-label="Save this search"]').click(); await wait(700);
+  const put = reqs.find((r) => r.method === 'PUT' && r.path === '/profile' && r.body?.settings?.savedSearches);
+  check('saving a search PUTs settings.savedSearches to the account', !!put && put.body.settings.savedSearches.includes('Kickoff'), JSON.stringify(reqs.filter((r) => r.method === 'PUT').map((r) => r.body)));
+  await page.evaluate(() => localStorage.removeItem('peblo-saved-searches'));
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(500);
+  check('a new device gets the saved search from the account', (await page.locator('.s-saved-searches button', { hasText: 'Kickoff' }).count()) === 1);
+  delete user.settings.savedSearches;
+  await page.evaluate(() => { localStorage.setItem('peblo-saved-searches', JSON.stringify(['legacy one'])); localStorage.removeItem('peblo-settings'); });
+  reqs.length = 0;
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(900);
+  check('a list kept only on this device is moved to the account once', (user.settings.savedSearches || []).includes('legacy one') && reqs.some((r) => r.method === 'PUT' && r.body?.settings?.savedSearches?.includes('legacy one')), JSON.stringify(user.settings.savedSearches));
+  // inbox: explained, and a note leaves it when moved to a folder
+  await page.locator('[data-testid="chip-inbox"]').click(); await wait(400);
+  check('the Inbox chip explains itself', /new, unsorted notes/.test(await page.locator('[data-testid="inbox-help"]').innerText()) && /unsorted/.test((await page.locator('[data-testid="chip-inbox"]').getAttribute('title')) || ''));
+  await page.locator('.s-notes-rows .s-note-row').first().click({ button: 'right' }); await wait(300);
+  check('the row menu of an Inbox note offers to move it out of the Inbox', /out of Inbox/.test(await page.locator('[data-testid="rm-move"]').innerText()));
+  await page.locator('[data-testid="rm-move"]').click(); await page.locator('.np-sheet').waitFor(TO); await wait(300);
+  await page.locator('.np-sheet [role="radio"]', { hasText: 'Ideas' }).click(); await page.locator('.np-sheet .np-go').click(); await wait(1000);
+  check('moving it files the note and clears the inbox tag', n4.meta.folder === 'Ideas' && !n4.tags.includes('inbox'), JSON.stringify([n4.meta, n4.tags]));
+  // word count ignores Markdown symbols, tables and links
+  n4.content = '# Heading\n\n| a | b |\n|---|---|\n| x | y |\n\n- [ ] one two\n\n![p](http://x.test/y.png) [l](http://z.test)';
+  await page.goto(`${base}/notes/n4`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(900);
+  check('the word count counts words, not symbols, table borders or links', /^\s*8 words/.test(await page.locator('.s-note-stats').innerText()), await page.locator('.s-note-stats').innerText());
+  // Ctrl+Alt+D flips Light / Dark; pictures are dimmed in dark
+  const isDark = () => page.evaluate(() => document.documentElement.classList.contains('theme-dark'));
+  reqs.length = 0;
+  check('the page starts Light', !(await isDark()));
+  await page.keyboard.press('Control+Alt+d'); await wait(600);
+  check('Ctrl+Alt+D switches to Dark and saves it to the account', (await isDark()) && reqs.some((r) => r.method === 'PUT' && r.body?.settings?.theme === 'dark'), JSON.stringify(reqs.filter((r) => r.method === 'PUT').map((r) => r.body)));
+  const dim = await page.evaluate(() => { const i = document.createElement('img'); i.alt = 't'; i.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; document.querySelector('.s-note-body').appendChild(i); return getComputedStyle(i).filter; });
+  check('pictures in notes are dimmed in the dark theme', /brightness\(0\.9\)/.test(dim), dim);
+  await page.keyboard.press('Control+Alt+d'); await wait(600);
+  check('Ctrl+Alt+D switches back to Light', !(await isDark()));
+  await page.evaluate(() => { localStorage.setItem('peblo-theme', 'light'); });
+  delete user.settings.theme;
 
   // 8. offline banner
   await ctx.setOffline(true); await wait(500);
