@@ -3,6 +3,7 @@ import { audit, can, spaceAccess } from './access.js';
 import { isOffice, noteLevel, teamViewOnly } from './noteAccess.js';
 import { policyOfSpace } from './orgPolicy.js';
 
+import { ANY_SPACE } from '../personalGuard.js';
 /*
  * Who may make a public link, and the revoking of links when a policy or a team switch turns them off.
  * Kept out of routes/share.ts so that file only calls three small functions from here.
@@ -16,7 +17,7 @@ export const NOTE_SHARE_SELECT = { id: true, userId: true, spaceId: true, shareT
  * only the author or someone the author let edit; in a Team a note shared "can view" is the author's to share.
  */
 export async function shareableNote(userId: string, id: string) {
-  const n = await prisma.note.findFirst({ where: { id, isDeleted: false }, select: NOTE_SHARE_SELECT });
+  const n = await prisma.note.findFirst({ where: { id, isDeleted: false, ...ANY_SPACE }, select: NOTE_SHARE_SELECT });
   if (!n) return null;
   if (!n.spaceId) return n.userId === userId ? n : null;
   const acc = await spaceAccess(userId, n.spaceId);
@@ -44,7 +45,7 @@ export async function shareBlockReason(spaceId: string | null | undefined): Prom
 /** The answer the client shows instead of a "Share link" button that would fail. */
 export async function shareVerdict(userId: string, kind: 'note' | 'todo', id: string): Promise<{ allowed: boolean; code?: string; reason?: string }> {
   if (kind === 'note') {
-    const raw = await prisma.note.findFirst({ where: { id, isDeleted: false }, select: { userId: true, spaceId: true } });
+    const raw = await prisma.note.findFirst({ where: { id, isDeleted: false, ...ANY_SPACE }, select: { userId: true, spaceId: true } });
     if (!raw || (!raw.spaceId && raw.userId !== userId)) return { allowed: false, code: 'not_found', reason: 'This note was not found.' };
     if (raw.spaceId) {
       const acc = await spaceAccess(userId, raw.spaceId);

@@ -1025,7 +1025,7 @@ check('..and reverting brings it back', r64.status === 200 && (await content(oth
 r64 = await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id, appendContent: 'ADDED' });
 check('confirming an addition appends it', r64.status === 200 && /other text[\s\S]*ADDED/.test(await content(otherN.id)));
 check('confirming nothing is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: otherN.id })).status === 400);
-check('confirming for a note in the Trash is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: trashN.id, appendContent: 'x' })).status === 404 && (await call('GET', `/api/notes/${trashN.id}`)).json.note.content === 'trash words');
+check('confirming for a note in the Trash is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: trashN.id, appendContent: 'x' })).status === 404 && (await call('GET', `/api/notes/${trashN.id}?deleted=1`)).json.note?.content === 'trash words');
 check('confirming for a note that does not exist is refused', (await call('POST', '/api/ai/chat/apply-update', { noteId: 'no-such-note', appendContent: 'x' })).status === 404);
 
 // the model names a #private note: dropped, nothing changes
@@ -1260,7 +1260,7 @@ async function prismaOffUser() {
 }
 // ---- Round 5: task and note "meta" (details, subtasks, estimate, label, dependencies; emoji, favourite) ----
 {
-  const mk = await call('POST', '/api/todos', { text: 'Meta task', meta: { details: 'Read chapter 3', estimateMin: 45, label: 'blue', subtasks: [{ text: 'first' }, { text: 'second', done: true }], bogus: 1, status: 'nope' } });
+  const mk = await call('POST', '/api/todos', { text: 'Meta task', meta: { details: 'Read chapter 3', estimateMin: 45, label: 'blue', subtasks: [{ text: 'first' }, { text: 'second', done: true }], bogus: 1, status: 'Not A Column!' } });
   check('a task can be created with meta', mk.status === 201, mk.json);
   const m = mk.json.todo.meta || {};
   check('..known keys are kept', m.details === 'Read chapter 3' && m.estimateMin === 45 && m.label === 'blue' && m.subtasks?.length === 2 && m.subtasks[1].done === true, m);
@@ -1359,7 +1359,7 @@ async function prismaOffUser() {
       await new Promise((r) => setTimeout(r, 600));
       check('R11: a Personal note of another person is not heard', sB.got.length === 0, sB.got);
       // removal: B leaves the space (rooms are dropped at once) and hears nothing more
-      token = rtB.token; const left = await call('POST', `/api/spaces/${spaceId}/leave`);
+      token = rtB.token; const left = await call('POST', `/api/workspaces/spaces/${spaceId}/leave`);
       token = rtA.token; sB.got.length = 0;
       await asA('POST', '/api/notes', { title: 'after leaving', content: 'y' });
       await new Promise((r) => setTimeout(r, 600));
@@ -1368,6 +1368,10 @@ async function prismaOffUser() {
       const sB2 = await open(rtB.token); await asA('POST', '/api/notes', { title: 'again', content: 'z' }); await new Promise((r) => setTimeout(r, 600));
       check('R11: a new connection of a removed member does not join the space room', sB2.got.length === 0, sB2.got);
       sB.sk.disconnect(); sB2.sk.disconnect();
+      // notes, tasks and notices of the org's spaces are RESTRICT-protected: remove them before the org
+      await prismaR.$executeRaw`DELETE FROM announcements WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${org.json.id})`;
+      await prismaR.$executeRaw`DELETE FROM todos WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${org.json.id})`;
+      await prismaR.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${org.json.id})`;
       await prismaR.$executeRaw`DELETE FROM organizations WHERE id = ${org.json.id}`;
     } finally {
       await prismaR.user.deleteMany({ where: { email: { in: [rtA.email, rtB.email] } } });
@@ -1378,8 +1382,9 @@ async function prismaOffUser() {
   {
     const { default: prismaT } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
     const pwT = 'correct horse battery';
-    const mkUser = async (email, name) => { const s2 = await call('POST', '/api/auth/signup', { email, password: pwT, name }); const u = await prismaT.user.findUnique({ where: { email } }); return { token: s2.json.token, id: u.id }; };
-    const own = await mkUser(emailE, 'Owner E'); const mem = await mkUser(emailF, 'Member F'); const lead2 = await mkUser(emailG, 'Lead G');
+    const mkUser = async (email, name) => { const s2 = await call('POST', '/api/auth/signup', { email, password: pwT, name }); const u = await prismaT.user.findUnique({ where: { email } }); const tk = s2.json.token || (await call('POST', '/api/auth/login', { email, password: pwT })).json.token; if (!tk) console.log('      signup gave no token:', s2.status, JSON.stringify(s2.json).slice(0, 200)); return { token: tk, id: u?.id }; };
+    // own addresses: emailE/F/G are used (and deleted) by earlier blocks
+    const own = await mkUser(`smoke-life-e-${runId}@peblo.test`, 'Owner E'); const mem = await mkUser(`smoke-life-f-${runId}@peblo.test`, 'Member F'); const lead2 = await mkUser(`smoke-life-g-${runId}@peblo.test`, 'Lead G');
     token = own.token;
     const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke lifecycle org' });
     check('lifecycle: organization created', org.status === 201, org);
@@ -1387,6 +1392,8 @@ async function prismaOffUser() {
     // put F and G in the org and the team directly (the invite flow needs verified email addresses)
     await prismaT.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${orgId}, ${mem.id}, 'member'), (${orgId}, ${lead2.id}, 'member')`;
     await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${teamId}, ${mem.id}, 'member'), (${teamId}, ${lead2.id}, 'lead')`;
+    // the creator becomes the first team's lead; this block wants E as a plain member of the team and G as its only lead
+    await prismaT.$executeRaw`UPDATE space_members SET role = 'member' WHERE space_id = ${teamId} AND user_id = ${own.id}`;
     const office = await call('POST', `/api/workspaces/orgs/${orgId}/spaces`, { name: 'Smoke office', kind: 'office' });
     await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${office.json.id}, ${mem.id}, 'member')`;
 
@@ -1409,6 +1416,8 @@ async function prismaOffUser() {
     // R8: handover. Not to a non-member; admin-only; into the Office only after the receiver is in it
     token = own.token;
     const hn = (to, extra = {}) => call('POST', `/api/workspaces/orgs/${orgId}/members/${mem.id}/handover-notes`, { toUserId: to, ...extra });
+    // the creator of a space is its first member: take E out of the Office for this check
+    await prismaT.$executeRaw`DELETE FROM space_members WHERE space_id = ${office.json.id} AND user_id = ${own.id}`;
     let h = await hn(own.id, { spaceIds: [office.json.id] });
     check('handover: refused while the receiver is not in the Office (nothing moved)', h.status === 200 && h.json.moved === 0 && h.json.skipped?.length === 1, h);
     h = await hn('not-a-user');
@@ -1417,7 +1426,7 @@ async function prismaOffUser() {
     h = await call('POST', `/api/workspaces/orgs/${orgId}/members/${own.id}/handover-notes`, { toUserId: mem.id });
     check('handover: a plain member cannot hand notes over (403)', h.status === 403, h);
     token = own.token;
-    await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${office.json.id}, ${own.id}, 'member')`;
+    await prismaT.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${office.json.id}, ${own.id}, 'member') ON CONFLICT (space_id, user_id) DO NOTHING`;
     h = await hn(own.id);
     check('handover: team and private Office notes move to the receiver', h.status === 200 && h.json.moved === 2 && h.json.privateOffice === 1, h);
     const moved = await prismaT.$queryRaw`SELECT id, user_id FROM notes WHERE id IN (${tn.note.id}, ${on.note.id})`;
@@ -1506,6 +1515,7 @@ async function prismaOffUser() {
 
 // ---- (added UNRUN) sharing, invites, export protection, mute, @mentions (docs/SERVER-TESTS-TO-RUN.md items 9 to 14) ----
 {
+  const { default: prismaDel } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
   const sSave = token;
   const mkUser = async (tag) => { const e = `smoke-sh-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: 'correct horse battery', name: `Sh ${tag}` }); return { e, id: r.json.user.id, tok: r.json.token }; };
   const O = await mkUser('o'), M = await mkUser('m');
@@ -1624,6 +1634,10 @@ async function prismaOffUser() {
     check('light list wordCount counts words (2 in "pin 1"), not symbols', wc && wc.wordCount === 2, wc && wc.wordCount);
   }
 
+  // notes, tasks and notices of the org's spaces are RESTRICT-protected: remove them before the org
+  await prismaDel.$executeRaw`DELETE FROM announcements WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await prismaDel.$executeRaw`DELETE FROM todos WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await prismaDel.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
   await prismaDel.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
   token = sSave;
   await prismaDel.user.deleteMany({ where: { id: { in: [O.id, M.id] } } });
@@ -1634,7 +1648,7 @@ async function prismaOffUser() {
 } finally {
   server.close();
   const { default: prisma } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
-  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC, emailD, emailE, emailF, emailG] } } }); } catch {} // cascades to everything they created
+  try { await prisma.user.deleteMany({ where: { email: { in: [emailA, emailB, emailC, emailD, emailE, emailF, emailG, `smoke-life-e-${runId}@peblo.test`, `smoke-life-f-${runId}@peblo.test`, `smoke-life-g-${runId}@peblo.test`] } } }); } catch {} // cascades to everything they created
   await prisma.$disconnect();
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
   process.exit(failures ? 1 : 0);

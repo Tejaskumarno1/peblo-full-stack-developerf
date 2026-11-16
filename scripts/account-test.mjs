@@ -115,11 +115,11 @@ try {
   check('a change needs the password', r.status === 403, r);
   r = await call('PUT', '/api/profile', { email: e2, currentPassword: PW });
   check('an address another account uses is refused', r.status === 409, r);
-  const before = mails().length;
+  const beforeChange = mails().length; // (was a second "before" in the same scope: a SyntaxError that stopped the whole file)
   r = await call('PUT', '/api/profile', { email: e1b, currentPassword: PW });
   check('with mail the address does NOT change yet; a pending change is reported', r.status === 200 && r.json.user.email === e1 && r.json.user.pendingEmail === e1b && r.json.emailChangePending === e1b && /link to/.test(r.json.message), r.json);
   m = mails();
-  check('the link goes to the NEW address', m.length === before + 1 && m.at(-1).to === e1b && /new email/i.test(m.at(-1).subject), m.at(-1));
+  check('the link goes to the NEW address', m.length === beforeChange + 1 && m.at(-1).to === e1b && /new email/i.test(m.at(-1).subject), m.at(-1));
   const rawChange = linkOf(m.at(-1));
   r = await call('POST', '/api/auth/login', { email: e1b, password: PW });
   check('the new address cannot sign in before it is confirmed', r.status === 401, r);

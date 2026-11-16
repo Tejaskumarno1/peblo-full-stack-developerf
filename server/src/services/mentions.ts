@@ -3,6 +3,7 @@ import { spaceMembers } from '../utils/access.js';
 import { noteLevel, isOffice } from '../utils/noteAccess.js';
 import { notifyUsers, nameOf } from './notify.js';
 
+import { ANY_SPACE } from '../personalGuard.js';
 /*
  * @mentions in notes. The editor writes a mention as a markdown link: [@Name](peblo-user:<userId>).
  * When a note is saved, the people who are in the new text but were not in the previous text get ONE notification,
@@ -18,7 +19,7 @@ export async function notifyMentions(app: any, actorId: string, noteId: string, 
     const before = new Set(mentionedIds(prev));
     const added = mentionedIds(next).filter((id) => id !== actorId && !before.has(id));
     if (!added.length) return 0;
-    const note = await prisma.note.findFirst({ where: { id: noteId, isDeleted: false }, select: { id: true, title: true, spaceId: true } });
+    const note = await prisma.note.findFirst({ where: { id: noteId, isDeleted: false, ...ANY_SPACE }, select: { id: true, title: true, spaceId: true } });
     if (!note?.spaceId) return 0; // Personal notes have nobody to mention
     const inSpace = new Set(await spaceMembers(note.spaceId));
     let who = added.filter((id) => inSpace.has(id));

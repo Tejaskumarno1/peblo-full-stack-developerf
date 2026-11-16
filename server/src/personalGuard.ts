@@ -32,3 +32,11 @@ export function withPersonalDefault<T extends { $extends: (x: any) => any }>(bas
     },
   });
 }
+
+/**
+ * Spread into a Note/Todo `where` to look in EVERY space (Personal, Team, Office) on purpose. The guard above only adds
+ * `spaceId: null` when the query does not mention spaceId at all; this mentions it with `undefined`, which Prisma ignores,
+ * so the lookup is not narrowed. Use it only where access is checked another way: a share token (unguessable), or after
+ * shareableNote / spaceAccess has decided this person may act on the note.
+ */
+export const ANY_SPACE = { spaceId: undefined } as const;

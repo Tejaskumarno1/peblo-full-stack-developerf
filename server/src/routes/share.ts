@@ -20,6 +20,7 @@ shareRoutes.use(authenticate);
 shareRoutes.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); }); // an AI client cannot publish a #private note
 
 import { shareableNote, shareBlockReason, shareVerdict } from '../utils/shareScope.js';
+import { ANY_SPACE } from '../personalGuard.js';
 const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);
 // A link whose end date has passed stops working (the owner can turn it on again from the share box).
@@ -36,7 +37,7 @@ async function purgeToken(kind: string, token: string) {
 }
 async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false, expiresAt: Date | null = null, shareNote = false) {
   const data = { shareToken: token, shareEdit: token ? edit : false, shareExpiresAt: token ? expiresAt : null };
-  if (kind === 'note') await prisma.note.update({ where: { id }, data, select: { id: true } });
+  if (kind === 'note') await prisma.note.update({ where: { ...ANY_SPACE, id }, data, select: { id: true } });
   else await prisma.todo.update({ where: { id }, data: { ...data, shareNote: token ? shareNote : false }, select: { id: true } });
 }
 
@@ -45,7 +46,7 @@ shareRoutes.get('/', async (req, res, next) => {
   try {
     const uid = req.user!.id;
     const [notes, todos] = await Promise.all([
-      prisma.note.findMany({ where: { userId: uid, isDeleted: false, shareToken: { not: null } }, select: { id: true, title: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
+      prisma.note.findMany({ where: { ...ANY_SPACE, userId: uid, isDeleted: false, shareToken: { not: null } }, select: { id: true, title: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
       prisma.todo.findMany({ where: { userId: uid, shareToken: { not: null } }, select: { id: true, text: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
     ]);
     const rows = [
@@ -99,7 +100,7 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    const live = await prisma.note.count({ where: { id: row.id, shareToken: { not: null }, ...LIVE() } }).catch(() => 0);
+    const live = await prisma.note.count({ where: { ...ANY_SPACE, id: row.id, shareToken: { not: null }, ...LIVE() } }).catch(() => 0);
     if (kind !== 'note' || !row.shareToken || !live) return res.json({ shared: false, viewers: [] });
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
@@ -406,7 +407,7 @@ async function listViewers(kind: string, token: string, mySession: string, canEd
 }
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
-  if (kind === 'note') return prisma.note.findFirst({ where: { shareToken: token, userId, isDeleted: false }, select: { id: true } });
+  if (kind === 'note') return prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId, isDeleted: false }, select: { id: true } });
   return prisma.todo.findFirst({ where: { shareToken: token, userId }, select: { id: true } });
 }
 
@@ -464,7 +465,7 @@ publicRoutes.post('/:kind/:token/presence', (req, res, next) => guestPresenceLim
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{16,80}$/.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const record = kind === 'note'
-      ? await prisma.note.findFirst({ where: { shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } })
+      ? await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } })
       : await prisma.todo.findFirst({ where: { shareToken: token, ...LIVE() }, select: { id: true, shareEdit: true } });
     if (!record) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
@@ -511,7 +512,7 @@ publicRoutes.post('/:kind/:token/knock', (req, res, next) => guestKnockLimit(req
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (typeof sessionId !== 'string' || !SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const live = kind === 'note'
-      ? await prisma.note.count({ where: { shareToken: token, ...LIVE(), isDeleted: false } })
+      ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } })
       : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
@@ -533,7 +534,7 @@ async function reactionsFor(noteId: string, sid: string | null) {
 publicRoutes.get('/note/:token/reactions', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     const sid = typeof req.query.sid === 'string' && SESSION_RE.test(req.query.sid) ? req.query.sid : null;
     res.json({ reactions: await reactionsFor(note.id, sid) });
@@ -546,7 +547,7 @@ publicRoutes.post('/note/:token/reactions', (req, res, next) => guestWriteLimit(
     if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const kind = String(req.body?.kind || '');
     if (!REACTIONS.includes(kind)) return res.status(400).json({ error: 'Unknown reaction.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked('note', req.params.token, sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
@@ -560,7 +561,7 @@ publicRoutes.post('/note/:token/reactions', (req, res, next) => guestWriteLimit(
 publicRoutes.get('/note/:token/polls', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     const acc = await accessFor('note', req.params.token, req.query.sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
     if (!acc.allowed || (await isBlocked('note', req.params.token, req.query.sid))) return res.json({ polls: [] });
@@ -573,7 +574,7 @@ publicRoutes.post('/note/:token/polls/:pid/vote', (req, res, next) => guestWrite
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const sid = req.body?.sessionId;
     if (typeof sid !== 'string' || !SESSION_RE.test(sid)) return res.status(400).json({ error: 'A valid viewer session is required.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked('note', req.params.token, sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
@@ -594,7 +595,7 @@ publicRoutes.post('/:kind/:token/extend-request', (req, res, next) => guestWrite
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const live = kind === 'note' ? await prisma.note.count({ where: { shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, extend_at, extend_by) VALUES ($1, $2, NOW(), $3) ON CONFLICT (kind, share_token) DO UPDATE SET extend_at = NOW(), extend_by = EXCLUDED.extend_by', kind, token, cleanName(req.body?.name));
@@ -613,7 +614,7 @@ publicRoutes.post('/note/:token/translate', (req, res, next) => translateLimit(r
     if (!(await unlockOk('note', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const lang = LANGS[String(req.body?.lang || '')];
     if (!lang) return res.status(400).json({ error: 'Pick one of the languages in the list.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, title: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, title: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked('note', req.params.token, sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const acc = await accessFor('note', req.params.token, sid, !!note.shareEdit, await ownerReq(req, 'note', req.params.token));
@@ -631,7 +632,7 @@ publicRoutes.post('/:kind/:token/edit-request', (req, res, next) => guestWriteLi
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const live = kind === 'note' ? await prisma.note.count({ where: { shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const message = String(req.body?.message || '').trim().slice(0, 400);
@@ -677,7 +678,7 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const note = await prisma.note.findFirst({
-      where: { shareToken: req.params.token, ...LIVE(), isDeleted: false },
+      where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false },
       select: { title: true, content: true, updatedAt: true, shareEdit: true, shareExpiresAt: true, user: { select: { name: true } } },
     });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
@@ -723,7 +724,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
 /** A note found by its link, with the access checks every versions call needs. Sends the refusal itself and returns null. */
 async function versionGate(req: any, res: any) {
   if (!validToken(req.params.token)) { res.status(404).json({ error: 'This link is not shared any more.' }); return null; }
-  const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, shareEdit: true } });
+  const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, content: true, shareEdit: true } });
   if (!note) { res.status(404).json({ error: 'This link is not shared any more.' }); return null; }
   if (!(await unlockOk('note', req.params.token, unlockOf(req)))) { res.status(401).json({ error: 'This page needs its password.', locked: true }); return null; }
   const sid = req.query.sid || req.body?.sessionId;
@@ -757,7 +758,7 @@ publicRoutes.post('/note/:token/versions/:vid/restore', (req, res, next) => gues
     const b = await prisma.noteBackup.findFirst({ where: { id: req.params.vid, noteId: g.note.id }, select: { content: true } });
     if (!b) return res.status(404).json({ error: 'That version is gone.' });
     await saveVersion(g.note.id, g.note.content || '', { force: true, by: cleanName(req.body?.name) });
-    const saved = await prisma.note.update({ where: { id: g.note.id }, data: { content: b.content }, select: { updatedAt: true } });
+    const saved = await prisma.note.update({ where: { ...ANY_SPACE, id: g.note.id }, data: { content: b.content }, select: { updatedAt: true } });
     invalidateNote(g.note.id);
     void logActivity(g.note.id, cleanName(req.body?.name), 'edited');
     try { (req.app as any)?.get?.('io')?.to(g.note.userId).emit('notes_changed'); } catch { /* live refresh is best-effort */ }
@@ -778,7 +779,7 @@ const guestPresenceLimit = rateLimit({ windowMs: 60_000, max: 120, message: 'Too
 publicRoutes.put('/note/:token', (req, res, next) => guestSaveLimit(req, res, next), async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const note = await prisma.note.findFirst({ where: { shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE(), isDeleted: false }, select: { id: true, userId: true, shareEdit: true } });
     if (!note) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (!(await unlockOk('note', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const acc = await accessFor('note', req.params.token, req.body?.sessionId, !!note.shareEdit);
