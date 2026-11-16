@@ -9,6 +9,7 @@ import { saveVersion } from '../services/noteVersions.js';
 import { saveNoteMerged } from '../services/noteSave.js';
 import { invalidateNote } from '../services/collab.js';
 import { cleanNoteMeta, scrubBody } from '../utils/meta.js';
+import { countWords } from '../utils/wordCount.js';
 import { PRIVATE_TAG } from '../utils/aiAccess.js';
 import { aadOf, decryptText } from '../dataCrypto.js';
 import { notifyMentions } from '../services/mentions.js';
@@ -248,7 +249,7 @@ function lightNote(n: any) {
   return {
     ...rest,
     snippet: snippetText(content) || (/!\[[^\]]*\]\(|<figure>|<img /.test(content) ? 'Picture' : ''),
-    wordCount: content.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean).length,
+    wordCount: countWords(content),
     hasPics: /!\[|<figure>/.test(content),
     light: true,
   };
@@ -476,6 +477,9 @@ async function nameOf(userId: string): Promise<string | undefined> {
   return u?.name?.trim() || undefined;
 }
 
+/** Most notes a person (in one space) can have pinned to Home. */
+const MAX_PINNED = 3;
+
 export async function updateNote(req: any, res: any, next: any) {
   try {
     const own = await noteScope(req, res, 'write');
@@ -514,6 +518,11 @@ export async function updateNote(req: any, res: any, next: any) {
       const cur = await prisma.note.findFirst({ where: { id: req.params.id, ...own }, select: { meta: true, updatedAt: true } });
       if (cur) {
         data.meta = cleanNoteMeta(meta, cur.meta);
+        // at most MAX_PINNED pinned notes (N50): the client checks too, this stops a second window, an import or an API caller
+        if (data.meta.pinned === true && (cur.meta as any)?.pinned !== true) {
+          const pinned = await prisma.note.count({ where: { ...own, isDeleted: false, isArchived: false, id: { not: req.params.id }, meta: { path: ['pinned'], equals: true } } });
+          if (pinned >= MAX_PINNED) return res.status(409).json({ error: `You can pin up to ${MAX_PINNED} notes. Unpin one first.`, code: 'pin_limit' });
+        }
         if (Object.keys(data).length === 1 && tags === undefined) data.updatedAt = cur.updatedAt;
       }
     }

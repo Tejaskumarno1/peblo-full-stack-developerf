@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, Zap, Plus, X, ChevronLeft, FileText, Tag as TagIcon } from 'lucide-react';
-import { FOLDER_COLORS, colorOf, RULE_FIELDS, EDITED, YESNO, opOf, tagFor, smartMatch, newId } from './folders';
+import { FOLDER_COLORS, colorOf, RULE_FIELDS, EDITED, YESNO, MATCH_MODES, opOf, tagFor, smartMatch, newId } from './folders';
+import { FolderChip, IconPicker } from './FolderLook';
+import { DEFAULT_VIEW } from './viewDefaults';
+import { toneVars } from './folders';
 import { relTime, snippetOf } from './softUtils';
 import { useDialogFocus } from './a11y';
 
@@ -16,7 +19,7 @@ export function useOutside(ref, on, close) {
   }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export const DEFAULT_VIEW = { sort: 'updated', group: 'date', density: 'cozy', pinFirst: true, preview: true, labels: true, subs: false };
+export { DEFAULT_VIEW };
 
 const Seg = ({ label, value, opts, onPick }) => (
   <div>
@@ -44,7 +47,7 @@ export function ViewPopover({ view, setView, onClose }) {
       <Toggle label="Pinned notes first" on={view.pinFirst} onChange={set('pinFirst')} />
       <Toggle label="Show preview text" on={view.preview} onChange={set('preview')} />
       <Toggle label="Show folder labels" on={view.labels} onChange={set('labels')} />
-      <Toggle label="Include sub-folders" on={view.subs} onChange={set('subs')} />
+      <Toggle label="Include sub-folders" on={view.subs} onChange={(v) => setView({ ...view, subs: v, subsSet: true })} />
       <button type="button" className="np-reset" onClick={() => setView({ ...DEFAULT_VIEW })}>Reset to default</button>
     </div>
   );
@@ -81,11 +84,11 @@ export function MoveSheet({ folders, current, count, bare, onMove, onNew, onClos
       <div className="np-fl" role="radiogroup" aria-label="Folders">
         {folders.map((f) => (
           <button key={f.id} type="button" role="radio" aria-checked={pick === f.name} className={`np-fo${pick === f.name ? ' on' : ''}`} onClick={() => setPick(f.name)}>
-            <span className="sw" style={{ background: colorOf(f.color)[1] }}><Folder size={14} strokeWidth={1.8} /></span>{f.name}<span className="r" />
+            <FolderChip tone={f.color} icon={f.icon} size={14} className="sw" />{f.name}<span className="r" />
           </button>
         ))}
         <button type="button" role="radio" aria-checked={pick === ''} className={`np-fo${pick === '' ? ' on' : ''}`} onClick={() => setPick('')}>
-          <span className="sw" style={{ background: '#F4EEE5' }}><Folder size={14} strokeWidth={1.8} /></span>No folder<span className="r" />
+          <FolderChip tone="sand" size={14} className="sw" />No folder<span className="r" />
         </button>
         <button type="button" className="np-fo new" onClick={onNew}><span className="sw dashed"><Plus size={14} /></span>New folder...</button>
       </div>
@@ -113,7 +116,7 @@ export function TagSheet({ tags, count, bare, onApply, onClose }) {
   );
 }
 
-const Swatch = ({ tone, icon: I }) => <span className="np-swt" style={{ background: colorOf(tone)[1] }}><I size={15} strokeWidth={1.8} /></span>;
+const Swatch = ({ tone, icon: I, folderIcon }) => (I === Folder ? <FolderChip tone={tone} icon={folderIcon} /> : <span className="np-swt fc" style={toneVars(tone)}><I size={15} strokeWidth={1.8} /></span>);
 const KindSeg = ({ smart, onKind }) => (
   <div className="np-kind" role="radiogroup" aria-label="Kind of folder">
     <button type="button" role="radio" aria-checked={!smart} className={!smart ? 'on' : ''} onClick={() => onKind(false)}><Folder size={15} strokeWidth={1.8} />Folder</button>
@@ -126,6 +129,7 @@ export function NewFolderSheet({ defs, notes, initial, onSave, onSmart, onDelete
   const edit = !!initial?.id;
   const [name, setName] = useState(initial?.name || '');
   const [color, setColor] = useState(initial?.color || 'lilac');
+  const [icon, setIcon] = useState(initial?.icon);
   const [parent, setParent] = useState(initial?.parent || '');
   const [pickParent, setPickParent] = useState(false);
   const tag = tagFor(name);
@@ -135,18 +139,19 @@ export function NewFolderSheet({ defs, notes, initial, onSave, onSmart, onDelete
   const parentName = top.find((d) => d.id === parent)?.name || 'Top level';
   const dupe = defs.some((d) => !d.smart && d.id !== initial?.id && d.name.toLowerCase() === name.trim().toLowerCase());
   const ok = name.trim() && !dupe;
-  const save = () => ok && onSave({ id: initial?.id || newId(), name: name.trim().slice(0, 60), color, parent: parent || undefined, tag: collect && tag ? tag : undefined });
+  const save = () => ok && onSave({ id: initial?.id || newId(), name: name.trim().slice(0, 60), color, icon: icon || undefined, parent: parent || undefined, tag: collect && tag ? tag : undefined });
   return (
     <Sheet label={edit ? 'Edit folder' : 'New folder'} onClose={onClose} cls="nf">
       <h4 className="np-h4">{edit ? 'Edit folder' : 'New folder'}</h4>
       {!edit && <KindSeg smart={false} onKind={(s) => s && onSmart(name)} />}
       <div><span className="np-lab">Name</span>
-        <label className="np-inp"><Swatch tone={color} icon={Folder} /><input autoFocus aria-label="Folder name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} placeholder="Folder name" /></label>
+        <label className="np-inp"><Swatch tone={color} icon={Folder} folderIcon={icon} /><input autoFocus aria-label="Folder name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} placeholder="Folder name" /></label>
         {dupe && <p className="np-err">A folder with this name already exists.</p>}
       </div>
       <div><span className="np-lab">Colour</span>
         <div className="np-cols" role="radiogroup" aria-label="Colour">{FOLDER_COLORS.map(([k, c]) => <button key={k} type="button" role="radio" aria-checked={color === k} aria-label={k} className={color === k ? 'on' : ''} style={{ background: c }} onClick={() => setColor(k)} />)}</div>
       </div>
+      <div><span className="np-lab">Icon</span><IconPicker value={icon} tone={color} onPick={setIcon} /></div>
       <div><span className="np-lab">Inside</span>
         <div className="np-where"><Folder size={15} strokeWidth={1.8} />{parentName}<button type="button" onClick={() => setPickParent((v) => !v)}>Change</button></div>
         {pickParent && <div className="np-parents" role="radiogroup" aria-label="Parent folder">
@@ -173,27 +178,29 @@ export function SmartFolderPage({ defs, notes, tags, folderNames, initial, start
   useDialogFocus(pageRef, true);
   const [name, setName] = useState(initial?.name || startName || '');
   const [rules, setRules] = useState(initial?.smart?.length ? initial.smart : [{ f: 'tag', v: tags[0] || '' }]);
-  const match = useMemo(() => notes.filter((n) => smartMatch(n, rules)), [notes, rules]);
-  const first = (f) => (f === 'tag' ? tags[0] || '' : f === 'edited' ? '7' : f === 'folder' ? folderNames[0] || '' : 'yes');
+  const [mode, setMode] = useState(initial?.smartMode === 'any' ? 'any' : 'all'); // N12: all rules, or any one of them
+  const match = useMemo(() => notes.filter((n) => smartMatch(n, rules, mode)), [notes, rules, mode]);
+  const first = (f) => (f === 'tag' ? tags[0] || '' : f === 'text' ? '' : f === 'edited' ? '7' : f === 'folder' ? folderNames[0] || '' : 'yes');
   const setRule = (i, p) => setRules((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)));
   const valOpts = (f) => (f === 'tag' ? tags.map((t) => [t, `#${t}`]) : f === 'edited' ? EDITED : f === 'folder' ? folderNames.map((x) => [x, x]) : YESNO);
-  const ok = name.trim() && rules.length > 0 && rules.every((r) => r.v);
+  const ok = name.trim() && rules.length > 0 && rules.every((r) => String(r.v || '').trim());
   const dupe = defs.some((d) => d.smart && d.id !== initial?.id && d.name.toLowerCase() === name.trim().toLowerCase());
-  const save = () => ok && !dupe && onSave({ id: initial?.id || newId(), name: name.trim().slice(0, 60), color: initial?.color || 'lilac', smart: rules });
+  const save = () => ok && !dupe && onSave({ id: initial?.id || newId(), name: name.trim().slice(0, 60), color: initial?.color || 'lilac', smart: rules.map((r) => (r.f === 'text' ? { ...r, v: String(r.v).trim().slice(0, 80) } : r)), smartMode: mode === 'any' ? 'any' : undefined });
   return (
     <div className="np-page" role="dialog" aria-modal="true" aria-label="New smart folder" ref={pageRef} tabIndex={-1}>
       <div className="np-ph"><button type="button" className="np-back" aria-label="Back" onClick={onClose}><ChevronLeft size={18} strokeWidth={1.8} /></button><b>{edit ? 'Edit smart folder' : 'New smart folder'}</b></div>
       {!edit && <KindSeg smart onKind={(s) => !s && onKind(name)} />}
       <label className="np-inp"><Swatch tone="lilac" icon={Zap} /><input autoFocus aria-label="Smart folder name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Smart folder name" /></label>
       {dupe && <p className="np-err">A smart folder with this name already exists.</p>}
-      <div className="np-lab p">Notes that match</div>
+      <div className="np-modes"><span className="np-lab p">Notes that match</span>
+        <Pick label="Match mode" cls="mode" value={mode} opts={MATCH_MODES} onChange={setMode} /></div>
       {rules.map((r, i) => (
         <div key={i} className="np-rulewrap">
-          {i > 0 && <div className="np-and">AND</div>}
+          {i > 0 && <div className="np-and">{mode === 'any' ? 'OR' : 'AND'}</div>}
           <div className="np-rule">
             <Pick label="Rule field" value={r.f} opts={RULE_FIELDS} onChange={(f) => setRule(i, { f, v: first(f) })} />
             <span className="op">{opOf(r.f)}</span>
-            {valOpts(r.f).length ? <Pick label="Rule value" cls="v" value={r.v} opts={valOpts(r.f)} onChange={(v) => setRule(i, { v })} /> : <span className="op">nothing yet</span>}
+            {r.f === 'text' ? <input className="np-pick v" aria-label="Rule text" placeholder="word or phrase" maxLength={80} value={r.v} onChange={(e) => setRule(i, { v: e.target.value })} /> : valOpts(r.f).length ? <Pick label="Rule value" cls="v" value={r.v} opts={valOpts(r.f)} onChange={(v) => setRule(i, { v })} /> : <span className="op">nothing yet</span>}
             <button type="button" className="x" aria-label="Remove rule" disabled={rules.length === 1} onClick={() => setRules((rs) => rs.filter((_, j) => j !== i))}><X size={15} strokeWidth={1.8} /></button>
           </div>
         </div>

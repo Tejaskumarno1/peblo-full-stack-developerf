@@ -14,6 +14,7 @@ const SHORTCUTS = [
   { group: 'Everywhere', rows: [
     [[`${MOD}+K`], 'Command palette: jump anywhere, find a note, change style'],
     [[`${MOD}+J`], 'Open the AI Hub'],
+    [['Ctrl+Alt+D'], 'Switch between Light and Dark'],
     [['?'], 'Show this help'],
   ] },
   { group: 'Notes (Studio, Console)', rows: [

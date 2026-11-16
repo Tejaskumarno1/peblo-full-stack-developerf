@@ -74,3 +74,12 @@ Known gaps left on purpose: the public share page returns a mention's user id as
 43. **Seat limit.** With limit 2: second invite works, third gets 409 `seat_limit`; two simultaneous accepts of the last seat leave one winner.
 44. **Invites by id and reminders.** `POST /invites/lookup {inviteId}` for a different user returns `invalid`; `remind` twice within 24 h gives 429 on the second.
 45. **people-lite in an Office.** `GET /spaces/:id/people-lite?noteId=` lists only people who can read that note (without `noteId` it lists all space members, by design).
+
+## Notes list fixes (branch feat-fixes3, no migration)
+
+Local `peblo_test` database only; never `server/.env`. `scripts/smoke-test.mjs` has a block "(added UNRUN, N50)" before the final clean-up that covers step 46.
+46. **Pin limit (N50).** `PATCH /notes/:id {meta:{pinned:true}}` on a 4th pinned note (not deleted, not archived, same space) returns 409 `{error:'You can pin up to 3 notes. Unpin one first.', code:'pin_limit'}` and the note stays unpinned. The first three pins work; pinning an already pinned note again is 200; `{meta:{folder,favourite,locked}}` on a note is never blocked; after unpinning one, the 4th can be pinned. Trashed and archived pinned notes do not count. In a Team space the count is per space (`noteScope`). In the app the toast reads "You can pin up to 3 notes. Unpin one first."
+47. **Light list word count (N38).** `GET /notes?fields=list` returns `wordCount` from `utils/wordCount.ts`: a note `| a | b |
+|---|---|
+# Title [link](http://x.test)` counts 4 (a, b, Title, link), not the symbols. Same rules as `client/src/soft/noteStats.js`.
+48. **Account settings.** `PUT /profile {settings:{savedSearches:[...8 strings]}}` and `{settings:{noteFolders:[...with icon, smartMode, smart rule f:'text']}}` are stored and returned by `GET /profile` (the 20 KB settings limit still applies).
