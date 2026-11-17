@@ -31,6 +31,44 @@ const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
 const MSG_QUERY_AWARENESS = 3;
 const MSG_SEED = 10; // server -> client: "you may fill this empty document from this text"
+const MSG_IDENT = 12; // server -> client: "this is the name and colour the others see for you" (FM22, M17)
+
+/*
+ * Who is who in a room (FM22, M17, M2/M14). The server, not the browser, decides the name and colour on each person's cursor:
+ *  - a signed-in member is shown with their account name and picture (member: true), whatever their browser says;
+ *  - a guest on a share link keeps the name they typed, but is always marked guest: true, so it can never look like a verified member;
+ *  - colours are handed out per room so two people present at the same time never share one, and a person keeps theirs
+ *    while they stay (all their tabs share it).
+ */
+export const PEER_COLORS = ['#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#9a3412', '#4f46e5'];
+type Ident = { key: string; name: string; avatar: string | null; member: boolean };
+const cleanTyped = (raw: unknown) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '') || 'Guest';
+
+/** Rewrites the `user` field of every state in an awareness update to the identity the server holds for this connection. */
+export function stampAwareness(update: Uint8Array, ident: Ident, color: string): Uint8Array {
+  const dec = decoding.createDecoder(update);
+  const enc = encoding.createEncoder();
+  const n = decoding.readVarUint(dec);
+  encoding.writeVarUint(enc, n);
+  for (let i = 0; i < n; i++) {
+    const clientID = decoding.readVarUint(dec);
+    const clock = decoding.readVarUint(dec);
+    const raw = decoding.readVarString(dec);
+    let out = raw;
+    try {
+      const st = JSON.parse(raw);
+      if (st && typeof st === 'object') {
+        const typed = st.user && typeof st.user === 'object' ? st.user.name : undefined;
+        st.user = { name: ident.member ? ident.name : cleanTyped(typed ?? ident.name), color, avatar: ident.member ? ident.avatar : null, member: ident.member, guest: !ident.member, key: ident.key };
+        out = JSON.stringify(st);
+      }
+    } catch { /* not JSON: passed on as it came (y-protocols would reject it anyway) */ }
+    encoding.writeVarUint(enc, clientID);
+    encoding.writeVarUint(enc, clock);
+    encoding.writeVarString(enc, out);
+  }
+  return encoding.toUint8Array(enc);
+}
 const MSG_MD = 11; //   client -> server: "I saved the Markdown text with this fingerprint"
 
 export const CLOSE_RESET = 4002; // the note was changed another way: reload it
@@ -66,6 +104,7 @@ type Conn = {
   session: string | null;
   awarenessIds: Set<number>;
   alive: boolean;
+  ident?: Ident;
 };
 
 class Room {
@@ -81,6 +120,19 @@ class Room {
   dirty = false;
   closed = false;
   suspect: string | null = null;
+  colors = new Map<string, string>(); // identity key -> colour, while that person has a connection here
+
+  /** A colour nobody else present has; the same one for every tab of the same person. */
+  colorOf(key: string): string {
+    const have = this.colors.get(key);
+    if (have) return have;
+    const used = new Set(this.colors.values());
+    let h = 0; for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const free = PEER_COLORS.filter((c) => !used.has(c));
+    const pick = free.length ? free[h % free.length] : PEER_COLORS[h % PEER_COLORS.length];
+    this.colors.set(key, pick);
+    return pick;
+  }
 
   constructor(public id: string) {
     this.awareness.setLocalState(null);
@@ -240,6 +292,12 @@ class Room {
       encoding.writeVarUint8Array(a, awarenessProtocol.encodeAwarenessUpdate(this.awareness, [...states.keys()]));
       send(ws, encoding.toUint8Array(a));
     }
+    if (conn.ident) { // tell this person how the others see them, so their own avatar matches
+      const id = encoding.createEncoder();
+      encoding.writeVarUint(id, MSG_IDENT);
+      encoding.writeVarString(id, JSON.stringify({ name: conn.ident.member ? conn.ident.name : null, color: this.colorOf(conn.ident.key), avatar: conn.ident.avatar, member: conn.ident.member, key: conn.ident.key }));
+      send(ws, encoding.toUint8Array(id));
+    }
     open = true;
     for (const msg of early) { try { this.onMessage(conn, msg); } catch (e) { console.error('[collab] bad message:', (e as Error).message); } }
     void this.offerSeed();
@@ -256,7 +314,8 @@ class Room {
       syncProtocol.readSyncMessage(dec, enc, this.doc, conn.ws);
       if (encoding.length(enc) > 1) send(conn.ws, encoding.toUint8Array(enc));
     } else if (type === MSG_AWARENESS) {
-      awarenessProtocol.applyAwarenessUpdate(this.awareness, decoding.readVarUint8Array(dec), conn.ws);
+      const upd = decoding.readVarUint8Array(dec);
+      awarenessProtocol.applyAwarenessUpdate(this.awareness, conn.ident ? stampAwareness(upd, conn.ident, this.colorOf(conn.ident.key)) : upd, conn.ws);
     } else if (type === MSG_QUERY_AWARENESS) {
       const states = this.awareness.getStates();
       if (!states.size) return;
@@ -272,6 +331,7 @@ class Room {
   remove(conn: Conn) {
     if (!this.conns.delete(conn.ws)) return;
     awarenessProtocol.removeAwarenessStates(this.awareness, [...conn.awarenessIds], null);
+    if (conn.ident && ![...this.conns.values()].some((c) => c.ident?.key === conn.ident!.key)) this.colors.delete(conn.ident.key); // their colour is free again
     if (this.seedHolder === conn.ws) { this.seedHolder = null; void this.offerSeed(); }
     if (!this.conns.size) void this.idleClose();
   }
@@ -372,14 +432,25 @@ function send(ws: WebSocket, buf: Uint8Array) {
 }
 
 /** Who is knocking, and which note do they want? null = not allowed. */
-async function authorize(url: URL): Promise<{ noteId: string; readOnly: boolean; userId: string | null; share: string | null; session: string | null } | null> {
+type Who = { noteId: string; readOnly: boolean; userId: string | null; share: string | null; session: string | null; ident?: Ident };
+
+/** The identity the room shows: a member's account name and picture, or a guest keyed by their link session. */
+async function identOf(who: Who): Promise<Ident> {
+  if (who.userId) {
+    const u = (await prisma.$queryRaw<{ name: string | null; avatar: string | null }[]>`SELECT name, avatar FROM users WHERE id = ${who.userId}`)[0];
+    return { key: `u:${who.userId}`, name: (u?.name || 'Peblo member').trim().slice(0, 40), avatar: u?.avatar && u.avatar.length < 4096 ? u.avatar : null, member: true };
+  }
+  return { key: who.session ? `s:${who.session}` : `c:${Math.random().toString(36).slice(2, 12)}`, name: 'Guest', avatar: null, member: false };
+}
+
+async function authorize(url: URL): Promise<Who | null> {
   const share = url.searchParams.get('share');
   const session = url.searchParams.get('sid');
   const ticket = url.searchParams.get('ticket');
   const noteParam = url.searchParams.get('note');
   if (share) {
     if (!validShare.test(share)) return null;
-    const note = await prisma.note.findFirst({ where: { shareToken: share, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] }, select: { id: true, shareEdit: true } });
+    const note = await prisma.note.findFirst({ where: { spaceId: undefined, shareToken: share, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] }, select: { id: true, shareEdit: true } });
     if (!note) return null;
     if (!(await unlockOk('note', share, url.searchParams.get('unlock')))) return null;
     let canEdit = !!note.shareEdit;
@@ -490,10 +561,11 @@ export function attachCollab(httpServer: Server, opts: { trustProxy?: (addr: str
       try {
         const who = await authorize(url);
         if (!who) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
+        who.ident = await identOf(who).catch(() => undefined);
         const room = roomFor(who.noteId);
         if (room.conns.size >= MAX_CONNS_PER_ROOM) { socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
         wss!.handleUpgrade(req, socket, head, (ws) => {
-          void room.add({ ws, readOnly: who.readOnly, userId: who.userId, share: who.share, session: who.session, awarenessIds: new Set(), alive: true });
+          void room.add({ ws, readOnly: who.readOnly, userId: who.userId, share: who.share, session: who.session, awarenessIds: new Set(), alive: true, ident: who.ident });
         });
       } catch (e) {
         console.error('[collab] upgrade failed:', (e as Error).message);

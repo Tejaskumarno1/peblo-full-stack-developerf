@@ -5,7 +5,8 @@ import { authenticate } from '../middleware/auth.js';
 import { notifyUsers, nameOf } from '../services/notify.js';
 import { audit, can, orgAccess, type OrgRole, type SpaceRole } from '../utils/access.js';
 import { refreshUserRooms, kickFromSpace, refreshSpaceRoom } from '../utils/spaceRooms.js';
-import { policyOf, POLICY_KEYS } from '../utils/orgPolicy.js';
+import { policyOf, POLICY_KEYS, cleanDomain, emailAllowed, domainRefusal, MAX_DOMAINS } from '../utils/orgPolicy.js';
+import groupRoutes from './orgGroups.js';
 import { decryptSecret, encryptSecret } from '../secrets.js';
 import { publicBase, sendMail, type Mail } from '../services/mailer.js';
 import { seatBlock, SeatLimitError } from '../utils/seats.js';
@@ -71,6 +72,8 @@ router.post('/orgs/:orgId/invites', async (req, res) => {
   if (!EMAIL.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   const pol = (await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${orgId}`)[0]?.policy ?? {};
   if (orgRole === 'guest' && pol.guests !== true) return res.status(403).json({ error: 'Guests are turned off in this organization.' });
+  const allowed = policyOf(pol).allowedDomains; // FM24: sign-in restriction by company domain (guests included)
+  if (!emailAllowed(email, allowed)) return res.status(403).json(domainRefusal(allowed));
   if (orgRole === 'owner' && org.role !== 'owner') return res.status(403).json({ error: 'Only an owner can invite another owner.' });
   if (orgRole === 'owner') return res.status(400).json({ error: 'Invite them as an admin, then make them an owner from the member list.' }); // org_invites only stores admin, member or guest (035)
   const wanted: string[] = Array.isArray(req.body?.spaceIds) ? req.body.spaceIds.filter((x: unknown) => typeof x === 'string') : [];
@@ -144,6 +147,9 @@ async function lookup(token: string, userId: string, inviteId = '') {
   if (new Date(inv.expiresAt) < new Date()) return { state: 'expired' as const, ...base };
   const member = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM org_members WHERE org_id = ${inv.orgId} AND user_id = ${userId}`;
   if ((member[0]?.n ?? 0) > 0) return { state: 'member' as const, ...base };
+  // the policy may have changed since the invite was sent: an address outside the allowed domains cannot join (FM24)
+  const allowed = policyOf((await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${inv.orgId}`)[0]?.policy).allowedDomains;
+  if (!emailAllowed(inv.email, allowed)) return { state: 'domain_not_allowed' as const, ...base, allowedDomains: allowed };
   if (!me[0] || me[0].email.toLowerCase() !== inv.email.toLowerCase()) return { state: 'wrong_account' as const, ...base };
   if (!me[0].verified) return { state: 'unverified' as const, ...base };
   return { state: 'ready' as const, ...base, inv };
@@ -200,6 +206,7 @@ router.post('/invites/accept', async (req, res) => {
   const userId = uid(req);
   const k = inviteKey(req.body);
   const r: any = await lookup(k.token, userId, k.id);
+  if (r.state === 'domain_not_allowed') return res.status(403).json(domainRefusal(r.allowedDomains || []));
   if (r.state !== 'ready') return res.status(409).json({ error: 'This invite cannot be accepted.', state: r.state });
   const inv = r.inv;
   const spaceIds: string[] = Array.isArray(inv.spaceIds) ? inv.spaceIds : [];
@@ -223,7 +230,8 @@ router.post('/invites/accept', async (req, res) => {
 
 /* Expiring join links for an Office (mockups WsE04 to WsE06). Table: 041_org_join_links.sql.
  * An owner or admin makes a link; anyone signed in with a verified email who opens it joins the organization as a member and the Office. */
-const joinUrl = (req: any, token: string) => `${publicBase(req)}/join?token=${token}`;
+// the token goes after the # (never sent to a server, so never in a proxy's access log); JoinPage still reads ?token= from older links (R13)
+const joinUrl = (req: any, token: string) => `${publicBase(req)}/join#token=${token}`;
 
 router.post('/orgs/:orgId/join-links', async (req, res) => {
   if (!(await gate(req, res, true))) return;
@@ -286,7 +294,9 @@ async function lookupJoin(token: string, userId: string) {
   if (l.maxUses && l.uses >= l.maxUses) return { state: 'full' as const, ...base };
   const already = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM space_members sm JOIN org_members m ON m.org_id = ${l.orgId} AND m.user_id = sm.user_id WHERE sm.space_id = ${l.spaceId} AND sm.user_id = ${userId}`;
   if ((already[0]?.n ?? 0) > 0) return { state: 'member' as const, ...base };
-  const me = await prisma.$queryRaw<{ verified: boolean }[]>`SELECT (email_verified_at IS NOT NULL) AS verified FROM users WHERE id = ${userId}`;
+  const me = await prisma.$queryRaw<{ verified: boolean; email: string }[]>`SELECT (email_verified_at IS NOT NULL) AS verified, email FROM users WHERE id = ${userId}`;
+  const allowed = policyOf((await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${l.orgId}`)[0]?.policy).allowedDomains;
+  if (me[0] && !emailAllowed(me[0].email, allowed)) return { state: 'domain_not_allowed' as const, ...base, allowedDomains: allowed }; // FM24
   if (!me[0]?.verified) return { state: 'unverified' as const, ...base };
   return { state: 'ready' as const, ...base, link: l };
 }
@@ -296,10 +306,17 @@ router.get('/join-links/lookup', async (req, res) => {
   const { link: _l, ...out } = r;
   res.json(out);
 });
+// POST keeps the token out of the address (and so out of access logs); the GET above stays for older clients
+router.post('/join-links/lookup', async (req, res) => {
+  const r: any = await lookupJoin(typeof req.body?.token === 'string' ? req.body.token : '', uid(req));
+  const { link: _l, ...out } = r;
+  res.json(out);
+});
 
 router.post('/join-links/accept', async (req, res) => {
   const userId = uid(req);
   const r: any = await lookupJoin(String(req.body?.token ?? ''), userId);
+  if (r.state === 'domain_not_allowed') return res.status(403).json(domainRefusal(r.allowedDomains || []));
   if (r.state !== 'ready') return res.status(409).json({ error: 'This link cannot be used.', state: r.state });
   const l = r.link;
   // the use is counted inside the same transaction as the inserts: two people racing for the last place cannot both get it, and a failed join does not burn a use
@@ -428,15 +445,32 @@ router.get('/orgs/:orgId/policy', async (req, res) => {
   res.json({ policy: policyOf(r[0]?.policy) });
 });
 router.patch('/orgs/:orgId/policy', async (req, res) => {
-  if (!(await gate(req, res, true))) return;
+  const org = await gate(req, res, true); if (!org) return;
   const cur = (await prisma.$queryRaw<{ policy: any }[]>`SELECT policy FROM organizations WHERE id = ${req.params.orgId}`)[0]?.policy ?? {};
   const next = { ...cur };
   for (const k of POLICY_KEYS) if (typeof req.body?.[k] === 'boolean') next[k] = req.body[k];
+  // FM24: the company domains people must sign in with. Owners only; an empty list lets anyone in again. People already in are not removed.
+  if (req.body?.allowedDomains !== undefined) {
+    if (org.role !== 'owner') return res.status(403).json({ error: 'Only an owner can change who may sign in.', code: 'owner_only' });
+    const raw = req.body.allowedDomains;
+    const list: unknown[] = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/[\s,;]+/).filter(Boolean) : [];
+    const bad = list.filter((d) => !cleanDomain(d));
+    if (bad.length) return res.status(400).json({ error: `Not a domain: ${bad.slice(0, 3).map(String).join(', ')}. Type it like acme.com.`, code: 'bad_domain' });
+    const clean = [...new Set(list.map((d) => cleanDomain(d) as string))];
+    if (clean.length > MAX_DOMAINS) return res.status(400).json({ error: `Up to ${MAX_DOMAINS} domains.`, code: 'too_many' });
+    next.allowedDomains = clean;
+  }
   await prisma.$executeRaw`UPDATE organizations SET policy = ${JSON.stringify(next)}::jsonb WHERE id = ${req.params.orgId}`;
   await audit(req.params.orgId, uid(req), 'policy.changed', null, req.body ?? {});
   // turning public links off ends every link that already exists in this organization's spaces, in this same request (R9)
   const revoked = req.body?.publicShares === false ? await revokeOrgLinks(req.params.orgId, uid(req), 'policy.publicShares') : null;
-  res.json({ policy: policyOf(next), ...(revoked ? { revoked } : {}) });
+  // people already in whose address is outside the new list stay; the owner is told how many there are
+  let outside: number | undefined;
+  if (req.body?.allowedDomains !== undefined && next.allowedDomains.length) {
+    const emails = await prisma.$queryRaw<{ email: string }[]>`SELECT u.email FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ${req.params.orgId}`;
+    outside = emails.filter((e) => !emailAllowed(e.email, next.allowedDomains)).length;
+  }
+  res.json({ policy: policyOf(next), ...(revoked ? { revoked } : {}), ...(outside !== undefined ? { outside } : {}) });
 });
 
 /** Everything in the organization in one file (mockup C07). Owners and admins only, and only with their password again (R19). Each export is written to the audit log BEFORE it starts,
@@ -585,5 +619,7 @@ router.get('/orgs/:orgId/exports', async (req, res) => {
   const rows = await prisma.$queryRaw<any[]>`SELECT a.id, a.at, u.name AS "byName" FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id WHERE a.org_id = ${req.params.orgId} AND a.action = 'org.exported' ORDER BY a.at DESC LIMIT 5`;
   res.json({ exports: rows });
 });
+
+router.use(groupRoutes); // FM23 groups (routes/orgGroups.ts)
 
 export default router;

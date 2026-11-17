@@ -58,7 +58,7 @@ export async function shareVerdict(userId: string, kind: 'note' | 'todo', id: st
     const b = await shareBlockReason(raw.spaceId);
     return b ? { allowed: false, code: b.code, reason: b.reason } : { allowed: true };
   }
-  const t = await prisma.todo.findFirst({ where: { id, userId }, select: { spaceId: true } });
+  const t = await prisma.todo.findFirst({ where: { ...ANY_SPACE, id, userId }, select: { spaceId: true } });
   if (!t) return { allowed: false, code: 'not_found', reason: 'This task was not found.' };
   const b = await shareBlockReason(t.spaceId);
   return b ? { allowed: false, code: b.code, reason: b.reason } : { allowed: true };

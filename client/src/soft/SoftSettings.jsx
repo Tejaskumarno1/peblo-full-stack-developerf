@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { SaveCtx, isDesktopApp } from './settings/ui';
 import { ProfileSection, AccountsSection, AppearanceSection, NotesSection } from './settings/sections1';
 import { OrgsPage as OrganizationsSection, MembersPage, TeamsPage, PolicyPage, AiKeysPage, AuditPage, ExportPage, useActiveOrg } from './settings/OrgPages';
+import { SignInRulesPage, GroupsPage } from './settings/OrgSections';
 import { AISection, ConnectSection, SharedSection, DataSection, ShortcutsSection, AboutSection, NotificationsSection, SystemSection } from './settings/sections2';
 import './soft.css';
 import './soft2.css';
@@ -47,6 +48,8 @@ const ORG_ITEMS = [
   { id: 'org-members', name: 'Members', icon: Users, view: MembersPage, words: 'people invite roles owner admin member guest remove join', sub: (o) => `People in ${o} and what they can do.` },
   { id: 'org-teams', name: 'Teams', icon: Users, view: TeamsPage, words: 'team office space rename close leave create join as viewer', sub: () => 'Each team has its own notes, tasks and members.' },
   { id: 'org-policy', name: 'Policy', icon: Shield, view: PolicyPage, admin: true, words: 'policy guests public links ai features publishers', sub: (o) => `What people in ${o} are allowed to do.` },
+  { id: 'org-signin', name: 'Sign-in rules', icon: Shield, view: SignInRulesPage, words: 'domain company email sign in restriction sso allowed domains', sub: () => 'Which email addresses can join.' },
+  { id: 'org-groups', name: 'Groups', icon: Users, view: GroupsPage, words: 'groups group people assign share many members', sub: () => 'Named groups of members, to give work to several people at once.' },
   { id: 'org-ai-keys', name: 'AI keys', icon: KeyRound, view: AiKeysPage, admin: true, words: 'ai key openai gemini organization', sub: () => 'Keys the organization pays for. Members never see them.' },
   { id: 'org-audit', name: 'Audit log', icon: AlignLeft, view: AuditPage, admin: true, words: 'audit log history who did what', sub: () => 'Who did what, and when.' },
   { id: 'org-export', name: 'Export and seats', icon: Download, view: ExportPage, admin: true, words: 'export seats plan trial download organization', sub: () => 'Take everything out, and see what your plan covers.' },

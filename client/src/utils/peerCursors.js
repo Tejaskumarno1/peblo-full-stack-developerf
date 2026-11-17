@@ -5,11 +5,32 @@ import './peer-cursors.css';
  * caret is in (just a number); we draw a coloured bar and their name next to that block. The marks live in their own
  * layer on top of the page, so the editor's own elements are never touched. Only blocks are marked, never characters.
  */
-const PALETTE = ['#C9430F', '#2350FF', '#177A4E', '#9440D6', '#946E00', '#0A7A85', '#C93A6B'];
-export const peerColor = (id = '') => PALETTE[[...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % PALETTE.length];
+const PALETTE = ['#C9430F', '#2350FF', '#177A4E', '#9440D6', '#946E00', '#0A7A85', '#C93A6B', '#4F46E5', '#65A30D', '#9A3412'];
+const hashColor = (id = '') => PALETTE[[...String(id)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % PALETTE.length];
+
+/*
+ * M17: colours are handed out per page, so two people here at the same time never share one. A person keeps the colour they
+ * were given for as long as they stay (their id is the same on every heartbeat); it is freed when they leave.
+ */
+const assigned = new Map(); // person id -> colour
+export function assignPeerColors(peers) {
+  const live = new Set(peers.map((p) => p.id));
+  for (const id of [...assigned.keys()]) if (!live.has(id)) assigned.delete(id);
+  for (const p of peers) {
+    if (p.id == null || assigned.has(p.id)) continue;
+    const used = new Set(assigned.values());
+    const want = hashColor(p.id);
+    assigned.set(p.id, !used.has(want) ? want : (PALETTE.find((c) => !used.has(c)) || want));
+  }
+  return assigned;
+}
+/** The colour of a person on this page: the one handed out to them, or (before they were seen) a fixed pick from their id. */
+export const peerColor = (id = '') => assigned.get(id) || hashColor(id);
+/** FM22 / M2: a signed-in member is shown by their account name; anyone else is marked a guest, whatever name they typed. */
+export const peerLabel = (p) => (p.guest && !p.owner ? `${p.name} (guest)` : p.name);
 /** Idle people are drawn grey so they are not mistaken for someone who is active. */
 const colorOf = (p) => (p.status === 'idle' ? '#8A8071' : peerColor(p.id));
-const nameOf = (p) => (p.status === 'idle' ? `${p.name} \u00B7 idle` : p.name);
+const nameOf = (p) => (p.status === 'idle' ? `${peerLabel(p)} \u00B7 idle` : peerLabel(p));
 
 /** Scroll the editor so a person's block is in view (used by Follow). */
 export function scrollToPeerBlock(index) {
@@ -139,7 +160,7 @@ function drawRange(frag, blk, p, clip, used) {
   if (inView(last)) {
     const end = el('div', 'pb-peer-end', `left:${Math.round(last.right)}px;top:${Math.round(last.top)}px;height:${Math.round(last.height)}px;--peer:${color}`);
     end.setAttribute('data-peer-end', p.name);
-    end.appendChild(el('span', '', '', `${p.name} · End · ${words} word${words === 1 ? '' : 's'}`));
+    end.appendChild(el('span', '', '', `${peerLabel(p)} · End · ${words} word${words === 1 ? '' : 's'}`));
     if (quiet) end.classList.add('quiet');
     stackFlag(used, end, last.right, last.top);
     frag.appendChild(end);
@@ -188,7 +209,7 @@ function draw() {
   for (const p of current) {
     if (p.cursor == null || !blocks[p.cursor]) continue;
     const prev = byBlock.get(p.cursor);
-    byBlock.set(p.cursor, prev ? { ...prev, name: `${prev.name} + ${p.name}` } : { name: nameOf(p), color: colorOf(p) });
+    byBlock.set(p.cursor, prev ? { ...prev, name: `${prev.name} + ${peerLabel(p)}` } : { name: nameOf(p), color: colorOf(p) });
   }
   const frag = document.createDocumentFragment();
   for (const [idx, info] of byBlock) {
@@ -212,6 +233,7 @@ function draw() {
 /** Mark the blocks other people are in. `peers`: [{ id, name, cursor }]. Pass [] to clear. Safe to call often. */
 export function showPeers(peers) {
   // In a live room the editor draws everyone's real cursor itself; the block markers would double it.
+  assignPeerColors(peers || []);
   current = typeof document !== 'undefined' && document.querySelector('[data-live="1"]') ? [] : peers;
   if (!layer) {
     layer = document.createElement('div');

@@ -90,3 +90,10 @@ Local `peblo_test` database only; never `server/.env`. `scripts/smoke-test.mjs` 
 |---|---|
 # Title [link](http://x.test)` counts 4 (a, b, Title, link), not the symbols. Same rules as `client/src/soft/noteStats.js`.
 50. **Account settings.** `PUT /profile {settings:{savedSearches:[...8 strings]}}` and `{settings:{noteFolders:[...with icon, smartMode, smart rule f:'text']}}` are stored and returned by `GET /profile` (the 20 KB settings limit still applies).
+
+## Sharing and teams round 3 (branch feat-r3): RUN on a local database (smoke block "R3", 49 checks, all passed on peblo_test_r3)
+51. **Domain rule (FM24).** Owner sets `allowedDomains`; invite / invite accept / join accept outside it give 403 `domain_not_allowed`; subdomains allowed; a refused join burns no use; clearing the list lets people in.
+52. **Copy limit and expiry (FM12, M6).** `allowCopy:false` -> public `noCopy:true`, `/s/note/<t>.md` 403; back on -> 200. `expiresAt` future works, past / >10 years / not a date 400. A password-protected page's `.md` is 401 without the unlock.
+53. **Requests and opens (M11, M8, M13, FM22).** Edit and extend requests notify the owner once per 10 minutes; declined guests stay 30 days (the sweep removes one older than 30 days); `/opens` lists guest and member with visits; presence marks a guest typing a member's name as `guest:true`.
+54. **Groups (FM23)** CRUD and `/spaces/:id/groups`; live cursor identity (`stampAwareness`); a team note's `.md`; a team task's link and password.
+Still not run: two real browsers in one live room (colours and names come from the server; checked as a unit only).
