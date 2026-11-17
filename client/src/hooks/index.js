@@ -21,6 +21,9 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
   const idRef = useRef(noteId);
   const retryRef = useRef({ timer: null, n: 0 });
   const busyRef = useRef(0); // saves in flight: a retry must not start a second save (a draft would be created twice)
+  // A draft that got its real id (saveFn answered { newId }): what was really saved, so the text typed while the note was being
+  // created is not taken as saved when the id changes (N28).
+  const carryRef = useRef(null);
 
   saveFnRef.current = saveFn;
   unloadFnRef.current = unloadFn;
@@ -46,10 +49,12 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
     setSaveStatus(prev => prev !== 'saving' ? 'saving' : prev);
     busyRef.current += 1;
     try {
-      await saveFnRef.current(id, payload);
+      const out = await saveFnRef.current(id, payload);
       clearUnsaved(id, payload?.content); // saved: the local safety copy is not needed any more
       lastSavedRef.current = current;
-      delete pendingRef.current[id];
+      if (out && out.newId && out.newId !== id && idRef.current === id) carryRef.current = { to: out.newId, saved: current };
+      // only forget the pending copy when nothing newer was typed while this save was on its way
+      if (pendingRef.current[id] && JSON.stringify(pendingRef.current[id]) === current) delete pendingRef.current[id];
       clearTimeout(retryRef.current.timer); retryRef.current.n = 0;
       setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
       return true;
@@ -69,6 +74,9 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
 
   // ONLY initialize when noteId changes, bypassing redundant updates while typing
   useEffect(() => {
+    const carry = carryRef.current;
+    carryRef.current = null;
+    if (carry && carry.to === noteId) { lastSavedRef.current = carry.saved; return; } // the same note under its new id: anything typed meanwhile still gets saved
     lastSavedRef.current = data ? JSON.stringify(data) : '';
     setSaveStatus(prev => prev !== 'saved' ? 'saved' : prev);
   }, [noteId]);
@@ -82,6 +90,7 @@ export function useAutoSave(noteId, data, saveFn, delay = 1500, unloadFn = null)
       clearTimeout(retryRef.current.timer);
       const pending = pendingRef.current[id];
       if (!id || !pending) return;
+      if (carryRef.current && carryRef.current.to === idRef.current) { delete pendingRef.current[id]; return; } // a draft that just got its id: the save under the new id carries this text
       const snapshot = JSON.stringify(pending);
       if (snapshot === lastSavedRef.current) return;
       const startedAt = Date.now();

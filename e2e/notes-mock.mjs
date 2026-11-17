@@ -57,6 +57,9 @@ let teamOn = false;
 let shareVerdict = { allowed: true };
 const prefs = { muted: false };
 const people = [{ id: 'u2', name: 'Ana Lee', avatar: null }, { id: 'u3', name: 'Bo Chen', avatar: null }];
+// R2 section: a slow note create (draft race, N28), a strict space check for opening a note (R30) and the AI Hub answer (N52)
+let r2SlowCreate = 0;
+let r2SpaceStrict = false;
 
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function handle(route) {
@@ -84,11 +87,28 @@ async function handle(route) {
     if (q.search) list = list.filter((n) => (n.title + n.content).toLowerCase().includes(q.search.toLowerCase()));
     return json(route, { notes: q.fields === 'list' ? list.map(light) : list });
   }
+  if (p === '/notes' && method === 'POST' && r2SlowCreate) await new Promise((r) => setTimeout(r, r2SlowCreate)); // r2: the create takes a while
+  // r2: the one-request folder and Trash endpoints (server/src/routes/notesBulk.ts), on the Personal pool
+  if (p === '/notes/folders/rename' && method === 'POST') { let count = 0; for (const n of notes) if (n.meta?.folder === body.from) { n.meta.folder = body.to; count++; } return json(route, { ok: true, count }); }
+  if (p === '/notes/folders/clear' && method === 'POST') { let count = 0; for (const n of notes) if (n.meta?.folder === body.name) { delete n.meta.folder; count++; } return json(route, { ok: true, count }); }
+  if (p === '/notes/trash/info') return json(route, { retentionDays: 30, purges: true });
+  if (p === '/notes/trash/empty' && method === 'POST') { const gone = notes.filter((n) => n.isDeleted); for (const n of gone) notes.splice(notes.indexOf(n), 1); return json(route, { ok: true, count: gone.length }); }
+  if (p === '/notes/trash/restore' && method === 'POST') { const back = notes.filter((n) => n.isDeleted); for (const n of back) n.isDeleted = false; return json(route, { ok: true, count: back.length }); }
+  if (p === '/ai/hub/chat' && method === 'POST') return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `data: ${JSON.stringify({ type: 'sources', sources: [] })}
+
+data: ${JSON.stringify({ type: 'delta', text: 'Answer from the fake AI ' })}
+
+data: ${JSON.stringify({ type: 'delta', text: 'about this note.' })}
+
+data: ${JSON.stringify({ type: 'done' })}
+
+` });
   if (p === '/notes' && method === 'POST') { const n = mk(body.title || 'Untitled', body.content || '', { tags: body.tags || [], meta: body.meta || {} }); notes.unshift(n); return json(route, { note: n }, 201); }
   let m = /^\/notes\/([^/]+)$/.exec(p);
   if (m) {
     const n = notes.find((x) => x.id === m[1]) || teamNotes.find((x) => x.id === m[1]);
     if (!n) return json(route, { error: 'nope' }, 404);
+    if (r2SpaceStrict && req.headers()['x-peblo-space'] === 'team-ro' && !teamNotes.includes(n)) return json(route, { error: 'Note not found' }, 404); // r2: a Personal note is not in the team
     if (method === 'GET') return json(route, { note: n });
     if (method === 'PATCH') {
       if (failIds.has(n.id)) return json(route, { error: 'Server said no' }, 500);
@@ -724,6 +744,110 @@ try {
   await page.keyboard.press('Escape'); await wait(300);
   check('Escape closes it', !(await tdlg.count()));
   teamOn = false;
+
+  // ---- R2: locked notes in the row menu and bulk actions, folder in the address and renamed in one request, Trash restore all,
+  // ---- visible text size / page width, one POST for a fast-typed draft, inline Ask, tabs kept per space
+  {
+    const byId = (id) => notes.find((x) => x.id === id);
+    for (const n of notes) { if (!n.hidden) { n.isDeleted = false; n.isArchived = false; } }
+    user.settings.noteFolders = [{ id: 'r2f', name: 'R2 Old', color: 'mint' }];
+    byId('n1').meta = { folder: 'R2 Old' }; byId('n3').meta = { folder: 'R2 Old' }; byId('n2').meta = { locked: true };
+    await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(700);
+    // 1. locked: the row menu offers Unlock instead of Move, Archive and Trash
+    await page.locator('.s-notes-rows .s-note-row', { hasText: 'Kickoff notes' }).first().click({ button: 'right' }); await wait(300);
+    check('R2 a locked note\'s row menu offers Unlock', (await page.locator('[data-testid="rm-unlock"]').count()) === 1);
+    check('R2 ..and no Move, Archive or Move to Trash', (await page.locator('[data-testid="rm-move"], [data-testid="rm-archive"], [data-testid="rm-trash"]').count()) === 0);
+    await page.keyboard.press('Escape'); await wait(200);
+    // bulk delete skips the locked note and says so
+    await page.getByRole('button', { name: 'Select notes' }).click(); await wait(300);
+    await page.locator('.s-notes-rows .s-note-row', { hasText: 'Kickoff notes' }).first().click();
+    await page.locator('.s-notes-rows .s-note-row', { hasText: 'Biology revision' }).first().click();
+    await page.locator('.np-actions button', { hasText: 'Delete' }).click(); await wait(900);
+    const bulkToast = await page.locator('.s-toast').innerText().catch(() => '');
+    check('R2 bulk delete skips a locked note', byId('n3').isDeleted === true && byId('n2').isDeleted === false, JSON.stringify([byId('n3').isDeleted, byId('n2').isDeleted]));
+    check('R2 ..and the message says "1 locked note skipped"', /1 locked note skipped/.test(bulkToast), bulkToast);
+    byId('n3').isDeleted = false;
+    await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(600);
+    await page.locator('.s-notes-rows .s-note-row', { hasText: 'Kickoff notes' }).first().click({ button: 'right' }); await wait(300);
+    await page.locator('[data-testid="rm-unlock"]').click(); await wait(700);
+    check('R2 Unlock from the row menu clears meta.locked', !byId('n2').meta.locked, JSON.stringify(byId('n2').meta));
+
+    // 2. N11: the open folder is in the address; a refresh and opening a note keep it; Back leaves it
+    await page.goto(`${base}/notes?folder=r2f`); await page.locator('.np-fhead .s-notes-h1').waitFor(TO); await wait(500);
+    check('R2 ?folder=<id> opens that folder', (await page.locator('.np-fhead .s-notes-h1').innerText()) === 'R2 Old');
+    await page.reload(); await page.locator('.np-fhead .s-notes-h1').waitFor(TO); await wait(500);
+    check('R2 a refresh keeps the folder open', (await page.locator('.np-fhead .s-notes-h1').innerText()) === 'R2 Old');
+    await page.locator('.s-notes-rows .s-note-row', { hasText: 'Sprint plan' }).first().click(); await page.locator('textarea.s-note-title').waitFor(TO); await wait(600);
+    check('R2 opening a note from the folder keeps ?folder= in the address', /\/notes\/n1\?.*folder=r2f/.test(page.url()), page.url());
+    await page.locator('.np-fhead button[aria-label="Show all notes"]').click(); await wait(500);
+    check('R2 closing the folder takes it out of the address', !page.url().includes('folder='), page.url());
+    await page.goBack(); await wait(700);
+    check('R2 Back opens the folder again', (await page.locator('.np-fhead .s-notes-h1').count()) === 1 && page.url().includes('folder=r2f'), page.url());
+
+    // 3. N4: renaming the folder is one request, not a PATCH per note
+    reqs.length = 0;
+    await page.getByRole('button', { name: 'Edit this folder' }).first().click(); await wait(400);
+    await page.locator('input[aria-label="Folder name"]').fill('R2 New'); await page.locator('input[aria-label="Folder name"]').press('Enter'); await wait(1000);
+    const renames = reqs.filter((r) => r.method === 'POST' && r.path === '/notes/folders/rename');
+    const perNote = reqs.filter((r) => r.method === 'PATCH' && r.body?.meta && 'folder' in r.body.meta);
+    check('R2 renaming a folder sends one rename request and no per-note PATCH', renames.length === 1 && perNote.length === 0 && renames[0].body.from === 'R2 Old' && renames[0].body.to === 'R2 New', JSON.stringify([renames.length, perNote.length]));
+    check('R2 ..and its notes are in the renamed folder', byId('n1').meta.folder === 'R2 New' && byId('n3').meta.folder === 'R2 New');
+
+    // 4. N49: Trash says how long it keeps notes; Restore all is one request
+    notes.push(mk('R2 trash one', 'x', { isDeleted: true }), mk('R2 trash two', 'y', { isDeleted: true }));
+    reqs.length = 0;
+    await page.goto(`${base}/notes?filter=trash`); await page.locator('.s-note-row').first().waitFor(TO); await wait(700);
+    check('R2 the Trash says notes are deleted after 30 days', /30 days/.test(await page.locator('[data-testid="trash-retention"]').innerText().catch(() => '')));
+    await page.locator('[data-testid="trash-restore-all"]').click(); await wait(900);
+    check('R2 Restore all is one request and puts every note back', reqs.filter((r) => r.path === '/notes/trash/restore').length === 1 && !notes.some((n) => /^R2 trash/.test(n.title) && n.isDeleted));
+
+    // 5. N32: text size and page width are shown as choices in the "..." menu
+    await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(700);
+    await page.locator('.s-menu-wrap button[aria-label="More"]').click(); await wait(300);
+    check('R2 the note menu shows Text size S / M / L and Page width Narrow / Wide at once', (await page.locator('[data-testid="seg-size"] button').count()) === 3 && (await page.locator('[data-testid="seg-width"] button').count()) === 2);
+    await page.locator('[data-testid="seg-size-l"]').click(); await wait(500);
+    check('R2 picking L saves the account text size and the note gets larger', user.settings.fontSize === 'large' && (await page.locator('.s-note-body').getAttribute('data-font')) === 'l', user.settings.fontSize);
+    await page.locator('[data-testid="seg-width-narrow"]').click(); await wait(300);
+    check('R2 picking Narrow narrows the page, and the choice shows as pressed', (await page.locator('.s-notes').getAttribute('data-width')) === 'narrow' && (await page.locator('[data-testid="seg-width-narrow"]').getAttribute('aria-pressed')) === 'true');
+    await page.locator('[data-testid="seg-size-m"]').click(); await page.locator('[data-testid="seg-width-wide"]').click(); await wait(300);
+    await page.keyboard.press('Escape');
+
+    // 6. N52: Ask about this note answers in the side card, the page stays
+    reqs.length = 0;
+    await page.locator('#s-note-ask').fill('What is this about?'); await page.locator('#s-note-ask').press('Enter'); await wait(1200);
+    const askReq = reqs.find((r) => r.path === '/ai/hub/chat');
+    check('R2 Ask about this note answers inline', /Answer from the fake AI about this note/.test(await page.locator('[data-testid="note-ask-answer"]').innerText().catch(() => '')) && /\/notes\/n1/.test(page.url()), page.url());
+    check('R2 ..with the note attached to the question', askReq?.body?.noteIds?.[0] === 'n1' && askReq.body.messages?.[0]?.content === 'What is this about?', JSON.stringify(askReq?.body));
+
+    // 7. N28: typing fast in a new draft while it is being created makes exactly one note, with all the text
+    r2SlowCreate = 2500;
+    reqs.length = 0;
+    await page.getByRole('button', { name: 'New note', exact: true }).first().click(); await wait(600);
+    await page.locator('.bn-editor[contenteditable="true"]').first().click();
+    await page.keyboard.type('draft race words typed while the note is created on the server', { delay: 60 });
+    await wait(5500);
+    r2SlowCreate = 0;
+    const posts = reqs.filter((r) => r.method === 'POST' && r.path === '/notes');
+    const made = notes.filter((n) => (n.content || '').includes('draft race words'));
+    check('R2 a fast-typed draft sends exactly one POST /notes', posts.length === 1, posts.length);
+    check('R2 ..and every word reaches that one note', made.length === 1 && made[0].content.includes('created on the server'), JSON.stringify(made.map((n) => n.content)));
+
+    // 8. R30: tabs stay with their space; a space change does not write Personal tabs under the team's key
+    await page.goto(`${base}/notes/n1`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(600);
+    await page.goto(`${base}/notes/n3`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(600);
+    wsOrgs = [{ id: 'o1', name: 'Org', status: 'active', role: 'member', spaces: [{ id: 'team-ro', name: 'Design', kind: 'team', role: 'member', members: 3 }] }];
+    r2SpaceStrict = true;
+    await page.evaluate(() => { localStorage.setItem('peblo-note-tabs:u1:team-ro', JSON.stringify({ tabs: [{ id: 'gone-note', title: 'Stale', pinned: false }] })); localStorage.setItem('peblo-space', 'team-ro'); window.dispatchEvent(new Event('peblo:space')); });
+    await wait(2500);
+    const tabsOf = (k) => page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{"tabs":[]}').tabs.map((t) => t.id), k);
+    const teamTabs = await tabsOf('peblo-note-tabs:u1:team-ro');
+    const personalTabs = await tabsOf('peblo-note-tabs:u1');
+    check('R2 after a space change the Personal tabs are not written under the team key', !teamTabs.includes('n1') && !teamTabs.includes('n3'), teamTabs.join(','));
+    check('R2 ..a stale tab of the team (note not in its list) is dropped', !teamTabs.includes('gone-note'), teamTabs.join(','));
+    check('R2 ..and the Personal tabs are kept under their own key', personalTabs.includes('n1') && personalTabs.includes('n3'), personalTabs.join(','));
+    await page.evaluate(() => { localStorage.removeItem('peblo-space'); window.dispatchEvent(new Event('peblo:space')); });
+    r2SpaceStrict = false; wsOrgs = [];
+  }
 } catch (e) {
   failures++; console.log('FAIL  test crashed:', e.message.split(String.fromCharCode(10)).slice(0, 5).join(' | '));
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));

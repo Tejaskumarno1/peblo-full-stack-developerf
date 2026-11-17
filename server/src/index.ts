@@ -15,6 +15,7 @@ import prisma, { initDatabase } from './db.js';
 import authRoutes from './routes/auth.js';
 import profileRoutes from './routes/profile.js';
 import notesRoutes from './routes/notes.js';
+import notesBulkRoutes from './routes/notesBulk.js';
 import { purgeExpiredTrash } from './controllers/notesController.js';
 import { purgeScheduledDeletions } from './services/accountDeletion.js';
 import { purgeClosedOrgs } from './services/orgPurge.js';
@@ -149,6 +150,7 @@ app.use('/api', apiLimiter());
   app.use('/api/tags', tagsRoutes);
 app.use('/api/tokens', tokensRoutes);
   app.use('/api/oauth', oauthApi);
+  app.use('/api/notes', notesBulkRoutes); // folder rename/clear and Trash empty/restore in one request each (before /:id routes)
   app.use('/api/notes', notesRoutes);
   app.use('/api/notes', noteAiRoutes);
   app.use('/api/ai', aiRoutes);

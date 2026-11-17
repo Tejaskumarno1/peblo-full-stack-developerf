@@ -1,9 +1,9 @@
 import { Fragment, memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import LiveDot from '../components/LiveDot';
 import NoteTabs from './NoteTabs';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Plus, Check, Sparkles, ArrowUp, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock, LockOpen } from 'lucide-react';
+import { Users, Archive, ClipboardCopy, Copy, FileDown, FolderInput, Keyboard, MoveHorizontal, Share2, Trash2, Plus, Check, Sparkles, History, X, Loader2, Pin, Link2, Maximize2, Minimize2, Eye, Pencil, Search, Star, SlidersHorizontal, SquareCheck, Folder, Zap, Tag as TagIcon, Image as PicIcon, MousePointer2, MoreHorizontal, ChevronDown, ChevronLeft, Lock, LockOpen, Type, RotateCcw } from 'lucide-react';
 import { marked } from 'marked';
 import TaskSheet from './TaskSheet';
 import ShareDialog from './ShareDialog';
@@ -47,12 +47,17 @@ import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 import Toast from '../components/Toast';
 import NavMenu from './NavMenu';
-import { TagFilterBar, BulkFailDialog } from './NotesExtras';
+import { TagFilterBar, BulkFailDialog, SegRow, NoteAskPanel, captureCaret, restoreCaret } from './NotesExtras';
+import { notesBulkAPI } from './notesBulkApi';
+import { getSpace } from '../api/space';
 import { useNotesKeys } from './notesKeys';
 import { bulkRun, partialText } from './bulkRun';
 import { folderCounts } from './folderCounts';
 import { TeamNoteByline, noteManageable } from './TeamNoteInfo';
 
+// The space the sidebar list was last loaded for (R30: tabs are only pruned against the right space's notes). Module level, not a
+// ref: the page is mounted again on a space change while the old instance's request may still finish.
+const sidebarSpace = { current: undefined };
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 // the first line of a note, used as its name while it has no title
 const firstLine = (content) => {
@@ -152,7 +157,6 @@ export default function SoftNotes() {
   const [tagDraft, setTagDraft] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [question, setQuestion] = useState('');
   const [toast, setToast] = useState('');
   const [toastAct, setToastAct] = useState(null); // { label, run }: a button on the message (Undo)
   const toastTimer = useRef(null);
@@ -195,7 +199,17 @@ export default function SoftNotes() {
   const group = view.group;
   const layout = ['cards', 'sections', 'classic'].includes(acct?.noteLayout) ? acct.noteLayout : 'cards';
   const [viewOpen, setViewOpen] = useState(false);
-  const [fSel, setFSel] = useState(null); // { kind: 'folder' | 'smart', id }
+  // { kind: 'folder' | 'smart', id }. N11: the open folder is also in the address (?folder=<id>), so refresh, Back and links keep it.
+  const [fSel, setFSelState] = useState(() => { const id = new URLSearchParams(window.location.search).get('folder'); return id ? { kind: 'folder', id } : null; });
+  const setFSel = useCallback((v) => {
+    setFSelState(v);
+    const id = v?.id || null;
+    const sp = new URLSearchParams(window.location.search);
+    if ((sp.get('folder') || null) === id) return;
+    if (id) sp.set('folder', id); else sp.delete('folder');
+    const qs = sp.toString();
+    navigate(`${window.location.pathname}${qs ? `?${qs}` : ''}`); // a new history step: Back returns to the folder before
+  }, [navigate]);
   const [cards, setCards] = useState(false); // the folder cards view
   const [gSel, setGSel] = useState(null); // the date or tag card that is open
   const [sheet, setSheet] = useState(null); // 'move' | 'tag' | 'folder'
@@ -211,12 +225,17 @@ export default function SoftNotes() {
   const saveSearch = () => addSavedSearch(q);
   const bodyRef = useRef(null);
   // the note text size is Settings > Notes > Text size in notes (settings.fontSize); the old per-note 'peblo-note-font' is still read
+  // N32: Text size is chosen from the note's "..." menu too (S / M / L shown at once); it is the account's settings.fontSize
+  const pickFont = (k) => {
+    try { localStorage.removeItem('peblo-note-font'); } catch { /* ignore */ } // the old per-device choice would win over 'medium'
+    updateSettings({ fontSize: { s: 'small', m: 'medium', l: 'large' }[k] });
+  };
   const noteFont = useMemo(() => ({ small: 's', medium: 'm', large: 'l' }[effectiveNoteFont(acct, (() => { try { return localStorage.getItem('peblo-note-font'); } catch { return null; } })())] || 'm'), [acct?.fontSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- data ----------
-  const { data: allNotes = [] } = useQuery({
+  const { data: allNotes = [], isSuccess: sidebarOk } = useQuery({
     queryKey: ['notes', 'soft-sidebar'], // not 'sidebar': other screens share that key and expect full text
-    queryFn: () => notesAPI.getAll({ sort: 'updated', fields: 'list' }).then((r) => r.data.notes || []),
+    queryFn: () => { const sp = getSpace() || null; return notesAPI.getAll({ sort: 'updated', fields: 'list' }).then((r) => { sidebarSpace.current = sp; return r.data.notes || []; }); },
   });
   const listParams = filter === 'archive' ? { archived: 'true' } : filter === 'trash' ? { deleted: 'true' } : filter === 'all' ? {} : { tag: filter };
   const { data: listed = [] } = useQuery({
@@ -267,6 +286,27 @@ export default function SoftNotes() {
   const smartDefs = useMemo(() => allDefs.filter((d) => d.smart), [allDefs]);
   const selDef = fSel ? allDefs.find((d) => d.id === fSel.id) : null;
   const folders = useMemo(() => normalDefs.map((d) => d.name), [normalDefs]);
+  // N11: the folder in the address may be a smart folder, or gone
+  useEffect(() => {
+    if (!fSel) return;
+    if (selDef) { const k = selDef.smart ? 'smart' : 'folder'; if (k !== fSel.kind) setFSelState({ kind: k, id: fSel.id }); }
+    else if (sidebarOk && acct) setFSel(null); // a folder that no longer exists
+  }, [fSel, selDef, sidebarOk]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Back / Forward: the open folder follows the address
+  useEffect(() => {
+    const on = () => { const id = new URLSearchParams(window.location.search).get('folder'); setFSelState((cur) => ((cur?.id || null) === id ? cur : id ? { kind: 'folder', id } : null)); };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, []);
+  // opening a note (rows link to /notes/<id>) keeps the open folder in the address, so a refresh keeps it too
+  const loc = useLocation();
+  useEffect(() => {
+    if (!fSel) return;
+    const sp = new URLSearchParams(loc.search);
+    if (sp.get('folder') === fSel.id) return;
+    sp.set('folder', fSel.id);
+    navigate(`${loc.pathname}?${sp.toString()}`, { replace: true });
+  }, [loc.pathname, loc.search, fSel]); // eslint-disable-line react-hooks/exhaustive-deps
   const passes = (n) => {
     if (!selDef) return true;
     return selDef.smart ? smartMatch(n, selDef.smart, selDef.smartMode) : inFolder(n, selDef, allDefs, view.subs);
@@ -359,13 +399,25 @@ export default function SoftNotes() {
   const noAuto = useRef(false);
   const loadingId = useRef(null); // the note whose full text is being fetched for the editor
   const closeDoc = useCallback(() => { noAuto.current = true; setDoc(null); setEditorKey('none'); navigate('/notes', { replace: true }); }, [navigate]);
+  // R30: a note of the old space must not stay open (and become a tab) in the new space. Its last words were already sent to
+  // the space it was opened in (useSwitchSpace flushes, and every save goes to the note's own space).
+  const prevSpace = useRef(curSpace);
+  useEffect(() => {
+    if (prevSpace.current === curSpace) return;
+    prevSpace.current = curSpace;
+    if (docRef.current && !docRef.current.isDraft) { noAuto.current = false; setDoc(null); setEditorKey('none'); }
+  }, [curSpace]);
   useEffect(() => { if (doc?.id && !doc.isDraft && params.get('view') === 'reader') setPreview(true); }, [doc?.id, params.get('view')]); // eslint-disable-line react-hooks/exhaustive-deps -- Open as > Reader view
 
+  const draftKeyRef = useRef(null); // which draft '__draft__' means right now (N28)
+  const draftJobs = useRef(new Map()); // draft key -> the request creating it: later saves of that draft wait for it and save into it
   const startDraft = useCallback(() => {
     noAuto.current = false;
     rememberNoteSpace('__draft__');
+    const draftKey = `d${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+    draftKeyRef.current = draftKey;
     const folderName = selDef && !selDef.smart ? selDef.name : '';
-    setDoc({ id: '__draft__', isDraft: true, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], meta: folderName ? { folder: folderName } : undefined, createdAt: new Date().toISOString() });
+    setDoc({ id: '__draft__', isDraft: true, draftKey, title: '', content: '', tags: selTags.length ? selTags : filter === 'inbox' ? ['inbox'] : [], meta: folderName ? { folder: folderName } : undefined, createdAt: new Date().toISOString() });
     setEditorKey(`draft-${Date.now()}`);
     setPreview(false);
     navigate('/notes', { replace: true });
@@ -401,18 +453,38 @@ export default function SoftNotes() {
 
   const saveFn = useCallback(async (id, payload) => {
     if (id === '__draft__') {
-      const dm = docRef.current?.meta;
-      const { data } = await notesAPI.create({ ...payload, title: payload.title || 'Untitled', ...(dm?.folder ? { meta: { folder: dm.folder } } : {}) }, noteSpaceCfg('__draft__'));
-      const created = data.note;
-      rememberNoteSpace(created.id, noteSpaceCfg('__draft__')?.spaceOverride ?? null);
+      // N28: one draft is created once. A save that comes while the note is being created (typing on, a retry, the flush when
+      // the id changes) waits for that request and saves into the new note instead of creating a second one.
+      const key = draftKeyRef.current;
+      const running = draftJobs.current.get(key);
+      if (running) {
+        const made = await running;
+        await saveNoteSafe(made.id, { ...payload, title: payload.title || 'Untitled' });
+        return { newId: made.id };
+      }
+      const dm = docRef.current?.isDraft && docRef.current.draftKey === key ? docRef.current.meta : null;
+      const spaceCfg = noteSpaceCfg('__draft__');
+      const job = notesAPI.create({ ...payload, title: payload.title || 'Untitled', ...(dm?.folder ? { meta: { folder: dm.folder } } : {}) }, spaceCfg).then((r) => r.data.note);
+      draftJobs.current.set(key, job);
+      job.catch(() => { if (draftJobs.current.get(key) === job) draftJobs.current.delete(key); }); // a failed create may be tried again
+      const created = await job;
+      rememberNoteSpace(created.id, spaceCfg?.spaceOverride ?? null);
       // Keep the editor as it is; only the id changes.
       setNoteBase(created.id, created.updatedAt, payload.content);
-      setDoc((d) => (d && d.isDraft ? { ...d, id: created.id, isDraft: false, meta: created.meta || d.meta, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
+      const still = docRef.current?.isDraft && docRef.current.draftKey === key; // not if the person started another draft meanwhile
+      setDoc((d) => (d && d.isDraft && d.draftKey === key ? { ...d, id: created.id, isDraft: false, meta: created.meta || d.meta, createdAt: created.createdAt, updatedAt: created.updatedAt } : d));
       queryClient.invalidateQueries({ queryKey: ['notes'] });
-      navigate(`/notes/${created.id}`, { replace: true });
-      return;
+      if (still) navigate(`/notes/${created.id}${window.location.search}`, { replace: true });
+      return { newId: created.id };
     }
-    const res = await saveNoteSafe(id, { ...payload, title: payload.title || 'Untitled' });
+    let res;
+    try { res = await saveNoteSafe(id, { ...payload, title: payload.title || 'Untitled' }); } catch (e) {
+      if (e?.response?.data?.code === 'locked') { // locked on another device meanwhile: the editor becomes read only; the text stays in the local copy
+        setDoc((d) => (d && d.id === id ? { ...d, meta: { ...(d.meta || {}), locked: true } } : d));
+        lockedFlash.current?.();
+      }
+      throw e;
+    }
     const now = res?.updatedAt ? new Date(res.updatedAt).toISOString() : new Date().toISOString();
     setDoc((d) => (d && d.id === id ? { ...d, updatedAt: now } : d));
     // the cached list entry is updated in place; a light entry (no text) gets a fresh snippet and word count instead of the text
@@ -429,6 +501,7 @@ export default function SoftNotes() {
       : old));
   }, [navigate, queryClient]);
 
+  const lockedFlash = useRef(null);
   const { saveStatus, forceSave } = useAutoSave(doc?.id, saveData, saveFn, 1000, saveNoteOnUnload);
   // "Saved" is shown for two seconds after a save finishes, then fades back to the quiet tick
   const [justSaved, setJustSaved] = useState(false);
@@ -470,8 +543,10 @@ export default function SoftNotes() {
       const m = e.detail;
       const d = docRef.current;
       if (!d || d.id !== m.id || d.content !== m.sent) return; // typed more meanwhile: the next save merges again
+      const caret = captureCaret(bodyRef.current); // N27: the editor is rebuilt with the merged text; put the cursor back where it was
       setDoc((cur) => ({ ...cur, content: m.content, updatedAt: new Date(m.updatedAt).toISOString() }));
       setEditorKey(`merged-${Date.now()}`);
+      if (caret) setTimeout(() => restoreCaret(bodyRef.current, caret), 60);
     };
     window.addEventListener('pb-note-merged', onMerged);
     return () => window.removeEventListener('pb-note-merged', onMerged);
@@ -488,8 +563,10 @@ export default function SoftNotes() {
     const apply = (content, updatedAt) => {
       const cur = docRef.current;
       if (!cur || cur.id !== d.id || cur.content !== d.content || content === cur.content) return; // typed, or switched note, meanwhile
+      const caret = captureCaret(bodyRef.current);
       setDoc((c) => ({ ...c, content, updatedAt }));
       setEditorKey(`remote-${Date.now()}`);
+      if (caret) setTimeout(() => restoreCaret(bodyRef.current, caret), 60);
     };
     if (typeof f.content === 'string') { if (f.content !== d.content) apply(f.content, f.updatedAt); return; }
     notesAPI.get(d.id).then((r) => apply(r.data.note.content || '', r.data.note.updatedAt)).catch(() => {}); // a light list entry has no text: fetch the note
@@ -622,7 +699,7 @@ export default function SoftNotes() {
     const outOfInbox = leaveInbox.current && !!name;
     leaveInbox.current = false;
     let ids = only ? [only] : selectMode && picked.length ? picked : doc ? [doc.id] : [];
-    if (!(doc?.isDraft && ids.length === 1 && ids[0] === doc.id)) { ids = manageableIds(ids); if (!ids.length) { setPicked([]); setSelectMode(false); return; } }
+    if (!(doc?.isDraft && ids.length === 1 && ids[0] === doc.id)) { ids = manageableIds(ids, { skipLocked: true }); if (!ids.length) { setPicked([]); setSelectMode(false); return; } }
     if (!only && !selectMode && doc?.isDraft) { // not saved yet: the folder is used when the note is first saved
       patch({ meta: name ? { ...(doc.meta || {}), folder: name } : undefined });
       flash(name ? `Will be saved in ${name}` : 'No folder');
@@ -643,7 +720,7 @@ export default function SoftNotes() {
       patch({ meta: { ...(doc.meta || {}), folder: name || '' }, ...(drop.length ? { tags: (doc.tags || []).filter((t) => !drop.includes(t)) } : {}) });
     }
     refreshLists();
-    if (bulkReport(res, ids.length, { oneFail: 'Could not move' })) flash(name ? `Moved to ${name}` : dropped.size ? `Removed from the folder (and ${[...dropped].map((t) => `#${t}`).join(', ')})` : 'Removed from folder');
+    if (bulkReport(res, ids.length, { oneFail: 'Could not move' })) flash(plusSkipped(name ? `Moved to ${name}` : dropped.size ? `Removed from the folder (and ${[...dropped].map((t) => `#${t}`).join(', ')})` : 'Removed from folder', ids));
     setPicked([]); setSelectMode(false);
   };
   // ---- right-click menu on a note row, and dropping a note on a folder
@@ -671,6 +748,11 @@ export default function SoftNotes() {
     refreshLists(); if (doc?.id === n.id) closeDoc();
     flash('Moved to the Trash', { label: 'Undo', run: async () => { await notesAPI.restore(n.id); refreshLists(); } });
   }, 'Could not delete the note');
+  const rowUnlock = (n) => rowAct(async () => {
+    await notesAPI.update(n.id, { meta: { locked: false } });
+    if (docRef.current?.id === n.id) patch({ meta: { ...(docRef.current.meta || {}), locked: undefined } });
+    refreshLists(); flash('Unlocked. You can edit, move or delete it again.');
+  }, 'Could not unlock the note');
   const rowRestore = (n) => rowAct(async () => { await notesAPI.restore(n.id); refreshLists(); flash('Restored'); }, 'Could not restore the note');
   const rowDeleteForever = (n) => rowAct(async () => {
     if (!(await confirmDialog({ title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return;
@@ -699,10 +781,14 @@ export default function SoftNotes() {
     setSheet(null); setFolderEdit(null); setSmartPage(null);
     if ((await saveDefs(next)) === false) { flash('Could not save the folder. Nothing was changed.'); return; } // do not touch the notes when the account did not take it
     if (was && !def.smart && was !== def.name) {
-      const mine = allNotes.filter((n) => n.meta?.folder === was);
-      const res = await runBulk(mine.map((n) => n.id), (id) => notesAPI.update(id, { meta: { folder: def.name } }));
+      // N4: one request renames the folder on every note of yours in this space, in one transaction (all or nothing)
+      try { await notesBulkAPI.renameFolder(was, def.name); } catch {
+        await saveDefs(defs); // put the old name back, so the folder and its notes still match
+        refreshLists();
+        flash('Could not rename the folder. Nothing was changed.');
+        return;
+      }
       refreshLists();
-      if (!bulkReport(res, mine.length, { oneFail: 'Could not rename the folder on every note' })) return;
     }
     if (moveAfter && !def.smart) { setMoveAfter(false); await moveTo(def.name); return; }
     setFSel({ kind: def.smart ? 'smart' : 'folder', id: def.id });
@@ -715,10 +801,13 @@ export default function SoftNotes() {
     setSheet(null); setFolderEdit(null); setSmartPage(null);
     if ((await saveDefs(defs.filter((d) => d.id !== def.id).map((d) => (d.parent === def.id ? { ...d, parent: undefined } : d)))) === false) { flash('Could not delete the folder. Nothing was changed.'); return; }
     if (count) {
-      const mine = allNotes.filter((n) => n.meta?.folder === def.name);
-      const res = await runBulk(mine.map((n) => n.id), (id) => notesAPI.update(id, { meta: { folder: '' } }));
+      try { await notesBulkAPI.clearFolder(def.name); } catch { // N4: one request; on failure the folder comes back, so no note is left in a folder that is gone
+        await saveDefs(defs);
+        refreshLists();
+        flash('Could not delete the folder. Nothing was changed.');
+        return;
+      }
       refreshLists();
-      bulkReport(res, mine.length, { oneFail: 'Could not take every note out' });
     }
     if (fSel?.id === def.id) setFSel(null);
   };
@@ -730,14 +819,25 @@ export default function SoftNotes() {
   useOutside(outsideHist, historyOpen, () => setHistoryOpen(false));
   // Only notes this person may manage (the author or a team lead; nobody in a view-only space) are archived, pinned, moved or trashed in bulk.
   const mayManage = (n) => spaceRole !== 'viewer' && (!n || !n.access || n.access === 'owner' || n.canManage === true);
-  const manageableIds = (ids) => {
-    const ok = ids.filter((id) => mayManage(id === doc?.id ? doc : allNotes.find((x) => x.id === id)));
-    if (ok.length < ids.length) flash(`${ids.length - ok.length} note${ids.length - ok.length === 1 ? '' : 's'} skipped: only the author or a team lead can change ${ids.length - ok.length === 1 ? 'it' : 'them'}.`);
-    return ok;
+  // Returns the ids that may be changed. What was left out is said at once when nothing is left, otherwise it rides on the
+  // final message (`.skipped`), so "Moved 3 to the Trash" does not hide "2 locked notes skipped".
+  const manageableIds = (ids, { skipLocked = false } = {}) => {
+    const noteOf = (id) => (id === doc?.id ? doc : allNotes.find((x) => x.id === id));
+    const ok = ids.filter((id) => mayManage(noteOf(id)));
+    const free = skipLocked ? ok.filter((id) => !noteOf(id)?.meta?.locked) : ok; // a locked note is not trashed, moved or archived (unlock it first)
+    const notMine = ids.length - ok.length;
+    const lockedN = ok.length - free.length;
+    const parts = [];
+    if (notMine) parts.push(`${notMine} note${notMine === 1 ? '' : 's'} skipped: only the author or a team lead can change ${notMine === 1 ? 'it' : 'them'}.`);
+    if (lockedN) parts.push(`${lockedN} locked note${lockedN === 1 ? '' : 's'} skipped. Unlock ${lockedN === 1 ? 'it' : 'them'} first.`);
+    free.skipped = parts.join(' ');
+    if (free.skipped && !free.length) flash(free.skipped);
+    return free;
   };
+  const plusSkipped = (msg, ids) => (ids?.skipped ? `${msg}. ${ids.skipped}` : msg);
   const bulk = async (kind) => {
     if (!picked.length) return;
-    const ids = manageableIds([...picked]);
+    const ids = manageableIds([...picked], { skipLocked: kind !== 'pin' });
     if (!ids.length) { setPicked([]); setSelectMode(false); return; }
     if (kind === 'pin') {
       const sel = allNotes.filter((n) => ids.includes(n.id));
@@ -754,7 +854,7 @@ export default function SoftNotes() {
       refreshLists();
       const undo = kind === 'trash' && res.done.length ? async () => { const r = await runBulk(res.done, (id) => notesAPI.restore(id)); refreshLists(); if (r.failed.length) flash(partialText(r, res.done.length)); } : null;
       if (bulkReport(res, ids.length, { oneFail: kind === 'trash' ? 'Could not delete the note' : 'Could not archive the note', extra: undo && { label: `Undo the ${res.done.length} moved`, run: undo } })) {
-        flash(kind === 'trash' ? `Moved ${ids.length} to the Trash` : 'Archived', undo ? { label: 'Undo', run: undo } : undefined);
+        flash(plusSkipped(kind === 'trash' ? `Moved ${ids.length} to the Trash` : 'Archived', ids), undo ? { label: 'Undo', run: undo } : undefined);
       }
       if (doc && res.done.includes(doc.id)) closeDoc();
     }
@@ -762,19 +862,32 @@ export default function SoftNotes() {
   };
   const tagPicked = async (tag) => {
     setSheet(null);
-    const todo = allNotes.filter((n) => picked.includes(n.id) && !(n.tags || []).includes(tag));
+    const want = allNotes.filter((n) => picked.includes(n.id) && !(n.tags || []).includes(tag));
+    const todo = want.filter((n) => !n.meta?.locked); // the server refuses tag changes on a locked note
+    const lockedN = want.length - todo.length;
+    const skipped = lockedN ? `${lockedN} locked note${lockedN === 1 ? '' : 's'} skipped. Unlock ${lockedN === 1 ? 'it' : 'them'} first.` : '';
     const res = await runBulk(todo.map((n) => n.id), (id) => notesAPI.update(id, { tags: [...(allNotes.find((x) => x.id === id)?.tags || []), tag] }));
     refreshLists();
-    if (bulkReport(res, todo.length, { oneFail: 'Could not add the tag' })) flash(`Tagged #${tag}`);
+    if (bulkReport(res, todo.length, { oneFail: 'Could not add the tag' })) flash(todo.length ? `Tagged #${tag}${skipped ? `. ${skipped}` : ''}` : skipped || `Tagged #${tag}`);
     setPicked([]); setSelectMode(false);
   };
+  // N49: emptying and restoring the Trash are one request each (one transaction on the server, this space only)
   const emptyTrash = async () => {
     if (!(await confirmDialog({ title: `Delete all ${shownList.length} notes in the Trash forever?`, body: 'This cannot be undone.', confirmLabel: 'Empty Trash', danger: true }))) return;
-    const res = await runBulk(shownList.map((n) => n.id), (id) => notesAPI.delete(id, { permanent: true }));
-    refreshLists();
-    if (bulkReport(res, shownList.length, { oneFail: 'Could not empty the Trash' })) flash('Trash emptied');
-    if (doc?.isDeleted && res.done.includes(doc.id)) navigate('/notes');
+    try {
+      const { data } = await notesBulkAPI.emptyTrash();
+      flash(data?.count === 1 ? 'Trash emptied (1 note)' : `Trash emptied (${data?.count ?? 0} notes)`);
+    } catch (e) { flash(e?.response?.data?.error || 'Could not empty the Trash. Nothing was deleted.'); return; } finally { refreshLists(); }
+    if (doc?.isDeleted) closeDoc();
   };
+  const restoreAllTrash = async () => {
+    try {
+      const { data } = await notesBulkAPI.restoreTrash();
+      flash(data?.count === 1 ? 'Restored 1 note' : `Restored ${data?.count ?? 0} notes`);
+      if (doc?.isDeleted) patch({ isDeleted: false });
+    } catch (e) { flash(e?.response?.data?.error || 'Could not restore the Trash. Nothing was changed.'); } finally { refreshLists(); }
+  };
+  const { data: trashInfo } = useQuery({ queryKey: ['notes', 'trash-info'], queryFn: () => notesBulkAPI.trashInfo().then((r) => r.data), enabled: filter === 'trash', staleTime: 300000 });
   const duplicateTab = async (id) => {
     forceSave();
     let n = id === doc?.id ? doc : allNotes.find((x) => x.id === id);
@@ -818,6 +931,7 @@ export default function SoftNotes() {
     setToast(msg); setToastAct(act || null);
     toastTimer.current = setTimeout(() => { setToast(''); setToastAct(null); }, act ? 6000 : 2200);
   };
+  lockedFlash.current = () => flash('This note was locked on another device. Your last changes are kept on this device; unlock it to save them.');
   // bulk actions: at most 5 requests at a time; a partly failed run says "N of M done, K failed" with a Show button
   const [fails, setFails] = useState(null); // { list, extra }
   const titleOf = (id) => { const n = id === doc?.id ? doc : allNotes.find((x) => x.id === id); return !n ? 'Untitled' : n.title && n.title !== 'Untitled' ? n.title : firstOfNote(n) || 'Untitled'; };
@@ -917,12 +1031,12 @@ export default function SoftNotes() {
                     placeholder="tag"
                   />
                 )}
-                {!doc.isDeleted && !doc.isDraft && manageable && !viewer && <MoveNote noteId={doc.id} title={doc.title} />}
+                {!doc.isDeleted && !doc.isDraft && manageable && !viewer && !locked && <MoveNote noteId={doc.id} title={doc.title} mine={!doc.access || doc.access === 'owner' || doc.owner?.id === wsData?.me?.id} author={doc.owner?.name} />}
               </div>
   );
   const renderMenuItems = () => (
     <>
-      {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-archive" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
+      {!doc.isDeleted && manageable && !locked && <button type="button" role="menuitem" data-testid="menu-archive" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-pin" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     {!doc.isDeleted && !viewer && <button type="button" role="menuitem" data-testid="menu-fav" onClick={guarded(toggleFav, 'Could not change the favourite')}><Star size={15} />{doc.meta?.favourite ? 'Remove from favourites' : 'Add to favourites'}</button>}
                     {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-lock" onClick={guarded(toggleLock, 'Could not change the lock')}>{locked ? <LockOpen size={15} /> : <Lock size={15} />}{locked ? 'Unlock note' : 'Lock note (read only)'}</button>}
@@ -931,8 +1045,9 @@ export default function SoftNotes() {
                     {manageable && <button type="button" role="menuitem" data-testid="menu-duplicate" onClick={duplicate}><Copy size={15} />Duplicate note</button>}
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          {manageable && <button type="button" role="menuitem" data-testid="menu-move" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>}
-                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+          {manageable && !locked && <button type="button" role="menuitem" data-testid="menu-move" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>}
+                    <SegRow label="Text size" icon={<Type size={15} />} testid="seg-size" value={noteFont} options={[['s', 'S', 'Small text'], ['m', 'M', 'Medium text'], ['l', 'L', 'Large text']]} onPick={pickFont} />
+                    <SegRow label="Page width" icon={<MoveHorizontal size={15} />} testid="seg-width" value={wide === 'narrow' ? 'narrow' : 'wide'} options={[['narrow', 'Narrow'], ['wide', 'Wide']]} onPick={(n) => { setWide(n); keep('peblo-focus-width', n); }} />
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{vErrText || (versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions')}</button>}
 {!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
@@ -942,7 +1057,7 @@ export default function SoftNotes() {
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
                     <div className="s-menu-sep" role="separator" />
-      {manageable && (!doc.isDeleted || canPurge) && <button type="button" role="menuitem" className="danger" data-testid="menu-trash" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
+      {manageable && (!doc.isDeleted || canPurge) && !(locked && !doc.isDeleted) && <button type="button" role="menuitem" className="danger" data-testid="menu-trash" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
     </>
   );
   const quickTask = async (text) => { await todosAPI.create({ text, priority: 'medium', noteId: doc.id }); queryClient.invalidateQueries({ queryKey: ['todos'] }); };
@@ -974,17 +1089,18 @@ export default function SoftNotes() {
         );
       })()}
       {rowMenu && (() => {
-        const n = rowMenu.n; const mine = mayManage(n);
+        const n = rowMenu.n; const mine = mayManage(n); const lockedRow = !!n.meta?.locked && !n.isDeleted;
         return (
           <NavMenu onClose={() => setRowMenu(null)} className="s-tab-menu s-row-menu" data-testid="row-menu" style={{ left: Math.min(rowMenu.x, window.innerWidth - 260), top: Math.min(rowMenu.y, window.innerHeight - 280) }} onPointerDown={(e) => e.stopPropagation()}>
             <button type="button" role="menuitem" onClick={() => { setRowMenu(null); navigate(`/notes/${n.id}`); }}>Open</button>
             {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-pin" onClick={() => rowPin(n)}>{n.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
-            {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-move" className={(n.tags || []).includes('inbox') ? 'hot' : undefined} onClick={() => rowMove(n)}>{(n.tags || []).includes('inbox') ? 'Move to folder (out of Inbox)…' : 'Move to folder…'}</button>}
+            {mine && lockedRow && <button type="button" role="menuitem" data-testid="rm-unlock" onClick={() => rowUnlock(n)}><LockOpen size={14} /> Unlock</button>}
+            {mine && !n.isDeleted && !lockedRow && <button type="button" role="menuitem" data-testid="rm-move" className={(n.tags || []).includes('inbox') ? 'hot' : undefined} onClick={() => rowMove(n)}>{(n.tags || []).includes('inbox') ? 'Move to folder (out of Inbox)…' : 'Move to folder…'}</button>}
             {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-fav" onClick={() => rowFav(n)}>{n.meta?.favourite ? 'Remove from favourites' : 'Add to favourites'}</button>}
             {!n.isDeleted && <button type="button" role="menuitem" data-testid="rm-dup" onClick={() => { setRowMenu(null); duplicateTab(n.id); }}>Duplicate</button>}
             <button type="button" role="menuitem" onClick={() => rowCopyLink(n)}>Copy link</button>
-            {mine && !n.isDeleted && <button type="button" role="menuitem" data-testid="rm-archive" onClick={() => rowArchive(n)}>Archive</button>}
-            {mine && !n.isDeleted && <button type="button" role="menuitem" className="danger" data-testid="rm-trash" onClick={() => rowTrash(n)}>Move to Trash</button>}
+            {mine && !n.isDeleted && !lockedRow && <button type="button" role="menuitem" data-testid="rm-archive" onClick={() => rowArchive(n)}>Archive</button>}
+            {mine && !n.isDeleted && !lockedRow && <button type="button" role="menuitem" className="danger" data-testid="rm-trash" onClick={() => rowTrash(n)}>Move to Trash</button>}
             {mine && n.isDeleted && <button type="button" role="menuitem" data-testid="rm-restore" onClick={() => rowRestore(n)}>Restore</button>}
             {mine && n.isDeleted && <button type="button" role="menuitem" className="danger" onClick={() => rowDeleteForever(n)}>Delete forever</button>}
           </NavMenu>
@@ -1103,6 +1219,7 @@ export default function SoftNotes() {
         )}
         {((!cards && !folderMode && !(dateTagCards && !gSel)) || fSel) && <div className="s-notes-rows">
           {spaceRole && filter === 'trash' && <p className="s-viewer-note" style={{ padding: '0 12px', whiteSpace: 'normal' }} data-testid="team-trash-note">Team trash is kept until a team lead deletes a note forever.</p>}
+          {!spaceRole && filter === 'trash' && trashInfo?.retentionDays && <p className="np-trash-note" data-testid="trash-retention">Notes in the Trash are deleted for good after {trashInfo.retentionDays} days.</p>}
           {shownList.length === 0 && filter === 'trash' && (
             <div className="np-empty"><span className="np-empty-ic"><Trash2 size={22} strokeWidth={1.8} /></span><b>The Trash is empty</b><small>Deleted notes wait here until you remove them for good.</small></div>
           )}
@@ -1127,6 +1244,7 @@ export default function SoftNotes() {
             <button type="button" className={filter === 'trash' ? 'on' : ''} onClick={() => { setFSel(null); setFilter(filter === 'trash' ? 'all' : 'trash'); }}><Trash2 size={18} strokeWidth={1.8} />Trash</button>
             <button type="button" onClick={() => setTagsOpen(true)}><TagIcon size={18} strokeWidth={1.8} />Tags</button>
             <button type="button" onClick={() => setGalleryOpen(true)}><PicIcon size={18} strokeWidth={1.8} />Pictures</button>
+            {filter === 'trash' && shownList.length > 0 && spaceRole !== 'viewer' && <button type="button" data-testid="trash-restore-all" onClick={guarded(restoreAllTrash, 'Could not restore the Trash')}><RotateCcw size={18} strokeWidth={1.8} />Restore all</button>}
             {filter === 'trash' && canPurge && shownList.length > 0 && <button type="button" className="danger" onClick={emptyTrash}><Trash2 size={18} strokeWidth={1.8} />Empty</button>}
           </div>
         )}
@@ -1141,7 +1259,7 @@ export default function SoftNotes() {
 
       {/* ---------- editor ---------- */}
       <main className="s-note-main" aria-label="Note">
-        <NoteTabs doc={doc} notes={allNotes} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} onEmpty={closeDoc} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
+        <NoteTabs doc={doc} notes={allNotes} notesReady={sidebarOk && sidebarSpace.current === (curSpace || null)} navigate={navigate} onNew={startDraft} onDuplicate={duplicateTab} onEmpty={closeDoc} dirty={saveStatus === 'saving' || saveStatus === 'unsaved'} />
         {denied ? (
           <NoAccess owner={denied.owner} />
         ) : !doc && routeId ? (
@@ -1192,7 +1310,8 @@ export default function SoftNotes() {
                 {menuOpen && doc.isDraft && (
                   <div className="s-menu" role="menu">
                     <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>
-                    <button type="button" role="menuitem" onClick={() => { const n = wide === 'narrow' ? 'wide' : 'narrow'; setWide(n); keep('peblo-focus-width', n); }}><MoveHorizontal size={15} />Page width: {wide === 'narrow' ? 'Narrow' : 'Wide'}</button>
+                    <SegRow label="Text size" icon={<Type size={15} />} testid="seg-size" value={noteFont} options={[['s', 'S', 'Small text'], ['m', 'M', 'Medium text'], ['l', 'L', 'Large text']]} onPick={pickFont} />
+                    <SegRow label="Page width" icon={<MoveHorizontal size={15} />} testid="seg-width" value={wide === 'narrow' ? 'narrow' : 'wide'} options={[['narrow', 'Narrow'], ['wide', 'Wide']]} onPick={(n) => { setWide(n); keep('peblo-focus-width', n); }} />
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                   </div>
                 )}
@@ -1243,18 +1362,7 @@ export default function SoftNotes() {
       {/* ---------- helpers ---------- */}
       <aside className={`s-note-side${phRail ? ' open' : ''}`} data-rail={phRail || ''} aria-label="About this note">
         <button type="button" className="ph-close" aria-label="Close" onClick={() => setPhRail(null)}><X size={16} strokeWidth={2.2} /></button>
-        <form className="s-note-ask rl-ask" onSubmit={(e) => { e.preventDefault(); ask(question); setQuestion(''); }}>
-          <label htmlFor="s-note-ask" className="s-ask-label" style={{ fontSize: 15 }}><Sparkles size={17} /> Ask about this note</label>
-          <div className="s-ask-row small">
-            <input id="s-note-ask" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={noteId ? 'What should I remember from this?' : 'Save the note to ask about it'} disabled={!noteId} autoComplete="off" />
-            <button type="submit" className="s-send small" aria-label="Ask" disabled={!question.trim() || !noteId}><ArrowUp size={16} strokeWidth={2.4} /></button>
-          </div>
-          <div className="s-chips" style={{ gap: 6 }}>
-            <button type="button" className="s-chip small" disabled={!noteId} onClick={() => ask('Summarise this note in a few short bullet points.')}>Summarise</button>
-            <button type="button" className="s-chip small" disabled={!noteId} onClick={() => ask('Make 8 flashcards (question and answer) from this note.')}>Flashcards</button>
-            <button type="button" className="s-chip small" disabled={!noteId} onClick={() => ask('List the tasks and to-dos hidden in this note.')}>Find tasks</button>
-          </div>
-        </form>
+        <NoteAskPanel noteId={noteId} noteTitle={doc?.title} beforeAsk={() => forceSaveRef.current()} onOpenFull={ask} />
 
         <section className={`s-side-card rl-tasks${!phone && !linked.length && !railOpen.tasks ? ' min' : ''}`} style={{ background: 'var(--s-peach)' }} aria-labelledby="s-linked" onClick={(e) => { if (e.currentTarget.classList.contains('min')) setRailOpen((o) => ({ ...o, tasks: true })); }}>
           <h3 id="s-linked" className="s-h3">Linked tasks <span className="s-cnt">{linked.length}</span></h3>

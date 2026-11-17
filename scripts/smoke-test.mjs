@@ -1642,6 +1642,98 @@ async function prismaOffUser() {
   token = sSave;
   await prismaDel.user.deleteMany({ where: { id: { in: [O.id, M.id] } } });
 }
+
+// ---- R2: locked notes refused by the server, folder rename / clear and Trash empty / restore in one request each ----
+{
+  const { default: prismaR2 } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  const sSave = token;
+  const mkU = async (tag) => { const e = `smoke-r2-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: 'correct horse battery', name: `R2 ${tag}` }); return { e, id: r.json.user.id, tok: r.json.token }; };
+  const A = await mkU('a'), B = await mkU('b');
+  await prismaR2.$executeRaw`UPDATE users SET email_verified_at = now() WHERE id IN (${A.id}, ${B.id})`;
+  const as = (sp, tok, method, url, body) => rawFetch(base + url, { method, headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json', ...(sp ? { 'x-peblo-space': sp } : {}) }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => { const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; } return { status: r.status, json: j }; });
+  const mk = async (sp, tok, title, extra = {}) => (await as(sp, tok, 'POST', '/api/notes', { title, content: `${title} text`, ...extra })).json.note;
+  const metaOf = async (id) => (await prismaR2.$queryRaw`SELECT meta, updated_at, is_deleted FROM notes WHERE id = ${id}`)[0];
+  token = A.tok;
+  const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke R2 org', start: 'team' });
+  const orgId = org.json.id, teamId = org.json.spaceId;
+  await prismaR2.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${orgId}, ${B.id}, 'member')`;
+  await prismaR2.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${teamId}, ${B.id}, 'member')`;
+
+  // 1. locked notes
+  const ln = await mk(null, A.tok, 'Locked one', { tags: ['keep'] });
+  let r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { meta: { locked: true } });
+  check('R2 lock: locking a note works', r.status === 200, r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { content: 'changed' });
+  check('R2 lock: a text change of a locked note is refused (403 locked)', r.status === 403 && r.json.code === 'locked', r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { title: 'New title' });
+  check('R2 lock: a title change is refused (403 locked)', r.status === 403 && r.json.code === 'locked', r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { tags: ['keep', 'more'] });
+  check('R2 lock: a tag change is refused (403 locked)', r.status === 403 && r.json.code === 'locked', r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { content: 'merged change', baseUpdatedAt: ln.updatedAt, baseContent: ln.content });
+  check('R2 lock: a merged save (baseUpdatedAt) is refused too', r.status === 403 && r.json.code === 'locked', r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { title: 'Locked one', content: 'Locked one text', tags: ['KEEP'] });
+  check('R2 lock: sending the unchanged title, text and tags is not a change (200)', r.status === 200, r);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { meta: { favourite: true } });
+  check('R2 lock: other meta (favourite) still changes', r.status === 200, r);
+  const stillText = (await as(null, A.tok, 'GET', `/api/notes/${ln.id}`)).json.note;
+  check('R2 lock: the locked note kept its text', stillText.content === 'Locked one text' && stillText.title === 'Locked one', stillText);
+  r = await as(null, A.tok, 'PATCH', `/api/notes/${ln.id}`, { content: 'edited while unlocking', meta: { locked: false } });
+  const unl = (await as(null, A.tok, 'GET', `/api/notes/${ln.id}`)).json.note;
+  check('R2 lock: a request that unlocks may change the text in the same go', r.status === 200 && unl.content === 'edited while unlocking' && !unl.meta?.locked, [r, unl.meta]);
+
+  // 2. folder rename and clear (N4): one request, only the caller's notes, only the current space
+  const p1 = await mk(null, A.tok, 'F1', { meta: { folder: 'Old' } });
+  const p2 = await mk(null, A.tok, 'F2', { meta: { folder: 'Old' } });
+  const p3 = await mk(null, A.tok, 'F3', { meta: { folder: 'Other' } });
+  const t1 = await mk(teamId, A.tok, 'T1', { meta: { folder: 'Old' } });
+  const tb = await mk(teamId, B.tok, 'TB', { meta: { folder: 'Old' } });
+  const bp = await mk(null, B.tok, 'BP', { meta: { folder: 'Old' } });
+  const before = await metaOf(p1.id);
+  await new Promise((res) => setTimeout(res, 20));
+  r = await as(null, A.tok, 'POST', '/api/notes/folders/rename', { from: 'Old', to: 'New' });
+  check('R2 folders: rename answers with the number of notes moved (2 Personal notes)', r.status === 200 && r.json.count === 2, r);
+  const m1 = await metaOf(p1.id), m3 = await metaOf(p3.id), mt = await metaOf(t1.id), mb = await metaOf(bp.id);
+  check('R2 folders: the Personal notes are in the new folder, others untouched', m1.meta.folder === 'New' && (await metaOf(p2.id)).meta.folder === 'New' && m3.meta.folder === 'Other', [m1.meta, m3.meta]);
+  check('R2 folders: a note in a team space and another person\'s note keep the old name', mt.meta.folder === 'Old' && mb.meta.folder === 'Old', [mt.meta, mb.meta]);
+  check('R2 folders: renaming does not change the "last edited" time', +new Date(m1.updated_at) === +new Date(before.updated_at), [m1.updated_at, before.updated_at]);
+  r = await as(teamId, A.tok, 'POST', '/api/notes/folders/rename', { from: 'Old', to: 'Team new' });
+  check('R2 folders: in a team only the caller\'s own notes are renamed', r.status === 200 && r.json.count === 1 && (await metaOf(t1.id)).meta.folder === 'Team new' && (await metaOf(tb.id)).meta.folder === 'Old', r);
+  r = await as(null, A.tok, 'POST', '/api/notes/folders/rename', { from: 'Old', to: '   ' });
+  check('R2 folders: an empty new name is refused (400)', r.status === 400, r);
+  r = await as('no-such-space', A.tok, 'POST', '/api/notes/folders/rename', { from: 'Old', to: 'X' });
+  check('R2 folders: a space the person is not in answers 404', r.status === 404, r);
+  r = await as(null, A.tok, 'POST', '/api/notes/folders/clear', { name: 'New' });
+  const c1 = await metaOf(p1.id);
+  check('R2 folders: clear takes every note out of the folder in one request', r.status === 200 && r.json.count === 2 && !('folder' in (c1.meta || {})) && (await metaOf(p3.id)).meta.folder === 'Other', [r, c1.meta]);
+
+  // 3. Trash (N49): info, restore all, empty, in the current space only
+  r = await as(null, A.tok, 'GET', '/api/notes/trash/info');
+  check('R2 trash: info says Personal notes are kept 30 days', r.status === 200 && r.json.retentionDays === 30 && r.json.purges === true, r);
+  r = await as(teamId, A.tok, 'GET', '/api/notes/trash/info');
+  check('R2 trash: a team Trash is not emptied on a timer', r.status === 200 && r.json.retentionDays === null && r.json.purges === false, r);
+  for (const id of [p1.id, p2.id]) await as(null, A.tok, 'DELETE', `/api/notes/${id}`);
+  for (const id of [t1.id]) await as(teamId, A.tok, 'DELETE', `/api/notes/${id}`);
+  await as(teamId, B.tok, 'DELETE', `/api/notes/${tb.id}`);
+  r = await as(null, A.tok, 'POST', '/api/notes/trash/restore');
+  check('R2 trash: restore all puts back the 2 Personal notes only', r.status === 200 && r.json.count === 2 && !(await metaOf(p1.id)).is_deleted && (await metaOf(t1.id)).is_deleted, r);
+  for (const id of [p1.id, p2.id]) await as(null, A.tok, 'DELETE', `/api/notes/${id}`);
+  r = await as(null, A.tok, 'POST', '/api/notes/trash/empty');
+  const left = await prismaR2.$queryRaw`SELECT id FROM notes WHERE id IN (${p1.id}, ${p2.id}, ${t1.id}, ${tb.id})`;
+  check('R2 trash: empty deletes the Personal Trash for good and leaves the team Trash', r.status === 200 && r.json.count === 2 && left.length === 2, [r, left]);
+  r = await as(teamId, B.tok, 'POST', '/api/notes/trash/empty');
+  check('R2 trash: a team member who is not a lead cannot empty the team Trash (403)', r.status === 403, r);
+  r = await as(teamId, B.tok, 'POST', '/api/notes/trash/restore');
+  check('R2 trash: a team member restores only their own notes', r.status === 200 && r.json.count === 1 && !(await metaOf(tb.id)).is_deleted && (await metaOf(t1.id)).is_deleted, r);
+  r = await as(teamId, A.tok, 'POST', '/api/notes/trash/empty');
+  check('R2 trash: the team lead empties the team Trash', r.status === 200 && r.json.count === 1 && !(await prismaR2.$queryRaw`SELECT 1 FROM notes WHERE id = ${t1.id}`).length && (await prismaR2.$queryRaw`SELECT 1 FROM notes WHERE id = ${tb.id}`).length === 1, r);
+
+  await prismaR2.$executeRaw`DELETE FROM announcements WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await prismaR2.$executeRaw`DELETE FROM todos WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await prismaR2.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await prismaR2.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
+  token = sSave;
+  await prismaR2.user.deleteMany({ where: { id: { in: [A.id, B.id] } } });
+}
 } catch (err) {
   failures++;
   console.error(err);
