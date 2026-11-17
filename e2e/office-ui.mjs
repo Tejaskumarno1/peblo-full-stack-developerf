@@ -69,7 +69,7 @@ try {
   await sleep(600);
   // join page: expired / revoked / ready
   const l2 = await b.api('POST', `/api/workspaces/orgs/${org.id}/join-links`, { expiresInDays: 7, spaceId: off.id });
-  const t2 = new URL(l2.link).searchParams.get('token');
+  const t2 = new URLSearchParams(new URL(l2.link).hash.slice(1)).get('token') || new URL(l2.link).searchParams.get('token');
   await p.goto(b.base + `/join?token=${t2}`, { waitUntil: 'networkidle' });
   await p.getByTestId('join-card').waitFor();
   ok(/already in/.test(await p.getByTestId('join-card').innerText()), 'the owner opening their own link sees they are already in');

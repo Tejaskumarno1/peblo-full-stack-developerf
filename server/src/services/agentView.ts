@@ -4,6 +4,9 @@ import { decField, encField } from '../dataCrypto.js';
 import { accessFor } from './shareAccess.js';
 import { describeImage } from './aiService.js';
 import { notePdf } from './agentPdf.js';
+import { unlockOk } from './sharePassword.js';
+import { noCopyOf } from './shareExtras.js';
+import { ANY_SPACE } from '../personalGuard.js';
 
 /*
  * A shared note, for bots and other programs: the same link gives plain Markdown or JSON when the caller asks for it
@@ -93,12 +96,17 @@ export async function agentNote(req: Request, res: Response, next: NextFunction)
     if (!fmt) return next();
     if (!TOKEN.test(token)) return res.status(404).type('text/plain').send('This link is not shared any more.');
     const note = await prisma.note.findFirst({
-      where: { shareToken: token, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] },
+      where: { ...ANY_SPACE, shareToken: token, isDeleted: false, OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new Date() } }] },
       select: { userId: true, title: true, content: true, updatedAt: true, shareEdit: true, user: { select: { name: true } } },
     });
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     res.setHeader('Cache-Control', 'no-store');
     if (!note) return res.status(404).type('text/plain').send('This link is not shared any more.');
+    // a password-protected page is not handed to a program without its unlock value (header X-Share-Unlock or ?unlock=)
+    if (!(await unlockOk('note', token, String(req.headers['x-share-unlock'] || req.query.unlock || '')))) return res.status(401).type('text/plain').send('This page needs its password.');
+    // FM12: the owner turned off copying and downloading for this link, so there is no plain-text, JSON or PDF copy of it.
+    // A program that only sniffed for text gets the normal page instead; an explicit .md/.json/.txt/.pdf address is refused.
+    if (await noCopyOf('note', token)) { if (!ext && !q) return next(); return res.status(403).type('text/plain').send('The owner turned off copying and downloading for this link.'); }
     const acc = await accessFor('note', token, req.query.sid, !!note.shareEdit, false);
     if (!acc.allowed) return res.status(403).type('text/plain').send('The owner has to let you in before this page can be read.');
     const base = origin(req);

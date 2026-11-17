@@ -57,6 +57,8 @@ let teamOn = false;
 let shareVerdict = { allowed: true };
 const prefs = { muted: false };
 const people = [{ id: 'u2', name: 'Ana Lee', avatar: null }, { id: 'u3', name: 'Bo Chen', avatar: null }];
+// R3 (sharing round 3): off until the R3 section turns it on
+const r3 = { on: false, token: null, allowCopy: true, expiresAt: null, posts: [], policy: { publicShares: true, allowedDomains: [] }, policyPatches: [], groups: [], groupPosts: [] };
 
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function handle(route) {
@@ -66,6 +68,21 @@ async function handle(route) {
   const method = req.method();
   let body = null; try { body = req.postDataJSON(); } catch { /* none */ }
   reqs.push({ method, path: p, body, q: Object.fromEntries(url.searchParams), space: req.headers()['x-peblo-space'] });
+  // ---- R3 branches (sharing round 3)
+  if (r3.on && /^\/share\/note\/[^/]+$/.test(p) && method === 'GET') return json(route, { token: r3.token, edit: false, expiresAt: r3.expiresAt, shareNote: false, hasPassword: false, allowCopy: r3.allowCopy }); // r3
+  if (r3.on && /^\/share\/note\/[^/]+$/.test(p) && method === 'POST') { r3.posts.push(body); r3.token = 'r3tokenAAAAAAAAAAAAAAAAAAAA'; if (body && 'allowCopy' in body) r3.allowCopy = body.allowCopy; if (body && 'expiresAt' in body) r3.expiresAt = body.expiresAt; return json(route, { token: r3.token, edit: false, expiresAt: r3.expiresAt, shareNote: false, allowCopy: r3.allowCopy }, 201); } // r3
+  if (r3.on && /^\/share\/note\/[^/]+\/opens$/.test(p)) return json(route, { opens: [{ name: 'Ana Lee', member: true, visits: 3, firstAt: now(), lastAt: now() }, { name: 'Zed', member: false, visits: 1, firstAt: now(), lastAt: now() }] }); // r3
+  if (r3.on && /^\/share\/note\/[^/]+\/requests$/.test(p)) return json(route, { requests: [{ id: 'g1', name: 'Dora', status: 'declined', role: null, at: now() }, { id: 'g2', name: 'Eve', status: 'waiting', role: null, at: now() }] }); // r3
+  if (r3.on && /^\/public\/note\/r3nocopy[A-Za-z]+$/.test(p) && method === 'GET') return json(route, { kind: 'note', title: 'No copy page', content: 'secret words here', updatedAt: now(), canEdit: false, expiresAt: null, author: 'Ana Lee', noCopy: true, hasPassword: false }); // r3
+  if (r3.on && /^\/public\/note\/r3nocopy[A-Za-z]+\/owner$/.test(p)) return json(route, { isOwner: false }); // r3
+  if (r3.on && /^\/public\/note\/r3nocopy[A-Za-z]+\/presence$/.test(p)) return json(route, { viewers: [], canEdit: false }); // r3
+  if (r3.on && /^\/public\/note\/r3nocopy[A-Za-z]+\/(reactions|polls)$/.test(p)) return json(route, { reactions: [], polls: [] }); // r3
+  if (r3.on && p === '/workspaces/join-links/lookup' && method === 'POST') return json(route, { state: 'domain_not_allowed', orgName: 'Acme', spaceName: 'Acme office', allowedDomains: ['acme.com'] }); // r3
+  if (r3.on && p === '/workspaces/orgs/org1/policy' && method === 'GET') return json(route, { policy: r3.policy }); // r3
+  if (r3.on && p === '/workspaces/orgs/org1/policy' && method === 'PATCH') { r3.policyPatches.push(body); if (body.allowedDomains) r3.policy = { ...r3.policy, allowedDomains: body.allowedDomains }; return json(route, { policy: r3.policy, outside: 1 }); } // r3
+  if (r3.on && p === '/workspaces/orgs/org1/members') return json(route, { members: [{ userId: 'u1', name: 'Tester', email: 'tester@peblo.test', role: 'owner', status: 'active', spaces: [] }, { userId: 'u2', name: 'Ana Lee', email: 'ana@peblo.test', role: 'member', status: 'active', spaces: [] }], invites: [] }); // r3
+  if (r3.on && p === '/workspaces/orgs/org1/groups' && method === 'GET') return json(route, { groups: r3.groups, canManage: true }); // r3
+  if (r3.on && p === '/workspaces/orgs/org1/groups' && method === 'POST') { r3.groupPosts.push(body); r3.groups.push({ id: `g${r3.groups.length + 1}`, name: body.name, size: body.userIds.length, members: body.userIds.map((u) => ({ userId: u, name: u === 'u2' ? 'Ana Lee' : 'Tester', avatar: null })) }); return json(route, { id: 'g1', name: body.name, members: body.userIds.length }, 201); } // r3
   if (p === '/profile' && method === 'GET') return json(route, { user });
   if (p === '/profile' && method === 'PUT') { Object.assign(user.settings, body?.settings || {}); return json(route, { user }); }
   if (p === '/config') return json(route, { publicUrl: '' });
@@ -801,6 +818,65 @@ try {
   page.off('dialog', r1OnDlg);
   user.settings.uiStyle = 'soft'; user.settings.theme = 'light';
   await page.evaluate(() => { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-theme', 'light'); });
+
+  // R3 sharing round 3: custom link end (M6), "Let guests copy and download" (FM12), link opens and declined guests (M13, M8),
+  // the shared page without copy/download (FM12), the join link token after # and the domain rule (R13, FM24), sign-in rules and groups pages (FM24, FM23)
+  r3.on = true; shareVerdict = { allowed: true };
+  notes.unshift(mk('R3 share me', 'r3 body', { id: 'r3n' }));
+  await page.goto(`${base}/notes/r3n`); await page.locator('textarea.s-note-title').waitFor(TO); await wait(700);
+  await page.locator('.s-menu-wrap button[aria-label="More"]').click(); await wait(250);
+  await page.locator('[data-testid="menu-share"]').click(); await page.locator('[data-testid="share-dialog"]').waitFor(TO); await wait(300);
+  check('R3 the share dialog offers "Let guests copy and download", on by default', await page.locator('[data-testid="share-allow-copy"]').isChecked());
+  await page.locator('[data-testid="share-expiry"]').selectOption('pick'); await wait(200);
+  check('R3 "Pick a date and time" shows a date and time field', await page.locator('[data-testid="share-expiry-at"]').isVisible());
+  const want = new Date(Date.now() + 5 * 86400000); want.setSeconds(0, 0);
+  const loc = new Date(want.getTime() - want.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  await page.locator('[data-testid="share-expiry-at"]').fill(loc);
+  await page.locator('[data-testid="share-allow-copy"]').uncheck(); await wait(100);
+  await page.locator('[data-testid="share-create"]').click(); await wait(800);
+  const made = r3.posts[r3.posts.length - 1] || {};
+  check('R3 Create link sends the chosen end as an ISO date and allowCopy false', made.allowCopy === false && Math.abs(new Date(made.expiresAt).getTime() - want.getTime()) < 60000 && !('expiresInDays' in made), JSON.stringify(made));
+  check('R3 with copying off the AI plain-text box is hidden and a note says why', (await page.locator('.s-share-ai').count()) === 0 && await page.locator('[data-testid="share-nocopy-note"]').isVisible());
+  await page.locator('[data-testid="share-opens"]').waitFor(TO);
+  const opensTxt = await page.locator('[data-testid="share-opens"]').innerText();
+  check('R3 the dialog lists who opened the link in the last 30 days (member and guest)', (await page.locator('[data-testid="share-open-row"]').count()) === 2 && /Ana Lee/.test(opensTxt) && /Zed/.test(opensTxt) && /Guest/.test(opensTxt) && /3 visits/.test(opensTxt), opensTxt);
+  check('R3 a declined guest is shown as Declined', (await page.locator('[data-testid="share-request-row"][data-status="declined"]').innerText()).includes('Declined'));
+  await page.locator('[data-testid="share-allow-copy"]').check(); await wait(600);
+  check('R3 turning copying back on saves allowCopy true', r3.posts[r3.posts.length - 1]?.allowCopy === true && (await page.locator('.s-share-ai').count()) === 1, JSON.stringify(r3.posts[r3.posts.length - 1]));
+  await page.keyboard.press('Escape'); await wait(300);
+
+  // FM12 on the shared page
+  await page.goto(`${base}/s/note/r3nocopyTokenAAAAAAAAAAAA`); await page.locator('#page-main').waitFor(TO); await wait(1200);
+  check('R3 the shared page shows the text', /secret words here/.test(await page.locator('#page-main').innerText()));
+  check('R3 with copying off there is no Save to my Peblo button', (await page.locator('.save-btn').count()) === 0);
+  if (await page.locator('[data-testid="join-anon"]').count()) { await page.locator('[data-testid="join-anon"]').click(); await wait(400); } // the guest's join card covers the page first
+  await page.locator('header button.btn.icon[aria-label="More options"]').dispatchEvent('click'); await wait(300); // the header can sit under the reading progress bar at this window size
+  const moreTxt = await page.locator('.menu[role="menu"]').innerText();
+  check('R3 ..and the menu has no download, print or copy-as-Markdown, only a note', !/Download as|Print|Copy as Markdown/.test(moreTxt) && (await page.locator('[data-testid="nocopy-note"]').count()) === 1, moreTxt);
+  await page.keyboard.press('Escape');
+  check('R3 ..and the page is marked no-copy', (await page.locator('.pb-shared.no-copy').count()) === 1);
+
+  // R13 / FM24 join link
+  await page.goto(`${base}/join#token=r3-join-secret`); await page.locator('[data-testid="join-card"]').waitFor(TO); await wait(800);
+  check('R3 the join token is removed from the address bar', !page.url().includes('r3-join-secret'), page.url());
+  const jlook = reqs.filter((r) => r.path === '/workspaces/join-links/lookup').pop();
+  check('R3 the join token goes in the request body, never in the query', jlook?.method === 'POST' && jlook.body?.token === 'r3-join-secret' && !Object.keys(jlook.q).length, JSON.stringify(jlook));
+  check('R3 an address outside the company domains is told which domains are allowed', /@acme\.com/.test(await page.locator('[data-testid="join-why"]').innerText()));
+
+  // FM24 sign-in rules and FM23 groups pages
+  teamOn = true;
+  await page.goto(`${base}/settings/org-signin`); await page.locator('[data-testid="org-signin-rules"]').waitFor(TO); await wait(500);
+  await page.locator('[data-testid="org-domains"]').fill('@Acme.com, acme.co.uk');
+  await page.locator('[data-testid="org-domains-save"]').click(); await wait(700);
+  check('R3 the owner saves the domains (cleaned) and is told who is outside', JSON.stringify(r3.policyPatches.pop()?.allowedDomains) === '["acme.com","acme.co.uk"]' && /1 person already in/.test(await page.locator('[data-testid="org-domains-msg"]').innerText()));
+  await page.goto(`${base}/settings/org-groups`); await page.locator('[data-testid="org-groups"]').waitFor(TO); await wait(500);
+  check('R3 the groups page starts empty', await page.locator('[data-testid="groups-none"]').isVisible());
+  await page.locator('[data-testid="group-new"]').click(); await wait(200);
+  await page.locator('[data-testid="group-name"]').fill('Design');
+  await page.locator('[data-testid="group-member"]').nth(1).check();
+  await page.locator('[data-testid="group-save"]').click(); await wait(800);
+  check('R3 a group is created with the chosen members', r3.groupPosts[0]?.name === 'Design' && JSON.stringify(r3.groupPosts[0]?.userIds) === '["u2"]' && (await page.locator('[data-testid="group-row"]').count()) === 1, JSON.stringify(r3.groupPosts));
+  teamOn = false; r3.on = false;
 } catch (e) {
   failures++; console.log('FAIL  test crashed:', e.message.split(String.fromCharCode(10)).slice(0, 5).join(' | '));
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));

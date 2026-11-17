@@ -10,6 +10,7 @@ import { rateLimit } from '../middleware/rateLimit.js';
 import { processTextCommand } from '../services/aiService.js';
 import { pwHashOf, hashPassword, verifyPassword, unlockFor, unlockOk } from '../services/sharePassword.js';
 import { accessFor, approvalOn, listWaiting, guestHash, SESSION_RE } from '../services/shareAccess.js';
+import { noCopyOf, setNoCopy, parseExpiresAt, notifyOwnerOfRequest, linkOpens, linkRequests } from '../services/shareExtras.js';
 
 /*
  * Share links. The owner turns a link on for one note or one task; anyone who has the link can read it (never edit).
@@ -29,7 +30,7 @@ const LIVE = () => ({ OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
   // a note: its author when it is Personal; in a Team or the Office anyone who can write in that space (utils/shareScope.ts)
   if (kind === 'note') return shareableNote(userId, id);
-  return prisma.todo.findFirst({ where: { id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } });
+  return prisma.todo.findFirst({ where: { ...ANY_SPACE, id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } });
 }
 /** A turned-off link leaves nothing behind: guests, presence, blocks, read stats, short code. */
 async function purgeToken(kind: string, token: string) {
@@ -38,7 +39,7 @@ async function purgeToken(kind: string, token: string) {
 async function setToken(kind: 'note' | 'todo', id: string, token: string | null, edit = false, expiresAt: Date | null = null, shareNote = false) {
   const data = { shareToken: token, shareEdit: token ? edit : false, shareExpiresAt: token ? expiresAt : null };
   if (kind === 'note') await prisma.note.update({ where: { ...ANY_SPACE, id }, data, select: { id: true } });
-  else await prisma.todo.update({ where: { id }, data: { ...data, shareNote: token ? shareNote : false }, select: { id: true } });
+  else await prisma.todo.update({ where: { ...ANY_SPACE, id }, data: { ...data, shareNote: token ? shareNote : false }, select: { id: true } });
 }
 
 // GET /api/share -> everything this person has shared: [{ kind, id, title, token, edit }]
@@ -47,7 +48,7 @@ shareRoutes.get('/', async (req, res, next) => {
     const uid = req.user!.id;
     const [notes, todos] = await Promise.all([
       prisma.note.findMany({ where: { ...ANY_SPACE, userId: uid, isDeleted: false, shareToken: { not: null } }, select: { id: true, title: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
-      prisma.todo.findMany({ where: { userId: uid, shareToken: { not: null } }, select: { id: true, text: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
+      prisma.todo.findMany({ where: { ...ANY_SPACE, userId: uid, shareToken: { not: null } }, select: { id: true, text: true, shareToken: true, shareEdit: true, shareExpiresAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' } }),
     ]);
     const rows = [
       ...notes.map((n) => ({ kind: 'note', id: n.id, title: n.title || 'Untitled', token: n.shareToken, edit: !!n.shareEdit, expiresAt: n.shareExpiresAt ?? null, updatedAt: n.updatedAt })),
@@ -73,7 +74,7 @@ shareRoutes.get('/:kind/:id', async (req, res, next) => {
     if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
     const row = await owned(kind, req.params.id, req.user!.id);
     if (!row) return res.status(404).json({ error: 'Not found.' });
-    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, shareNote: 'shareNote' in row ? !!row.shareNote : false, hasPassword: !!row.shareToken && !!(await pwHashOf(kind, row.shareToken)) });
+    res.json({ token: row.shareToken ?? null, edit: !!row.shareEdit, expiresAt: row.shareExpiresAt ?? null, shareNote: 'shareNote' in row ? !!row.shareNote : false, hasPassword: !!row.shareToken && !!(await pwHashOf(kind, row.shareToken)), allowCopy: row.shareToken ? !(await noCopyOf(kind, row.shareToken)) : true });
   } catch (e) { next(e); }
 });
 
@@ -104,7 +105,7 @@ shareRoutes.get('/:kind/:id/live', async (req, res, next) => {
     if (kind !== 'note' || !row.shareToken || !live) return res.json({ shared: false, viewers: [] });
     const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true } });
     const session = `owner:${req.user!.id}`;
-    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor), cleanCursor(req.query.selStart), cleanCursor(req.query.selEnd));
+    await touchViewer(kind, row.shareToken, session, me?.name?.trim().slice(0, 80) || 'Owner', req.query.typing === '1', cleanCursor(req.query.cursor), cleanCursor(req.query.selStart), cleanCursor(req.query.selEnd), req.user!.id);
     const style = String(req.query.style || '');
     if (style === 'soft' || style === 'river' || style === 'orbit') await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, style) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET style = EXCLUDED.style', kind, row.shareToken, style).catch(() => {});
     const ext = (await prisma.$queryRawUnsafe<{ extend_at: Date | null; extend_by: string | null }[]>('SELECT extend_at, extend_by FROM share_settings WHERE kind = $1 AND share_token = $2', kind, row.shareToken))[0];
@@ -262,6 +263,28 @@ for (const verb of ['close', 'reopen', 'reset', 'remove'] as const) {
   });
 }
 
+// GET /api/share/:kind/:id/opens -> who opened this link in the last 30 days (M13): name, signed-in or guest, visits, last time. Newest first.
+shareRoutes.get('/:kind/:id/opens', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    res.json({ opens: row.shareToken ? await linkOpens(kind, row.shareToken) : [] });
+  } catch (e) { next(e); }
+});
+
+// GET /api/share/:kind/:id/requests -> guests who asked to come in: waiting, let in, or declined (declined ones are kept 30 days, M8)
+shareRoutes.get('/:kind/:id/requests', async (req, res, next) => {
+  try {
+    const kind = kindOf(String(req.params.kind));
+    if (!kind) return res.status(400).json({ error: 'You can share a note or a task.' });
+    const row = await owned(kind, req.params.id, req.user!.id);
+    if (!row) return res.status(404).json({ error: 'Not found.' });
+    res.json({ requests: row.shareToken ? await linkRequests(kind, row.shareToken) : [] });
+  } catch (e) { next(e); }
+});
+
 // GET /api/share/note/:id/activity -> what happened on this note's link, newest first.
 shareRoutes.get('/:kind/:id/activity', async (req, res, next) => {
   try {
@@ -297,7 +320,7 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     if (!row) return res.status(404).json({ error: 'Not found.' });
     if (!row.shareToken) {
       // a new link needs both the organization policy and the team's own switch to allow it
-      const sp = kind === 'note' ? (row as any).spaceId : (await prisma.todo.findFirst({ where: { id: row.id }, select: { spaceId: true } }))?.spaceId;
+      const sp = kind === 'note' ? (row as any).spaceId : (await prisma.todo.findFirst({ where: { ...ANY_SPACE, id: row.id }, select: { spaceId: true } }))?.spaceId;
       const block = await shareBlockReason(sp);
       if (block) return res.status(403).json({ error: block.reason, code: block.code });
     }
@@ -309,11 +332,19 @@ shareRoutes.post('/:kind/:id', async (req, res, next) => {
     let expiresAt: Date | null = row.shareExpiresAt && row.shareExpiresAt.getTime() > Date.now() ? row.shareExpiresAt : null;
     if (days === null || days === 0) expiresAt = null;
     else if (typeof days === 'number' && days > 0 && days <= 3650) expiresAt = new Date(Date.now() + days * 86400000);
+    // M6: any date and time. expiresAt (ISO) wins over expiresInDays; null means never. It must be in the future and at most 10 years away.
+    if (req.body?.expiresAt !== undefined) {
+      const at = parseExpiresAt(req.body.expiresAt);
+      if (at === 'bad') return res.status(400).json({ error: 'Pick a date and time in the future, at most 10 years away.', code: 'bad_expiry' });
+      expiresAt = at;
+    }
     // Tasks only: whether the linked note is shown on the link. Off unless the owner turns it on.
     const shareNote = typeof req.body?.shareNote === 'boolean' ? req.body.shareNote : ('shareNote' in row ? !!row.shareNote : false);
     await setToken(kind, row.id, token, edit, expiresAt, shareNote);
     await prisma.$executeRawUnsafe('UPDATE share_settings SET extend_at = NULL, extend_by = NULL, edit_ask_at = NULL, edit_ask_by = NULL, edit_ask_msg = NULL WHERE kind = $1 AND share_token = $2', kind, token).catch(() => {});
-    res.status(201).json({ token, edit, expiresAt, shareNote: kind === 'todo' ? shareNote : false });
+    // FM12: "Let guests copy and download" (on unless turned off); leaving it out keeps what the link had
+    if (typeof req.body?.allowCopy === 'boolean') await setNoCopy(kind, token, !req.body.allowCopy);
+    res.status(201).json({ token, edit, expiresAt, shareNote: kind === 'todo' ? shareNote : false, allowCopy: !(await noCopyOf(kind, token)) });
   } catch (e) { next(e); }
 });
 
@@ -350,17 +381,18 @@ const prunePresence = () => Promise.all([
   prisma.$executeRawUnsafe('DELETE FROM share_viewers WHERE seen_at < NOW() - INTERVAL \'35 seconds\''),
   prisma.$executeRawUnsafe('DELETE FROM share_blocked WHERE at < NOW() - INTERVAL \'7 days\''),
   prisma.$executeRawUnsafe("DELETE FROM share_guests WHERE status = 'waiting' AND at < NOW() - INTERVAL '1 hour'"),
-  prisma.$executeRawUnsafe("DELETE FROM share_guests WHERE status = 'declined' AND role IS NULL AND at < NOW() - INTERVAL '1 day'"),
+  prisma.$executeRawUnsafe("DELETE FROM share_guests WHERE status = 'declined' AND role IS NULL AND at < NOW() - INTERVAL '30 days'"),
   prisma.$executeRawUnsafe("DELETE FROM share_reads WHERE last_at < NOW() - INTERVAL '30 days'"),
 ]).then(() => { const now = Date.now(); for (const [k, v] of viewerNames) if (v.expiresAt <= now) viewerNames.delete(k); }).catch(() => {});
 const presenceSweep = setInterval(() => { void prunePresence(); }, 15_000);
 presenceSweep.unref?.();
 
 /** Mark a person as present (and, when `typing`, as typing for the next few seconds). */
-async function touchViewer(kind: string, token: string, sessionId: string, name: string, typing: boolean, cursor: number | null = null, selStart: number | null = null, selEnd: number | null = null): Promise<boolean> {
+async function touchViewer(kind: string, token: string, sessionId: string, name: string, typing: boolean, cursor: number | null = null, selStart: number | null = null, selEnd: number | null = null, userId: string | null = null): Promise<boolean> {
+  // user_id (054) is set only for a signed-in person: the page shows their real name and picture, and a guest can never pass for them (FM22)
   const rows = await prisma.$queryRawUnsafe<{ inserted: boolean }[]>(
-    'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at, cursor_block, sel_start, sel_end) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END, $6, $7, $8) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END, cursor_block = COALESCE($6, share_viewers.cursor_block), sel_start = CASE WHEN $6 IS NULL THEN share_viewers.sel_start ELSE $7 END, sel_end = CASE WHEN $6 IS NULL THEN share_viewers.sel_end ELSE $8 END RETURNING (xmax = 0) AS inserted',
-    kind, token, sessionId, name, typing, cursor, selStart, selEnd,
+    'INSERT INTO share_viewers (kind, share_token, session_id, display_name, seen_at, typing_at, cursor_block, sel_start, sel_end, user_id) VALUES ($1, $2, $3, $4, NOW(), CASE WHEN $5 THEN NOW() ELSE NULL END, $6, $7, $8, $9) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET display_name = EXCLUDED.display_name, user_id = EXCLUDED.user_id, seen_at = NOW(), typing_at = CASE WHEN $5 THEN NOW() ELSE share_viewers.typing_at END, cursor_block = COALESCE($6, share_viewers.cursor_block), sel_start = CASE WHEN $6 IS NULL THEN share_viewers.sel_start ELSE $7 END, sel_end = CASE WHEN $6 IS NULL THEN share_viewers.sel_end ELSE $8 END RETURNING (xmax = 0) AS inserted',
+    kind, token, sessionId, name, typing, cursor, selStart, selEnd, userId,
   );
   return !!rows[0]?.inserted;
 }
@@ -381,8 +413,8 @@ async function logActivity(noteId: string, actor: string, action: 'viewed' | 'ed
 }
 /** Everyone on the link right now. No emails or addresses: a short id, a name, and whether they are typing. */
 async function listViewers(kind: string, token: string, mySession: string, canEdit = false) {
-  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null; sel_start: number | null; sel_end: number | null; idle_s: number }[]>(
-    'SELECT session_id, display_name, cursor_block, sel_start, sel_end, (typing_at IS NOT NULL AND typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing, EXTRACT(EPOCH FROM (NOW() - seen_at))::int AS idle_s FROM share_viewers WHERE kind = $1 AND share_token = $2 AND seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY seen_at DESC LIMIT 50',
+  const rows = await prisma.$queryRawUnsafe<{ session_id: string; display_name: string; typing: boolean; cursor_block: number | null; sel_start: number | null; sel_end: number | null; idle_s: number; user_id: string | null; avatar: string | null }[]>(
+    'SELECT v.session_id, v.display_name, v.cursor_block, v.sel_start, v.sel_end, v.user_id, u.avatar, (v.typing_at IS NOT NULL AND v.typing_at >= NOW() - INTERVAL \'4 seconds\') AS typing, EXTRACT(EPOCH FROM (NOW() - v.seen_at))::int AS idle_s FROM share_viewers v LEFT JOIN users u ON u.id = v.user_id WHERE v.kind = $1 AND v.share_token = $2 AND v.seen_at >= NOW() - INTERVAL \'35 seconds\' ORDER BY v.seen_at DESC LIMIT 50',
     kind, token,
   );
   const roleRows = await prisma.$queryRawUnsafe<{ session_id: string; role: string | null }[]>('SELECT session_id, role FROM share_guests WHERE kind = $1 AND share_token = $2 AND role IS NOT NULL', kind, token);
@@ -403,19 +435,23 @@ async function listViewers(kind: string, token: string, mySession: string, canEd
     selStart: v.sel_start,
     selEnd: v.sel_end,
     owner: v.session_id.startsWith('owner:'), // guests cannot use ':' in a session id
+    // FM22 / M2: a signed-in person shows their account name and picture; anyone else is marked a guest, whatever name they typed
+    member: !!v.user_id,
+    guest: !v.user_id,
+    avatar: v.user_id && typeof v.avatar === 'string' && v.avatar.length < 4096 ? v.avatar : null,
   }));
 }
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId, isDeleted: false }, select: { id: true } });
-  return prisma.todo.findFirst({ where: { shareToken: token, userId }, select: { id: true } });
+  return prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId }, select: { id: true } });
 }
 
 // The share link remains public, but only its owner can see management controls or revoke it.
 // POST /api/public/note/:token/summary { summary } -> the owner writes (or clears) the short summary readers see under the title.
 publicRoutes.post('/note/:token/summary', authenticate, async (req, res, next) => {
   try {
-    if (!validToken(req.params.token) || !(await shareOwner('note', req.params.token, req.user!.id))) return res.status(404).json({ error: 'Not found.' });
+    if (!validToken(String(req.params.token)) || !(await shareOwner('note', String(req.params.token), req.user!.id))) return res.status(404).json({ error: 'Not found.' });
     const text = typeof req.body?.summary === 'string' ? req.body.summary.trim().slice(0, 400) : '';
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, summary) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET summary = EXCLUDED.summary', 'note', req.params.token, text || null);
     res.json({ summary: text || null });
@@ -426,7 +462,7 @@ publicRoutes.post('/note/:token/summary', authenticate, async (req, res, next) =
 publicRoutes.post('/:kind/:token/password', authenticate, async (req, res, next) => {
   try {
     const kind = kindOf(String(req.params.kind));
-    if (!kind || !validToken(req.params.token) || !(await shareOwner(kind, req.params.token, req.user!.id))) return res.status(404).json({ error: 'Not found.' });
+    if (!kind || !validToken(String(req.params.token)) || !(await shareOwner(kind, String(req.params.token), req.user!.id))) return res.status(404).json({ error: 'Not found.' });
     const pw = typeof req.body?.password === 'string' ? req.body.password : '';
     if (pw && (pw.length < 4 || pw.length > 100)) return res.status(400).json({ error: 'Use 4 to 100 characters.' });
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, pw_hash) VALUES ($1, $2, $3) ON CONFLICT (kind, share_token) DO UPDATE SET pw_hash = EXCLUDED.pw_hash', kind, req.params.token, pw ? hashPassword(pw) : null);
@@ -466,7 +502,7 @@ publicRoutes.post('/:kind/:token/presence', (req, res, next) => guestPresenceLim
     if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{16,80}$/.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const record = kind === 'note'
       ? await prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false }, select: { id: true, shareEdit: true } })
-      : await prisma.todo.findFirst({ where: { shareToken: token, ...LIVE() }, select: { id: true, shareEdit: true } });
+      : await prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token, ...LIVE() }, select: { id: true, shareEdit: true } });
     if (!record) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
 
@@ -492,11 +528,12 @@ publicRoutes.post('/:kind/:token/presence', (req, res, next) => guestPresenceLim
     } else if (req.body?.peek === true) {
       // a guest still choosing a name only looks at who is here; they are counted (and named) once they join
     } else {
-      const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor), cleanCursor(req.body?.selStart), cleanCursor(req.body?.selEnd));
+      const fresh = await touchViewer(kind, token, sessionId, name, req.body?.typing === true, cleanCursor(req.body?.cursor), cleanCursor(req.body?.selStart), cleanCursor(req.body?.selEnd), user?.id ?? null);
       if (fresh && kind === 'note') void logActivity(record.id, name, 'viewed');
-      if (kind === 'note' && !owner) {
-        const progress = Math.max(0, Math.min(100, Math.round(Number(req.body?.progress) || 0)));
-        void prisma.$executeRawUnsafe('INSERT INTO share_reads (kind, share_token, session_id, name, progress) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET name = EXCLUDED.name, progress = GREATEST(share_reads.progress, EXCLUDED.progress), secs = share_reads.secs + LEAST(EXTRACT(EPOCH FROM (NOW() - share_reads.last_at))::int, 15), last_at = NOW()', kind, token, sessionId, name, progress).catch(() => {});
+      if (!owner) {
+        // reading stats (notes) and "who opened this link" (notes and tasks, M13): one row per visitor session, a visit counted each time they come back
+        const progress = kind === 'note' ? Math.max(0, Math.min(100, Math.round(Number(req.body?.progress) || 0))) : 0;
+        await prisma.$executeRawUnsafe('INSERT INTO share_reads (kind, share_token, session_id, name, progress, user_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (kind, share_token, session_id) DO UPDATE SET name = EXCLUDED.name, user_id = COALESCE(EXCLUDED.user_id, share_reads.user_id), progress = GREATEST(share_reads.progress, EXCLUDED.progress), secs = share_reads.secs + LEAST(EXTRACT(EPOCH FROM (NOW() - share_reads.last_at))::int, 15), visits = share_reads.visits + CASE WHEN $7 THEN 1 ELSE 0 END, last_at = NOW()', kind, token, sessionId, name, progress, user?.id ?? null, fresh).catch(() => {});
       }
     }
     res.json({ viewers: await listViewers(kind, token, sessionId, !!record.shareEdit), canEdit: acc.canEdit });
@@ -513,7 +550,7 @@ publicRoutes.post('/:kind/:token/knock', (req, res, next) => guestKnockLimit(req
     if (typeof sessionId !== 'string' || !SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'A valid viewer session is required.' });
     const live = kind === 'note'
       ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } })
-      : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+      : await prisma.todo.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     if (!(await approvalOn(kind, token))) return res.json({ status: 'admitted' });
@@ -595,10 +632,12 @@ publicRoutes.post('/:kind/:token/extend-request', (req, res, next) => guestWrite
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
+    const prevExt = (await prisma.$queryRawUnsafe<{ extend_at: Date | null }[]>('SELECT extend_at FROM share_settings WHERE kind = $1 AND share_token = $2', kind, token))[0]?.extend_at ?? null;
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, extend_at, extend_by) VALUES ($1, $2, NOW(), $3) ON CONFLICT (kind, share_token) DO UPDATE SET extend_at = NOW(), extend_by = EXCLUDED.extend_by', kind, token, cleanName(req.body?.name));
+    await notifyOwnerOfRequest(req.app, kind, token, 'extend', cleanName(req.body?.name), prevExt, await signedInName(req)); // M11
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -632,11 +671,13 @@ publicRoutes.post('/:kind/:token/edit-request', (req, res, next) => guestWriteLi
     const kind = kindOf(String(req.params.kind));
     const { token } = req.params;
     if (!kind || !validToken(token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { shareToken: token, ...LIVE() } });
+    const live = kind === 'note' ? await prisma.note.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE(), isDeleted: false } }) : await prisma.todo.count({ where: { ...ANY_SPACE, shareToken: token, ...LIVE() } });
     if (!live) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (await isBlocked(kind, token, req.body?.sessionId)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const message = String(req.body?.message || '').trim().slice(0, 400);
+    const prevAsk = (await prisma.$queryRawUnsafe<{ edit_ask_at: Date | null }[]>('SELECT edit_ask_at FROM share_settings WHERE kind = $1 AND share_token = $2', kind, token))[0]?.edit_ask_at ?? null;
     await prisma.$executeRawUnsafe('INSERT INTO share_settings (kind, share_token, edit_ask_at, edit_ask_by, edit_ask_msg) VALUES ($1, $2, NOW(), $3, $4) ON CONFLICT (kind, share_token) DO UPDATE SET edit_ask_at = NOW(), edit_ask_by = EXCLUDED.edit_ask_by, edit_ask_msg = EXCLUDED.edit_ask_msg', kind, token, cleanName(req.body?.name), message);
+    await notifyOwnerOfRequest(req.app, kind, token, 'edit', cleanName(req.body?.name), prevAsk, await signedInName(req)); // M11
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -649,6 +690,15 @@ export async function shortRedirect(req: any, res: any, next: any) {
     if (!r || !validToken(r.share_token)) return res.redirect(302, '/');
     res.redirect(302, `/s/${r.kind === 'todo' ? 'todo' : 'note'}/${r.share_token}`);
   } catch (e) { next(e); }
+}
+
+/** The account name of a signed-in caller on a public route (null for a guest), so a notification says who really asked (M2). */
+async function signedInName(req: any): Promise<string | null> {
+  const auth = String(req.headers.authorization || '');
+  if (!auth.startsWith('Bearer ')) return null;
+  const u = await verifyToken(auth.slice(7)).catch(() => null);
+  if (!u) return null;
+  return (await prisma.user.findUnique({ where: { id: u.id }, select: { name: true } }))?.name?.trim().slice(0, 80) || null;
 }
 
 async function ownerReq(req: any, kind: 'note' | 'todo', token: string) {
@@ -690,7 +740,7 @@ publicRoutes.get('/note/:token', async (req, res, next) => {
     if (await isBlocked('note', req.params.token, req.query.sid)) return res.status(403).json({ error: 'The owner removed you from this page.', removed: true });
     const stRow = (await prisma.$queryRawUnsafe<{ style: string | null; summary: string | null }[]>('SELECT style, summary FROM share_settings WHERE kind = $1 AND share_token = $2', 'note', req.params.token))[0];
     const st = stRow?.style || null;
-    res.json({ unlock: stored ? unlockFor('note', req.params.token, stored) : undefined, hasPassword: !!stored, summary: stRow?.summary || null, ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null });
+    res.json({ unlock: stored ? unlockFor('note', req.params.token, stored) : undefined, hasPassword: !!stored, summary: stRow?.summary || null, ownerStyle: st, kind: 'note', title: note.title, content: note.content, updatedAt: note.updatedAt, canEdit: acc.canEdit, expiresAt: note.shareExpiresAt ?? null, author: note.user?.name || null, noCopy: await noCopyOf('note', req.params.token) });
   } catch (e) { next(e); }
 });
 
@@ -698,7 +748,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
     const t = await prisma.todo.findFirst({
-      where: { shareToken: req.params.token, ...LIVE() },
+      where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE() },
       select: {
         text: true, completed: true, priority: true, deadline: true, todoTags: true, updatedAt: true, shareEdit: true, shareNote: true,
         note: { select: { title: true, content: true, isDeleted: true } },
@@ -717,6 +767,7 @@ publicRoutes.get('/todo/:token', async (req, res, next) => {
       kind: 'todo', text: t.text, completed: t.completed, completedAt: t.completed ? t.updatedAt : null, priority: t.priority, deadline: t.deadline,
       tags: Array.isArray(t.todoTags) ? t.todoTags : [], updatedAt: t.updatedAt, canEdit: acc.canEdit, author: t.user?.name || null,
       note: t.shareNote && t.note && !t.note.isDeleted ? { title: t.note.title, content: t.note.content } : null,
+      noCopy: await noCopyOf('todo', req.params.token), // FM12: the page hides copy, download, print and export
     });
   } catch (e) { next(e); }
 });
@@ -807,7 +858,7 @@ publicRoutes.put('/note/:token', (req, res, next) => guestSaveLimit(req, res, ne
 publicRoutes.put('/todo/:token', (req, res, next) => guestSaveLimit(req, res, next), async (req, res, next) => {
   try {
     if (!validToken(req.params.token)) return res.status(404).json({ error: 'This link is not shared any more.' });
-    const t = await prisma.todo.findFirst({ where: { shareToken: req.params.token, ...LIVE() }, select: { id: true, shareEdit: true } });
+    const t = await prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: req.params.token, ...LIVE() }, select: { id: true, shareEdit: true } });
     if (!t) return res.status(404).json({ error: 'This link is not shared any more.' });
     if (!(await unlockOk('todo', req.params.token, unlockOf(req)))) return res.status(401).json({ error: 'This page needs its password.', locked: true });
     const acc = await accessFor('todo', req.params.token, req.body?.sessionId, !!t.shareEdit);
@@ -817,7 +868,7 @@ publicRoutes.put('/todo/:token', (req, res, next) => guestSaveLimit(req, res, ne
     const data: { completed?: boolean; text?: string } = {};
     if (typeof req.body?.completed === 'boolean') data.completed = req.body.completed;
     if (typeof req.body?.text === 'string' && req.body.text.trim()) data.text = req.body.text.trim().slice(0, 500);
-    const saved = await prisma.todo.update({ where: { id: t.id }, data, select: { updatedAt: true, completed: true, text: true } });
+    const saved = await prisma.todo.update({ where: { ...ANY_SPACE, id: t.id }, data, select: { updatedAt: true, completed: true, text: true } });
     res.json({ ok: true, ...saved });
   } catch (e) { next(e); }
 });

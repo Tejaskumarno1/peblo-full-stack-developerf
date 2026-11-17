@@ -13,6 +13,7 @@ import api from '../api/client';
 
 const MSG_SEED = 10;
 const MSG_MD = 11;
+const MSG_IDENT = 12; // server -> client: the name and colour the others see for me (FM22, M17)
 export const CLOSE_RESET = 4002;
 export const CLOSE_GONE = 4003;
 
@@ -101,13 +102,25 @@ export function createCollab(opts) {
   // the server's offer: "this document is empty, fill it from the saved text"
   provider.messageHandlers[MSG_SEED] = (_enc, dec, p) => { p.emit('seed', [decoding.readVarString(dec)]); };
   const name = (opts.name || 'Someone').slice(0, 40);
-  provider.awareness.setLocalStateField('user', { name, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) });
+  const user = { name, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) };
+  provider.awareness.setLocalStateField('user', { ...user });
+  // The server decides how the others see me (a member by their account name and picture, a guest marked as one, a colour
+  // nobody else in the room has). Take the same identity locally so my own avatar and "edited by" marks match theirs.
+  provider.messageHandlers[MSG_IDENT] = (_enc, dec, p) => {
+    try {
+      const id = JSON.parse(decoding.readVarString(dec));
+      if (id.member && typeof id.name === 'string' && id.name) user.name = id.name.slice(0, 40);
+      if (/^#[0-9a-f]{6}$/i.test(id.color || '')) user.color = id.color;
+      user.member = !!id.member; user.guest = !id.member; user.avatar = id.member ? id.avatar || null : null; user.key = id.key || undefined;
+      p.awareness.setLocalStateField('user', { ...(p.awareness.getLocalState()?.user || {}), ...user });
+    } catch { /* an older server or a damaged message: keep what we have */ }
+  };
 
   let destroyTimer = null;
   return {
     doc,
     provider,
-    user: { name, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : colorFor(opts.share ? (opts.sid || name) : opts.noteId + name) },
+    user, // the same object the identity handler updates
     connect() { clearTimeout(destroyTimer); provider.connect(); },
     /** Tell the server which Markdown text this editor is about to save. */
     announce(markdown) {

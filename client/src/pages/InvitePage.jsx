@@ -16,6 +16,7 @@ const COPY = {
   member: ['You are already in this organization', 'Nothing to accept.'],
   wrong_account: ['This invite is for another account', 'Sign in with the address it was sent to, then open the link again.'],
   unverified: ['Verify your email first', 'Confirm your address with the link we sent, then come back to accept.'],
+  domain_not_allowed: ['This organization uses company accounts', 'Only email addresses at its company domain can join. Ask the person who invited you to invite your work address.'],
 };
 
 /** The invite token is carried in the URL fragment (/invite#token=...), which is never sent to a server. Older emails used ?token=..., still read here. */
@@ -55,7 +56,7 @@ export default function InvitePage() {
   const join = async () => {
     setSt((x) => ({ ...x, busy: true }));
     try { await workspacesAPI.acceptInvite(ref); await qc.invalidateQueries({ queryKey: ['workspaces'] }); setSt((x) => ({ ...x, s: 'joined', busy: false })); }
-    catch (e) { setSt((x) => ({ ...x, s: e.response?.data?.state || 'invalid', busy: false })); }
+    catch (e) { setSt((x) => ({ ...x, s: e.response?.data?.state || 'invalid', allowedDomains: e.response?.data?.allowedDomains || x.allowedDomains, busy: false })); }
   };
 
   const remind = async () => {
@@ -95,7 +96,7 @@ export default function InvitePage() {
           <Link className="ve-btn" to="/notes">Stay here</Link></>}
         {st.s === 'member' && <><CheckCircle2 size={42} className="ve-ok" aria-hidden="true" /><h1>You are already a member</h1><p>{st.orgName ? `${st.orgName} is already in your spaces.` : COPY.member[1]}</p><button type="button" className="ve-btn" onClick={() => nav('/notes')}>{st.orgName ? `Open ${st.orgName}` : 'Open Notes'}</button></>}
         {COPY[st.s] && st.s !== 'wrong_account' && st.s !== 'member' && <><XCircle size={42} className="ve-bad" aria-hidden="true" /><h1>{COPY[st.s][0]}</h1>
-          <p>{st.s === 'expired' ? `Invites work for 7 days. Ask ${inviter} to send a new one${st.email ? ` to ${st.email}` : ''}.` : st.s === 'unverified' ? `Confirm ${st.email || 'your address'} with the link we sent, then come back to accept.` : COPY[st.s][1]}</p>
+          <p>{st.s === 'expired' ? `Invites work for 7 days. Ask ${inviter} to send a new one${st.email ? ` to ${st.email}` : ''}.` : st.s === 'unverified' ? `Confirm ${st.email || 'your address'} with the link we sent, then come back to accept.` : st.s === 'domain_not_allowed' && st.allowedDomains?.length ? `${st.orgName || 'This organization'} only accepts addresses at ${st.allowedDomains.map((d) => `@${d}`).join(', ')}. Ask ${inviter} to invite your work address.` : COPY[st.s][1]}</p>
           {st.s === 'expired' && <button type="button" className="ve-btn" data-testid="invite-remind" disabled={st.busy} onClick={remind}>{`Email ${st.inviterName || 'them'} a reminder`}</button>}
           {st.s === 'unverified' && <button type="button" className="ve-btn" data-testid="invite-resend" disabled={st.busy} onClick={resend}>Resend the link</button>}
           {st.note && <small role="status" data-testid="invite-note">{st.note}</small>}

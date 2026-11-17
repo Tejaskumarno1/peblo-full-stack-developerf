@@ -126,7 +126,7 @@ try {
   const email = `ravi-${Date.now()}@peblo.test`;
   const su = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'correct horse battery', name: 'Ravi Kumar' }) }).then((x) => x.json());
   await db.user.updateMany({ where: { email }, data: { emailVerifiedAt: new Date() } });
-  const tk = new URL(link.link).searchParams.get('token');
+  const tk = new URLSearchParams(new URL(link.link).hash.slice(1)).get('token') || new URL(link.link).searchParams.get('token');
   await fetch(base + '/api/workspaces/join-links/accept', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${su.token}`, 'x-peblo-space': off.id }, body: JSON.stringify({ token: tk }) });
   const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'x-peblo-space': off.id };
   const on = await fetch(base + '/api/notes', { method: 'POST', headers: H, body: JSON.stringify({ title: 'Office live', content: 'Hello from the office' }) }).then((x) => x.json());

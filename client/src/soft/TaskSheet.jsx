@@ -8,6 +8,7 @@ import ShareDialog from './ShareDialog';
 import TaskThread from './TaskThread';
 import { askScope } from '../utils/askScope';
 import { useSpaceMembers } from './spaces';
+import { GroupPills } from './GroupPick';
 import './tasks2.css';
 import { tagsOf, addDays, startOfDay, snippetOf } from './softUtils';
 
@@ -327,6 +328,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
             <div className="s-sheet-pills tk-people" role="group" aria-label="Pick people">
               {team.people.filter((p) => !assignees.includes(p.id)).map((p) => <button key={p.id} type="button" data-testid="assign-pill" onClick={() => { setAssignees([...assignees, p.id]); setAddingPerson(false); }}>{p.id === team.me ? 'Me' : p.name.split(' ')[0]}</button>)}
               {team.people.every((p) => assignees.includes(p.id)) && <span className="tk-anyone">Everyone is already on it</span>}
+              <GroupPills onPick={(ids) => { setAssignees([...new Set([...assignees, ...ids])].slice(0, 10)); setAddingPerson(false); }} />
             </div>
           )}
         </section>

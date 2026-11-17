@@ -4,6 +4,7 @@ import { Eye, Lock, Pencil, Users, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { notesAccessAPI } from '../api';
 import { Backdrop } from './spaces';
+import { GroupSelect } from './GroupPick';
 import './spaces.css';
 import './officeaccess.css';
 
@@ -74,6 +75,7 @@ export function AccessDialog({ note, onClose }) {
             </select>
           </label>
         )}
+        {data?.candidates && <GroupSelect spaceId={note.spaceId} allowed={[...people.map((p) => p.userId), ...(data.candidates || []).map((c) => c.userId)]} onPick={(ids) => save({ people: [...people.map((p) => ({ userId: p.userId, level: p.level })), ...ids.filter((u) => !people.some((p) => p.userId === u)).map((userId) => ({ userId, level: 'view' }))] })} />}
         {err && <p className="s-space-err" role="alert">{err}</p>}
         <small className="oa-note">People you add are told. Take them off again at any time.</small>
       </div>

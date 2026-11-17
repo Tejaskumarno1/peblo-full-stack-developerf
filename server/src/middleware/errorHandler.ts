@@ -1,11 +1,14 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
+/** The address as it may be logged: secrets that older clients still send in the query (invite and join tokens, share unlock values, tickets) are blanked (R13). */
+const logUrl = (req: Request) => String(req.originalUrl || '').replace(/([?&](?:token|ticket|unlock|sid|key|code)=)[^&#]*/gi, '$1[redacted]');
+
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
-  if (res.headersSent) { console.error(`Error after the reply was sent on ${req.method} ${req.originalUrl}:`, err?.message || err); return; }
+  if (res.headersSent) { console.error(`Error after the reply was sent on ${req.method} ${logUrl(req)}:`, err?.message || err); return; }
   // Prisma unique constraint violation
   if (err.code === 'P2002') {
-    console.error(`Unique clash on ${req.method} ${req.originalUrl}:`, JSON.stringify(err.meta?.target ?? err.meta ?? null));
+    console.error(`Unique clash on ${req.method} ${logUrl(req)}:`, JSON.stringify(err.meta?.target ?? err.meta ?? null));
     return res.status(409).json({ error: 'A record with this value already exists' });
   }
 
@@ -29,6 +32,6 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
     return res.status(err.statusCode).json({ error: text, ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {}) });
   }
   const requestId = crypto.randomBytes(4).toString('hex');
-  console.error(`Error [${requestId}] ${req.method} ${req.originalUrl}:`, err.stack || err.message || err);
+  console.error(`Error [${requestId}] ${req.method} ${logUrl(req)}:`, err.stack || err.message || err);
   res.status(500).json({ error: `Something went wrong. If it keeps happening, quote reference ${requestId}.`, requestId });
 }

@@ -1475,7 +1475,7 @@ async function prismaOffUser() {
     inv = await call('POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `guest-${runId}@peblo.test`, orgRole: 'guest' });
     check('seat limit: a guest invite does not use a seat (201 if guests are on, else 403)', inv.status === 201 || inv.status === 403, inv);
     const sl = await call('POST', `/api/workspaces/orgs/${orgId}/join-links`, { spaceId: office.json.id });
-    const slJoin = sl.json.link ? new URL(sl.json.link).searchParams.get('token') : null;
+    const slJoin = sl.json.link ? new URLSearchParams(new URL(sl.json.link).hash.slice(1)).get('token') || new URL(sl.json.link).searchParams.get('token') : null; // join links keep the token after # (R13)
     token = (await mkUser(`smoke-h-${runId}@peblo.test`, 'Joiner H')).token;
     const jn = await call('POST', '/api/workspaces/join-links/accept', { token: slJoin });
     check('seat limit: a join link does not admit past the limit and burns no use (needs a verified email to reach the check)', jn.status === 409 && (jn.json.code === 'seat_limit' || jn.json.state === 'unverified') && (await prismaT.$queryRaw`SELECT uses FROM org_join_links WHERE org_id = ${orgId}`)[0].uses === 0, jn);
@@ -1763,6 +1763,181 @@ async function prismaOffUser() {
   await pb.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
   await pb.user.deleteMany({ where: { id: { in: [O.id, A.id, B.id, V.id] } } });
   token = save;
+}
+
+// ---- R3 sharing and teams: domain rule (FM24), copy limit (FM12), custom expiry (M6), request notifications (M11),
+// ---- declined kept 30 days (M8), link opens (M13), member vs guest on links (FM22/M2), groups (FM23), live identity (M17/FM22), join link fragment (R13)
+{
+  const { default: prismaR3 } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  const sSave = token;
+  const mkU = async (tag) => { const e = `smoke-r3-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: 'correct horse battery', name: `R3 ${tag}` }); return { e, id: r.json.user.id, tok: r.json.token }; };
+  const O = await mkU('o'), M = await mkU('m'), J = await mkU('j');
+  await prismaR3.$executeRaw`UPDATE users SET email_verified_at = now() WHERE id IN (${O.id}, ${M.id}, ${J.id})`;
+  const as = (tok, method, url, body, headers = {}) => rawFetch(base + url, { method, headers: { ...(tok ? { Authorization: `Bearer ${tok}` } : {}), 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => { const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; } return { status: r.status, json: j }; });
+  const org = await as(O.tok, 'POST', '/api/workspaces/orgs', { name: 'R3 org', start: 'team' });
+  const orgId = org.json.id, spaceId = org.json.spaceId;
+  try {
+    // FM24 domain rule
+    let r = await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: ['not a domain'] });
+    check('R3 FM24: a bad domain is refused (400 bad_domain)', r.status === 400 && r.json.code === 'bad_domain', r);
+    r = await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: ['@Acme.Example', 'acme.example'] });
+    check('R3 FM24: owner sets allowed domains (cleaned, de-duplicated); people already in are counted', r.status === 200 && JSON.stringify(r.json.policy.allowedDomains) === '["acme.example"]' && r.json.outside === 1, r.json);
+    r = await as(O.tok, 'GET', `/api/workspaces/orgs/${orgId}/policy`);
+    check('R3 FM24: GET policy returns allowedDomains', r.json.policy?.allowedDomains?.[0] === 'acme.example', r.json);
+    r = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/invites`, { email: M.e, spaceIds: [spaceId] });
+    check('R3 FM24: an invite outside the domains is refused (403 domain_not_allowed)', r.status === 403 && r.json.code === 'domain_not_allowed' && r.json.allowedDomains?.[0] === 'acme.example', r);
+    r = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/invites`, { email: `someone@eu.acme.example` });
+    check('R3 FM24: a subdomain of an allowed domain can be invited', r.status === 201, r);
+    const office = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/spaces`, { name: 'R3 office', kind: 'office' });
+    const jl = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/join-links`, { spaceId: office.json.id });
+    check('R3 R13: join links keep the token after # (never in a query string)', jl.status === 201 && /\/join#token=/.test(jl.json.link) && !/\?token=/.test(jl.json.link), jl.json);
+    const jt = new URLSearchParams(new URL(jl.json.link).hash.slice(1)).get('token');
+    r = await as(J.tok, 'POST', '/api/workspaces/join-links/lookup', { token: jt });
+    check('R3 FM24: join link lookup (POST body) says domain_not_allowed', r.status === 200 && r.json.state === 'domain_not_allowed', r.json);
+    r = await as(J.tok, 'POST', '/api/workspaces/join-links/accept', { token: jt });
+    check('R3 FM24: join link accept outside the domains is refused (403) and uses nothing', r.status === 403 && r.json.code === 'domain_not_allowed', r);
+    const uses = await prismaR3.$queryRaw`SELECT uses FROM org_join_links WHERE org_id = ${orgId}`;
+    check('R3 FM24: the refused join burned no use', uses[0]?.uses === 0, uses);
+    r = await as(M.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: [] });
+    check('R3 FM24: a non-member cannot change the rule', r.status === 404, r.status);
+    r = await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: [] });
+    check('R3 FM24: an empty list lets anyone in again', r.status === 200 && r.json.policy.allowedDomains.length === 0, r.json);
+    r = await as(J.tok, 'POST', '/api/workspaces/join-links/accept', { token: jt });
+    check('R3 FM24: with no rule the same join link works', r.status === 200, r);
+    const inv = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/invites`, { email: M.e, spaceIds: [spaceId] });
+    await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: ['acme.example'] });
+    r = await as(M.tok, 'POST', '/api/workspaces/invites/accept', { token: new URLSearchParams(new URL(inv.json.link).hash.slice(1)).get('token') });
+    check('R3 FM24: an invite sent before the rule cannot be accepted after it (403 domain_not_allowed)', r.status === 403 && r.json.code === 'domain_not_allowed', r);
+    await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/policy`, { allowedDomains: [] });
+    r = await as(M.tok, 'POST', '/api/workspaces/invites/accept', { token: new URLSearchParams(new URL(inv.json.link).hash.slice(1)).get('token') });
+    check('R3 FM24: and can once the rule is cleared', r.status === 200, r);
+
+    // FM23 groups
+    r = await as(M.tok, 'POST', `/api/workspaces/orgs/${orgId}/groups`, { name: 'Design' });
+    check('R3 FM23: a plain member cannot create a group (403)', r.status === 403, r.status);
+    r = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/groups`, { name: 'Design', userIds: [O.id, M.id, 'not-a-user'] });
+    check('R3 FM23: owner creates a group; unknown ids are dropped', r.status === 201 && r.json.members === 2, r.json);
+    const gid = r.json.id;
+    r = await as(O.tok, 'POST', `/api/workspaces/orgs/${orgId}/groups`, { name: 'design' });
+    check('R3 FM23: names are unique per organization, any case (409)', r.status === 409, r.status);
+    r = await as(M.tok, 'GET', `/api/workspaces/orgs/${orgId}/groups`);
+    check('R3 FM23: members can see groups but not manage them', r.status === 200 && r.json.groups[0]?.size === 2 && r.json.canManage === false, r.json);
+    r = await as(J.tok, 'GET', `/api/workspaces/spaces/${spaceId}/groups`);
+    check('R3 FM23: someone not in the team cannot list its groups (404)', r.status === 404, r.status);
+    r = await as(M.tok, 'GET', `/api/workspaces/spaces/${spaceId}/groups`);
+    check('R3 FM23: a team member sees the group with its members in that team', r.status === 200 && r.json.groups[0]?.members.length === 2, r.json);
+    r = await as(O.tok, 'PATCH', `/api/workspaces/orgs/${orgId}/groups/${gid}`, { name: 'Design team', userIds: [O.id] });
+    check('R3 FM23: rename and replace members', r.status === 200 && r.json.members === 1, r.json);
+    r = await as(O.tok, 'GET', `/api/workspaces/spaces/${office.json.id}/groups`);
+    check('R3 FM23: a group is offered in another team where one of its members is', r.status === 200 && r.json.groups.length === 1, r.json);
+    r = await as(O.tok, 'DELETE', `/api/workspaces/orgs/${orgId}/groups/${gid}`);
+    check('R3 FM23: delete a group', r.status === 200 && (await as(O.tok, 'GET', `/api/workspaces/orgs/${orgId}/groups`)).json.groups.length === 0, r);
+
+    // M6 custom expiry, FM12 copy limit (a Personal note of O)
+    const n = await as(O.tok, 'POST', '/api/notes', { title: 'R3 shared', content: 'hello r3' });
+    const nid = n.json.note.id;
+    const at = new Date(Date.now() + 3 * 86400000 + 4 * 3600000);
+    r = await as(O.tok, 'POST', `/api/share/note/${nid}`, { expiresAt: at.toISOString(), allowCopy: false });
+    check('R3 M6: a link with a chosen end date and time', r.status === 201 && Math.abs(new Date(r.json.expiresAt) - at) < 1000 && r.json.allowCopy === false, r.json);
+    const tok = r.json.token;
+    r = await as(O.tok, 'POST', `/api/share/note/${nid}`, { expiresAt: new Date(Date.now() - 60000).toISOString() });
+    check('R3 M6: a past end date is refused (400 bad_expiry)', r.status === 400 && r.json.code === 'bad_expiry', r);
+    r = await as(O.tok, 'POST', `/api/share/note/${nid}`, { expiresAt: new Date(Date.now() + 11 * 365 * 86400000).toISOString() });
+    check('R3 M6: more than 10 years is refused', r.status === 400, r.status);
+    r = await as(O.tok, 'POST', `/api/share/note/${nid}`, { expiresAt: 'tomorrow' });
+    check('R3 M6: a value that is not a date is refused', r.status === 400, r.status);
+    r = await as(O.tok, 'GET', `/api/share/note/${nid}`);
+    check('R3 FM12: the owner sees allowCopy=false', r.json.allowCopy === false && r.json.token === tok, r.json);
+    r = await as(null, 'GET', `/api/public/note/${tok}`);
+    check('R3 FM12: the public page is told noCopy', r.status === 200 && r.json.noCopy === true, r.json);
+    let md = await rawFetch(`${base}/s/note/${tok}.md`);
+    check('R3 FM12: the plain-text .md version is refused while copying is off (403)', md.status === 403, md.status);
+    md = await rawFetch(`${base}/s/note/${tok}`, { headers: { Accept: 'text/markdown' } });
+    check('R3 FM12: a bot asking for markdown on the normal link gets no text copy', md.status !== 200 || !(await md.text()).includes('hello r3'), md.status);
+    r = await as(O.tok, 'POST', `/api/share/note/${nid}`, { allowCopy: true, expiresAt: null });
+    check('R3 FM12/M6: copying back on; expiresAt null means never', r.status === 201 && r.json.allowCopy === true && r.json.expiresAt === null, r.json);
+    md = await rawFetch(`${base}/s/note/${tok}.md`);
+    check('R3 FM12: the .md version works again', md.status === 200 && (await md.text()).includes('hello r3'), md.status);
+    await as(O.tok, 'POST', `/api/share/note/${nid}/password`, { password: 'open sesame' });
+    md = await rawFetch(`${base}/s/note/${tok}.md`);
+    check('R3: a password-protected page has no .md version without its unlock (401)', md.status === 401, md.status);
+    await as(O.tok, 'POST', `/api/share/note/${nid}/password`, { password: '' });
+
+    // M11 owner notified of requests
+    const sid = 'r3guestsession0000001';
+    r = await as(null, 'POST', `/api/public/note/${tok}/edit-request`, { sessionId: sid, name: 'Mallory', message: 'please' });
+    await as(null, 'POST', `/api/public/note/${tok}/edit-request`, { sessionId: sid, name: 'Mallory', message: 'please again' });
+    let nr = await prismaR3.$queryRaw`SELECT title, from_name FROM user_notifications WHERE user_id = ${O.id} AND kind = 'share_request'`;
+    check('R3 M11: an edit request notifies the owner once (repeat within 10 min is quiet), the guest is marked', r.status === 200 && nr.length === 1 && /asked to edit/.test(nr[0].title) && /\(guest\)/.test(nr[0].title), nr);
+    await as(null, 'POST', `/api/public/note/${tok}/extend-request`, { sessionId: sid, name: 'Mallory' });
+    nr = await prismaR3.$queryRaw`SELECT title FROM user_notifications WHERE user_id = ${O.id} AND kind = 'share_request'`;
+    check('R3 M11: an extend request notifies the owner too', nr.length === 2 && nr.some((x) => /keep the link/.test(x.title)), nr);
+    await as(M.tok, 'POST', `/api/public/note/${tok}/extend-request`, { sessionId: 'r3membersession000002', name: 'Fake Boss' });
+    nr = await prismaR3.$queryRaw`SELECT title FROM user_notifications WHERE user_id = ${O.id} AND kind = 'share_request' ORDER BY created_at DESC`;
+    check('R3 M11: a request within 10 minutes of the last one is not notified again', nr.length === 2, nr.length);
+
+    // M13 opens and FM22 member vs guest on the link
+    r = await as(null, 'POST', `/api/public/note/${tok}/presence`, { sessionId: sid, name: 'R3 O' });
+    const gv = (r.json.viewers || []).find((v) => v.self);
+    check('R3 FM22/M2: a guest typing a member\'s name is still marked a guest', r.status === 200 && gv && gv.guest === true && gv.member === false, r.json);
+    r = await as(M.tok, 'POST', `/api/public/note/${tok}/presence`, { sessionId: 'r3membersession000002', name: 'Typed Name' });
+    const mv = (r.json.viewers || []).find((v) => v.self);
+    check('R3 FM22: a signed-in person shows their account name and is a member', mv && mv.member === true && mv.name === 'R3 m', mv);
+    await new Promise((res) => setTimeout(res, 300));
+    r = await as(O.tok, 'GET', `/api/share/note/${nid}/opens`);
+    const opens = r.json.opens || [];
+    check('R3 M13: the owner sees who opened the link (guest and member, with visits)', r.status === 200 && opens.length === 2 && opens.some((o) => o.member && o.name === 'R3 m') && opens.some((o) => !o.member && o.name === 'R3 O' && o.visits >= 1), opens);
+    r = await as(M.tok, 'GET', `/api/share/note/${nid}/opens`);
+    check('R3 M13: nobody else can read the list (404)', r.status === 404, r.status);
+
+    // M8 declined kept 30 days and listed
+    await as(O.tok, 'POST', `/api/share/note/${nid}/approval`, { on: true });
+    const s2 = 'r3guestsession0000003', s3 = 'r3guestsession0000004';
+    await as(null, 'POST', `/api/public/note/${tok}/knock`, { sessionId: s2, name: 'Dora' });
+    await as(null, 'POST', `/api/public/note/${tok}/knock`, { sessionId: s3, name: 'Old' });
+    let reqs = (await as(O.tok, 'GET', `/api/share/note/${nid}/requests`)).json.requests || [];
+    for (const q of reqs.filter((x) => x.name === 'Dora' || x.name === 'Old')) await as(O.tok, 'POST', `/api/share/note/${nid}/guests/${q.id}/decline`);
+    await prismaR3.$executeRaw`UPDATE share_guests SET at = now() - interval '2 days' WHERE share_token = ${tok} AND session_id = ${s2}`;
+    await prismaR3.$executeRaw`UPDATE share_guests SET at = now() - interval '31 days' WHERE share_token = ${tok} AND session_id = ${s3}`;
+    await new Promise((res) => setTimeout(res, 16500)); // the presence sweep runs every 15 s
+    reqs = (await as(O.tok, 'GET', `/api/share/note/${nid}/requests`)).json.requests || [];
+    check('R3 M8: a guest declined 2 days ago is still listed as declined; one from 31 days ago is gone', reqs.some((x) => x.name === 'Dora' && x.status === 'declined') && !reqs.some((x) => x.name === 'Old'), reqs);
+
+    // M17 / FM22 live identity: the server stamps the cursor name and colour
+    const { stampAwareness, PEER_COLORS } = await import(pathToFileURL(path.resolve('dist/server/services/collab.js')).href);
+    const enc = await import('lib0/encoding'); const dec = await import('lib0/decoding');
+    const e = enc.createEncoder(); enc.writeVarUint(e, 1); enc.writeVarUint(e, 77); enc.writeVarUint(e, 3); enc.writeVarString(e, JSON.stringify({ user: { name: 'The CEO', color: '#000000', member: true } }));
+    const read = (u) => { const d = dec.createDecoder(u); dec.readVarUint(d); dec.readVarUint(d); dec.readVarUint(d); return JSON.parse(dec.readVarString(d)); };
+    const g = read(stampAwareness(enc.toUint8Array(e), { key: 's:x', name: 'Guest', avatar: null, member: false }, PEER_COLORS[2]));
+    check('R3 FM22/M2: a guest cannot claim to be a member on a live cursor; the server colour wins', g.user.guest === true && g.user.member === false && g.user.color === PEER_COLORS[2] && g.user.name === 'The CEO', g);
+    const mm = read(stampAwareness(enc.toUint8Array(e), { key: 'u:1', name: 'Real Name', avatar: null, member: true }, PEER_COLORS[0]));
+    check('R3 FM22: a member\'s live cursor shows the account name', mm.user.name === 'Real Name' && mm.user.member === true, mm);
+
+    // a team task's link: its owner can make it and set its password (ANY_SPACE in shareOwner / owned for tasks)
+    const tt = await as(O.tok, 'POST', '/api/todos', { text: 'R3 team task' }, { 'x-peblo-space': spaceId });
+    const tsh = await as(O.tok, 'POST', `/api/share/todo/${tt.json.todo?.id}`, {});
+    check('R3: the owner of a team task can share it by link', tt.status === 201 && tsh.status === 201 && !!tsh.json.token, [tt.status, tsh.json]);
+    r = await as(O.tok, 'POST', `/api/public/todo/${tsh.json.token}/password`, { password: 'open sesame' });
+    check('R3: and set its password from the shared page (owner found in any space)', r.status === 200 && r.json.hasPassword === true, r);
+    r = await as(null, 'GET', `/api/public/todo/${tsh.json.token}`);
+    check('R3: a guest then sees the team task link as locked', r.status === 200 && r.json.locked === true, r.json);
+    r = await as(M.tok, 'POST', `/api/public/todo/${tsh.json.token}/password`, { password: '' });
+    check('R3: someone else cannot change the team task link password (404)', r.status === 404, r.status);
+
+    // a team note's plain-text version works (ANY_SPACE in agentView)
+    const tn = await as(O.tok, 'POST', '/api/notes', { title: 'R3 team', content: 'team words' }, { 'x-peblo-space': spaceId });
+    const ts = await as(O.tok, 'POST', `/api/share/note/${tn.json.note.id}`, {});
+    md = await rawFetch(`${base}/s/note/${ts.json.token}.md`);
+    check('R3: a team note shared by link has its .md version', md.status === 200 && (await md.text()).includes('team words'), md.status);
+  } finally {
+    // org notes, todos and announcements are ON DELETE RESTRICT: remove them before the org
+    await prismaR3.$executeRaw`DELETE FROM announcements WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+    await prismaR3.$executeRaw`DELETE FROM todos WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+    await prismaR3.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+    await prismaR3.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
+    token = sSave;
+    await prismaR3.user.deleteMany({ where: { id: { in: [O.id, M.id, J.id] } } });
+  }
 }
 } catch (err) {
   failures++;

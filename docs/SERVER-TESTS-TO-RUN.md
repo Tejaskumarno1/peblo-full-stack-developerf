@@ -96,3 +96,10 @@ Local `peblo_test` database only; never `server/.env`. `scripts/smoke-test.mjs` 
 51. **Bulk in one request, by hand.** In the app, select 10 notes and archive, pin, move to a folder, tag and trash them (then Undo): the network panel shows ONE `POST /api/notes/bulk` per action, and a second window refreshes once. Against an older server the same actions still work (one request per note). In a team, a member's bulk archive of a lead's note reports it as skipped.
 52. **`notes_changed` once.** With a socket connected, one bulk call emits exactly one `notes_changed` (not checked by the smoke test).
 53. **Prisma models for 035-053.** On a copy of production: `prisma db pull --print` and compare the workspace models with `server/prisma/schema.prisma` (never `migrate`/`db push`).
+
+## Sharing and teams round 3 (branch feat-r3): RUN on a local database (smoke block "R3", 49 checks, all passed on peblo_test_r3)
+54. **Domain rule (FM24).** Owner sets `allowedDomains`; invite / invite accept / join accept outside it give 403 `domain_not_allowed`; subdomains allowed; a refused join burns no use; clearing the list lets people in.
+55. **Copy limit and expiry (FM12, M6).** `allowCopy:false` -> public `noCopy:true`, `/s/note/<t>.md` 403; back on -> 200. `expiresAt` future works, past / >10 years / not a date 400. A password-protected page's `.md` is 401 without the unlock.
+56. **Requests and opens (M11, M8, M13, FM22).** Edit and extend requests notify the owner once per 10 minutes; declined guests stay 30 days (the sweep removes one older than 30 days); `/opens` lists guest and member with visits; presence marks a guest typing a member's name as `guest:true`.
+57. **Groups (FM23)** CRUD and `/spaces/:id/groups`; live cursor identity (`stampAwareness`); a team note's `.md`; a team task's link and password.
+Still not run: two real browsers in one live room (colours and names come from the server; checked as a unit only).

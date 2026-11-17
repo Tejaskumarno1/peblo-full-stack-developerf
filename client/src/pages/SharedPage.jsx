@@ -850,7 +850,7 @@ export default function SharedPage() {
     setMenuOpen(false);
   };
   const exportShared = async (format) => {
-    if (!data || exporting) return;
+    if (!data || exporting || lockCopy) return;
     const note = data.kind === 'todo'
       ? { title: data.text, content: `## Task\n\n- [${data.completed ? 'x' : ' '}] ${data.text}\n\n${data.note?.content || ''}`, tags: data.tags }
       : { title: data.title || 'Untitled', content: data.content || '', tags: data.tags };
@@ -1086,6 +1086,17 @@ export default function SharedPage() {
   const [trBusy, setTrBusy] = useState(false);
   const trRef = useRef(null);
   useEffect(() => { if (!trOpen) return undefined; const away = (e) => { if (!trRef.current?.contains(e.target)) setTrOpen(false); }; document.addEventListener('mousedown', away); return () => document.removeEventListener('mousedown', away); }, [trOpen]);
+  // FM12: the owner turned off "Let guests copy and download" for this link. Copy, download, print and export are hidden and the
+  // usual shortcuts do nothing (someone can still take a screenshot; the page says so nowhere, it simply offers no copy). The owner keeps everything.
+  const lockCopy = !!data?.noCopy && !isOwner;
+  useEffect(() => {
+    if (!lockCopy) return undefined;
+    const inEditor = (e) => !!e.target?.closest?.('.bn-editor[contenteditable="true"], input, textarea');
+    const block = (e) => { if (!inEditor(e)) e.preventDefault(); };
+    const keys = (e) => { if ((e.ctrlKey || e.metaKey) && ['p', 's'].includes(String(e.key).toLowerCase())) e.preventDefault(); };
+    document.addEventListener('copy', block); document.addEventListener('cut', block); document.addEventListener('keydown', keys, true);
+    return () => { document.removeEventListener('copy', block); document.removeEventListener('cut', block); document.removeEventListener('keydown', keys, true); };
+  }, [lockCopy]);
   const pickLang = async (code) => {
     if (!code) { setTrLang(null); setTrText(''); setTrOpen(false); return; }
     setTrBusy(true);
@@ -1096,8 +1107,9 @@ export default function SharedPage() {
     } catch { showToast('Translation is not available right now.'); } finally { setTrBusy(false); }
   };
   return (
-    <div ref={rootRef} className={`pb-shared${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
+    <div ref={rootRef} data-nocopy={lockCopy ? '1' : undefined} className={`pb-shared${lockCopy ? ` no-copy${data?.canEdit ? '' : ' read-only'}` : ''}${fullscreen ? ' is-fs' : ''}${topHidden ? ' top-tucked' : ''}${look.quiet ? ' is-quiet' : ''}${reader.showChanges ? '' : ' no-chg'}`} data-theme={darkMode ? 'dark' : 'light'} data-size={look.size} data-width={look.width} data-font={look.font}>
       <div className="blobs" aria-hidden="true"><i /><i /><i /></div>
+      {lockCopy && <style>{`@media print { .pb-shared.no-copy { display: none !important; } } .pb-shared.no-copy.read-only article { -webkit-user-select: none; user-select: none; }`}</style>}
       <a className="skip-link" href="#page-main" onClick={(e) => { e.preventDefault(); document.getElementById('page-main')?.focus(); }}>Skip to content</a>
       <header className="top">
         <div className="top-in">
@@ -1111,7 +1123,7 @@ export default function SharedPage() {
             {previewMode ? <Pencil size={16} /> : <Eye size={16} />}<span>{previewMode ? 'Edit page' : 'Preview'}</span>
           </button>}
           {data?.canEdit && previewMode && <div className="seg preview-roles" role="group" aria-label="Preview as" data-testid="preview-roles"><button type="button" className="on" aria-pressed="true">View only</button><button type="button" data-testid="preview-as-edit" aria-pressed="false" onClick={() => setPreviewMode(false)}>Can edit</button></div>}
-          {data && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
+          {data && !lockCopy && <button className={`btn primary save-btn${savedCopy ? ' is-saved' : ''}`} type="button" aria-label={savedCopy ? 'Open saved copy in Peblo' : 'Save to my Peblo'} disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}>
             {saveBusy ? <LoaderCircle className="spin" size={16} /> : savedCopy ? <Check size={16} /> : <Clipboard size={16} />}
             <span>{saveBusy ? 'Saving…' : savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</span>
           </button>}
@@ -1154,14 +1166,15 @@ export default function SharedPage() {
             {menuOpen && <div className="menu" role="menu">
               <h4>Share and export</h4>
               <div className="linkbox"><input readOnly value={window.location.href} aria-label="Share link" /><button className="btn dark" type="button" onClick={() => copy(window.location.href)}>Copy</button></div>
-              <hr />
+              {!lockCopy && <><hr />
               <button type="button" role="menuitem" onClick={() => exportShared('md')}><Download size={17} /><span>Download as Markdown<small>Keep your note formatting</small></span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('pdf')}><FileText size={17} /><span>Download as PDF<small>Ready to share or print</small></span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={17} /><span>Download as Word<small>Editable .doc document</small></span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('html')}><FileText size={17} /><span>Download as HTML</span></button>
               <button type="button" role="menuitem" onClick={() => exportShared('txt')}><FileText size={17} /><span>Download as plain text</span></button>
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); exportDocs([{ title: data?.title || data?.text || 'Untitled', content: data?.content || data?.note?.content || '' }], 'print', pageTitle).catch((cause) => showToast(cause.message || 'Could not open print dialog')); }}><Printer size={17} /><span>Print<small>Opens the print dialog</small></span></button>
-              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy as Markdown</span></button>
+              <button type="button" role="menuitem" onClick={() => copy(data?.kind === 'todo' ? `${data.text}\n\n${data.note?.content || ''}` : `# ${data?.title || 'Untitled'}\n\n${data?.content || ''}`, 'Note text copied')}><Clipboard size={17} /><span>Copy as Markdown</span></button></>}
+              {lockCopy && <div className="menu-note" data-testid="nocopy-note">The owner turned off copying and downloading for this page.</div>}
               <button type="button" role="menuitem" onClick={() => { setDarkMode((dark) => !dark); setMenuOpen(false); }}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? 'Light mode' : 'Dark mode'}</span></button>
               {isOwner && !shareOff && <><hr /><button className="danger" type="button" role="menuitem" onClick={() => { setRevokeConfirm(true); setMenuOpen(false); }}><X size={17} /><span>Turn sharing off<small>Only the owner sees this</small></span></button></>}
               <hr />
@@ -1173,7 +1186,7 @@ export default function SharedPage() {
       </header>
       {data?.kind === 'note' && !error && <FocusChrome container={rootRef.current} active={fullscreen} prefs={fsp} set={setFsp} title={data.title || 'Untitled'} saveStatus={status === 'saved' ? 'saved' : status === 'error' || status === 'conflict' ? 'error' : 'saving'} words={wordCount} docKey={token} getScroller={() => articleRef.current}
         outline={headings.map((h) => ({ level: h.level, text: h.title }))} onJump={(text, index) => { const h = headings[index]; if (h) scrollToHeading(h.id); }} onExit={toggleFullscreen}
-        noteNode={<>
+        noteNode={lockCopy ? <p className="fsx-muted">The owner turned off copying and downloading for this page.</p> : <>
           <button type="button" role="menuitem" data-testid="fs-x-md" onClick={() => exportShared('md')}><Download size={15} />Download as Markdown</button>
           <button type="button" role="menuitem" data-testid="fs-x-pdf" onClick={() => exportShared('pdf')}><FileText size={15} />Download as PDF</button>
           <button type="button" role="menuitem" onClick={() => exportShared('doc')}><FileText size={15} />Download as Word</button>
@@ -1188,7 +1201,7 @@ export default function SharedPage() {
         </>}
         barItems={[
           { id: 'who', label: 'Shared by', node: <span className="fsx-chip"><span className="av" aria-hidden="true">{initials(data.author)}</span>{data.author || 'Shared note'}</span> },
-          { id: 'save', label: 'Save to my Peblo', node: <button type="button" className="fsx-save" data-testid="fs-save" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={14} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button> },
+          ...(lockCopy ? [] : [{ id: 'save', label: 'Save to my Peblo', node: <button type="button" className="fsx-save" data-testid="fs-save" disabled={saveBusy} onClick={() => savedCopy ? navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks') : saveSharedCopy()}><Clipboard size={14} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button> }]),
         ]} />}
       {showJoin && <div className="join-back" data-testid="join-back"><div className="join-card" role="dialog" aria-modal="true" aria-label="Join this page" data-testid="join-card" onKeyDown={(event) => { if (event.key === 'Escape') joinNow(true); }}>
         <div className="join-prev"><span className="join-big" style={{ background: myColor, boxShadow: `0 0 0 5px ${myColor}33` }}>{(cardName.trim()[0] || 'G').toUpperCase()}</span><div><h3>Join {data.title || 'this page'}</h3><p>{data.author ? `${data.author} shared this page.` : 'This page was shared with you.'}{others.length > 0 ? ` ${others.length === 1 ? '1 person is' : `${others.length} people are`} here now.` : ''}</p></div></div>
@@ -1232,14 +1245,16 @@ export default function SharedPage() {
       </aside>}
       {data && !error && shownFly === 'file' && <aside className="srail-fly" data-testid="fly-file" aria-label="File">
         <div className="fly-head"><b>{data.title || data.text || 'Shared page'}</b></div>
-        <button type="button" className="fly-item" disabled={saveBusy} onClick={() => { setFly(null); if (savedCopy) navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks'); else saveSharedCopy(); }}><Clipboard size={16} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button>
+        {!lockCopy && <button type="button" className="fly-item" disabled={saveBusy} onClick={() => { setFly(null); if (savedCopy) navigate(savedCopy.kind === 'note' ? `/notes/${savedCopy.id}` : '/tasks'); else saveSharedCopy(); }}><Clipboard size={16} />{savedCopy ? 'Open in Peblo' : 'Save to my Peblo'}</button>}
         <button type="button" className="fly-item" onClick={() => { copy(window.location.href, 'Share link copied'); setFly(null); }}><Link2 size={16} />Copy link</button>
         <hr />
+        {lockCopy && <p className="fly-empty" data-testid="fly-nocopy">The owner turned off copying and downloading for this page.</p>}
+        {!lockCopy && <>
         <button type="button" className="fly-item" onClick={() => { exportShared('md'); setFly(null); }}><Download size={16} />Markdown</button>
         <button type="button" className="fly-item" onClick={() => { exportShared('pdf'); setFly(null); }}><FileText size={16} />PDF</button>
         <button type="button" className="fly-item" onClick={() => { exportShared('doc'); setFly(null); }}><FileText size={16} />Word</button>
         <button type="button" className="fly-item" onClick={() => { exportShared('html'); setFly(null); }}><FileText size={16} />HTML</button>
-        <button type="button" className="fly-item" onClick={() => { exportShared('txt'); setFly(null); }}><FileText size={16} />Plain text</button>
+        <button type="button" className="fly-item" onClick={() => { exportShared('txt'); setFly(null); }}><FileText size={16} />Plain text</button></>}
       </aside>}
 
       {shareOff && <div className="share-off-banner" role="status"><Check size={17} /><span><b>Sharing is off.</b> This link no longer works for other people.</span></div>}
@@ -1273,10 +1288,10 @@ export default function SharedPage() {
             {tocLinks}
             {data.kind === 'note' && reader.bookmarks.length > 0 && <div className="toc-bm" data-testid="toc-bookmarks"><h3>Bookmarks</h3>{reader.bookmarks.slice(0, 4).map((b) => <button type="button" key={b.sig} onClick={() => reader.goBookmark(b.sig)}><Bookmark size={13} /><span>{b.title || b.text || 'Bookmark'}</span></button>)}</div>}
             <div className="toc-foot" data-testid="toc-foot">
-              <button type="button" onClick={() => exportShared('pdf')}><Download size={17} />Export</button>
+              {!lockCopy && <button type="button" onClick={() => exportShared('pdf')}><Download size={17} />Export</button>}
               <button type="button" onClick={() => setLookOpen(true)}><Type size={17} />Look</button>
               <button type="button" onClick={() => setKeysOpen(true)}><Keyboard size={17} />Keys</button>
-              <button type="button" onClick={() => window.print()}><Printer size={17} />Print</button>
+              {!lockCopy && <button type="button" onClick={() => window.print()}><Printer size={17} />Print</button>}
             </div>
             <div className="meta"><b>{Math.max(1, Math.ceil(wordCount / 200))} min read</b><br />Updated {when(data.updatedAt)}<br /><span>{data.canEdit ? 'Anyone with the link can edit' : 'Read only · no sign-in needed'}</span></div>
           </aside>}

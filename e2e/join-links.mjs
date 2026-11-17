@@ -17,7 +17,7 @@ try {
     else await db.user.updateMany({ where: { email }, data: { emailVerifiedAt: null } });
     return { email, token: r.token, call: call(r.token) };
   };
-  const tokenOf = (link) => new URL(link).searchParams.get('token');
+  const tokenOf = (link) => new URLSearchParams(new URL(link).hash.slice(1)).get('token') || new URL(link).searchParams.get('token'); // invite and join links keep the token after #
   const W = '/api/workspaces';
 
   const noOffice = await b.api('POST', `${W}/orgs`, { name: 'Teams only', start: 'team' });

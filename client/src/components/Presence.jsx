@@ -26,7 +26,11 @@ const ago = (t) => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return `${Math.round(s / 86400)} d ago`;
 };
-const keyOf = (p) => `${p.name}|${p.color}`;
+// the server stamps each person with a stable key (their account, or their link session), so two tabs of one person count once (FM22)
+const keyOf = (p) => (p.key ? `k:${p.key}` : `${p.name}|${p.color}`);
+/** M2 / M14: a guest's typed name is always shown as a guest; only the server marks someone a member. */
+const labelOf = (p) => (p.guest ? `${p.name} (guest)` : p.name);
+const safeAvatar = (a) => (typeof a === 'string' && /^(https?:|data:image\/|\/)/.test(a) && a.length < 4096 ? a : null);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /** The element that scrolls the note (the page itself when nothing inside does). */
@@ -65,7 +69,7 @@ export function usePeers(rt) {
       const byKey = new Map();
       aw.getStates().forEach((st, id) => {
         if (!st?.user) return;
-        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, next: st.next || null, deck: st.deck || null, dp: st.dp || null, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, reacts: st.reacts || null, poll: st.poll || null, vote: st.vote || null, recapMd: st.recapMd || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
+        const p = { id, name: st.user.name || 'Someone', color: st.user.color || '#2563eb', key: typeof st.user.key === 'string' ? st.user.key : null, member: st.user.member === true, guest: st.user.guest === true, avatar: st.user.member === true ? safeAvatar(st.user.avatar) : null, idle: !!st.idle, typingAt: st.typingAt || 0, presenting: !!st.presenting, next: st.next || null, deck: st.deck || null, dp: st.dp || null, mode: st.mode || 'follow', qOn: st.qOn !== false, hand: st.hand || 0, asks: st.asks || [], shown: st.shown || null, called: st.called || null, reacts: st.reacts || null, poll: st.poll || null, vote: st.vote || null, recapMd: st.recapMd || null, answered: st.answered || [], tour: st.tour || null, follows: st.follows || null, view: st.view || null, me: id === aw.clientID };
         const k = keyOf(p);
         const old = byKey.get(k);
         if (!old || (p.me && !old.me) || (old.idle && !p.idle && !old.me)) byKey.set(k, { ...p, me: p.me || !!old?.me });
@@ -426,25 +430,28 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
                 <button
                   key={keyOf(p)}
                   type="button"
-                  className={`pb-avatar ${state}${followed && keyOf(p) === following ? ' following' : ''}${p.presenting ? ' presenting' : ''}`}
-                  style={{ '--c': p.color }}
+                  className={`pb-avatar ${state}${followed && keyOf(p) === following ? ' following' : ''}${p.presenting ? ' presenting' : ''}${p.guest ? ' guest' : ''}`}
+                  style={{ '--c': p.color, ...(p.avatar ? { backgroundImage: `url("${p.avatar}")`, backgroundSize: 'cover', backgroundPosition: 'center', color: 'transparent' } : {}) }}
                   data-testid="presence-avatar"
                   data-state={state}
+                  data-member={p.member ? '1' : undefined}
+                  data-guest={p.guest ? '1' : undefined}
                   disabled={p.me}
-                  title={p.me ? 'You' : `${p.name}${typing ? ' is typing' : p.idle ? ' is away' : ' is here'}. Click to follow their cursor`}
-                  aria-label={p.me ? 'You' : `${p.name}, ${state === 'typing' ? 'typing' : state === 'away' ? 'away' : 'here'}. Follow`}
+                  title={p.me ? 'You' : `${labelOf(p)}${p.member ? ' (member)' : ''}${typing ? ' is typing' : p.idle ? ' is away' : ' is here'}. Click to follow their cursor`}
+                  aria-label={p.me ? 'You' : `${labelOf(p)}, ${state === 'typing' ? 'typing' : state === 'away' ? 'away' : 'here'}. Follow`}
                   aria-pressed={!p.me && following === keyOf(p)}
                   onClick={() => setFollowing((f) => (f === keyOf(p) ? null : keyOf(p)))}
                 >
                   {initial(p.name)}
                   {p.presenting && <span className="badge" aria-hidden="true"><Ic name="presentation" size={9} /></span>}
                   {typing && <span className="dots" aria-hidden="true">…</span>}
+                  {p.guest && !p.me && <span className="gst" aria-hidden="true" title="Guest">G</span>}
                 </button>
               );
             })}
             {hidden > 0 && <span className="pb-avatar more" aria-label={`${hidden} more`}>+{hidden}</span>}
             <button type="button" ref={presentBtn} className={`pb-present${presenting ? ' on' : ''}`} data-testid="present-btn" aria-pressed={presenting} title={presenting ? 'Stop presenting' : 'Present: everyone else can follow your view'} aria-label={presenting ? 'Stop presenting' : 'Present to everyone'} onClick={() => { if (presenting) { setPresenting(false); setStartOpen(false); } else { setStartOpen(false); setMenuOpen((v) => !v); } }}><Ic name="presentation" size={15} /></button>
-            <button type="button" className="pb-presence-count" data-testid="open-collab" title="Who is here" aria-label="Open live collaboration" aria-live="polite" onClick={() => window.dispatchEvent(new Event('pb-open-collab'))}>{others.length === 1 ? `${others[0].name} is here` : `${others.length} others here`}</button>
+            <button type="button" className="pb-presence-count" data-testid="open-collab" title="Who is here" aria-label="Open live collaboration" aria-live="polite" onClick={() => window.dispatchEvent(new Event('pb-open-collab'))}>{others.length === 1 ? `${labelOf(others[0])} is here` : `${others.length} others here`}</button>
           </div>
           {menuOpen && !presenting && <PresentMenu anchor={presentBtn.current} count={others.length} qOn={qOn} setQOn={setQOn} onPick={quickStart} decks={menuOpen ? collectDecks(editor) : []} onDeck={(d) => quickStart('ppt', d)} onOptions={() => { setMenuOpen(false); setStartOpen(true); }} onClose={() => setMenuOpen(false)} />}
           {startOpen && !presenting && <PresentStart mode={mode} setMode={setMode} qOn={qOn} setQOn={setQOn} notesOn={notesOn} setNotesOn={setNotesOn} count={others.length} onStart={() => { setStartOpen(false); setPresenting(true); }} onCancel={() => setStartOpen(false)} />}
@@ -496,6 +503,7 @@ export default function PresenceBar({ rt, editor, rootRef, ready }) {
         .pb-avatar.typing { animation: pb-pulse 1s ease-in-out infinite; }
         .pb-avatar.following { outline: 2px solid var(--c); outline-offset: 2px; }
         .pb-avatar.more { background: transparent; color: inherit; border-color: currentColor; opacity: .7; cursor: default; }
+        .pb-avatar .gst { position: absolute; left: -5px; bottom: -5px; min-width: 13px; height: 13px; border-radius: 7px; background: #4b5563; color: #fff; font-size: 8px; line-height: 13px; text-align: center; border: 1.5px solid var(--pb-bg, #fff); }
         .pb-avatar .dots { position: absolute; right: -4px; bottom: -6px; font-size: 14px; color: var(--c); }
         .pb-presence-count { margin-left: 4px; opacity: .75; white-space: nowrap; }
         .pb-follow { pointer-events: auto; margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: #111827; color: #fff; font-size: 12px; display: flex; gap: 10px; align-items: center; }
