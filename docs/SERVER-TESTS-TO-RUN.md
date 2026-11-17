@@ -103,3 +103,7 @@ Local `peblo_test` database only; never `server/.env`. `scripts/smoke-test.mjs` 
 56. **Requests and opens (M11, M8, M13, FM22).** Edit and extend requests notify the owner once per 10 minutes; declined guests stay 30 days (the sweep removes one older than 30 days); `/opens` lists guest and member with visits; presence marks a guest typing a member's name as `guest:true`.
 57. **Groups (FM23)** CRUD and `/spaces/:id/groups`; live cursor identity (`stampAwareness`); a team note's `.md`; a team task's link and password.
 Still not run: two real browsers in one live room (colours and names come from the server; checked as a unit only).
+
+## R1-R4 merged (branch notes-ux-fixes): run on 2026-11-17 against a fresh local Postgres (`peblo_test_merge`, port 55433)
+`scripts/smoke-test.mjs` **520 passed, 0 failed** (416 earlier checks plus the blocks "R4" 31, "R3" 49 and "R2" 24, all on one database); `account-test` 34/34; `connections-test` 46/46; `connections-unit` 29/29; `uninstall-unit` 6/6; client `npm test` 144/144; `contrast-check` 266/266; `e2e/notes-mock.mjs` 243/243 (real Chrome, fake API); `npx tsc -p server --noEmit` 0 errors. `server/src/routes/notesBulk.ts` now holds R4's `POST /bulk` and R2's folder and Trash routes in one router (one `authenticate`, limited to its own paths).
+58. **Org groups models.** `schema.prisma` gained `OrgGroup` / `OrgGroupMember` for 055 at the merge: on a copy of production, `prisma db pull --print` and compare (never `migrate` / `db push`).

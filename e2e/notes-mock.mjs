@@ -898,6 +898,11 @@ try {
   await page.locator('[data-testid="group-save"]').click(); await wait(800);
   check('R3 a group is created with the chosen members', r3.groupPosts[0]?.name === 'Design' && JSON.stringify(r3.groupPosts[0]?.userIds) === '["u2"]' && (await page.locator('[data-testid="group-row"]').count()) === 1, JSON.stringify(r3.groupPosts));
   teamOn = false; r3.on = false;
+  // leave no R3 note open for the next section: drop its tab and its step in the back / forward trail (they are what /notes reopens)
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('peblo-note-tabs')) { try { const s = JSON.parse(localStorage.getItem(k)); if (Array.isArray(s?.tabs)) { s.tabs = s.tabs.filter((t) => t.id !== 'r3n'); localStorage.setItem(k, JSON.stringify(s)); } } catch { /* ignore */ } }
+    for (const k of Object.keys(sessionStorage)) if (k.endsWith(':trail')) { try { const s = JSON.parse(sessionStorage.getItem(k)); if (Array.isArray(s?.hist?.list)) { s.hist.list = s.hist.list.filter((id) => id !== 'r3n'); s.hist.i = s.hist.list.length - 1; sessionStorage.setItem(k, JSON.stringify(s)); } } catch { /* ignore */ } }
+  });
 
   // ---- R2: locked notes in the row menu and bulk actions, folder in the address and renamed in one request, Trash restore all,
   // ---- visible text size / page width, one POST for a fast-typed draft, inline Ask, tabs kept per space

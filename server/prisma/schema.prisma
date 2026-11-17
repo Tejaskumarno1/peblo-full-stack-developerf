@@ -67,6 +67,8 @@ model User {
   orgJoinLinksCreated OrgJoinLink[]
   spacePrefs          SpacePref[]
   noteMentions        NoteMention[]
+  orgGroupsCreated    OrgGroup[]
+  orgGroupMemberships OrgGroupMember[]
 
   @@map("users")
 }
@@ -399,6 +401,7 @@ model Organization {
   audit     AuditLog[]
   aiKeys    OrgAiKey[]
   joinLinks OrgJoinLink[]
+  groups    OrgGroup[]
 
   @@map("organizations")
 }
@@ -698,4 +701,34 @@ model NoteMention {
 
   @@id([noteId, userId])
   @@map("note_mentions")
+}
+
+/// 055 (FM23). Named groups of organization members. The unique index org_groups_org_name_idx is on (org_id, lower(name)),
+/// which Prisma cannot express: it stays in SQL only. Row level security is enabled on both tables in SQL.
+model OrgGroup {
+  id        String   @id
+  orgId     String   @map("org_id")
+  name      String
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  org     Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  creator User?            @relation(fields: [createdBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  members OrgGroupMember[]
+
+  @@map("org_groups")
+}
+
+/// 055 (FM23).
+model OrgGroupMember {
+  groupId String   @map("group_id")
+  userId  String   @map("user_id")
+  addedAt DateTime @default(now()) @map("added_at")
+
+  group OrgGroup @relation(fields: [groupId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([groupId, userId])
+  @@index([userId], map: "org_group_members_user_idx")
+  @@map("org_group_members")
 }

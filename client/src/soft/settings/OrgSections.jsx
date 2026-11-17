@@ -7,6 +7,7 @@ import { ShieldCheck, Users, Plus, Trash2, Pencil, X } from 'lucide-react';
 import api from '../../api/client';
 import { workspacesAPI } from '../../api';
 import { useActiveOrg } from './OrgPages';
+import { confirmDialog } from '../ConfirmDialog';
 import { Card } from './ui';
 import '../orgpages.css';
 
@@ -91,7 +92,7 @@ export function GroupsPage() {
     setBusy(false);
   };
   const remove = async (g) => {
-    if (!window.confirm(`Delete the group ${g.name}? Tasks and notes already given to its members stay with them.`)) return;
+    if (!(await confirmDialog({ title: `Delete the group ${g.name}?`, body: 'Tasks and notes already given to its members stay with them.', confirmLabel: 'Delete', danger: true }))) return;
     try { await api.delete(`/workspaces/orgs/${org.id}/groups/${g.id}`); await refresh(); } catch (e) { setMsg(errOf(e, 'Could not delete the group.')); }
   };
   const toggle = (uid) => setEditing((x) => ({ ...x, userIds: x.userIds.includes(uid) ? x.userIds.filter((u) => u !== uid) : [...x.userIds, uid] }));
