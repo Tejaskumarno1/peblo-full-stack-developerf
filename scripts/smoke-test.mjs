@@ -1642,6 +1642,128 @@ async function prismaOffUser() {
   token = sSave;
   await prismaDel.user.deleteMany({ where: { id: { in: [O.id, M.id] } } });
 }
+
+// ---- R4 (R37): bulk note actions in one request, POST /api/notes/bulk ----
+{
+  const { default: pb } = await import(pathToFileURL(path.resolve('dist/server/db.js')).href);
+  const save = token;
+  const mk = async (tag) => { const e = `smoke-bulk-${tag}-${runId}@peblo.test`; const r = await call('POST', '/api/auth/signup', { email: e, password: 'correct horse battery', name: `Bulk ${tag}` }); return { e, id: r.json.user.id, tok: r.json.token }; };
+  const O = await mk('o'), A = await mk('a'), B = await mk('b'), V = await mk('v');
+  const req = (tok, sp, method, url, body) => rawFetch(base + url, { method, headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json', ...(sp ? { 'x-peblo-space': sp } : {}) }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => { const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; } return { status: r.status, json: j }; });
+  const bulk = (tok, sp, body) => req(tok, sp, 'POST', '/api/notes/bulk', body);
+  const mkNote = async (tok, sp, title, extra = {}) => (await req(tok, sp, 'POST', '/api/notes', { title, content: title, ...extra })).json.note.id;
+  const rowsOf = (ids) => pb.$queryRaw`SELECT id, is_archived, is_deleted, deleted_at, meta, updated_at FROM notes WHERE id = ANY(${ids}::text[]) ORDER BY id`;
+  const failCode = (r, id) => r.json.failed?.find((f) => f.id === id)?.code;
+
+  // Personal: archive, unarchive, trash, restore
+  const p = [await mkNote(A.tok, null, 'b1'), await mkNote(A.tok, null, 'b2'), await mkNote(A.tok, null, 'b3'), await mkNote(A.tok, null, 'b4')];
+  let r = await bulk(A.tok, null, { action: 'archive', ids: p });
+  check('R4 bulk: archive 4 Personal notes in one request', r.status === 200 && r.json.done.length === 4 && r.json.failed.length === 0 && (await rowsOf(p)).every((n) => n.is_archived), r);
+  r = await bulk(A.tok, null, { action: 'unarchive', ids: p });
+  check('R4 bulk: unarchive', r.status === 200 && (await rowsOf(p)).every((n) => !n.is_archived), r);
+  r = await bulk(A.tok, null, { action: 'trash', ids: p.slice(0, 2) });
+  let rows = await rowsOf(p.slice(0, 2));
+  check('R4 bulk: trash sets is_deleted and deleted_at', r.json.done.length === 2 && rows.every((n) => n.is_deleted && n.deleted_at), rows);
+  r = await bulk(A.tok, null, { action: 'trash', ids: p.slice(0, 2) });
+  check('R4 bulk: trashing a trashed note again is a harmless no-op', r.status === 200 && r.json.done.length === 2, r);
+  r = await bulk(A.tok, null, { action: 'restore', ids: p.slice(0, 2) });
+  rows = await rowsOf(p.slice(0, 2));
+  check('R4 bulk: restore', r.json.done.length === 2 && rows.every((n) => !n.is_deleted && !n.deleted_at), rows);
+
+  // input checks
+  r = await bulk(A.tok, null, { action: 'explode', ids: p });
+  check('R4 bulk: an unknown action is 400', r.status === 400 && r.json.code === 'bad_action', r);
+  r = await bulk(A.tok, null, { action: 'archive', ids: Array.from({ length: 501 }, (_, i) => `x${i}`) });
+  check('R4 bulk: more than 500 ids is 400 too_many', r.status === 400 && r.json.code === 'too_many', r);
+  r = await bulk(A.tok, null, { action: 'move', ids: p });
+  check('R4 bulk: move needs a folder (400)', r.status === 400 && r.json.code === 'bad_folder', r);
+  r = await bulk(A.tok, null, { action: 'archive', ids: [] });
+  check('R4 bulk: an empty id list is 400', r.status === 400, r);
+
+  // someone else's note and a made-up id fail per note; the rest still works
+  const bNote = await mkNote(B.tok, null, 'not yours');
+  r = await bulk(A.tok, null, { action: 'archive', ids: [p[0], bNote, 'no-such-note'] });
+  check('R4 bulk: another person\'s note and an unknown id fail as not_found, mine is done', r.json.done.length === 1 && r.json.done[0] === p[0] && failCode(r, bNote) === 'not_found' && failCode(r, 'no-such-note') === 'not_found' && !(await rowsOf([bNote]))[0].is_archived, r);
+  await bulk(A.tok, null, { action: 'unarchive', ids: [p[0]] });
+
+  // pin limit (3 per scope), unpin; meta changes keep updated_at
+  const before = (await rowsOf(p)).map((n) => +new Date(n.updated_at));
+  r = await bulk(A.tok, null, { action: 'pin', ids: p });
+  check('R4 bulk: pin 4 gives 3 done and 1 pin_limit', r.json.done.length === 3 && r.json.failed.length === 1 && r.json.failed[0].code === 'pin_limit' && r.json.failed[0].id === p[3], r);
+  rows = await rowsOf(p);
+  check('R4 bulk: pinning does not change "last edited"', rows.map((n) => +new Date(n.updated_at)).join() === before.join(), [before, rows.map((n) => n.updated_at)]);
+  r = await bulk(A.tok, null, { action: 'pin', ids: p.slice(0, 3) });
+  check('R4 bulk: pinning already pinned notes is not counted twice', r.json.done.length === 3 && r.json.failed.length === 0, r);
+  r = await bulk(A.tok, null, { action: 'unpin', ids: p });
+  check('R4 bulk: unpin removes the flag', r.json.done.length === 4 && (await rowsOf(p)).every((n) => !n.meta?.pinned), r);
+
+  // move to a folder and out again
+  r = await bulk(A.tok, null, { action: 'move', ids: p.slice(0, 2), folder: 'Work' });
+  check('R4 bulk: move sets meta.folder', r.json.done.length === 2 && (await rowsOf(p.slice(0, 2))).every((n) => n.meta?.folder === 'Work'), r);
+  r = await bulk(A.tok, null, { action: 'move', ids: p.slice(0, 2), folder: '' });
+  check('R4 bulk: move with "" takes them out of the folder', (await rowsOf(p.slice(0, 2))).every((n) => !('folder' in (n.meta || {}))), await rowsOf(p.slice(0, 2)));
+
+  // tag: adds one tag, keeps the others, no duplicates
+  const tagged = await mkNote(A.tok, null, 'tagged', { tags: ['keep', 'bulk-tag'] });
+  r = await bulk(A.tok, null, { action: 'tag', ids: [p[0], tagged], tag: '#Bulk-Tag' });
+  const tagRows = await pb.$queryRaw`SELECT nt.note_id, t.name FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.note_id = ANY(${[p[0], tagged]}::text[]) ORDER BY nt.note_id, t.name`;
+  check('R4 bulk: tag adds the (lower-cased) tag once and keeps the others', r.json.done.length === 2 && tagRows.filter((t) => t.name === 'bulk-tag').length === 2 && tagRows.some((t) => t.note_id === tagged && t.name === 'keep'), tagRows);
+
+  // a locked note is skipped, except for pin/unpin
+  await req(A.tok, null, 'PATCH', `/api/notes/${p[2]}`, { meta: { locked: true } });
+  r = await bulk(A.tok, null, { action: 'trash', ids: [p[2], p[3]] });
+  check('R4 bulk: a locked note is skipped (code locked), the other is trashed', failCode(r, p[2]) === 'locked' && r.json.done[0] === p[3] && !(await rowsOf([p[2]]))[0].is_deleted, r);
+  r = await bulk(A.tok, null, { action: 'pin', ids: [p[2]] });
+  check('R4 bulk: a locked note can still be pinned', r.json.done.length === 1, r);
+
+  // Team: O creates (lead), A and B members, V viewer
+  token = O.tok;
+  const org = await call('POST', '/api/workspaces/orgs', { name: 'Smoke bulk org', start: 'team' });
+  const orgId = org.json.id, team = org.json.spaceId;
+  await pb.$executeRaw`INSERT INTO org_members (org_id, user_id, role) VALUES (${orgId}, ${A.id}, 'member'), (${orgId}, ${B.id}, 'member'), (${orgId}, ${V.id}, 'member')`;
+  await pb.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${team}, ${A.id}, 'member'), (${team}, ${B.id}, 'member'), (${team}, ${V.id}, 'viewer')`;
+  const tA = await mkNote(A.tok, team, 'team note by A');
+  r = await bulk(B.tok, team, { action: 'archive', ids: [tA] });
+  check('R4 bulk team: a member cannot archive someone else\'s note (owner_only)', failCode(r, tA) === 'owner_only' && !(await rowsOf([tA]))[0].is_archived, r);
+  r = await bulk(O.tok, team, { action: 'archive', ids: [tA] });
+  check('R4 bulk team: a lead can', r.json.done[0] === tA && (await rowsOf([tA]))[0].is_archived, r);
+  r = await bulk(A.tok, team, { action: 'unarchive', ids: [tA] });
+  check('R4 bulk team: the author can', r.json.done[0] === tA, r);
+  r = await bulk(B.tok, team, { action: 'move', ids: [tA], folder: 'Shared' });
+  check('R4 bulk team: a member may move (write, like PATCH meta)', r.json.done[0] === tA, r);
+  await pb.$executeRaw`UPDATE notes SET meta = COALESCE(meta, '{}'::jsonb) || '{"teamShare":{"level":"view"}}'::jsonb WHERE id = ${tA}`;
+  r = await bulk(B.tok, team, { action: 'tag', ids: [tA], tag: 'x' });
+  check('R4 bulk team: a note shared "can view" is view_only for others', failCode(r, tA) === 'view_only', r);
+  r = await bulk(V.tok, team, { action: 'pin', ids: [tA] });
+  check('R4 bulk team: a viewer of the space is refused (403)', r.status === 403, r);
+  r = await bulk(A.tok, null, { action: 'archive', ids: [tA] });
+  check('R4 bulk: without the space header a team note is not found (Personal scope)', failCode(r, tA) === 'not_found', r);
+  r = await bulk(A.tok, 'not-a-space', { action: 'archive', ids: [tA] });
+  check('R4 bulk: a space the caller is not in is 404', r.status === 404, r);
+
+  // Office: private by default; view; edit; manage stays the author's
+  const office = await call('POST', `/api/workspaces/orgs/${orgId}/spaces`, { name: 'Bulk office', kind: 'office' });
+  const off = office.json.id;
+  await pb.$executeRaw`INSERT INTO space_members (space_id, user_id, role) VALUES (${off}, ${A.id}, 'member'), (${off}, ${B.id}, 'member')`;
+  const oA = await mkNote(A.tok, off, 'office note by A');
+  r = await bulk(B.tok, off, { action: 'pin', ids: [oA] });
+  check('R4 bulk office: a private note gives no_access', failCode(r, oA) === 'no_access', r);
+  await pb.$executeRaw`UPDATE notes SET office_everyone = 'view' WHERE id = ${oA}`;
+  r = await bulk(B.tok, off, { action: 'pin', ids: [oA] });
+  check('R4 bulk office: shared to view gives view_only', failCode(r, oA) === 'view_only', r);
+  await pb.$executeRaw`UPDATE notes SET office_everyone = 'edit' WHERE id = ${oA}`;
+  r = await bulk(B.tok, off, { action: 'pin', ids: [oA] });
+  const r2 = await bulk(B.tok, off, { action: 'trash', ids: [oA] });
+  check('R4 bulk office: shared to edit can be pinned, but trash is the author\'s (owner_only)', r.json.done[0] === oA && failCode(r2, oA) === 'owner_only', [r, r2]);
+  r = await bulk(A.tok, off, { action: 'trash', ids: [oA] });
+  check('R4 bulk office: the author can trash it', r.json.done[0] === oA, r);
+
+  await pb.$executeRaw`DELETE FROM todos WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await pb.$executeRaw`DELETE FROM notes WHERE space_id IN (SELECT id FROM spaces WHERE org_id = ${orgId})`;
+  await pb.$executeRaw`DELETE FROM organizations WHERE id = ${orgId}`;
+  await pb.user.deleteMany({ where: { id: { in: [O.id, A.id, B.id, V.id] } } });
+  token = save;
+}
 } catch (err) {
   failures++;
   console.error(err);

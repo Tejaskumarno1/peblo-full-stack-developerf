@@ -90,3 +90,9 @@ Local `peblo_test` database only; never `server/.env`. `scripts/smoke-test.mjs` 
 |---|---|
 # Title [link](http://x.test)` counts 4 (a, b, Title, link), not the symbols. Same rules as `client/src/soft/noteStats.js`.
 50. **Account settings.** `PUT /profile {settings:{savedSearches:[...8 strings]}}` and `{settings:{noteFolders:[...with icon, smartMode, smart rule f:'text']}}` are stored and returned by `GET /profile` (the 20 KB settings limit still applies).
+
+## Round R4 (branch feat-r4): run on 2026-11-17 against a local Postgres (`peblo_test_r4`, port 55433)
+`scripts/smoke-test.mjs` **447 passed, 0 failed** (416 before plus 31 in the new block "R4 (R37): bulk note actions in one request"); `account-test` **34/34** (the 2 SMTP failures were a real sender bug on Node 26, see `docs/memory/02-server.md`); `connections-test` 46/46; client `npm test` 139/139; `e2e/notes-mock.mjs` passes (its fake API answers 404 to `/notes/bulk`, so it exercises the fallback).
+51. **Bulk in one request, by hand.** In the app, select 10 notes and archive, pin, move to a folder, tag and trash them (then Undo): the network panel shows ONE `POST /api/notes/bulk` per action, and a second window refreshes once. Against an older server the same actions still work (one request per note). In a team, a member's bulk archive of a lead's note reports it as skipped.
+52. **`notes_changed` once.** With a socket connected, one bulk call emits exactly one `notes_changed` (not checked by the smoke test).
+53. **Prisma models for 035-053.** On a copy of production: `prisma db pull --print` and compare the workspace models with `server/prisma/schema.prisma` (never `migrate`/`db push`).

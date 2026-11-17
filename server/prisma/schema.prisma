@@ -1,43 +1,43 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
   // Generated inside the project (not node_modules/.prisma) so the desktop packager ships it.
-  output   = "../generated/prisma"
+  output          = "../generated/prisma"
   // One engine per kind of computer we ship to: the installers are built on one machine for all of them (PEB-71).
   // electron/engine.cjs picks the matching file at start-up.
-  binaryTargets = ["native", "windows", "darwin", "darwin-arm64", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+  binaryTargets   = ["native", "windows", "darwin", "darwin-arm64", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
   extensions = [citext]
 }
 
 model User {
-  id           String   @id @default(uuid())
-  name         String   @default("You")
-  email        String   @unique @db.Citext
-  passwordHash String   @map("password_hash")
-  tokenVersion Int      @default(0) @map("token_version")
+  id              String    @id @default(uuid())
+  name            String    @default("You")
+  email           String    @unique @db.Citext
+  passwordHash    String    @map("password_hash")
+  tokenVersion    Int       @default(0) @map("token_version")
   emailVerifiedAt DateTime? @map("email_verified_at")
 
   // Profile & Settings
-  jobTitle     String?  @map("job_title")
-  bio          String?  @db.Text
-  avatar       String?  @db.Text
-  timezone     String   @default("UTC")
-  settings     Json
+  jobTitle String? @map("job_title")
+  bio      String? @db.Text
+  avatar   String? @db.Text
+  timezone String  @default("UTC")
+  settings Json
 
   // Profile page (migration 030)
-  username     String?  @unique @db.Citext
-  pronouns     String?
-  language     String   @default("en")
-  passwordChangedAt    DateTime? @map("password_changed_at")
-  deletionRequestedAt  DateTime? @map("deletion_requested_at")
+  username            String?   @unique @db.Citext
+  pronouns            String?
+  language            String    @default("en")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+  deletionRequestedAt DateTime? @map("deletion_requested_at")
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   notes         Note[]
   tags          Tag[]
@@ -49,36 +49,58 @@ model User {
   quizRuns      QuizRun[]
   mastery       TopicMastery[]
   apiTokens     ApiToken[]
-  oauthCodes   OauthCode[]
-  emailTokens  EmailToken[]
+  oauthCodes    OauthCode[]
+  emailTokens   EmailToken[]
+
+  // Workspaces (raw SQL 035-053; see the "Workspaces" models at the end of this file)
+  assignedTodos       Todo[]         @relation("TodoAssignee")
+  orgsCreated         Organization[]
+  orgMemberships      OrgMember[]
+  spacesCreated       Space[]
+  spaceMemberships    SpaceMember[]  @relation("SpaceMemberUser")
+  spaceMembersAdded   SpaceMember[]  @relation("SpaceMemberAddedBy")
+  orgInvitesSent      OrgInvite[]
+  auditEntries        AuditLog[]
+  announcements       Announcement[]
+  noteAccess          NoteAccess[]   @relation("NoteAccessUser")
+  noteAccessGranted   NoteAccess[]   @relation("NoteAccessGrantedBy")
+  orgJoinLinksCreated OrgJoinLink[]
+  spacePrefs          SpacePref[]
+  noteMentions        NoteMention[]
 
   @@map("users")
 }
 
 model Note {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  title      String   @default("Untitled") @db.Text
-  content    String   @default("") @db.Text
-  category   String?
-  isArchived Boolean  @default(false) @map("is_archived")
-  isDeleted  Boolean  @default(false) @map("is_deleted")
-  deletedAt  DateTime? @map("deleted_at")
-  meta       Json?
-  shareToken String? @unique @map("share_token")
-  shareEdit  Boolean  @default(false) @map("share_edit")
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  title          String    @default("Untitled") @db.Text
+  content        String    @default("") @db.Text
+  category       String?
+  isArchived     Boolean   @default(false) @map("is_archived")
+  isDeleted      Boolean   @default(false) @map("is_deleted")
+  deletedAt      DateTime? @map("deleted_at")
+  meta           Json?
+  shareToken     String?   @unique @map("share_token")
+  shareEdit      Boolean   @default(false) @map("share_edit")
   shareExpiresAt DateTime? @map("share_expires_at")
   /// null = Personal. Set for notes that live in a Team or the Office (035_workspaces_expand.sql).
-  spaceId    String?  @map("space_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  spaceId        String?   @map("space_id")
+  /// Office notes only (040): NULL = the author and people in note_access; 'view' / 'edit' = everyone in the Office. SQL CHECK limits the values.
+  officeEveryone String?   @map("office_everyone")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags          NoteTag[]
-  aiGenerations AiGeneration[]
-  backups       NoteBackup[]
-  linkedTodos   Todo[]
-  embedding     NoteEmbedding?
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  space          Space?          @relation(fields: [spaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  tags           NoteTag[]
+  aiGenerations  AiGeneration[]
+  backups        NoteBackup[]
+  linkedTodos    Todo[]
+  embedding      NoteEmbedding?
+  access         NoteAccess[]
+  mentions       NoteMention[]
+  shareReactions ShareReaction[]
 
   @@index([userId])
   @@index([userId, isArchived])
@@ -143,32 +165,36 @@ model NoteBackup {
 }
 
 model Todo {
-  id        String    @id @default(uuid())
-  userId    String    @map("user_id")
-  text      String    @db.Text
-  completed Boolean   @default(false) @map("is_completed")
-  priority  String    @default("medium")
-  deadline  DateTime? @map("deadline")
-  todoTags   Json      @map("tags")
-  noteId     String?   @map("linked_note_id")
-  startTime  String?   @map("start_time")
-  endTime    String?   @map("end_time")
-  recurrence String?   @default("none") @map("recurrence")
-  seriesId   String?   @map("series_id")
-  meta       Json?
-  shareToken String? @unique @map("share_token")
-  shareEdit  Boolean  @default(false) @map("share_edit")
-  shareNote  Boolean  @default(false) @map("share_note")
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  text           String    @db.Text
+  completed      Boolean   @default(false) @map("is_completed")
+  priority       String    @default("medium")
+  deadline       DateTime? @map("deadline")
+  todoTags       Json      @map("tags")
+  noteId         String?   @map("linked_note_id")
+  startTime      String?   @map("start_time")
+  endTime        String?   @map("end_time")
+  recurrence     String?   @default("none") @map("recurrence")
+  seriesId       String?   @map("series_id")
+  meta           Json?
+  shareToken     String?   @unique @map("share_token")
+  shareEdit      Boolean   @default(false) @map("share_edit")
+  shareNote      Boolean   @default(false) @map("share_note")
   shareExpiresAt DateTime? @map("share_expires_at")
   /// null = Personal. Set for tasks that live in a Team (035_workspaces_expand.sql).
-  spaceId    String?  @map("space_id")
-  assigneeId String?  @map("assignee_id")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  spaceId        String?   @map("space_id")
+  assigneeId     String?   @map("assignee_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note   Note?       @relation(fields: [noteId], references: [id], onDelete: SetNull)
-  series TodoSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note     Note?          @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  series   TodoSeries?    @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  space    Space?         @relation(fields: [spaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  assignee User?          @relation("TodoAssignee", fields: [assigneeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  comments TaskComment[]
+  activity TaskActivity[]
 
   @@index([userId])
   @@index([userId, deadline])
@@ -209,6 +235,7 @@ model NoteEmbedding {
   createdAt DateTime @default(now()) @map("created_at")
 
   note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
   @@map("note_embeddings")
 }
 
@@ -224,7 +251,6 @@ model UserApiKeys {
 
   @@map("user_api_keys")
 }
-
 
 // One-time email links (migration 019): confirm an address, or move the account to a new one. Only the hash is stored.
 model EmailToken {
@@ -266,7 +292,7 @@ model AiConnection {
 model QuizRun {
   id         String    @id @default(uuid())
   userId     String    @map("user_id")
-  topic      String   @db.Citext
+  topic      String    @db.Citext
   questions  String    @db.Text
   answers    String?   @db.Text
   correct    Int?
@@ -320,7 +346,7 @@ model OauthClient {
   id           String      @id
   name         String
   redirectUris Json        @map("redirect_uris")
-  createdAt    DateTime    @db.Timestamptz(3) @default(now()) @map("created_at")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   codes        OauthCode[]
 
   @@map("oauth_clients")
@@ -334,7 +360,7 @@ model OauthCode {
   redirectUri   String      @map("redirect_uri")
   codeChallenge String      @map("code_challenge")
   scope         String      @default("write")
-  expiresAt     DateTime    @db.Timestamptz(3) @map("expires_at")
+  expiresAt     DateTime    @map("expires_at") @db.Timestamptz(3)
   client        OauthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -342,4 +368,334 @@ model OauthCode {
   @@index([clientId])
   @@index([userId])
   @@map("oauth_codes")
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Workspaces (organizations, Teams, the Office) and the team tables from raw SQL migrations 035-053.
+// The SQL files in prisma/sql are the source of truth and the code reads these tables with raw SQL; these models only
+// describe them (types for the generated client, CLAUDE.md rule). They were checked against `prisma db pull --print` of a
+// database with 001-053 applied. Not expressible in Prisma and therefore NOT described here (they still exist in SQL):
+// the CHECK constraints (organizations.status, org_members.role/status, spaces.kind/default_role, space_members.role,
+// org_invites.org_role/space_role, org_join_links.space_role/max_uses, note_access.level, notes.office_everyone) and the
+// partial indexes notes_space_idx / todos_space_idx (WHERE space_id IS NOT NULL). Never run `prisma migrate` or
+// `db push` with this file: it would try to "fix" those.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/// 035. status: active | read_only | closed. purge_after: 053 (delete organization, R16).
+model Organization {
+  id         String    @id
+  name       String
+  status     String    @default("active")
+  policy     Json      @default("{}")
+  createdBy  String?   @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  closedAt   DateTime? @map("closed_at") @db.Timestamptz(6)
+  purgeAfter DateTime? @map("purge_after") @db.Timestamptz(6)
+
+  creator   User?         @relation(fields: [createdBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  members   OrgMember[]
+  spaces    Space[]
+  invites   OrgInvite[]
+  audit     AuditLog[]
+  aiKeys    OrgAiKey[]
+  joinLinks OrgJoinLink[]
+
+  @@map("organizations")
+}
+
+/// 035. role: owner | admin | member | guest; status: active | paused.
+model OrgMember {
+  orgId      String    @map("org_id")
+  userId     String    @map("user_id")
+  role       String
+  status     String    @default("active")
+  guestUntil DateTime? @map("guest_until") @db.Timestamptz(6)
+  joinedAt   DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([orgId, userId])
+  @@index([userId], map: "org_members_user_idx")
+  @@map("org_members")
+}
+
+/// 035 (+ public_links 039). kind: team | office; default_role: member | viewer.
+model Space {
+  id               String    @id
+  orgId            String    @map("org_id")
+  kind             String
+  name             String
+  defaultRole      String    @default("member") @map("default_role")
+  allowPublicLinks Boolean   @default(false) @map("allow_public_links")
+  createdBy        String?   @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(6)
+  publicLinks      Boolean   @default(true) @map("public_links")
+
+  org           Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  creator       User?          @relation(fields: [createdBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  members       SpaceMember[]
+  notes         Note[]
+  todos         Todo[]
+  announcements Announcement[]
+  joinLinks     OrgJoinLink[]
+  prefs         SpacePref[]
+
+  @@index([orgId], map: "spaces_org_idx")
+  @@map("spaces")
+}
+
+/// 035. role: lead | member | viewer.
+model SpaceMember {
+  spaceId String   @map("space_id")
+  userId  String   @map("user_id")
+  role    String
+  addedBy String?  @map("added_by")
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user  User  @relation("SpaceMemberUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  adder User? @relation("SpaceMemberAddedBy", fields: [addedBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@id([spaceId, userId])
+  @@index([userId], map: "space_members_user_idx")
+  @@map("space_members")
+}
+
+/// 035 (+ last_reminded_at 051). Only a hash of the invite token is stored.
+model OrgInvite {
+  id             String    @id
+  orgId          String    @map("org_id")
+  email          String    @db.Citext
+  orgRole        String    @default("member") @map("org_role")
+  spaceIds       Json      @default("[]") @map("space_ids")
+  spaceRole      String    @default("member") @map("space_role")
+  tokenHash      String    @unique(map: "org_invites_token_idx") @map("token_hash")
+  invitedBy      String?   @map("invited_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastRemindedAt DateTime? @map("last_reminded_at") @db.Timestamptz(6)
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  inviter User?        @relation(fields: [invitedBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([orgId], map: "org_invites_org_idx")
+  @@map("org_invites")
+}
+
+/// 035.
+model AuditLog {
+  id      String   @id
+  orgId   String   @map("org_id")
+  actorId String?  @map("actor_id")
+  action  String
+  target  String?
+  detail  Json     @default("{}")
+  at      DateTime @default(now()) @db.Timestamptz(6)
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  actor User?        @relation(fields: [actorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([orgId, at(sort: Desc)], map: "audit_log_org_at_idx")
+  @@map("audit_log")
+}
+
+/// 036. Office announcements.
+model Announcement {
+  id          String    @id
+  spaceId     String    @map("space_id")
+  authorId    String    @map("author_id")
+  title       String
+  body        String    @default("")
+  status      String    @default("published")
+  version     Int       @default(1)
+  retractedAt DateTime? @map("retracted_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  space    Space                 @relation(fields: [spaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  author   User                  @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  versions AnnouncementVersion[]
+
+  @@index([spaceId, createdAt(sort: Desc)], map: "announcements_space_idx")
+  @@map("announcements")
+}
+
+/// 036.
+model AnnouncementVersion {
+  announcementId String   @map("announcement_id")
+  version        Int
+  title          String
+  body           String
+  savedAt        DateTime @default(now()) @map("saved_at") @db.Timestamptz(6)
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([announcementId, version])
+  @@map("announcement_versions")
+}
+
+/// 038. The secret is encrypted (secrets.ts) and never returned. added_by has no foreign key.
+model OrgAiKey {
+  orgId    String   @map("org_id")
+  provider String
+  secret   String
+  addedBy  String?  @map("added_by")
+  addedAt  DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([orgId, provider])
+  @@map("org_ai_keys")
+}
+
+/// 040. Per-person access to a private Office note. level: view | edit.
+model NoteAccess {
+  noteId    String   @map("note_id")
+  userId    String   @map("user_id")
+  level     String
+  grantedBy String?  @map("granted_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  note    Note  @relation(fields: [noteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user    User  @relation("NoteAccessUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  granter User? @relation("NoteAccessGrantedBy", fields: [grantedBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@id([noteId, userId])
+  @@index([userId], map: "note_access_user_idx")
+  @@map("note_access")
+}
+
+/// 041. Expiring join links for an Office. space_role: member | viewer; max_uses NULL or above 0.
+model OrgJoinLink {
+  id        String    @id
+  orgId     String    @map("org_id")
+  spaceId   String    @map("space_id")
+  spaceRole String    @default("member") @map("space_role")
+  tokenHash String    @unique @map("token_hash")
+  tokenEnc  String?   @map("token_enc")
+  maxUses   Int?      @map("max_uses")
+  uses      Int       @default(0)
+  createdBy String?   @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  space   Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  creator User?        @relation(fields: [createdBy], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([orgId], map: "org_join_links_org_idx")
+  @@map("org_join_links")
+}
+
+/// 042. Reactions on a shared page (row level security is enabled on the table in SQL).
+model ShareReaction {
+  noteId    String   @map("note_id")
+  sessionId String   @map("session_id")
+  kind      String
+  at        DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([noteId, sessionId, kind])
+  @@map("share_reactions")
+}
+
+/// 048. space_id and user_id have no foreign key in SQL.
+model TaskComment {
+  id        String   @id
+  todoId    String   @map("todo_id")
+  spaceId   String   @map("space_id")
+  userId    String   @map("user_id")
+  body      String
+  mentions  Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  todo Todo @relation(fields: [todoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([todoId, createdAt], map: "task_comments_todo_idx")
+  @@map("task_comments")
+}
+
+/// 048. space_id and user_id have no foreign key in SQL.
+model TaskActivity {
+  id        String   @id
+  todoId    String   @map("todo_id")
+  spaceId   String   @map("space_id")
+  userId    String   @map("user_id")
+  kind      String
+  detail    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  todo Todo @relation(fields: [todoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([spaceId, createdAt(sort: Desc)], map: "task_activity_space_idx")
+  @@index([todoId, createdAt], map: "task_activity_todo_idx")
+  @@map("task_activity")
+}
+
+/// 048. Who is around in a team. No foreign keys in SQL.
+model MemberAvailability {
+  spaceId   String   @map("space_id")
+  userId    String   @map("user_id")
+  status    String   @default("available")
+  note      String?
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([spaceId, userId])
+  @@map("member_availability")
+}
+
+/// 049. No foreign keys in SQL.
+model TaskTemplate {
+  id        String   @id
+  spaceId   String   @map("space_id")
+  name      String
+  items     Json     @default("[]")
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([spaceId], map: "task_templates_space_idx")
+  @@map("task_templates")
+}
+
+/// 050. scope = a space id, or u: + a user id for Personal.
+model BoardColumns {
+  scope     String   @id
+  columns   Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("board_columns")
+}
+
+/// 051. Mute a team.
+model SpacePref {
+  userId    String   @map("user_id")
+  spaceId   String   @map("space_id")
+  muted     Boolean  @default(false)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([userId, spaceId])
+  @@index([spaceId], map: "space_prefs_space_idx")
+  @@map("space_prefs")
+}
+
+/// 052. @mentions in notes: last notification time per (note, person).
+model NoteMention {
+  noteId     String   @map("note_id")
+  userId     String   @map("user_id")
+  notifiedAt DateTime @default(now()) @map("notified_at") @db.Timestamptz(6)
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([noteId, userId])
+  @@map("note_mentions")
 }
