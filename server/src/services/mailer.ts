@@ -1,4 +1,5 @@
 import tls from 'node:tls';
+import net from 'node:net';
 import { appendFileSync } from 'node:fs';
 import type { Request } from 'express';
 
@@ -45,12 +46,16 @@ function smtpSend(mail: Mail): Promise<void> {
   const host = process.env.SMTP_HOST!;
   const port = Number(process.env.SMTP_PORT) || 465;
   return new Promise((resolve, reject) => {
-    const socket = tls.connect({ host, port, servername: host });
+    // SNI only for a host name: an IP address as `servername` is not allowed by RFC 6066, and Node 26 throws
+    // ERR_INVALID_ARG_VALUE for it, so SMTP_HOST=1.2.3.4 could never send. Certificate checks are unchanged.
+    const socket = tls.connect({ host, port, ...(net.isIP(host) ? {} : { servername: host }) });
     socket.setTimeout(20_000, () => { socket.destroy(); reject(new Error('The mail server did not answer in time.')); });
     let buf = '';
     let waiter: ((code: number, text: string) => void) | null = null;
     const check = () => {
       // A reply ends at a line whose 4th character is a space ("250 OK"); "250-..." lines continue it.
+      // Keep a reply that arrives before anyone waits for it (it was dropped before); reply() checks again.
+      if (!waiter) return;
       const lines = buf.split('\r\n');
       for (let i = 0; i < lines.length - 1; i++) {
         if (/^\d{3} /.test(lines[i]) || /^\d{3}$/.test(lines[i])) {

@@ -17,7 +17,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-test-secret-smoke-test
 process.env.TRUST_PROXY = '1';
 process.env.SIGNUP_RATE_MAX = '1000';
 process.env.PUBLIC_URL = 'https://peblo.example';
-for (const k of ['MAIL_OUTBOX', 'RESEND_API_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_PORT', 'MAIL_FROM']) delete process.env[k];
+for (const k of ['MAIL_OUTBOX', 'RESEND_API_KEY', 'BREVO_API_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_PORT', 'MAIL_FROM']) delete process.env[k];
 delete process.env.PEBLO_HOSTED;
 
 const outbox = path.join(os.tmpdir(), `peblo-outbox-${process.pid}.jsonl`);
@@ -157,7 +157,10 @@ try {
   // ---- the SMTP sender, against a fake TLS mail server ----
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'peblo-smtp-'));
   const sslArgs = `req -x509 -newkey rsa:2048 -nodes -keyout "${dir}/k.pem" -out "${dir}/c.pem" -days 2 -subj /CN=localhost`;
-  const sslBins = ['openssl', 'C:\\Program Files\\Git\\usr\\bin\\openssl.exe', 'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe'];
+  // openssl is often not on PATH on Windows, but Git for Windows ships one next to git.exe (<git>\cmd\git.exe -> <git>\usr\bin).
+  const gitRoots = [];
+  try { for (const g of execSync(process.platform === 'win32' ? 'where git' : 'command -v git', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\r?\n/).filter(Boolean)) gitRoots.push(path.resolve(path.dirname(g), '..')); } catch { /* no git */ }
+  const sslBins = ['openssl', ...['C:\\Program Files\\Git', ...gitRoots].flatMap((r) => [path.join(r, 'usr', 'bin', 'openssl.exe'), path.join(r, 'mingw64', 'bin', 'openssl.exe')])];
   let sslOk = false;
   for (const b of sslBins) { try { execSync(`"${b}" ${sslArgs}`, { stdio: 'ignore' }); sslOk = true; break; } catch { /* try the next one */ } }
   if (!sslOk) throw new Error('openssl not found (needed to make a test certificate)');
