@@ -14,6 +14,7 @@
   --r-fg3: #5C6570;
   --r-now: #E2501A;
   --r-now-ink: #B83C0F;
+  --r-on-now: #101418; /* dark text on the orange "now" fill: white was 3.9:1 */
   --r-meet: #DCE4FF;
   --r-meet-ink: #1F3A9E;
   --r-focus: #D4EFE1;
@@ -40,6 +41,7 @@
   --r-fg3: #8E98A4;
   --r-now: #FF6A33;
   --r-now-ink: #FF8A5C;
+  --r-on-now: #0D1014;
   --r-meet: #1E2A4F;
   --r-meet-ink: #B3C3FF;
   --r-focus: #173327;
@@ -55,10 +57,11 @@
   --r-backdrop: rgba(0, 0, 0, 0.55);
 }
 .theme-midnight .river {
+  /* Midnight: a pure black page; cards and lanes one visible step lighter (contrast-check.mjs checks the step) */
   --r-bg: #000000;
-  --r-surface: #0E1115;
-  --r-lane: #13171C;
-  --r-line: #1E242B;
+  --r-surface: #15191F;
+  --r-lane: #191E25;
+  --r-line: #2A313A;
 }
 
 /* ---------- Frame ---------- */
@@ -228,10 +231,14 @@
 .r-meet.meet { background: var(--r-meet); color: var(--r-meet-ink); }
 .r-meet.focus { background: var(--r-focus); color: var(--r-focus-ink); }
 .r-meet.personal { background: var(--r-personal); color: var(--r-personal-ink); }
-.r-meet.past { opacity: 0.55; }
+.r-meet.past { opacity: 1; } /* past meetings: a paler fill, the text keeps full contrast (opacity gave 2.75:1) */
+.r-meet.past.meet { background: color-mix(in srgb, var(--r-meet) 55%, var(--r-lane)); }
+.r-meet.past.focus { background: color-mix(in srgb, var(--r-focus) 55%, var(--r-lane)); }
+.r-meet.past.personal { background: color-mix(in srgb, var(--r-personal) 55%, var(--r-lane)); }
+.r-meet.past .t { font-weight: 600; }
 .r-meet.sel { background: var(--r-ink); color: var(--r-on-ink); box-shadow: 0 0 0 3px var(--r-now); opacity: 1; }
 .r-meet .t { font-size: 12.5px; font-weight: 700; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.r-meet .m { font-size: 11px; opacity: 0.85; white-space: nowrap; }
+.r-meet .m { font-size: 11px; white-space: nowrap; }
 .r-meet.slim { flex-direction: row; align-items: center; gap: 6px; padding: 0 9px; }
 .r-meet.slim .t { white-space: nowrap; }
 .r-meet.narrow { padding: 8px 6px; }

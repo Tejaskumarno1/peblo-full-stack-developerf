@@ -1,0 +1,102 @@
+/* Appearance extras (branch feat-r1). Loaded once from utils/useAppearanceSync.js.
+   - the in-app confirm dialog takes River, Orbit and Studio/Console colours (it uses --s-* variables)
+   - note text: font family and line height (html[data-note-font], html[data-line-height])
+   - colour-blind friendly status and priority colours (html[data-cb])
+   - code blocks in the editor follow Light / Dark / Midnight
+   The attributes are set by utils/appearance.js applyTextAndColourPrefs. */
+
+/* ---------- confirm dialog outside Soft ---------- */
+.river .cd-back {
+  --s-backdrop: var(--r-backdrop); --s-surface: var(--r-surface); --s-fg: var(--r-fg); --s-fg2: var(--r-fg2); --s-line: var(--r-line);
+  --s-chip-solid: var(--r-lane); --s-accent: var(--r-ink); --s-on-accent: var(--r-on-ink); --s-capture-shadow: var(--r-shadow);
+}
+.orbit .cd-back {
+  --s-backdrop: var(--o-scrim); --s-surface: var(--o-surface); --s-fg: var(--o-fg); --s-fg2: var(--o-fg2); --s-line: var(--o-line);
+  --s-chip-solid: var(--o-soft); --s-accent: var(--o-ink); --s-on-accent: var(--o-on-ink); --s-capture-shadow: var(--o-shadow-lg);
+}
+.orbit .cd-box, .river .cd-box { font-family: inherit; }
+/* Studio / Console: the dialog is mounted on <body> */
+body > div > .cd-back {
+  --s-backdrop: rgba(0, 0, 0, 0.45); --s-surface: var(--pb-surface, #fff); --s-fg: var(--pb-fg, #241f1a); --s-fg2: var(--pb-fg-2, #564d43);
+  --s-line: var(--pb-line, #eadfd0); --s-chip-solid: var(--pb-surface-2, #f4eee5); --s-accent: var(--pb-solid, #c4441c); --s-on-accent: var(--pb-on-solid, #fff);
+  font-family: var(--pb-font, system-ui, sans-serif);
+}
+.theme-dark .river .cd-back, .theme-dark .orbit .cd-back, .theme-dark body > div > .cd-back { --s-danger-bg: #B3261E; --s-danger-fg: #FFFFFF; }
+
+/* ---------- note text: font family (FT9) and line height (FT10) ---------- */
+html[data-note-font="serif"] { --pb-note-font: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif; }
+html[data-note-font="mono"] { --pb-note-font: 'Geist Mono', 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+/* Easy to read: fonts made for legibility when the computer has one, else Verdana (wide, open letters) */
+html[data-note-font="easy"] { --pb-note-font: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Next', Lexend, OpenDyslexic, Verdana, Tahoma, sans-serif; }
+html[data-note-font] .bn-container { --bn-font-family: var(--pb-note-font); }
+html[data-note-font] .bn-editor,
+html[data-note-font] .bn-editor .bn-inline-content { font-family: var(--pb-note-font) !important; }
+html[data-note-font="easy"] .bn-editor { letter-spacing: 0.02em; word-spacing: 0.08em; }
+html[data-line-height="relaxed"] { --pb-note-lh: 1.95; }
+html[data-line-height="relaxed"] .bn-editor,
+html[data-line-height="relaxed"] .bn-editor .bn-inline-content { line-height: var(--pb-note-lh) !important; }
+/* code keeps a code font whatever the note font is */
+html[data-note-font] .bn-editor code, html[data-note-font] .bn-editor pre { font-family: 'Geist Mono', ui-monospace, Consolas, monospace !important; }
+
+/* ---------- colour-blind friendly colours (FT8): green / red pairs become blue / orange of different lightness ---------- */
+html[data-cb] {
+  --pb-cb-good: #1F5FBF; --pb-cb-good-soft: #DCE8FA;
+  --pb-cb-bad: #A34E00; --pb-cb-bad-fill: #E69F00; --pb-cb-bad-soft: #FCEBD2;
+  --pb-cb-mid: #56B4E9;
+}
+html[data-cb].theme-dark {
+  --pb-cb-good: #8AB4F8; --pb-cb-good-soft: #18263D;
+  --pb-cb-bad: #FFB061; --pb-cb-bad-fill: #F5B341; --pb-cb-bad-soft: #3A2710;
+  --pb-cb-mid: #9AD3F5;
+}
+html[data-cb] .soft { --s-local: var(--pb-cb-good); --s-danger: var(--pb-cb-bad); --s-danger-bg: #B34700; --s-danger-fg: #FFFFFF; }
+html[data-cb] .orbit { --o-strong: #0072B2; --o-ok: #56B4E9; --o-weak: #E69F00; --o-weak-ink: #A35A00; }
+html[data-cb].theme-dark .orbit { --o-strong: #3A9BE0; --o-ok: #9AD3F5; --o-weak: #F5B341; --o-weak-ink: #FFB061; }
+html[data-cb][data-style] { --pb-local: var(--pb-cb-good); --pb-local-soft: var(--pb-cb-good-soft); --pb-danger: var(--pb-cb-bad); --pb-danger-soft: var(--pb-cb-bad-soft); }
+/* fixed status and priority colours */
+html[data-cb] .todo-priority-dot.high, html[data-cb] .ai-intake-priority-dot.priority-high, html[data-cb] .r-tl-pri.high { background: var(--pb-cb-bad-fill); box-shadow: none; }
+html[data-cb] .todo-priority-dot.medium, html[data-cb] .ai-intake-priority-dot.priority-medium, html[data-cb] .r-tl-pri.medium { background: var(--pb-cb-mid); }
+html[data-cb] .todo-priority-dot.low, html[data-cb] .ai-intake-priority-dot.priority-low, html[data-cb] .r-tl-pri.low { background: var(--pb-cb-good); }
+html[data-cb] .cal-all-day-task.priority-high { background: var(--pb-cb-bad-soft); color: var(--pb-cb-bad); border-color: currentColor; }
+html[data-cb] .cal-all-day-task.priority-low { background: var(--pb-cb-good-soft); color: var(--pb-cb-good); border-color: currentColor; }
+html[data-cb] .cal-timeline-task.priority-high { border-left-color: var(--pb-cb-bad-fill); }
+html[data-cb] .cal-timeline-task.priority-high .cal-timeline-task-bg { background-color: var(--pb-cb-bad-fill); }
+html[data-cb] .cal-timeline-task.priority-high .cal-timeline-task-title, html[data-cb] .cal-timeline-task.priority-high .cal-timeline-task-time { color: var(--pb-cb-bad); }
+html[data-cb] .cal-timeline-task.priority-low { border-left-color: var(--pb-cb-good); }
+html[data-cb] .cal-timeline-task.priority-low .cal-timeline-task-bg { background-color: var(--pb-cb-good); }
+html[data-cb] .cal-timeline-task.priority-low .cal-timeline-task-title, html[data-cb] .cal-timeline-task.priority-low .cal-timeline-task-time { color: var(--pb-cb-good); }
+html[data-cb] .soft .s-set-status-line.ok i { background: var(--pb-cb-good); }
+html[data-cb] .soft .s-set-status-line.bad i { background: var(--pb-cb-bad-fill); }
+html[data-cb] .s-plan .pl-acts .ok, html[data-cb] .s-plan .mint .pl-acts button.ok { background: #1F5FBF; color: #FFFFFF; }
+html[data-cb] .s-plan .pl-acts .bad, html[data-cb] .tl-menu .bad, html[data-cb] .tl-dlg p.warn { color: var(--pb-cb-bad); }
+html[data-cb] .soft .s-understood .lead.ok { color: var(--pb-cb-good); }
+
+/* ---------- code blocks follow the theme (FT17) ---------- */
+:root {
+  --pb-code-bg: #F6F8FA; --pb-code-fg: #1F2328; --pb-code-line: #D8DEE4;
+  --pb-code-keyword: #A0111F; --pb-code-string: #0A3069; --pb-code-comment: #57606A; --pb-code-number: #0550AE;
+  --pb-code-func: #6639BA; --pb-code-type: #953800; --pb-code-tag: #116329;
+}
+.theme-dark {
+  --pb-code-bg: #0D1117; --pb-code-fg: #E6EDF3; --pb-code-line: #30363D;
+  --pb-code-keyword: #FF7B72; --pb-code-string: #A5D6FF; --pb-code-comment: #8B949E; --pb-code-number: #79C0FF;
+  --pb-code-func: #D2A8FF; --pb-code-type: #FFA657; --pb-code-tag: #7EE787;
+}
+.theme-midnight { --pb-code-bg: #0A0C10; --pb-code-line: #21262D; }
+html .bn-block-content[data-content-type="codeBlock"] { background-color: var(--pb-code-bg); color: var(--pb-code-fg); box-shadow: inset 0 0 0 1px var(--pb-code-line); }
+html .bn-block-content[data-content-type="codeBlock"] > div > select { color: var(--pb-code-fg); }
+/* tokens: highlight.js / lowlight class names and Shiki's two-theme output, whichever a highlighter writes */
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .token.keyword) { color: var(--pb-code-keyword); }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-string, .hljs-regexp, .hljs-attr-value, .token.string) { color: var(--pb-code-string); }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-comment, .hljs-quote, .token.comment) { color: var(--pb-code-comment); font-style: italic; }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-number, .hljs-literal, .token.number, .token.boolean) { color: var(--pb-code-number); }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-title, .hljs-function, .token.function) { color: var(--pb-code-func); }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-type, .hljs-class, .hljs-attr, .token.class-name) { color: var(--pb-code-type); }
+html .bn-block-content[data-content-type="codeBlock"] :is(.hljs-tag, .hljs-name, .token.tag) { color: var(--pb-code-tag); }
+html.theme-dark .bn-block-content[data-content-type="codeBlock"] span[style*="--shiki-dark"] { color: var(--shiki-dark) !important; }
+html .markdown-preview pre, html .hub-md pre { background: var(--pb-code-bg); color: var(--pb-code-fg); }
+
+/* ---------- settings bits ---------- */
+.ax-text-sample { margin: 6px 0 0; padding: 12px 14px; border-radius: 14px; background: var(--s-chip-solid, #f4eee5); color: var(--s-fg, #241f1a); font-size: 15px; }
+.settings-theme-grid button.theme-card { font: inherit; color: inherit; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.settings-theme-grid button.theme-card:focus-visible { outline: 3px solid var(--accent, #4F46E5); outline-offset: 2px; }

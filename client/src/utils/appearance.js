@@ -178,3 +178,88 @@ export function setA11yDeviceOnly(on, storage = globalThis.localStorage) { try {
 export function effectiveA11y(account, local, deviceOnly) {
   return deviceOnly || !account || typeof account !== 'object' ? local : account;
 }
+
+// ---------- theme names, preview and classes ----------
+/** What the UI calls each theme choice. CSS classes stay theme-dark / theme-midnight. */
+export const THEME_LABELS = { light: 'Light', dark: 'Dark', midnight: 'Midnight', system: 'System', auto: 'Auto by time' };
+export const themeLabel = (id) => THEME_LABELS[id] || THEME_LABELS.light;
+/** The theme the River / Orbit header menu offers next: Light -> Dark -> Midnight -> Light. */
+export const nextTheme = (theme) => (theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light');
+
+/** Puts a resolved theme ('light' | 'dark' | 'midnight') on <html> and <body>. */
+export function applyThemeClasses(resolved, doc = globalThis.document) {
+  if (!doc) return;
+  for (const el of [doc.body, doc.documentElement]) {
+    if (!el) continue;
+    el.classList.toggle('theme-dark', resolved === 'dark' || resolved === 'midnight');
+    el.classList.toggle('theme-midnight', resolved === 'midnight');
+  }
+  doc.documentElement.style.colorScheme = resolved === 'light' ? 'light' : 'dark';
+}
+/** The resolved theme for a choice right now (System reads the OS, Auto reads the stored schedule). */
+export function resolveNow(theme, schedule = null) {
+  const systemDark = !!globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  return resolveTheme(theme, { systemDark, schedule: schedule || loadSchedule(), date: new Date() });
+}
+/**
+ * Live preview of a theme choice while a theme card is hovered or focused: `previewTheme('dark')` draws it,
+ * `previewTheme(null, current)` puts the current choice back. Nothing is saved.
+ */
+export function previewTheme(id, current, doc = globalThis.document) {
+  if (!doc) return;
+  if (id) doc.documentElement.setAttribute('data-theme-preview', id); else doc.documentElement.removeAttribute('data-theme-preview');
+  applyThemeClasses(resolveNow(id || current), doc);
+}
+
+// ---------- note text: font family and line height (FT9, FT10) ----------
+export const NOTE_FONTS = [
+  { id: 'sans', label: 'Sans' },
+  { id: 'serif', label: 'Serif' },
+  { id: 'mono', label: 'Mono' },
+  { id: 'easy', label: 'Easy to read' },
+];
+/** 'sans' (the style's own font, default) | 'serif' | 'mono' | 'easy'. */
+export const normNoteFont = (v) => (NOTE_FONTS.some((f) => f.id === v) ? v : 'sans');
+/** 'normal' (default) | 'relaxed'. */
+export const normLineHeight = (v) => (v === 'relaxed' ? 'relaxed' : 'normal');
+
+// ---------- colour-blind friendly status colours (FT8) ----------
+export const colourBlindOn = (settings) => settings?.colourBlind === true;
+
+// ---------- exports and printing (light by default, or the same theme as the app) ----------
+export const EXPORT_THEME_KEY = 'peblo-export-theme';
+/** 'light' (default) | 'app'. */
+export const normExportTheme = (v) => (v === 'app' ? 'app' : 'light');
+/** The mode an export or printout is drawn in: always light unless "Same as app" is chosen. */
+export const exportModeFor = (setting, resolved) => (normExportTheme(setting) === 'app' && (resolved === 'dark' || resolved === 'midnight') ? resolved : 'light');
+const EXPORT_PALETTES = {
+  light: { bg: '#FFFFFF', fg: '#1E293B', heading: '#0F172A', muted: '#475569', line: '#E2E8F0', accent: '#4F46E5', codeBg: '#F1F5F9', codeFg: '#0F172A' },
+  dark: { bg: '#16141B', fg: '#E7E3EC', heading: '#F5F0F7', muted: '#B9B2C4', line: '#2F2839', accent: '#A5B4FC', codeBg: '#0E0C12', codeFg: '#E7E3EC' },
+  midnight: { bg: '#000000', fg: '#E4E1EA', heading: '#F5F0F7', muted: '#B3ADBD', line: '#231C2B', accent: '#A5B4FC', codeBg: '#121016', codeFg: '#E4E1EA' },
+};
+/** Colours for an export page in a mode. Every text colour is at least 4.5:1 on bg (appearance.test.mjs). */
+export const exportPalette = (mode) => EXPORT_PALETTES[mode] || EXPORT_PALETTES.light;
+export function loadExportTheme(storage = globalThis.localStorage) { try { return normExportTheme(storage.getItem(EXPORT_THEME_KEY)); } catch { return 'light'; } }
+/** The mode for an export made now, from this device's copy of the choice and what is on screen. */
+export function currentExportMode(doc = globalThis.document) {
+  const html = doc?.documentElement;
+  const resolved = html?.classList.contains('theme-midnight') ? 'midnight' : html?.classList.contains('theme-dark') ? 'dark' : 'light';
+  return exportModeFor(loadExportTheme(), resolved);
+}
+
+/**
+ * The text and colour choices as attributes on <html>, read by styles/appearance-extra.css:
+ * data-note-font, data-line-height, data-cb (colour-blind palette) and data-print-theme.
+ */
+export function applyTextAndColourPrefs(settings, doc = globalThis.document, storage = globalThis.localStorage) {
+  if (!doc) return;
+  const html = doc.documentElement;
+  const font = normNoteFont(settings?.noteFont);
+  const lh = normLineHeight(settings?.lineHeight);
+  const exp = normExportTheme(settings?.exportTheme);
+  if (font === 'sans') html.removeAttribute('data-note-font'); else html.setAttribute('data-note-font', font);
+  if (lh === 'normal') html.removeAttribute('data-line-height'); else html.setAttribute('data-line-height', lh);
+  if (colourBlindOn(settings)) html.setAttribute('data-cb', '1'); else html.removeAttribute('data-cb');
+  html.setAttribute('data-print-theme', exp);
+  try { if (exp === 'app') storage.setItem(EXPORT_THEME_KEY, 'app'); else storage.removeItem(EXPORT_THEME_KEY); } catch { /* storage blocked */ }
+}

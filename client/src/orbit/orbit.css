@@ -14,13 +14,14 @@
   --o-wire: #B9B9B1;
   --o-fg: #141414;
   --o-fg2: #5A5A55;
-  --o-fg3: #B5B5AE;
+  --o-fg3: #6B6B65; /* used for text (info buttons, week dots): was #B5B5AE, 1.8:1 */
   --o-ink: #141414;
   --o-on-ink: #FFFFFF;
   --o-ink-soft: #2A2A2A;
   --o-path: #2350FF;
   --o-path-soft: #E8EDFF;
   --o-path-ink: #1A3BCC;
+  --o-on-path: #FFFFFF;
   --o-weak: #FF6B4A;
   --o-weak-ink: #C2391A;
   --o-ok: #F2B33D;
@@ -44,13 +45,14 @@
   --o-wire: #3A4252;
   --o-fg: #EEF0F4;
   --o-fg2: #A3AAB8;
-  --o-fg3: #4A5263;
+  --o-fg3: #8A92A2;
   --o-ink: #EEF0F4;
   --o-on-ink: #0B0D12;
   --o-ink-soft: #D5D9E2;
   --o-path: #5B7CFF;
   --o-path-soft: #1A2340;
   --o-path-ink: #A9BBFF;
+  --o-on-path: #0B0D12; /* white on #5B7CFF was 3.6:1 */
   --o-weak: #FF7A5C;
   --o-weak-ink: #FF9A80;
   --o-ok: #F2B33D;
@@ -63,12 +65,13 @@
   --o-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
 }
 .theme-midnight .orbit {
+  /* Midnight: a pure black page; cards one visible step lighter (contrast-check.mjs checks the step) */
   --o-bg: #000000;
-  --o-dot: #1A1E27;
-  --o-surface: #0D1016;
-  --o-soft: #171B24;
-  --o-rail: #0A0C11;
-  --o-line: #1C212C;
+  --o-dot: #1E232D;
+  --o-surface: #14181F;
+  --o-soft: #1C212A;
+  --o-rail: #0F1218;
+  --o-line: #282E3A;
 }
 
 /* ---------- Frame ---------- */

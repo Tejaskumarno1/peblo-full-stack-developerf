@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, CheckSquare } from 'lucide-react';
-import { notesAPI, todosAPI } from '../api';
+import { notesAPI, todosAPI, profileAPI } from '../api';
+import { applyAccent, normHex, applyThemeClasses, resolveNow, normalizeSchedule, applyTextAndColourPrefs } from '../utils/appearance';
 import { parseTask } from '../utils/parseTask';
 import '../styles/quick-capture.css';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +11,9 @@ import OrbitCapture from '../orbit/OrbitCapture';
 
 /** Ctrl+Shift+Space window: Soft Studio has its own capture card. */
 export default function QuickCaptureWindow() {
-  const { uiStyle } = useAuth();
+  const { uiStyle: localStyle } = useAuth();
+  const acctStyle = useAccountAppearance();
+  const uiStyle = acctStyle || localStyle;
   if (uiStyle === 'soft') {
     return <div className="soft soft-window"><SoftCapture windowMode /></div>;
   }
@@ -21,6 +24,39 @@ export default function QuickCaptureWindow() {
     return <div className="orbit orbit-window"><OrbitCapture windowMode /></div>;
   }
   return <QuickCapturePage />;
+}
+
+const STYLES = ['soft', 'river', 'orbit', 'studio', 'console'];
+/**
+ * The capture window stays open in the background between uses, so a theme, accent or style changed on another device
+ * (or while the storage event was missed) would not reach it. Each time it is shown it reads the account and applies
+ * them at once. Returns the account's style ('' until known).
+ */
+function useAccountAppearance() {
+  const [style, setStyle] = useState('');
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const { data } = await profileAPI.me();
+        const s = data?.user?.settings || {};
+        if (!alive) return;
+        if (['light', 'dark', 'midnight', 'system', 'auto'].includes(s.theme)) applyThemeClasses(resolveNow(s.theme, s.themeSchedule ? normalizeSchedule(s.themeSchedule) : null));
+        applyAccent(normHex(s.accent));
+        applyTextAndColourPrefs(s);
+        if (STYLES.includes(s.uiStyle)) {
+          setStyle(s.uiStyle);
+          for (const el of [document.body, document.documentElement]) el.setAttribute('data-style', s.uiStyle);
+        }
+      } catch { /* offline: keep what this device has */ }
+    };
+    pull();
+    document.addEventListener('visibilitychange', pull);
+    window.addEventListener('focus', pull);
+    return () => { alive = false; document.removeEventListener('visibilitychange', pull); window.removeEventListener('focus', pull); };
+  }, []);
+  return style;
 }
 
 function QuickCapturePage() {

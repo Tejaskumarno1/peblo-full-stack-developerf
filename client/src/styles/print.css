@@ -1,8 +1,19 @@
-/* Print-friendly output (PEB-166): only the hidden #peblo-print-root is printed, with none of the app around it. */
+/* Print-friendly output (PEB-166): only the hidden #peblo-print-root is printed, with none of the app around it.
+   Printouts are light unless Settings > Appearance > Exports and printing is "Same as app" (html[data-print-theme="app"],
+   set by utils/appearance.js); then a Dark or Midnight screen prints dark. */
 #peblo-print-root { display: none; }
 @media print {
   body > *:not(#peblo-print-root) { display: none !important; }
   html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
   #peblo-print-root { display: block !important; position: static; color: #111; background: #fff; padding: 0; }
   @page { margin: 16mm; }
+
+  html[data-print-theme="app"].theme-dark, html[data-print-theme="app"].theme-dark body { background: #16141B !important; }
+  html[data-print-theme="app"].theme-dark.theme-midnight, html[data-print-theme="app"].theme-dark.theme-midnight body { background: #000 !important; }
+  html[data-print-theme="app"].theme-dark #peblo-print-root { background: #16141B !important; color: #E7E3EC !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html[data-print-theme="app"].theme-midnight #peblo-print-root { background: #000 !important; color: #E4E1EA !important; }
+  html[data-print-theme="app"].theme-dark #peblo-print-root :is(h1, h2, h3, h4, p, li, td, th, blockquote, span, div, b, strong, em) { color: inherit !important; background-color: transparent !important; }
+  html[data-print-theme="app"].theme-dark #peblo-print-root :is(pre, code) { background: #0E0C12 !important; color: #E7E3EC !important; }
+  html[data-print-theme="app"].theme-dark #peblo-print-root a { color: #A5B4FC !important; }
+  html[data-print-theme="app"].theme-dark #peblo-print-root :is(hr, td, th, table) { border-color: #2F2839 !important; }
 }

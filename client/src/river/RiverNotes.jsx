@@ -24,6 +24,7 @@ import TagManager from '../soft/TagManager';
 import Gallery from '../soft/Gallery';
 import { exportMarkdown, exportManyMarkdown, exportWord, exportPdf } from '../utils/exportNote';
 import Toast from '../components/Toast';
+import { confirmDialog } from '../soft/ConfirmDialog';
 
 const fullDay = (d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
@@ -626,8 +627,9 @@ function RiverNoteList({ onNew }) {
   const endSelect = () => { setPicked([]); setSelectMode(false); };
   const bulk = async (kind) => {
     if (!picked.length) return;
-    if (kind === 'trash' && !window.confirm('Move ' + picked.length + ' note(s) to the Trash?')) return;
-    if (kind === 'forever' && !window.confirm('Delete ' + picked.length + ' note(s) forever? This cannot be undone.')) return;
+    const many = picked.length === 1 ? '1 note' : picked.length + ' notes';
+    if (kind === 'trash' && !(await confirmDialog({ title: `Move ${many} to the Trash?`, confirmLabel: 'Move to Trash', danger: true }))) return;
+    if (kind === 'forever' && !(await confirmDialog({ title: `Delete ${many} forever?`, body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return;
     try {
       for (const id of picked) {
         if (kind === 'archive' || kind === 'unarchive') await notesAPI.archive(id);
@@ -668,11 +670,11 @@ function RiverNoteList({ onNew }) {
     : filter === 'trash'
       ? [
           { label: 'Restore', run: (n) => attempt(() => notesAPI.restore(n.id), 'Could not restore that note. Try again.') },
-          { label: 'Delete forever', danger: true, run: async (n) => { if (!window.confirm('Delete this note forever? This cannot be undone.')) return; await attempt(() => notesAPI.delete(n.id, { permanent: true }), 'Could not delete that note. Try again.'); } },
+          { label: 'Delete forever', danger: true, run: async (n) => { if (!(await confirmDialog({ title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }))) return; await attempt(() => notesAPI.delete(n.id, { permanent: true }), 'Could not delete that note. Try again.'); } },
         ]
       : null;
   const emptyTrash = async () => {
-    if (!window.confirm(`Delete ${listed.length} note${listed.length === 1 ? '' : 's'} in the Trash forever? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: `Delete ${listed.length} note${listed.length === 1 ? '' : 's'} in the Trash forever?`, body: 'This cannot be undone.', confirmLabel: 'Empty Trash', danger: true }))) return;
     await attempt(async () => { for (const n of listed) await notesAPI.delete(n.id, { permanent: true }); }, 'Could not empty the Trash. Try again.');
   };
   const shownTags = moreTags || tags.findIndex(([t]) => t === filter) >= 10 ? tags : tags.slice(0, 10);

@@ -7,6 +7,7 @@ import { workspacesAPI } from '../../api';
 import { useWorkspaces, useCurrentSpace, CreateOrgDialog } from '../spaces';
 import { Card } from './ui';
 import { NotesHandoverPicker, FormerMembersCard, GuestExpiry, TeamMemberList, ClosedTeams, DeleteOrgDialog } from './OrgLifecycle';
+import { confirmDialog } from '../ConfirmDialog';
 import '../orgpages.css';
 
 const TONES = ['peach', 'sky', 'mint', 'butter', 'lilac'];
@@ -386,7 +387,7 @@ function TeamPair({ s, admin, policy, run, org, me }) {
             </div>
             <div className="og-cap">Sharing</div>
             <div className="og-head" style={{ flexWrap: 'nowrap' }}><b style={{ fontSize: 14.5 }}>Allow public links for this team</b>
-              <button type="button" role="switch" aria-checked={links} aria-label="Allow public links for this team" disabled={!orgAllows} className={`og-sw${links ? ' on' : ''}`} onClick={() => { if (links && !window.confirm('Turn off public links for this team? Links that already exist for its notes stop working now.')) return; run(() => workspacesAPI.updateSpace(s.id, { publicLinks: !links })); }}><span /></button></div>
+              <button type="button" role="switch" aria-checked={links} aria-label="Allow public links for this team" disabled={!orgAllows} className={`og-sw${links ? ' on' : ''}`} onClick={async () => { if (links && !(await confirmDialog({ title: 'Turn off public links for this team?', body: 'Links that already exist for its notes stop working now.', confirmLabel: 'Turn off', danger: true }))) return; run(() => workspacesAPI.updateSpace(s.id, { publicLinks: !links })); }}><span /></button></div>
             <p>Needs the organization setting to be on. Turning it off ends the team's existing public links.</p>
             <TeamMemberList s={s} org={org} me={me} canManage={canManage} run={run} />
           </>
@@ -470,8 +471,11 @@ export function PolicyPage() {
   if (!admin) return <Card title="Organization policy" hint="Only owners and admins can see and change the policy." />;
   const office = org.spaces.find((s) => s.kind === 'office');
   const leads = (mem?.members || []).filter((m) => m.spaces.some((s) => s.id === office?.id && s.role === 'lead'));
-  const set = (k, v) => run(async () => {
-    if (k === 'publicShares' && v === false && !window.confirm('Turn off public links? Every link that already exists for notes and tasks in this organization stops working now.')) return;
+  const set = async (k, v) => {
+    if (k === 'publicShares' && v === false && !(await confirmDialog({ title: 'Turn off public links?', body: 'Every link that already exists for notes and tasks in this organization stops working now.', confirmLabel: 'Turn off', danger: true }))) return;
+    return save(k, v);
+  };
+  const save = (k, v) => run(async () => {
     const r = await workspacesAPI.setPolicy(org.id, { [k]: v });
     qc.invalidateQueries({ queryKey: ['org-policy', org.id] });
     if (r.data?.revoked) setMsg(`${r.data.revoked.notes + r.data.revoked.tasks} public link${r.data.revoked.notes + r.data.revoked.tasks === 1 ? '' : 's'} turned off.`);

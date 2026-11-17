@@ -13,6 +13,7 @@ import { tagCounts, topicName, levelOf, levelVar, tagsOfNote, pickSubject, setDa
 import { initialsOf } from '../river/riverUtils';
 import Avatar from '../components/Avatar';
 import MeetingReminders from '../river/MeetingReminders';
+import { nextTheme, themeLabel } from '../utils/appearance';
 import './orbit.css';
 
 const OrbitContext = createContext(null);
@@ -87,7 +88,7 @@ function OrbitTop({ data }) {
   const menuRef = useDismiss(menu, () => setMenu(false));
   const askRef = useDismiss(askOpen, () => setAskOpen(false));
   const tags = useMemo(() => tagCounts(data.notes), [data.notes]);
-  const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light';
+  const next = nextTheme(theme); // Light -> Dark -> Midnight -> Light
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -180,7 +181,7 @@ function OrbitTop({ data }) {
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/profiles'); }}>Switch profile</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/calendar'); }}>This week</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(next); }}>Switch to {themeLabel(next)} theme</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:topics')); }}>Manage topics</button>
             {(data.notes || []).some((n) => Array.isArray(n.tags) && n.tags.includes('example-data'))
               ? <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:example-clear')); }}>Clear example data</button>

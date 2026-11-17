@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
-import { applyAccent, storeAccent, normHex, normalizeSchedule, storeSchedule, loadSchedule, resolveTheme, effectiveDensity, a11yDeviceOnly } from './appearance';
+import { applyAccent, storeAccent, normHex, normalizeSchedule, storeSchedule, loadSchedule, resolveTheme, effectiveDensity, a11yDeviceOnly, applyThemeClasses, applyTextAndColourPrefs, normNoteFont, normLineHeight, colourBlindOn, normExportTheme } from './appearance';
+import '../styles/print.css';
+import '../styles/appearance-extra.css';
 import { normalize as normA11y, apply as applyA11y, store as storeA11y } from './a11yPrefs';
 
 /**
@@ -21,11 +23,8 @@ export default function useAppearanceSync(settings, theme) {
     const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
     const run = () => {
       const resolved = resolveTheme(theme, { systemDark: !!mq?.matches, schedule: schedKey ? JSON.parse(schedKey) : loadSchedule(), date: new Date() });
-      for (const el of [document.body, document.documentElement]) {
-        el.classList.toggle('theme-dark', resolved === 'dark' || resolved === 'midnight');
-        el.classList.toggle('theme-midnight', resolved === 'midnight');
-      }
-      document.documentElement.style.colorScheme = resolved === 'light' ? 'light' : 'dark';
+      if (document.documentElement.hasAttribute('data-theme-preview')) return; // a theme card is being previewed; leaving it restores this
+      applyThemeClasses(resolved);
     };
     run();
     const timer = theme === 'auto' ? setInterval(run, 60_000) : null;
@@ -42,6 +41,15 @@ export default function useAppearanceSync(settings, theme) {
   const density = effectiveDensity(settings);
   useEffect(() => { document.documentElement.setAttribute('data-compact', density === 'compact' ? '1' : '0'); }, [density]);
 
+  // "Easy to read" uses fonts already on the computer (Atkinson Hyperlegible, Lexend or OpenDyslexic when installed, else Verdana):
+  // the Content-Security-Policy only allows fonts from the app's own origin, so no web font is fetched.
+  // note font and line height (FT9, FT10), colour-blind friendly status colours (FT8) and the export / print theme
+  const prefsKey = [normNoteFont(settings?.noteFont), normLineHeight(settings?.lineHeight), colourBlindOn(settings), normExportTheme(settings?.exportTheme)].join('|');
+  useEffect(() => {
+    const [noteFont, lineHeight, cb, exportTheme] = prefsKey.split('|');
+    applyTextAndColourPrefs({ noteFont, lineHeight, colourBlind: cb === 'true', exportTheme });
+  }, [prefsKey]);
+
   // accessibility options saved on the account apply here unless this device keeps its own
   const a11yKey = settings?.a11y && typeof settings.a11y === 'object' ? JSON.stringify(normA11y(settings.a11y)) : '';
   useEffect(() => {
@@ -51,3 +59,4 @@ export default function useAppearanceSync(settings, theme) {
     applyA11y(p);
   }, [a11yKey]);
 }
+

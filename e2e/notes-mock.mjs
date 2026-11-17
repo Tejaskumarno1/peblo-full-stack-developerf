@@ -724,6 +724,83 @@ try {
   await page.keyboard.press('Escape'); await wait(300);
   check('Escape closes it', !(await tdlg.count()));
   teamOn = false;
+
+  // ---------- R1: theme preview, radio keys, note text, colour-blind colours, exports, River confirm and Midnight ----------
+  console.log('--- R1 appearance');
+  user.settings.theme = 'light';
+  await page.evaluate(() => localStorage.setItem('peblo-theme', 'light'));
+  await page.goto(`${base}/settings/appearance`); await page.locator('[data-testid="theme-grid"]').waitFor(TO); await wait(600);
+  const r1Dark = () => page.evaluate(() => document.documentElement.classList.contains('theme-dark'));
+  const r1Grid = page.locator('[data-testid="theme-grid"]');
+  const r1Away = () => page.mouse.move(5, 895);
+  check('R1 theme cards are radios with one tab stop', (await r1Grid.locator('[role="radio"]').count()) === 5 && (await r1Grid.locator('[role="radio"][tabindex="0"]').count()) === 1);
+  await r1Grid.locator('[data-theme-id="midnight"]').hover(); await wait(200);
+  check('R1 hovering Midnight previews it on the page', await page.evaluate(() => document.documentElement.classList.contains('theme-midnight')));
+  await r1Away(); await wait(200);
+  check('R1 leaving the card restores Light', !(await r1Dark()) && user.settings.theme === 'light');
+  await r1Grid.locator('[data-theme-id="light"]').focus(); await wait(150);
+  await page.keyboard.press('ArrowRight'); await wait(700);
+  check('R1 ArrowRight chooses Dark and saves it', user.settings.theme === 'dark' && (await r1Dark()) && await page.evaluate(() => document.activeElement?.getAttribute('data-theme-id') === 'dark'), user.settings.theme);
+  await page.keyboard.press('ArrowLeft'); await wait(700);
+  check('R1 ArrowLeft goes back to Light', user.settings.theme === 'light' && !(await r1Dark()), user.settings.theme);
+
+  const r1Seg = (label, name) => page.locator(`[role="radiogroup"][aria-label="${label}"] [role="radio"]`, { hasText: name });
+  const r1Attr = (a) => page.evaluate((x) => document.documentElement.getAttribute(x), a);
+  const r1SampleFont = () => page.locator('[data-testid="text-sample"]').evaluate((e) => getComputedStyle(e).fontFamily);
+  await r1Seg('Note font', 'Serif').click(); await wait(500);
+  check('R1 Serif note font is saved and applied', user.settings.noteFont === 'serif' && (await r1Attr('data-note-font')) === 'serif' && /serif/i.test(await r1SampleFont()), user.settings.noteFont);
+  await r1Seg('Note font', 'Easy to read').click(); await wait(400);
+  check('R1 Easy to read uses a legible system font stack', /Verdana|Atkinson/i.test(await r1SampleFont()), await r1SampleFont());
+  await r1Seg('Line height', 'Relaxed').click(); await wait(400);
+  check('R1 Relaxed line height is saved and applied', user.settings.lineHeight === 'relaxed' && (await r1Attr('data-line-height')) === 'relaxed', user.settings.lineHeight);
+  await page.getByRole('switch', { name: 'Colour-blind friendly colours' }).click(); await wait(400);
+  check('R1 colour-blind switch saves and sets data-cb', user.settings.colourBlind === true && (await r1Attr('data-cb')) === '1', String(user.settings.colourBlind));
+  const r1Local = await page.evaluate(() => getComputedStyle(document.querySelector('.soft')).getPropertyValue('--s-local').trim());
+  check('R1 colour-blind palette swaps the Soft green for blue', !/1E7A46/i.test(r1Local), r1Local);
+  await r1Seg('Exports and printing', 'Same as app').click(); await wait(400);
+  check('R1 Exports and printing: Same as app is saved', user.settings.exportTheme === 'app' && (await r1Attr('data-print-theme')) === 'app' && (await page.evaluate(() => localStorage.getItem('peblo-export-theme'))) === 'app', user.settings.exportTheme);
+
+  // the note editor follows the font and line height
+  await page.goto(`${base}/notes`); await page.locator('.s-note-row').first().waitFor(TO); await wait(600);
+  await page.locator('.s-note-row').first().click(); await page.locator('.bn-editor').first().waitFor(TO); await wait(800);
+  const r1Ed = await page.locator('.bn-editor').first().evaluate((e) => ({ f: getComputedStyle(e).fontFamily, lh: parseFloat(getComputedStyle(e).lineHeight) / parseFloat(getComputedStyle(e).fontSize) }));
+  check('R1 the editor uses the chosen note font and relaxed line height', /Verdana|Atkinson/i.test(r1Ed.f) && r1Ed.lh > 1.85, JSON.stringify(r1Ed));
+  // print media: Same as app in Dark prints dark, the default prints white
+  await page.evaluate(() => { document.documentElement.classList.add('theme-dark'); const r = document.createElement('div'); r.id = 'peblo-print-root'; r.textContent = 'print me'; document.body.appendChild(r); });
+  await page.emulateMedia({ media: 'print' });
+  const r1PrintDark = await page.evaluate(() => getComputedStyle(document.getElementById('peblo-print-root')).backgroundColor);
+  await page.evaluate(() => document.documentElement.setAttribute('data-print-theme', 'light'));
+  const r1PrintLight = await page.evaluate(() => getComputedStyle(document.getElementById('peblo-print-root')).backgroundColor);
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => { document.getElementById('peblo-print-root')?.remove(); document.documentElement.classList.remove('theme-dark'); });
+  check('R1 printing follows the export choice (dark when Same as app, white by default)', r1PrintDark === 'rgb(22, 20, 27)' && r1PrintLight === 'rgb(255, 255, 255)', `${r1PrintDark} / ${r1PrintLight}`);
+  Object.assign(user.settings, { noteFont: 'sans', lineHeight: 'normal', colourBlind: false, exportTheme: 'light' });
+
+  // River in Dark: the in-app confirm takes River colours and replaces window.confirm
+  const r1Trashed = mk('R1 trashed note', 'old text', { isDeleted: true }); notes.push(r1Trashed);
+  user.settings.uiStyle = 'river'; user.settings.theme = 'dark';
+  await page.evaluate(() => { localStorage.setItem('peblo-style', 'river'); localStorage.setItem('peblo-theme', 'dark'); });
+  let r1Native = 0; const r1OnDlg = (d) => { r1Native++; d.dismiss(); }; page.on('dialog', r1OnDlg);
+  await page.goto(`${base}/notes`); await page.locator('.river').first().waitFor(TO); await wait(1200);
+  await page.locator('.river button[aria-pressed]', { hasText: /^Trash$/ }).click(); await wait(800);
+  await page.locator('.river button', { hasText: 'Empty Trash' }).click(); await wait(400);
+  const r1cd = page.locator('[data-testid="confirm-dialog"]');
+  const r1Bg = await r1cd.evaluate((e) => getComputedStyle(e).backgroundColor).catch(() => '');
+  const r1Var = (v, prop = 'color') => page.evaluate(([x, pr]) => { const d = document.createElement('div'); d.style[pr] = `var(${x})`; document.querySelector('.river').appendChild(d); const c = getComputedStyle(d)[pr]; d.remove(); return c; }, [v, prop]);
+  const r1Surf = await r1Var('--r-surface', 'backgroundColor');
+  check('R1 River Empty Trash asks with the in-app dialog in River colours', (await r1cd.isVisible()) && r1Bg === r1Surf && r1Native === 0, `${r1Bg} vs ${r1Surf}`);
+  await page.locator('[data-testid="confirm-cancel"]').click(); await wait(400);
+  check('R1 Cancel keeps the note', notes.includes(r1Trashed));
+  await page.locator('.river button', { hasText: 'Empty Trash' }).click(); await wait(400);
+  await page.locator('[data-testid="confirm-ok"]').click(); await wait(900);
+  check('R1 confirming deletes it forever', !notes.includes(r1Trashed) && reqs.some((r) => r.method === 'DELETE' && r.path === `/notes/${r1Trashed.id}`));
+  // Midnight: River cards are one visible step above the black page
+  await page.evaluate(() => document.documentElement.classList.add('theme-midnight')); await wait(200);
+  const r1Step = [await r1Var('--r-bg'), await r1Var('--r-surface')];
+  check('R1 Midnight River surface is a step above the black page', r1Step[0] === 'rgb(0, 0, 0)' && r1Step[1] !== r1Step[0], JSON.stringify(r1Step));
+  page.off('dialog', r1OnDlg);
+  user.settings.uiStyle = 'soft'; user.settings.theme = 'light';
+  await page.evaluate(() => { localStorage.setItem('peblo-style', 'soft'); localStorage.setItem('peblo-theme', 'light'); });
 } catch (e) {
   failures++; console.log('FAIL  test crashed:', e.message.split(String.fromCharCode(10)).slice(0, 5).join(' | '));
   console.log('page errors:', logs.filter((l) => l.startsWith('pageerror') || !/WebSocket/.test(l)).slice(0, 4));
