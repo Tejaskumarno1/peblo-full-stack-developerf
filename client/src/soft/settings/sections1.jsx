@@ -10,7 +10,8 @@ import { Card, Row, Switch, Seg, Confirm, PasswordInput, passwordStrength, useSa
 import Avatar from '../../components/Avatar';
 import ProfilePage from './ProfilePage';
 import { effectiveDensity } from '../../utils/appearance';
-import { AccentCard, ScheduleRow, DensityRow, A11yCard } from './AppearanceExtras';
+import { AccentCard, ScheduleRow, DensityRow, A11yCard, TextCard, ColourAndExportCard } from './AppearanceExtras';
+import useThemePreview, { radioKeys } from '../../utils/useThemePreview';
 
 const initialOf = (u) => (String(u?.name || u?.email || 'You').trim().charAt(0) || 'Y').toUpperCase();
 const apiBase = () => import.meta.env.VITE_API_URL || '/api';
@@ -171,9 +172,11 @@ const THEMES = [
 export function AppearanceSection() {
   const { uiStyle, setUiStyle, theme, setTheme, settings } = useAuth();
   const save = useSave();
+  const { previewProps } = useThemePreview(theme); // hovering or focusing a card previews it; leaving restores the choice
+  const pick = (id) => save(async () => (await setTheme(id)) !== false);
   return (
     <>
-      <Card title="Style" hint="Changes the layout, type and colours of the whole app. Your notes stay exactly the same. Light, dark and midnight work with every style.">
+      <Card title="Style" hint="Changes the layout, type and colours of the whole app. Your notes stay exactly the same. Light, Dark and Midnight work with every style.">
         <div className="style-grid s-set-stylegrid" role="radiogroup" aria-label="Style">
           {STYLES.map((o) => (
             <button key={o.id} type="button" role="radio" aria-checked={uiStyle === o.id} className={`style-card${uiStyle === o.id ? ' active' : ''}`} onClick={() => save(async () => (await setUiStyle(o.id)) !== false)}>
@@ -186,9 +189,9 @@ export function AppearanceSection() {
         </div>
       </Card>
       <Card title="Colours" hint="System follows your computer. Auto by time is dark between two times you choose.">
-        <div className="settings-theme-grid s-set-themegrid" role="radiogroup" aria-label="Theme">
+        <div className="settings-theme-grid s-set-themegrid" role="radiogroup" aria-label="Theme" data-testid="theme-grid" onKeyDown={(e) => radioKeys(e, THEMES.map((t) => t.id), theme, pick)}>
           {THEMES.map(({ id, name, icon: Icon }) => (
-            <button key={id} type="button" role="radio" aria-checked={theme === id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => save(async () => (await setTheme(id)) !== false)}>
+            <button key={id} type="button" role="radio" aria-checked={theme === id} tabIndex={theme === id ? 0 : -1} data-theme-id={id} className={`theme-card${theme === id ? ' active' : ''}`} onClick={() => pick(id)} {...previewProps(id)}>
               <span className={`theme-preview ${id === 'midnight' ? 'dark' : id === 'auto' ? 'system' : id}`} style={id === 'midnight' ? { background: '#000' } : undefined} />
               <span className="s-set-themename"><Icon size={14} /> {name}</span>
             </button>
@@ -198,6 +201,8 @@ export function AppearanceSection() {
         <DensityRow />
       </Card>
       <AccentCard />
+      <TextCard />
+      <ColourAndExportCard />
       <A11yCard />
     </>
   );

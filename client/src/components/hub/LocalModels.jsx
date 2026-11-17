@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, HardDrive, MemoryStick, Download, Check, Sparkles, X, ExternalLink, Zap, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { aiAPI } from '../../api';
+import { confirmDialog } from '../../soft/ConfirmDialog';
 import './localModels.css';
 
 /**
@@ -47,7 +48,7 @@ export default function LocalModels({ variant = 'soft' }) {
   };
   const cancel = async (id) => { try { await aiAPI.localCancel(id); } catch { /* it ends on its own */ } refresh(); };
   const remove = async (m) => {
-    if (!window.confirm(`Remove ${m.name} from this computer? You can download it again later.`)) return;
+    if (!(await confirmDialog({ title: `Remove ${m.name} from this computer?`, body: 'You can download it again later.', confirmLabel: 'Remove', danger: true }))) return;
     setError('');
     try { await aiAPI.localRemove(m.id); } catch (e) { setError(e.response?.data?.error || 'Could not remove it.'); }
     refresh();

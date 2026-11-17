@@ -10,9 +10,14 @@ import DataTools from './DataTools';
 import { ConnectSection } from '../soft/settings/sections2';
 import CaptureShortcut from '../soft/settings/CaptureShortcut';
 import { User, Settings, Shield, Palette, X, Monitor, Moon, Sun, AlertTriangle, LogOut, Key, Cpu, Trash2 } from 'lucide-react';
+import { themeLabel } from '../utils/appearance';
+import useThemePreview, { radioKeys } from '../utils/useThemePreview';
+
+const OLD_THEMES = [{ id: 'light', Icon: Sun }, { id: 'dark', Icon: Moon }, { id: 'midnight', Icon: Moon }, { id: 'system', Icon: Monitor }];
 
 function SettingsModal({ onClose, initialTab = 'profile' }) {
   const { user, updateProfile, logout, theme, setTheme, uiStyle, setUiStyle, settings, updateSettings } = useAuth();
+  const { previewProps } = useThemePreview(theme);
   const [activeTab, setActiveTab] = useState(initialTab === 'security' ? 'data' : initialTab);
   
   // Profile specific states (saved to user obj in DB ideally, mocked here)
@@ -316,7 +321,7 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
 
               <div className="settings-field-group">
                 <label className="settings-field-label" id="style-label">Style</label>
-                <p className="style-hint">Changes the layout, type and colours of the whole app. Light, dark and midnight work with every style.</p>
+                <p className="style-hint">Changes the layout, type and colours of the whole app. Light, Dark and Midnight work with every style.</p>
                 <div className="style-grid" role="radiogroup" aria-labelledby="style-label">
                   {[
                     { id: 'soft', name: 'Soft Studio', desc: 'Friendly tiles and a floating dock', tags: ['Beginners', 'Visual'], tip: 'For people who like light, friendly screens. Big tiles show your day at a glance, with less to read.' },
@@ -345,24 +350,24 @@ function SettingsModal({ onClose, initialTab = 'profile' }) {
               </div>
               
               <div className="settings-field-group">
-                <label className="settings-field-label">Theme</label>
-                <div className="settings-theme-grid">
-                  <div className={`theme-card ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')}>
-                    <div className="theme-preview light"></div>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Sun size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Light</span>
-                  </div>
-                  <div className={`theme-card ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')}>
-                    <div className="theme-preview dark"></div>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Dark</span>
-                  </div>
-                  <div className={`theme-card ${theme === 'midnight' ? 'active' : ''}`} onClick={() => setTheme('midnight')}>
-                    <div className="theme-preview dark" style={{ background: '#000' }}></div>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Moon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Midnight</span>
-                  </div>
-                  <div className={`theme-card ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')}>
-                    <div className="theme-preview system"></div>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Monitor size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> System</span>
-                  </div>
+                <label className="settings-field-label" id="theme-label">Theme</label>
+                <div className="settings-theme-grid" role="radiogroup" aria-labelledby="theme-label" data-testid="old-theme-grid" onKeyDown={(e) => radioKeys(e, OLD_THEMES.map((t) => t.id), theme, setTheme)}>
+                  {OLD_THEMES.map(({ id, Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === id}
+                      tabIndex={theme === id || (!OLD_THEMES.some((t) => t.id === theme) && id === 'light') ? 0 : -1}
+                      data-theme-id={id}
+                      className={`theme-card ${theme === id ? 'active' : ''}`}
+                      onClick={() => setTheme(id)}
+                      {...previewProps(id)}
+                    >
+                      <span className={`theme-preview ${id === 'midnight' ? 'dark' : id}`} style={{ display: 'block', ...(id === 'midnight' ? { background: '#000' } : null) }} aria-hidden="true" />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}><Icon size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }} aria-hidden="true" /> {themeLabel(id)}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 

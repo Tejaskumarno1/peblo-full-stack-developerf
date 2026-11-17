@@ -2,7 +2,7 @@ import '../../styles/appearance.css';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Card, Row, Switch, Seg, useSave } from './ui';
-import { ACCENTS, normHex, applyAccent, deriveAccent, contrast, readableOn, DEFAULT_ACCENT, normalizeSchedule, effectiveDensity, a11yDeviceOnly, setA11yDeviceOnly, effectiveA11y } from '../../utils/appearance';
+import { ACCENTS, normHex, applyAccent, deriveAccent, contrast, readableOn, DEFAULT_ACCENT, normalizeSchedule, effectiveDensity, a11yDeviceOnly, setA11yDeviceOnly, effectiveA11y, themeLabel, NOTE_FONTS, normNoteFont, normLineHeight, colourBlindOn, normExportTheme } from '../../utils/appearance';
 import { load as loadA11y, store as storeA11y, apply as applyA11y, normalize as normA11y } from '../../utils/a11yPrefs';
 
 /** Accent colour: six curated colours plus any colour you pick. Previews live; Apply (or a swatch) saves it on the account. */
@@ -24,7 +24,7 @@ export function AccentCard() {
   const dirty = !!valid && valid !== (saved || DEFAULT_ACCENT);
   const current = saved || DEFAULT_ACCENT;
   return (
-    <Card title="Accent colour" hint="The colour of buttons, highlights and the active tab in every style. Text on it is picked so it stays readable, in light, dark and midnight.">
+    <Card title="Accent colour" hint="The colour of buttons, highlights and the active tab in every style. Text on it is picked so it stays readable, in Light, Dark and Midnight.">
       <div className="ax-swatches" role="radiogroup" aria-label="Accent colour">
         {ACCENTS.map((a) => (
           <button key={a.id} type="button" role="radio" aria-checked={current === a.hex && !dirty} aria-label={a.name} title={a.name} className="ax-sw" style={{ '--ax': a.hex, '--ax-on': readableOn(a.hex) }} onClick={() => choose(a.hex)}>
@@ -43,7 +43,7 @@ export function AccentCard() {
       </Row>
       <small id="ax-hex-err" role="alert" className="ax-err">{!valid && text ? 'That is not a colour. Try #4F46E5.' : ''}</small>
       <div className="ax-preview" aria-hidden="true">
-        {['light', 'dark', 'midnight'].map((m) => { const d = deriveAccent(valid || draft, m); return <span key={m} className="ax-pv" style={{ background: d.solid, color: d.on }}>{m}</span>; })}
+        {['light', 'dark', 'midnight'].map((m) => { const d = deriveAccent(valid || draft, m); return <span key={m} className="ax-pv" style={{ background: d.solid, color: d.on }}>{themeLabel(m)}</span>; })}
       </div>
     </Card>
   );
@@ -104,6 +104,43 @@ export function A11yCard() {
       <Row label="High contrast" hint="Darker text and clearer outlines in every style."><Switch label="High contrast" checked={p.contrast} onChange={(v) => set({ contrast: v })} /></Row>
       <Row label="Visible focus ring" hint="A bold outline on whatever the keyboard is on."><Switch label="Visible focus ring" checked={p.focus} onChange={(v) => set({ focus: v })} /></Row>
       <Row label="Only this device" hint="Keep these four choices on this device instead of the account."><Switch label="Only this device" checked={deviceOnly} onChange={toggleDevice} /></Row>
+    </Card>
+  );
+}
+
+/** Appearance > Text (FT9, FT10): the font and line height of note text, saved on the account (noteFont, lineHeight). */
+export function TextCard() {
+  const { settings } = useAuth();
+  const save = useSave();
+  const font = normNoteFont(settings?.noteFont);
+  const lh = normLineHeight(settings?.lineHeight);
+  return (
+    <Card title="Text" hint="How the text of your notes looks. Headings and the rest of the app keep their own font.">
+      <Row label="Font" hint={font === 'easy' ? 'Uses Atkinson Hyperlegible, Lexend or OpenDyslexic when your computer has one, otherwise Verdana.' : 'Sans is the font of the style you use.'}>
+        <Seg label="Note font" value={font} onChange={(v) => save({ noteFont: v })} options={NOTE_FONTS.map((f) => ({ id: f.id, label: f.label }))} />
+      </Row>
+      <Row label="Line height" hint="Relaxed puts more space between lines.">
+        <Seg label="Line height" value={lh} onChange={(v) => save({ lineHeight: v })} options={[{ id: 'normal', label: 'Normal' }, { id: 'relaxed', label: 'Relaxed' }]} />
+      </Row>
+      <p className="ax-text-sample" data-testid="text-sample" style={{ fontFamily: 'var(--pb-note-font, inherit)', lineHeight: lh === 'relaxed' ? 'var(--pb-note-lh)' : 1.5 }}>
+        The quick brown fox jumps over the lazy dog. Il1 O0 rn m: letters that look alike stay apart.
+      </p>
+    </Card>
+  );
+}
+
+/** Colour-blind friendly status colours (FT8) and the theme of exports and printouts. */
+export function ColourAndExportCard() {
+  const { settings } = useAuth();
+  const save = useSave();
+  return (
+    <Card title="Colours for status and exports">
+      <Row label="Colour-blind friendly colours" hint="Done / overdue, priorities and status dots use blue and orange of different lightness instead of green and red.">
+        <Switch label="Colour-blind friendly colours" checked={colourBlindOn(settings)} onChange={(v) => save({ colourBlind: v })} />
+      </Row>
+      <Row label="Exports and printing" hint="PDFs and printouts are light unless you choose the same theme as the app.">
+        <Seg label="Exports and printing" value={normExportTheme(settings?.exportTheme)} onChange={(v) => save({ exportTheme: v })} options={[{ id: 'light', label: 'Default (Light)' }, { id: 'app', label: 'Same as app' }]} />
+      </Row>
     </Card>
   );
 }

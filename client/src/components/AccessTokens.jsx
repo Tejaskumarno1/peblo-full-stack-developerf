@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plug, Trash2, Copy } from 'lucide-react';
 import { tokensAPI } from '../api';
 import { usePublicUrl } from '../api/publicUrl';
+import { confirmDialog } from '../soft/ConfirmDialog';
 
 // PEB-95: personal access tokens for the Peblo MCP server (Claude Desktop, Cursor) and scripts.
 export default function AccessTokens() {
@@ -27,7 +28,7 @@ export default function AccessTokens() {
     } catch (err) { setMsg(err.response?.data?.error || 'Could not make the token.'); }
   };
   const revoke = async (t) => {
-    if (!window.confirm(`Remove "${t.name}"? Anything using it stops working straight away.`)) return;
+    if (!(await confirmDialog({ title: `Remove "${t.name}"?`, body: 'Anything using this token stops working straight away.', confirmLabel: 'Remove', danger: true }))) return;
     try { await tokensAPI.remove(t.id); setFresh(null); load(); } catch (err) { setMsg(err.response?.data?.error || 'Could not remove it.'); }
   };
   const mcpUrl = `${publicUrl || window.location.origin}/mcp`;

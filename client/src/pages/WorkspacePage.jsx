@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import BlockEditor from '../components/BlockEditor';
 import NoteContextPanel from '../components/workspace/NoteContextPanel';
+import { confirmDialog } from '../soft/ConfirmDialog';
+import { exportPalette, currentExportMode } from '../utils/appearance';
 import '../styles/workspace.css';
 import '../styles/notes.css';
 
@@ -384,7 +386,7 @@ export default function WorkspacePage() {
   };
 
   const handleRestoreBackup = async (backupId) => {
-    if (!confirm('Restore this version? The text you have now is saved as a version first, so you can come back to it.')) return;
+    if (!(await confirmDialog({ title: 'Restore this version?', body: 'The text you have now is saved as a version first, so you can come back to it.', confirmLabel: 'Restore' }))) return;
     try {
       const res = await notesAPI.revertBackup(selectedNote.id, backupId);
       applyNoteToEditor(res.data.note);
@@ -447,9 +449,12 @@ export default function WorkspacePage() {
         .then((html2pdfModule) => {
           const html2pdf = html2pdfModule.default;
           const container = document.createElement('div');
+          // Light unless Settings > Appearance > Exports and printing is "Same as app" (utils/appearance.js)
+          const pal = exportPalette(currentExportMode());
           container.innerHTML = `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: #1e293b; background: #ffffff;">
-              <h1 style="border-bottom: 2px solid #6366f1; padding-bottom: 10px; color: #0f172a; margin-top: 0;">${escapeHtml(noteTitle || 'Untitled')}</h1>
+            <div data-export-mode="${currentExportMode()}" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; padding: 40px; color: ${pal.fg}; background: ${pal.bg};">
+              <style>pre, code { background: ${pal.codeBg}; color: ${pal.codeFg}; } a { color: ${pal.accent}; } blockquote { color: ${pal.muted}; border-left: 4px solid ${pal.line}; padding-left: 12px; } td, th { border: 1px solid ${pal.line}; }</style>
+              <h1 style="border-bottom: 2px solid ${pal.accent}; padding-bottom: 10px; color: ${pal.heading}; margin-top: 0;">${escapeHtml(noteTitle || 'Untitled')}</h1>
               <div>${renderMarkdown(noteContent || '')}</div>
             </div>
           `;
@@ -457,7 +462,7 @@ export default function WorkspacePage() {
             margin:       10,
             filename:     `${(noteTitle || 'Untitled').trim().replace(/[^a-zA-Z0-9-_\s]/g, '').replace(/\s+/g, '_')}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2 },
+            html2canvas:  { scale: 2, backgroundColor: pal.bg },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
           };
           
@@ -465,7 +470,7 @@ export default function WorkspacePage() {
         })
         .catch((err) => {
           console.error('Failed to load html2pdf dynamically:', err);
-          alert('Could not load PDF generation library. Please try again.');
+          sayToast('Could not load the PDF maker. Try again.');
         });
       return;
     }
@@ -486,7 +491,7 @@ export default function WorkspacePage() {
       }, 500);
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Failed to export document. Please try again.');
+      sayToast('Could not export the note. Try again.');
     }
   };
 
@@ -594,11 +599,10 @@ export default function WorkspacePage() {
     const targetNote = notes.find((n) => n.id === noteId) || (selectedNote?.id === noteId ? selectedNote : null);
     const isAlreadyDeleted = targetNote?.isDeleted;
 
-    if (isAlreadyDeleted) {
-      if (!confirm('Permanently delete this note? This cannot be undone.')) return;
-    } else {
-      if (!confirm('Move this note to trash?')) return;
-    }
+    const ok = await confirmDialog(isAlreadyDeleted
+      ? { title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }
+      : { title: 'Move this note to the Trash?', confirmLabel: 'Move to Trash', danger: true });
+    if (!ok) return;
 
     try {
       ignoredNoteIdsRef.current.add(noteId);

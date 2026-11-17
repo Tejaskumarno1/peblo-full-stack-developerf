@@ -5,6 +5,7 @@ import { notesAPI, todosAPI } from '../api';
 import { useAutoSave } from './index';
 import { saveNoteSafe, setNoteBase, getNoteBase, isNoteLive, markExternalEdit } from '../utils/noteSync';
 import { useUndoToast } from '../utils/useUndoToast';
+import { confirmDialog } from '../soft/ConfirmDialog';
 
 const editable = (title) => (!title || title === 'Untitled' ? '' : title);
 
@@ -163,7 +164,10 @@ export default function useNoteDoc({ draftTags = [] } = {}) {
   };
   const trash = async (after = '/notes') => {
     if (!doc) return;
-    if (!window.confirm(doc.isDeleted ? 'Delete this note forever? This cannot be undone.' : 'Move this note to the Trash?')) return;
+    const ok = await confirmDialog(doc.isDeleted
+      ? { title: 'Delete this note forever?', body: 'This cannot be undone.', confirmLabel: 'Delete forever', danger: true }
+      : { title: 'Move this note to the Trash?', confirmLabel: 'Move to Trash', danger: true });
+    if (!ok) return;
     try {
       await notesAPI.delete(doc.id, { permanent: !!doc.isDeleted });
     } catch (err) {

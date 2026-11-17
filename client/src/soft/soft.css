@@ -84,11 +84,12 @@
 }
 
 .theme-midnight .soft {
-  --s-bg: #07050A;
-  --s-surface: #141019;
-  --s-col: #0F0C14;
-  --s-line: #231C2B;
-  --s-chip-solid: #1F1A27;
+  /* Midnight: a near-black page; cards and columns one visible step lighter (contrast-check.mjs checks the step) */
+  --s-bg: #050307;
+  --s-surface: #19141F;
+  --s-col: #110D16;
+  --s-line: #2B2335;
+  --s-chip-solid: #221C2B;
 }
 
 /* ---------- Frame ---------- */

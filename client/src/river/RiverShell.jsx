@@ -8,6 +8,7 @@ import MeetingReminders from './MeetingReminders';
 import { exportCalendar, importCalendar } from './calendarIO';
 import { initialsOf } from './riverUtils';
 import Avatar from '../components/Avatar';
+import { nextTheme, themeLabel } from '../utils/appearance';
 import './river.css';
 
 const NAV = [
@@ -43,7 +44,7 @@ export function RiverHeader({ children, tools }) {
   const fileRef = useRef(null);
   const ref = useDismiss(menu, () => setMenu(false));
   const say = (t) => { setCalMsg(t); setTimeout(() => setCalMsg(''), 4000); };
-  const nextTheme = theme === 'light' ? 'dark' : theme === 'dark' ? 'midnight' : 'light';
+  const next = nextTheme(theme); // Light -> Dark -> Midnight -> Light
 
   return (
     <header className="r-head">
@@ -65,7 +66,7 @@ export function RiverHeader({ children, tools }) {
           <div className="r-pop right" role="menu" style={{ width: 220 }}>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/ai/connections'); }}>Your AI and privacy</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate('/profiles'); }}>Switch profile</button>
-            <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(nextTheme); }}>Switch to {nextTheme} theme</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); setTheme(next); }}>Switch to {themeLabel(next)} theme</button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); window.dispatchEvent(new Event('peblo:help')); }}>Help and shortcuts</button>
             <span className="r-pop-h">Calendar</span>
             <button type="button" role="menuitem" onClick={() => exportCalendar().then((n) => say('Downloaded ' + n + ' items (.ics)')).catch(() => say('Could not export'))}>Export calendar (.ics)</button>
