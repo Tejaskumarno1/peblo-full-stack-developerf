@@ -150,7 +150,7 @@ app.use('/api', apiLimiter());
   app.use('/api/tags', tagsRoutes);
 app.use('/api/tokens', tokensRoutes);
   app.use('/api/oauth', oauthApi);
-  app.use('/api/notes', notesBulkRoutes); // R37: POST /api/notes/bulk (own authenticate; before /:id routes)
+  app.use('/api/notes', notesBulkRoutes); // POST /bulk (R37), /folders/rename|clear, /trash/info|empty|restore: one router, own authenticate, before the /:id routes
   app.use('/api/notes', notesRoutes);
   app.use('/api/notes', noteAiRoutes);
   app.use('/api/ai', aiRoutes);

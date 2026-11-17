@@ -11,22 +11,32 @@ const keyFor = (uid) => `peblo-note-tabs:${uid || 'anon'}${getSpace() ? ':' + ge
 export const MAX_TABS = 8;
 const load = (key) => { try { const s = JSON.parse(localStorage.getItem(key)); return Array.isArray(s?.tabs) ? s.tabs : []; } catch { return []; } };
 const loadSession = (key) => { try { return JSON.parse(sessionStorage.getItem(`${key}:trail`)) || {}; } catch { return {}; } };
+const loadHist = (key) => { const t = loadSession(key).hist; return t && Array.isArray(t.list) ? { list: t.list, i: Math.min(t.i, t.list.length - 1), skip: false } : { list: [], i: -1, skip: false }; };
 
 // Open notes as tabs above the page, with back / forward, pin, duplicate, close others and reopen closed.
-export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onEmpty, dirty }) {
+export default function NoteTabs({ doc, notes, notesReady = true, navigate, onNew, onDuplicate, onEmpty, dirty }) {
   const { user } = useAuth();
   const KEY = keyFor(user?.id);
   const [tabs, setTabs] = useState(() => { try { localStorage.removeItem('peblo-note-tabs'); } catch { /* ignore */ } return load(KEY); }); // the old shared key is dropped
   const [closed, setClosed] = useState(() => (loadSession(KEY).closed || []));
   const [menu, setMenu] = useState(null); // { id, x, y }
-  const hist = useRef((() => { const t = loadSession(KEY).hist; return t && Array.isArray(t.list) ? { list: t.list, i: Math.min(t.i, t.list.length - 1), skip: false } : { list: [], i: -1, skip: false }; })());
+  const hist = useRef(loadHist(KEY));
+  // R30: the key the tabs in state belong to. When the space (or account) changes, the new key's tabs are loaded and the old
+  // space's tabs are never written under the new key.
+  const [tabsKey, setTabsKey] = useState(KEY);
+  if (tabsKey !== KEY) {
+    setTabsKey(KEY);
+    setTabs(load(KEY));
+    setClosed(loadSession(KEY).closed || []);
+    hist.current = loadHist(KEY);
+  }
   const [, bump] = useState(0);
   const tabsRef = useRef(tabs); tabsRef.current = tabs;
   const closedRef = useRef(closed); closedRef.current = closed;
   const docId = doc && !doc.isDraft ? doc.id : null;
 
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs, KEY]);
-  const saveTrail = () => { try { sessionStorage.setItem(`${KEY}:trail`, JSON.stringify({ closed: closedRef.current.slice(-20), hist: { list: hist.current.list.slice(-50), i: hist.current.i } })); } catch { /* ignore */ } };
+  useEffect(() => { if (tabsKey !== KEY) return; try { localStorage.setItem(tabsKey, JSON.stringify({ tabs })); } catch { /* ignore */ } }, [tabs, tabsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveTrail = () => { if (tabsKey !== KEY) return; try { sessionStorage.setItem(`${tabsKey}:trail`, JSON.stringify({ closed: closedRef.current.slice(-20), hist: { list: hist.current.list.slice(-50), i: hist.current.i } })); } catch { /* ignore */ } };
   useEffect(() => { saveTrail(); }, [closed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const titleOf = useCallback((t) => {
@@ -60,11 +70,13 @@ export default function NoteTabs({ doc, notes, navigate, onNew, onDuplicate, onE
   }, [docId, doc?.title]);
 
   // a note that was deleted for good, or moved to the Trash or Archive, should not leave a dead tab behind
+  // Only against a list that was loaded for this space (notesReady): an empty space drops its stale tabs, and the old space's
+  // list (still shown for a moment after a switch) never prunes the new space's tabs.
   useEffect(() => {
-    if (!notes.length) return;
+    if (!notesReady || tabsKey !== KEY) return;
     const alive = new Set(notes.map((n) => n.id));
     setTabs((ts) => (ts.some((t) => !alive.has(t.id) && t.id !== docId) ? ts.filter((t) => alive.has(t.id) || t.id === docId) : ts));
-  }, [notes, docId]);
+  }, [notes, docId, notesReady, tabsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = useCallback((id) => navigate(`/notes/${id}`), [navigate]);
   const ordered = [...tabs.filter((t) => t.pinned), ...tabs.filter((t) => !t.pinned)];

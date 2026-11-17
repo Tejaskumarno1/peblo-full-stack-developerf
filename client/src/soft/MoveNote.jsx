@@ -8,7 +8,7 @@ import { Backdrop, iconOf, toneOf, useCurrentSpace, useWorkspaces } from './spac
 import Toast from '../components/Toast';
 
 /** Move a note to another space, or share a copy (mockups A05, A06, A07, A07b). Shown only to people who belong to an organization. */
-export default function MoveNote({ noteId, title }) {
+export default function MoveNote({ noteId, title, mine = true, author }) {
   const { data } = useWorkspaces();
   const current = useCurrentSpace();
   const qc = useQueryClient();
@@ -24,7 +24,8 @@ export default function MoveNote({ noteId, title }) {
   const spaces = orgs.flatMap((o) => o.spaces.map((s) => ({ ...s, orgName: o.name })));
   const here = spaces.find((s) => s.id === current) || null;
   const writable = spaces.filter((s) => s.role !== 'viewer' && s.id !== current);
-  const options = [...(here ? [{ id: null, name: 'Personal', kind: 'personal', note: 'Only you' }] : []), ...writable.map((s) => ({ id: s.id, name: s.name, kind: s.kind, note: `${s.members} member${s.members === 1 ? '' : 's'}` }))];
+  // R32: only the author can move a note into a Personal space (the server refuses anyone else), so a lead does not see that choice
+  const options = [...(here && mine ? [{ id: null, name: 'Personal', kind: 'personal', note: 'Only you' }] : []), ...writable.map((s) => ({ id: s.id, name: s.name, kind: s.kind, note: `${s.members} member${s.members === 1 ? '' : 's'}` }))];
   const chosen = options.find((o) => o.id === dest) || null;
 
   const close = () => { setOpen(false); setErr(''); setDest(undefined); setBusy(false); };
@@ -65,7 +66,9 @@ export default function MoveNote({ noteId, title }) {
           {chosen && (
             <p className="s-share-msg" data-testid="move-effect">
               {mode === 'move'
-                ? <><b>Loses access:</b> {here ? `everyone in ${here.name} except you` : 'nobody'}. <b>Gains access:</b> {chosen.id ? `everyone in ${chosen.name}` : 'only you'}. Its tasks, images and comments go with it.</>
+                ? (mine
+                  ? <><b>Loses access:</b> {here ? `everyone in ${here.name} except you` : 'nobody'}. <b>Gains access:</b> {chosen.id ? `everyone in ${chosen.name}` : 'only you'}. Its tasks, images and comments go with it.</>
+                  : <><b>Loses access:</b> everyone in {here ? here.name : 'this space'} who is not in {chosen.name}, you included. {author || 'The author'} stays its author but can only open it if they belong to {chosen.name}. <b>Gains access:</b> everyone in {chosen.name}. Its tasks, images and comments go with it.</>)
                 : <>A new note with the same words is added to <b>{chosen.name}</b>. The original stays where it is, and the two are not kept in sync.</>}
             </p>
           )}
@@ -81,16 +84,24 @@ export default function MoveNote({ noteId, title }) {
 export function MoveToast() {
   const qc = useQueryClient();
   const [undo, setUndo] = useState(null);
+  const [undoErr, setUndoErr] = useState('');
+  useEffect(() => {
+    if (!undoErr) return undefined;
+    const t = setTimeout(() => setUndoErr(''), 7000);
+    return () => clearTimeout(t);
+  }, [undoErr]);
   useEffect(() => {
     let t;
     const on = (e) => { setUndo(e.detail); clearTimeout(t); t = setTimeout(() => setUndo(null), e.detail.copy ? 6000 : 12000); };
     window.addEventListener('peblo:moved', on);
     return () => { window.removeEventListener('peblo:moved', on); clearTimeout(t); };
   }, []);
+  if (undoErr) return <Toast><div className="s-toast s-move-toast" role="alert" data-testid="move-undo-error">{undoErr}</div></Toast>;
   if (!undo) return null;
   const back = async () => {
     const u = undo; setUndo(null);
-    try { await notesAPI.move(u.id, u.from, u.to); await qc.invalidateQueries(); } catch { /* it stays where it is */ }
+    // R32: a failed Undo is said, not swallowed (the note stays where it was moved to)
+    try { await notesAPI.move(u.id, u.from, u.to); await qc.invalidateQueries(); } catch (e) { setUndoErr(`Could not move it back. ${e?.response?.data?.error || 'It is still in ' + u.name + '.'}`); }
   };
   return (
     <Toast><div className="s-toast s-move-toast" role="status" data-testid="move-toast">

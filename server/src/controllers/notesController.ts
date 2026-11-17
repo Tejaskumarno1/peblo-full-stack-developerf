@@ -488,6 +488,21 @@ export async function updateNote(req: any, res: any, next: any) {
     if (req.body?.isArchived !== undefined && !(await noteScope(req, res, 'manage'))) return;
     scrubBody(req.body, ['title', 'content', 'category', 'baseContent']);
     const { title, content, category, isArchived, tags, meta, baseUpdatedAt, baseContent, keepBoth, collab } = req.body;
+    // A locked note (meta.locked) is read only until it is unlocked: its title, text and tags are not changed, unless this same
+    // request unlocks it. A save that sends what is already there (an editor flushing unchanged text) is not a change.
+    if (title !== undefined || content !== undefined || tags !== undefined) {
+      const unlocking = meta && typeof meta === 'object' && 'locked' in meta && meta.locked !== true;
+      if (!unlocking) {
+        const cur = await prisma.note.findFirst({ where: { id: req.params.id, ...own }, select: { meta: true, title: true, content: true, tags: { include: { tag: true } } } });
+        if (cur && (cur.meta as any)?.locked === true) {
+          const norm = (list: any[]) => JSON.stringify([...new Set(list.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean))].sort());
+          const changed = (title !== undefined && ((typeof title === 'string' ? title.slice(0, 300) : '') || 'Untitled') !== cur.title)
+            || (content !== undefined && content !== cur.content)
+            || (tags !== undefined && norm(Array.isArray(tags) ? tags : []) !== norm(cur.tags.map((t: any) => t.tag.name)));
+          if (changed) return res.status(403).json({ error: 'This note is locked. Unlock it to change it.', code: 'locked' });
+        }
+      }
+    }
     // An editor in a live room (collab) already holds everyone's merged text, so its save is not a stale copy to merge.
     const force = req.body.force || collab === true;
     // @mentions: only a save whose text contains a mention link can add one, so only then is the earlier text read (to tell who is new)
@@ -564,7 +579,8 @@ export async function updateNote(req: any, res: any, next: any) {
   }
 }
 
-const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** How long a Personal note stays in the Trash before it is deleted for good (team trash is never emptied on a timer). */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const TRASH_PURGE_BATCH = 200;
 
 /** Permanently removes notes that have sat in the trash for over 30 days (at most 200 per call). Returns how many were removed. */
