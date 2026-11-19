@@ -82,13 +82,26 @@ export interface VerifyResult {
   error?: string;
 }
 
-const NOT_CHAT = /embed|whisper|tts|moderation|dall-e|image|audio|transcribe|rerank|guard|speech/i;
+// Things a provider lists that cannot answer a typed question: embeddings, speech, images, music, video, live/voice sessions,
+// robots, computer control, research agents, and the like.
+const NOT_CHAT = /embed|whisper|tts|moderation|dall-e|image|imagen|audio|transcribe|rerank|guard|speech|live|realtime|lyria|veo|sora|robotics|computer-use|deep-research|antigravity|translate|customtools|aqa|learnlm/i;
+
+// Google lists every model it has under one key. Only these families are text chat models, so for Gemini the list is
+// an allow-list (a deny-list kept missing new odd names such as "gemini-4-neon" or "gemini-decision-1").
+const GEMINI_CHAT = /^gemini-(\d+(\.\d+)?-)?(flash|pro)(-lite)?(-latest|-preview[\w.-]*|-\d[\w.-]*)?$/i;
+
+/** True when this model id from this provider can be used to chat. */
+export function isChatModel(provider: string, id: string): boolean {
+  if (NOT_CHAT.test(id)) return false;
+  if (provider === 'gemini') return GEMINI_CHAT.test(id);
+  return true;
+}
 
 /** The model to suggest: the provider's usual one if it is on the list, else the first that looks like a chat model. */
 export function suggestModel(provider: string, models: string[]): string {
   const want = providerById(provider)?.defaultModel || '';
   if (want && models.includes(want)) return want;
-  return models.find((m) => !NOT_CHAT.test(m)) || want || models[0] || '';
+  return models.find((m) => isChatModel(provider, m)) || want || models[0] || '';
 }
 
 function modelIds(body: any): string[] {
@@ -124,7 +137,7 @@ export async function verifyConnection(providerId: string, key: string, baseUrl?
     if (res.status >= 300 && res.status < 400) return fail('address', 'That address redirects somewhere else. Use the final address.', base);
     if (!res.ok) return fail('other', `${info.label} answered with HTTP ${res.status}.`, base);
     // Only models that can chat: embedding, speech and image models are not something to answer questions with.
-    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: modelIds(await res.json()).filter((m) => !NOT_CHAT.test(m)) };
+    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: modelIds(await res.json()).filter((m) => isChatModel(providerId, m)) };
   } catch {
     return fail('unreachable', providerId === 'custom' ? `Could not reach ${base}.` : `Could not reach ${info.label}.`, base);
   }

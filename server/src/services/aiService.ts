@@ -225,6 +225,15 @@ export function unreadableKeyNames(user: any): string[] {
   return out;
 }
 
+/** Turns a provider's HTTP failure into something a person can act on (a bare "403 status code (no body)" tells them nothing). */
+export function explainProviderFailure(error: any, label: string): string | null {
+  const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
+  if (status === 401 || status === 403) return `${label} refused the request (${status}). Its API key was rejected or is not allowed to use this model: it may be wrong, revoked, restricted, or switched off by ${label}. Make a new key and paste it in AI Hub → Connections.`;
+  if (status === 429) return `${label} says you have used up its free limit for now (429). Wait a bit, pick a lighter model in AI Hub → Connections, or add a second provider.`;
+  if (status === 404) return `${label} does not have the model you picked (404). Choose another model in AI Hub → Connections.`;
+  return null;
+}
+
 function noKeyError(user?: any) {
   if (aiIsOff(user)) {
     const off: any = new Error('AI is turned off in your settings, so nothing is sent to any model. Turn it back on in Settings > AI Providers.');
@@ -271,6 +280,8 @@ async function runWithCascade(
   }
 
   let timedOut = false;
+  let lastError: any = null;
+  let lastLabel = 'The AI provider';
   for (const name of order) {
     try {
       if (name === 'gemini' && providers.gemini) {
@@ -288,13 +299,15 @@ async function runWithCascade(
       }
     } catch (error: any) {
       if (error?.code === 'TIMEOUT' || error?.name === 'APIConnectionTimeoutError') timedOut = true;
-      console.warn(`[${operationName}] ${name} failed: ${error.message}`);
+      lastError = error;
+      lastLabel = name === 'gemini' ? 'Gemini' : (providers[name]?.label || name);
+      console.warn(`[${operationName}] ${name} (${lastLabel}) failed: status ${error?.status ?? '?'} ${error.message}`);
     }
   }
 
   const err: any = new Error(timedOut
     ? 'The AI took too long to answer. Try again, or pick a faster model in AI Hub → Connections.'
-    : 'The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
+    : explainProviderFailure(lastError, lastLabel) || 'The AI request failed. Check AI Hub → Connections: your API key may be invalid or out of credit, or Ollama may not be running.');
   err.statusCode = 502;
   err.public = true; // the text above is written for people
   err.code = timedOut ? 'TIMEOUT' : 'PROVIDER_ERROR';
@@ -1149,6 +1162,7 @@ export async function streamHubChat(
   }
 
   let lastError: any = null;
+  let lastLabel = 'The AI provider';
   for (const name of available) {
     let sent = false;
     try {
@@ -1179,7 +1193,8 @@ export async function streamHubChat(
     } catch (error: any) {
       if (opts.signal?.aborted) throw error;
       lastError = error;
-      console.warn(`[AI Hub] ${name} failed: ${error.message}`);
+      lastLabel = name === 'gemini' ? 'Gemini' : (providers[name]?.label || name);
+      console.warn(`[AI Hub] ${name} (${lastLabel}) failed: status ${error?.status ?? '?'} ${error.message}`);
       if (sent) throw error; // don't mix two models' answers
     }
   }
@@ -1193,7 +1208,7 @@ export async function streamHubChat(
   }
   const err: any = new Error(lastError?.message?.includes('ECONNREFUSED') || lastError?.message?.includes('Connection error')
     ? 'Could not reach the model. If you use Local AI, check that Ollama is running.'
-    : 'The AI request failed: ' + (lastError?.message || 'unknown error'));
+    : explainProviderFailure(lastError, lastLabel) || 'The AI request failed: ' + (lastError?.message || 'unknown error'));
   err.code = 'AI_FAILED';
   throw err;
 }
