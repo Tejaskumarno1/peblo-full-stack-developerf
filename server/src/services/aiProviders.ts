@@ -82,31 +82,47 @@ export interface VerifyResult {
   error?: string;
 }
 
-// Things a provider lists that cannot answer a typed question: embeddings, speech, images, music, video, live/voice sessions,
-// robots, computer control, research agents, and the like.
-const NOT_CHAT = /embed|whisper|tts|moderation|dall-e|image|imagen|audio|transcribe|rerank|guard|speech|live|realtime|lyria|veo|sora|robotics|computer-use|deep-research|antigravity|translate|customtools|aqa|learnlm/i;
+// Words that name a kind of model that cannot answer a typed question (a modality, not a model): embeddings, speech,
+// images, music, video, live/voice sessions. Only used when the provider says nothing about what a model can do.
+const NOT_CHAT = /embed|whisper|tts|moderation|dall-e|image|imagen|audio|transcribe|rerank|guard|speech|live|realtime|lyria|veo|sora/i;
 
-// Google lists every model it has under one key. Only these families are text chat models, so for Gemini the list is
-// an allow-list (a deny-list kept missing new odd names such as "gemini-4-neon" or "gemini-decision-1").
-const GEMINI_CHAT = /^gemini-(\d+(\.\d+)?-)?(flash|pro)(-lite)?(-latest|-preview[\w.-]*|-\d[\w.-]*)?$/i;
+/** A model a provider listed, with whatever it said about what the model can do (undefined = it said nothing). */
+export interface ListedModel { id: string; chat?: boolean }
 
-/** True when this model id from this provider can be used to chat. */
-export function isChatModel(provider: string, id: string): boolean {
-  if (NOT_CHAT.test(id)) return false;
-  if (provider === 'gemini') return GEMINI_CHAT.test(id);
-  return true;
+/**
+ * Reads what the provider itself reports, so no model name is hard coded:
+ *  - Google: supportedGenerationMethods contains "generateContent" for models that answer text.
+ *  - OpenRouter: architecture.output_modalities is only "text".
+ *  - Mistral: capabilities.completion_chat.  Together: type "chat".
+ */
+function reportedChat(m: any): boolean | undefined {
+  if (Array.isArray(m?.supportedGenerationMethods)) return m.supportedGenerationMethods.includes('generateContent');
+  const out = m?.architecture?.output_modalities;
+  if (Array.isArray(out)) return out.length > 0 && out.every((x: string) => x === 'text');
+  if (typeof m?.capabilities?.completion_chat === 'boolean') return m.capabilities.completion_chat;
+  if (typeof m?.type === 'string') return m.type === 'chat' || m.type === 'language';
+  return undefined;
+}
+
+/** True when this model can be used to chat: the provider's own answer wins, otherwise the kind of model the name describes. */
+export function isChatModel(listed: ListedModel | string): boolean {
+  const m: ListedModel = typeof listed === 'string' ? { id: listed } : listed;
+  if (m.chat !== undefined) return m.chat && !/embed|tts|image|imagen|audio|live|lyria|veo/i.test(m.id);
+  return !NOT_CHAT.test(m.id);
 }
 
 /** The model to suggest: the provider's usual one if it is on the list, else the first that looks like a chat model. */
-export function suggestModel(provider: string, models: string[]): string {
+export function suggestModel(provider: string, models: string[]): string {   // `models` are already chat models
   const want = providerById(provider)?.defaultModel || '';
   if (want && models.includes(want)) return want;
-  return models.find((m) => isChatModel(provider, m)) || want || models[0] || '';
+  return models[0] || want;
 }
 
-function modelIds(body: any): string[] {
+function listModels(body: any): ListedModel[] {
   const list = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
-  return list.map((m: any) => String(m?.id ?? m?.name ?? '').replace(/^models\//, '')).filter(Boolean);
+  return list
+    .map((m: any) => ({ id: String(m?.id ?? m?.name ?? '').replace(/^models\//, ''), chat: reportedChat(m) }))
+    .filter((m: ListedModel) => m.id);
 }
 
 /**
@@ -127,17 +143,20 @@ export async function verifyConnection(providerId: string, key: string, baseUrl?
   }
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  // Google's OpenAI-style list is names only. Its own list says which models can answer text (generateContent), so ask that one.
+  const listUrl = providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000' : `${base}/models`;
+  if (providerId === 'gemini') { delete headers.Authorization; headers['x-goog-api-key'] = apiKey; }
   if (providerId === 'anthropic') { headers['x-api-key'] = apiKey; headers['anthropic-version'] = '2023-06-01'; }
   try {
     // Redirects are not followed: an address that answers with one could be pointing somewhere the server must not go.
     const init = { headers, redirect: 'manual' as const, signal: AbortSignal.timeout(8000) };
     // On a shared server connect to the validated address only (no DNS rebinding); redirects still come back unfollowed.
-    const res = hosted() ? (await safeFetchFollow(`${base}/models`, init, { maxRedirects: 0 })).response : await fetch(`${base}/models`, init);
+    const res = hosted() ? (await safeFetchFollow(listUrl, init, { maxRedirects: 0 })).response : await fetch(listUrl, init);
     if (res.status === 400 || res.status === 401 || res.status === 403) return fail('key', `${info.label} did not accept that key.`, base);
     if (res.status >= 300 && res.status < 400) return fail('address', 'That address redirects somewhere else. Use the final address.', base);
     if (!res.ok) return fail('other', `${info.label} answered with HTTP ${res.status}.`, base);
     // Only models that can chat: embedding, speech and image models are not something to answer questions with.
-    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: modelIds(await res.json()).filter((m) => isChatModel(providerId, m)) };
+    return { ok: true, provider: providerId, label: info.label, baseUrl: base, models: listModels(await res.json()).filter(isChatModel).map((m) => m.id) };
   } catch {
     return fail('unreachable', providerId === 'custom' ? `Could not reach ${base}.` : `Could not reach ${info.label}.`, base);
   }

@@ -760,6 +760,8 @@
 .soft .s-attach { width: 260px; }
 .soft .s-attach input { height: 36px; margin-bottom: 4px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--s-line); background: var(--s-bg); color: var(--s-fg); font: inherit; font-size: 13.5px; outline: none; }
 .soft .s-menu.right { left: auto; right: 0; }
+/* A long list (a model picker can have 100+ rows) must scroll inside the screen instead of growing past it. */
+.soft .s-menu[role="listbox"] { max-height: min(420px, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .soft .s-menu button[aria-selected="true"] { background: var(--s-lilac); }
 .soft .s-menu button:disabled { opacity: 0.5; cursor: default; }
 .soft .s-menu-link { padding: 10px 12px; font-size: 13.5px; font-weight: 700; color: var(--s-accent-ink); text-decoration: none; }
