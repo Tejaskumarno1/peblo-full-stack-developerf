@@ -5,6 +5,8 @@
 // citations and the Sources panel depend on, so a later hybrid full-text + vector search
 // (docs/04-ai-hub.md) can replace the scoring without touching callers.
 import prisma from '../db.js';
+import { policyOf } from '../utils/orgPolicy.js';
+import { hiddenNoteIds } from '../utils/noteAccess.js';
 
 export interface Source {
   n: number;
@@ -64,28 +66,64 @@ function snippetAround(text: string, words: string[], size = 170): string {
   return (start > 0 ? '…' : '') + plain.slice(start, start + size) + (start + size < plain.length ? '…' : '');
 }
 
+export interface ReadableSpace { id: string; name: string; kind: string }
+
+/**
+ * The spaces (teams and offices) whose notes and tasks the person may have an AI read: the ones they are an active member of.
+ * An organization that turned "AI features" off is left out. One that requires its own AI key is left out too, unless the
+ * question is asked from inside that space (`here`), where orgAiGate already switches the call to the organization's key.
+ */
+export async function readableSpaces(userId: string, here?: string | null): Promise<ReadableSpace[]> {
+  const rows = await prisma.$queryRaw<{ id: string; name: string; kind: string; policy: any }[]>`
+    SELECT s.id, s.name, s.kind, o.policy FROM space_members sm
+    JOIN spaces s ON s.id = sm.space_id AND s.closed_at IS NULL
+    JOIN org_members m ON m.org_id = s.org_id AND m.user_id = sm.user_id AND m.status = 'active' AND (m.guest_until IS NULL OR m.guest_until > now())
+    JOIN organizations o ON o.id = s.org_id AND o.closed_at IS NULL
+    WHERE sm.user_id = ${userId}`;
+  return rows
+    .filter((r) => { const pol = policyOf(r.policy); return pol.aiFeatures && (!pol.requireOrgKey || r.id === here); })
+    .map((r) => ({ id: r.id, name: r.name, kind: r.kind }));
+}
+
 export async function retrieve(
   userId: string,
   query: string,
-  opts: { noteIds?: string[]; maxNotes?: number } = {}
+  opts: { noteIds?: string[]; maxNotes?: number; /** also read the teams and offices the person belongs to */ shared?: boolean; /** the space the question is asked from */ here?: string | null } = {}
 ): Promise<RetrievalResult> {
   const words = [...new Set(tokens(query))].slice(0, 24); // a pasted essay must not turn into thousands of scans per note
   const maxNotes = opts.maxNotes ?? 5;
 
+  // Personal content, plus (when asked) everything in the teams and offices the person is a member of right now.
+  // An Office note its author has not opened up to this person stays hidden, exactly as it is in the notes list.
+  const spaces = opts.shared ? await readableSpaces(userId, opts.here) : [];
+  const spaceIds = spaces.map((sp) => sp.id);
+  const hidden = (await Promise.all(spaces.filter((sp) => sp.kind === 'office').map((sp) => hiddenNoteIds(userId, sp.id, 'read')))).flat();
+  const spaceName = new Map(spaces.map((sp) => [sp.id, sp.name]));
+  const mine = opts.shared ? { userId, spaceId: null } : { userId };
+
   const [notes, tasks] = await Promise.all([
     prisma.note.findMany({
-      where: { userId, isDeleted: false },
-      select: { id: true, title: true, content: true, updatedAt: true, tags: { select: { tag: { select: { name: true } } } } },
+      where: {
+        isDeleted: false,
+        ...(spaceIds.length
+          ? { OR: [mine, { spaceId: { in: spaceIds }, ...(hidden.length ? { id: { notIn: hidden } } : {}) }] }
+          : mine),
+      },
+      select: { id: true, title: true, content: true, updatedAt: true, userId: true, spaceId: true, tags: { select: { tag: { select: { name: true } } } } },
       orderBy: { updatedAt: 'desc' },
       take: 1500, // newest notes first; far above what a normal person has, but bounds memory and time per question
     }),
     prisma.todo.findMany({
-      where: { userId, completed: false },
-      select: { id: true, text: true, deadline: true, priority: true, todoTags: true },
+      where: { completed: false, ...(spaceIds.length ? { OR: [mine, { spaceId: { in: spaceIds } }] } : mine) },
+      select: { id: true, text: true, deadline: true, priority: true, todoTags: true, spaceId: true },
       orderBy: { deadline: 'asc' },
       take: 1500,
     }),
   ]);
+
+  // Who wrote the shared notes that are about to be quoted, so the answer can say whose they are.
+  const authorIds = [...new Set(notes.filter((n) => n.spaceId && n.userId !== userId).map((n) => n.userId))];
+  const authors = new Map((authorIds.length ? await prisma.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true } }) : []).map((u) => [u.id, u.name]));
 
   // Notes tagged #private are never shown to any model.
   const visible = notes.filter((n) => !n.tags.some((t) => t.tag.name === 'private'));
@@ -121,7 +159,7 @@ export async function retrieve(
       kind: 'note',
       id: n.id,
       title: n.title || 'Untitled',
-      meta: ['Note', ...tags.slice(0, 2), 'edited ' + relTime(n.updatedAt)].join(' · '),
+      meta: ['Note', ...(n.spaceId ? ['in ' + (spaceName.get(n.spaceId) || 'a team'), ...(n.userId !== userId ? ['by ' + (authors.get(n.userId) || 'a teammate')] : [])] : []), ...tags.slice(0, 2), 'edited ' + relTime(n.updatedAt)].join(' · '),
       snippet: snippetAround(n.content || n.title, words),
       text: (n.content || '').slice(0, 1800),
     });
@@ -137,7 +175,7 @@ export async function retrieve(
       kind: 'task',
       id: t.id,
       title: t.text,
-      meta: `Task · ${t.priority} · due ${fmtDue(t.deadline)}`,
+      meta: `Task${t.spaceId ? ' · in ' + (spaceName.get(t.spaceId) || 'a team') : ''} · ${t.priority} · due ${fmtDue(t.deadline)}`,
       snippet: `Due ${fmtDue(t.deadline)} · ${t.priority} priority`,
       text: `Open task: "${t.text}" (priority ${t.priority}, due ${fmtDue(t.deadline)})`,
     });

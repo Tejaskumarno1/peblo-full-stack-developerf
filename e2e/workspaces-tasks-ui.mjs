@@ -41,7 +41,7 @@ try {
 
   await p.evaluate((sp) => localStorage.setItem('peblo-space', sp), org.spaceId);
   await p.goto(b.base + '/ai', { waitUntil: 'networkidle' });
-  ok((await p.getByTestId('ai-scope').innerText()).includes('only your Personal'), 'AI says it reads only Personal while a team is open');
+  ok((await p.getByTestId('ai-scope').innerText()).includes('everything you have access to'), 'AI says it reads whatever the person can access while a team is open');
   ok((await p.locator('.soft-search').innerText()).includes('Search in Studio team'), 'the search bar names the space it searches');
   await p.screenshot({ path: shots + '\\ws-ai-scope.png' });
 

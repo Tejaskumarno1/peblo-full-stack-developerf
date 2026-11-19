@@ -220,7 +220,7 @@ export default function SoftAI() {
               ))}
             </div>
           )}
-          {spaceName && <p className="s-ai-scope" data-testid="ai-scope"><Lock size={13} /> Peblo AI reads only your Personal notes and tasks. Nothing in {spaceName} is sent to an AI.</p>}
+          {spaceName && <p className="s-ai-scope" data-testid="ai-scope"><Lock size={13} /> Peblo AI can read everything you have access to: your Personal notes and tasks and the teams and offices you are in, including {spaceName}. It never sees #private notes or anything you cannot open.</p>}
           <div className="s-composer-row">
             <label htmlFor="s-ai-input" className="s-sr">Message</label>
             <input

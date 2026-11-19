@@ -6,6 +6,9 @@ import { listHubModels, streamHubChat, HubMessage } from '../services/aiService.
 import { retrieve, sourcesPrompt } from '../services/retrieval.js';
 import { tzOf } from '../utils/userTime.js';
 
+/** The space the request was made from (the x-peblo-space header), or null for Personal. */
+const spaceHeader = (req: any): string | null => { const v = String(req.headers['x-peblo-space'] ?? '').trim(); return v && v !== 'personal' ? v : null; };
+
 const router = Router();
 router.use(authenticate);
 
@@ -21,7 +24,7 @@ router.get('/models', async (req, res, next) => {
 // POST /api/ai/hub/search — the sources a question would use (for previews)
 router.post('/search', async (req, res, next) => {
   try {
-    const result = await retrieve(req.user!.id, String(req.body?.query || ''), { noteIds: req.body?.noteIds });
+    const result = await retrieve(req.user!.id, String(req.body?.query || ''), { noteIds: req.body?.noteIds, shared: true, here: spaceHeader(req) });
     res.json({ ...result, sources: result.sources.map(({ text, ...s }) => s) });
   } catch (error) {
     next(error);
@@ -54,7 +57,7 @@ router.post('/chat', ...aiLimit, orgAiGate, async (req, res) => {
   const started = Date.now();
 
   try {
-    const found = await retrieve(userId, last.content, { noteIds: req.body?.noteIds });
+    const found = await retrieve(userId, last.content, { noteIds: req.body?.noteIds, shared: true, here: spaceHeader(req) });
     send({
       type: 'sources',
       sources: found.sources.map(({ text, ...s }) => s),
