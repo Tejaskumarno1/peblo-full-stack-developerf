@@ -196,6 +196,14 @@ html[data-fs-theme="dark"] .pb-cbtn { background: var(--fs-seg); color: var(--fs
 .fsx-nm button:hover { background: var(--fs-seg); }
 .fsx-nm button.danger { color: var(--fs-bad); }
 .fsx-nm button svg { opacity: .7; flex: none; }
+/* Text size / Page width rows (SegRow). Full screen is portalled outside .soft, so the .soft rules in notesextras.css do not reach it. */
+.fsx-nm .nx-segrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font: 600 13px var(--fs-sans); color: var(--fs-fg); }
+.fsx-nm .nx-seglab { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+.fsx-nm .nx-seglab svg { opacity: .7; flex: none; }
+.fsx-nm .nx-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--fs-seg); }
+.fsx-nm .nx-seg button { display: inline-flex; justify-content: center; height: 26px; min-width: 30px; padding: 0 9px; border-radius: 999px; font: 700 12px var(--fs-sans); }
+.fsx-nm .nx-seg button.on { background: var(--fs-segon); box-shadow: 0 2px 6px var(--fs-segsh); }
+.fsx-nm .nx-seg button:hover:not(.on) { background: transparent; }
 .fsx-share { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .fsx-share .cp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .fsx-muted { margin: 0; font-size: 13px; color: var(--fs-dim); }
