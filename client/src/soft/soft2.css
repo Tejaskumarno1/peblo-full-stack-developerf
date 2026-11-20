@@ -553,6 +553,9 @@ html[data-compact="1"] .soft .s-note-row, html[data-compact="1"] .soft .s-item {
 .soft textarea.s-note-title { min-height: 32px; }
 .soft .s-note-head .s-note-tags { flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .soft .s-note-head .s-add-tag { padding: 2px 12px; height: 26px; font-size: 13px; }
+/* In the one-line header the small chips ("+ tag", "Move or share", tags) keep their full size; the long byline chip gives way instead and ends in "...". */
+.soft .s-note-head .s-dashed, .soft .s-note-head .s-note-tag { flex: none; white-space: nowrap; }
+.soft .s-note-head .oa-chip { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .soft .s-note-head .s-note-stats { margin: 0; white-space: nowrap; font-weight: 700; flex: none; }
 .soft .s-note-head .s-saved { padding: 0; background: transparent; width: 10px; height: 10px; flex: none; gap: 0; font-size: 0; }
 .soft .s-note-head .s-saved::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--s-local); display: block; }
