@@ -196,6 +196,11 @@ html[data-fs-theme="dark"] .pb-cbtn { background: var(--fs-seg); color: var(--fs
 .fsx-nm button:hover { background: var(--fs-seg); }
 .fsx-nm button.danger { color: var(--fs-bad); }
 .fsx-nm button svg { opacity: .7; flex: none; }
+.fsx-nm .s-menu-body { display: flex; flex-direction: column; gap: 2px; }
+.fsx-nm .s-menu-foot { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--fs-line); }
+.fsx-nm .s-menu-foot:empty { display: none; }
+.fsx-nm .s-menu-sep { height: 1px; margin: 4px 8px; background: var(--fs-line); }
+.fsx-nm .s-menu-body > .s-menu-sep:first-child, .fsx-nm .s-menu-body > .s-menu-sep:last-child, .fsx-nm .s-menu-body > .s-menu-sep + .s-menu-sep { display: none; }
 /* Text size / Page width rows (SegRow). Full screen is portalled outside .soft, so the .soft rules in notesextras.css do not reach it. */
 .fsx-nm .nx-segrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; font: 600 13px var(--fs-sans); color: var(--fs-fg); }
 .fsx-nm .nx-seglab { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }

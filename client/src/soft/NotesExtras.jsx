@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Tag as TagIcon, X, Sparkles, ArrowUp } from 'lucide-react';
 import { renderAnswer } from '../hooks/useHubChat';
 import { authHeaders, signOutIfRejected } from '../api/token';
@@ -57,6 +57,28 @@ export function BulkFailDialog({ fails, extra, onClose }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Caps a dropdown menu to the room left below it, so a long menu scrolls inside itself instead of running off the screen.
+ * Measured in real pixels and converted with the page's scale (the canvas can be scaled). A menu that is not floating
+ * (the phone sheet, where the page scrolls) is left alone.
+ */
+export function useFitMenu(open, ref) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!open || !el) return undefined;
+    const fit = () => {
+      el.style.maxHeight = '';
+      if (getComputedStyle(el).position !== 'absolute') return;
+      const r = el.getBoundingClientRect();
+      const scale = el.offsetHeight ? r.height / el.offsetHeight : 1;
+      el.style.maxHeight = `${Math.max(220, Math.floor((window.innerHeight - r.top - 12) / (scale || 1)))}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [open, ref]);
 }
 
 /** A labelled row of choices shown all at once (N32: text size and page width in the note's "..." menu, instead of cycling). */

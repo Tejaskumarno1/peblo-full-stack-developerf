@@ -47,7 +47,7 @@ import { peerColor, peersBySection } from '../utils/peerCursors';
 import { toneOf, toneVar, relTime, snippetOf, timeOf } from './softUtils';
 import Toast from '../components/Toast';
 import NavMenu from './NavMenu';
-import { TagFilterBar, BulkFailDialog, SegRow, NoteAskPanel, captureCaret, restoreCaret } from './NotesExtras';
+import { TagFilterBar, BulkFailDialog, SegRow, NoteAskPanel, captureCaret, restoreCaret, useFitMenu } from './NotesExtras';
 import { notesBulkAPI } from './notesBulkApi';
 import { getSpace } from '../api/space';
 import { useNotesKeys } from './notesKeys';
@@ -814,6 +814,8 @@ export default function SoftNotes() {
   const openEdit = (d) => { if (d.smart) setSmartPage({ initial: d }); else { setFolderEdit(d); setSheet('folder'); } };
   const openNew = (andMove = false) => { setMoveAfter(andMove); setFolderEdit({}); setSheet('folder'); };
   const outsideMenu = useRef(null);
+  const menuBox = useRef(null);
+  useFitMenu(menuOpen && !!doc && !doc.isDraft, menuBox); // the note menu is long: cap it to the room left on screen and let it scroll
   const outsideHist = useRef(null);
   useOutside(outsideMenu, menuOpen, () => setMenuOpen(false));
   useOutside(outsideHist, historyOpen, () => setHistoryOpen(false));
@@ -1036,28 +1038,32 @@ export default function SoftNotes() {
   );
   const renderMenuItems = () => (
     <>
+      <div className="s-menu-body">
       {!doc.isDeleted && manageable && !locked && <button type="button" role="menuitem" data-testid="menu-archive" onClick={guarded(archive, 'Could not archive the note')}><Archive size={15} />{doc.isArchived ? 'Unarchive' : 'Archive'}</button>}
                     {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-pin" onClick={guarded(togglePin, 'Could not change the pin')}><Pin size={15} />{doc.meta?.pinned ? 'Unpin from Home' : 'Pin to Home'}</button>}
                     {!doc.isDeleted && !viewer && <button type="button" role="menuitem" data-testid="menu-fav" onClick={guarded(toggleFav, 'Could not change the favourite')}><Star size={15} />{doc.meta?.favourite ? 'Remove from favourites' : 'Add to favourites'}</button>}
                     {!doc.isDeleted && manageable && <button type="button" role="menuitem" data-testid="menu-lock" onClick={guarded(toggleLock, 'Could not change the lock')}>{locked ? <LockOpen size={15} /> : <Lock size={15} />}{locked ? 'Unlock note' : 'Lock note (read only)'}</button>}
-                    <div className="s-menu-sep" role="separator" />
+          {manageable && !locked && <button type="button" role="menuitem" data-testid="menu-move" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>}
+      <div className="s-menu-sep" role="separator" />
       <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); window.dispatchEvent(new Event('pb-find-open')); }}><Search size={15} />Find in note  (Ctrl+F)</button>
                     {manageable && <button type="button" role="menuitem" data-testid="menu-duplicate" onClick={duplicate}><Copy size={15} />Duplicate note</button>}
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`# ${doc.title || 'Untitled'}\n\n${await inlineMedia(doc.content || '')}`); flash('Copied as Markdown'); } catch { flash('Could not copy'); } }}><ClipboardCopy size={15} />Copy as Markdown</button>
           <button type="button" role="menuitem" onClick={async () => { setMenuOpen(false); try { await navigator.clipboard.writeText(`${publicUrl || window.location.origin}/notes/${doc.id}`); flash(publicUrl ? 'Link copied' : 'Link copied. It only works on this computer.'); } catch { flash('Could not copy'); } }}><Link2 size={15} />Copy link to note</button>
-          {manageable && !locked && <button type="button" role="menuitem" data-testid="menu-move" onClick={() => { setMenuOpen(false); setSelectMode(false); setSheet('move'); }}><FolderInput size={15} />{doc.meta?.folder ? `Folder: ${doc.meta.folder}…` : 'Move to folder…'}</button>}
+      <div className="s-menu-sep" role="separator" />
                     <SegRow label="Text size" icon={<Type size={15} />} testid="seg-size" value={noteFont} options={[['s', 'S', 'Small text'], ['m', 'M', 'Medium text'], ['l', 'L', 'Large text']]} onPick={pickFont} />
                     <SegRow label="Page width" icon={<MoveHorizontal size={15} />} testid="seg-width" value={wide === 'narrow' ? 'narrow' : 'wide'} options={[['narrow', 'Narrow'], ['wide', 'Wide']]} onPick={(n) => { setWide(n); keep('peblo-focus-width', n); }} />
                     <button type="button" role="menuitem" onClick={() => { const n = typewriter === 'on' ? 'off' : 'on'; setTypewriter(n); keep('peblo-typewriter', n); }}><Keyboard size={15} />Typewriter focus: {typewriter === 'on' ? 'On' : 'Off'}</button>
                     {!doc.isDeleted && !doc.isDraft && <button type="button" role="menuitem" data-testid="menu-versions" disabled={!versions.length} onClick={() => { setMenuOpen(false); if (versions[0]) setDiffV(versions[0]); }}><History size={15} />{vErrText || (versions.length ? `Version history (${versions.length} kept)` : 'No earlier versions')}</button>}
+      <div className="s-menu-sep" role="separator" />
 {!curSpace && !doc.isDeleted && !doc.isDraft && shareTargets.length > 0 && <button type="button" role="menuitem" data-testid="menu-team-share" className="ts-menu-hot" onClick={() => { setMenuOpen(false); setTeamOpen(true); }}><Users size={15} />Share with team...</button>}
-          <div className="s-menu-sep" role="separator" />
       {manageable && (shareOk.allowed ? <button type="button" role="menuitem" data-testid="menu-share" onClick={() => { setMenuOpen(false); setShareOpen(true); }}><Share2 size={15} />Share link…</button> : <ShareBlocked reason={shareOk.reason} />)}
                     <button type="button" role="menuitem" onClick={guarded(exportPdf, 'Could not export the PDF')}><FileDown size={15} />Export as PDF</button>
                     <button type="button" role="menuitem" onClick={guarded(exportWord, 'Could not export to Word')}><FileDown size={15} />Export as Word</button>
                     <button type="button" role="menuitem" onClick={guarded(exportMd, 'Could not export the note')}><FileDown size={15} />Export as Markdown</button>
-                    <div className="s-menu-sep" role="separator" />
+      </div>
+      <div className="s-menu-foot">
       {manageable && (!doc.isDeleted || canPurge) && !(locked && !doc.isDeleted) && <button type="button" role="menuitem" className="danger" data-testid="menu-trash" onClick={guarded(trash, 'Could not delete the note')}><Trash2 size={15} />{doc.isDeleted ? 'Delete forever' : 'Move to Trash'}</button>}
+      </div>
     </>
   );
   const quickTask = async (text) => { await todosAPI.create({ text, priority: 'medium', noteId: doc.id }); queryClient.invalidateQueries({ queryKey: ['todos'] }); };
@@ -1316,7 +1322,7 @@ export default function SoftNotes() {
                   </div>
                 )}
                 {menuOpen && !doc.isDraft && (
-                  <div className="s-menu" role="menu">
+                  <div className="s-menu s-menu-tall" role="menu" ref={menuBox}>
                     {renderMenuItems()}
                   </div>
                 )}

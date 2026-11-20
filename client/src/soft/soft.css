@@ -762,6 +762,13 @@
 .soft .s-menu.right { left: auto; right: 0; }
 /* A long list (a model picker can have 100+ rows) must scroll inside the screen instead of growing past it. */
 .soft .s-menu[role="listbox"] { max-height: min(420px, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* The note "..." menu: a body that scrolls (capped by useFitMenu) and a footer that stays put, so Move to Trash is always reachable. */
+.soft .s-menu-tall { overflow: hidden; }
+.soft .s-menu-body { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.soft .s-menu-foot { flex: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--s-line); }
+.soft .s-menu-foot:empty { display: none; }
+/* tidy separators when a group is empty (a locked, trashed or read-only note hides most rows) */
+.soft .s-menu-body > .s-menu-sep:first-child, .soft .s-menu-body > .s-menu-sep:last-child, .soft .s-menu-body > .s-menu-sep + .s-menu-sep { display: none; }
 .soft .s-menu button[aria-selected="true"] { background: var(--s-lilac); }
 .soft .s-menu button:disabled { opacity: 0.5; cursor: default; }
 .soft .s-menu-link { padding: 10px 12px; font-size: 13.5px; font-weight: 700; color: var(--s-accent-ink); text-decoration: none; }
