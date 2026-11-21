@@ -153,7 +153,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         text: text.trim(), priority, tags: t && !tags.includes(t) ? [...tags, t] : tags, deadline, noteId: note?.id || null, scope,
         ...(ruleChanged ? { recurrence } : {}),
         ...(team.canAssign && JSON.stringify(assignees) !== JSON.stringify(startAssignees) ? { assignees } : {}),
-        ...(team.canAssign && status !== startStatus && status !== 'done' ? { column: status } : {}),
+        ...(status !== startStatus && status !== 'done' ? { column: status } : {}),
         meta: {
           ...(team.canAssign ? {
             visibility: visibility === 'team' ? null : visibility,
@@ -351,14 +351,14 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         </section>
       )}
 
-      {team.canAssign && startStatus !== 'done' && (
+      {startStatus !== 'done' && (
         <section className="s-sheet-sec" aria-label="Status">
           <span className="s-sheet-lab">Status</span>
           <div className="s-sheet-pills" role="radiogroup" aria-label="Status">
             {[['todo', 'To do'], ['doing', 'In progress'], ['review', 'In review']].map(([v, name]) => (
               <button key={v} type="button" role="radio" aria-checked={status === v} className={status === v ? 'on' : ''} data-testid={`status-${v}`} onClick={() => setStatus(v)}>{name}</button>
             ))}
-            <button type="button" aria-pressed={watching} className={`tk-watch ${watching ? 'on' : ''}`} data-testid="task-watch" onClick={() => setWatching(!watching)}>{watching ? 'Watching' : 'Watch this task'}</button>
+            {team.canAssign && <button type="button" aria-pressed={watching} className={`tk-watch ${watching ? 'on' : ''}`} data-testid="task-watch" onClick={() => setWatching(!watching)}>{watching ? 'Watching' : 'Watch this task'}</button>}
           </div>
         </section>
       )}

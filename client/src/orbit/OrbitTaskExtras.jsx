@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { LABELS, LABEL_HEX, metaOf, columnOf, assignmentStatus, minutesLabel, rankTasks, isBlocked } from './taskMeta';
 import { topicName, tagsOfTodo, shortDate } from './orbitUtils';
+import { DEFAULT_COLUMNS } from '../soft/useBoard';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -80,25 +81,27 @@ export function TaskDetail({ t, todos, onMeta, onOpenNote, onFocus }) {
 }
 
 /** To do / Doing / Done as three columns; drag a card, or use its buttons. */
-export function Board({ todos, onMove }) {
-  const cols = [['todo', 'To do'], ['doing', 'Doing'], ['done', 'Done']];
+/** Same columns Soft's Kanban uses for this space (custom columns included), not a fixed To do/Doing/Done —
+ * so a column a team added or renamed in Settings shows here too, instead of every non-"doing" status
+ * collapsing back into "To do". `columns` defaults to the stock 4 while the real ones are still loading. */
+export function Board({ todos, onMove, columns = DEFAULT_COLUMNS }) {
+  const keys = columns.map((c) => c.key);
   const recent = Date.now() - 7 * 864e5;
   const list = todos.filter((t) => !t.completed || new Date(t.updatedAt || 0).getTime() > recent);
+  const colOf = (t) => (keys.includes(columnOf(t)) ? columnOf(t) : 'todo');
   return (
     <div className="o-board" aria-label="Task board">
-      {cols.map(([key, label]) => {
-        const items = list.filter((t) => columnOf(t) === key);
+      {columns.map(({ key, name: label }) => {
+        const items = list.filter((t) => colOf(t) === key);
         return (
-          <section key={key} className="o-col" data-col={key} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const t = todos.find((x) => x.id === e.dataTransfer.getData('text/plain')); if (t && columnOf(t) !== key) onMove(t, key); }}>
+          <section key={key} className="o-col" data-col={key} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const t = todos.find((x) => x.id === e.dataTransfer.getData('text/plain')); if (t && colOf(t) !== key) onMove(t, key); }}>
             <h3>{label} · {items.length}</h3>
             {items.map((t) => (
               <div key={t.id} className={`o-card-task${t.completed ? ' done' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}>
                 <span>{metaOf(t).label && <i className="o-dot" style={{ background: LABEL_HEX[metaOf(t).label] }} />}{t.text}</span>
                 {t.deadline && <span className="m">{shortDate(t.deadline)}</span>}
                 <span className="btns">
-                  {key !== 'todo' && <button type="button" className="o-chip" onClick={() => onMove(t, 'todo')}>To do</button>}
-                  {key !== 'doing' && <button type="button" className="o-chip" onClick={() => onMove(t, 'doing')}>Doing</button>}
-                  {key !== 'done' && <button type="button" className="o-chip" onClick={() => onMove(t, 'done')}>Done</button>}
+                  {columns.filter((c) => c.key !== key).map((c) => <button key={c.key} type="button" className="o-chip" onClick={() => onMove(t, c.key)}>{c.name}</button>)}
                 </span>
               </div>
             ))}
