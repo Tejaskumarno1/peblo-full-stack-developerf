@@ -25,8 +25,15 @@ export function minutesLabel(m) {
   return `${h} h${m % 60 ? ` ${m % 60} min` : ''}`;
 }
 
-/** Where a task sits on the board: 'todo' | 'doing' | 'done'. */
-export const columnOf = (t) => (t.completed ? 'done' : metaOf(t).status === 'doing' ? 'doing' : 'todo');
+/** Where a task sits on the board: done wins, then the stored status (any of this space's board columns), else To do.
+ * Matches the server's taskAccess.ts columnOf exactly, and Soft's useBoard.js columnFor, so the same task lands
+ * in the same column everywhere instead of Orbit collapsing every status but "doing" back to "To do". */
+const COLUMN_KEY = /^[a-z][a-z0-9_]{0,31}$/;
+export const columnOf = (t) => {
+  if (t.completed) return 'done';
+  const s = metaOf(t).status;
+  return typeof s === 'string' && COLUMN_KEY.test(s) && s !== 'todo' && s !== 'done' ? s : 'todo';
+};
 
 /** The status of an assignment: 'not-started' | 'in-progress' | 'submitted'. */
 export const assignmentStatus = (t) => (t.completed ? 'submitted' : metaOf(t).astatus === 'in-progress' || metaOf(t).status === 'doing' ? 'in-progress' : 'not-started');

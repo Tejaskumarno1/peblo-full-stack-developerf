@@ -47,6 +47,15 @@ export function repeatLabel(t) {
 }
 const SMART = [['all', 'All'], ['inbox', 'Inbox'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['waiting', 'Waiting'], ['someday', 'Someday'], ['overdue', 'Overdue'], ['high', 'High priority']];
 const VIEWS = [['board', 'Board'], ['kanban', 'Kanban'], ['list', 'List'], ['table', 'Table'], ['timeline', 'Timeline']];
+// "Board" and "Kanban" are two unrelated groupings of the same tasks (due date vs status) — a tooltip says so,
+// since moving a card in one has no effect on the other and that surprises people who expect one shared board.
+const VIEW_HINT = {
+  board: 'Grouped by due date: Today, Tomorrow, This week, Done. Separate from Kanban below.',
+  kanban: 'Grouped by status: your Kanban columns (To do, In progress, In review, Done). Separate from Board above.',
+  list: 'One list, grouped and sorted your way.',
+  table: 'Every task as rows, with repeat, priority, steps and tags.',
+  timeline: 'The next 14 days.',
+};
 const stepsOf = (t) => (Array.isArray(t.meta?.subtasks) ? t.meta.subtasks : []);
 
 function StepsBar({ steps }) {
@@ -190,10 +199,13 @@ export default function SoftTasks() {
     const week = open.filter((t) => t.deadline && daysFromToday(t.deadline) >= 2 && daysFromToday(t.deadline) <= 6).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
     const later = open.filter((t) => !t.deadline || daysFromToday(t.deadline) > 6).sort((a, b) => new Date(a.deadline || 8.64e15) - new Date(b.deadline || 8.64e15));
     const weekAgo = addDays(startOfDay(), -6);
+    // "Done this week" for the date-based Board/subtitle. The Kanban board's Done column uses allDone below —
+    // a task finished over a week ago is still completed:true server-side and must not vanish from the Kanban view too.
     const done = base.filter((t) => t.completed && !gone.includes(t.id) && new Date(t.updatedAt) >= weekAgo).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const allDone = base.filter((t) => t.completed && !gone.includes(t.id)).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     const ord = (t) => (typeof t.meta?.order === 'number' ? t.meta.order : null);
     const withOrder = (arr) => (arr.some((x) => ord(x) !== null) ? [...arr].sort((a, b) => (ord(a) ?? 1e12) - (ord(b) ?? 1e12)) : arr);
-    return { overdue, today: withOrder(today), tomorrow: withOrder(tomorrow), week: withOrder(week), later, done, open };
+    return { overdue, today: withOrder(today), tomorrow: withOrder(tomorrow), week: withOrder(week), later, done, allDone, open };
   }, [base, gone]);
   const otherGroups = useMemo(() => {
     const sorted = sortTasks(groups.open, ls === 'manual' ? 'manual' : ls === 'due' || lg === 'when' ? 'due' : ls, SOFT_H);
@@ -317,12 +329,14 @@ export default function SoftTasks() {
   const bTag = (tag, ids = sel) => bulk(`Tagged #${tag}`, ['tags'], (t) => ({ tags: [...new Set([...tagsOf(t), tag])] }), ids);
   const bPrio = (p, ids = sel) => bulk('Priority changed', ['priority'], () => ({ priority: p }), ids);
 
+  // One atomic request for the whole batch (the server's /todos/bulk), not one PATCH per task — a partial
+  // failure can no longer leave some selected tasks changed and others not with no way to tell which.
   const bAssign = async (userId, ids = sel) => {
-    try { await Promise.all([...ids].map((id) => todosAPI.update(id, { assignees: userId ? [userId] : [], scope: 'this' }))); say(`${userId ? 'Assigned' : 'Unassigned'}: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
+    try { await todosAPI.bulk([...ids], { assignees: userId ? [userId] : [] }); say(`${userId ? 'Assigned' : 'Unassigned'}: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
     refresh();
   };
   const bStatus = async (col, ids = sel) => {
-    try { await Promise.all([...ids].map((id) => todosAPI.update(id, { column: col, scope: 'this' }))); say(`Status changed: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
+    try { await todosAPI.bulk([...ids], { column: col }); say(`Status changed: ${ids.size} task${ids.size === 1 ? '' : 's'}`, () => {}); } catch { setErr('Some changes could not be saved.'); }
     refresh();
   };
   const exitSelect = () => { setSelMode(false); setSel(new Set()); lastSel.current = null; };
@@ -542,7 +556,7 @@ export default function SoftTasks() {
 
   const visibleTasks = view === 'table' || view === 'timeline'
     ? [...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later]
-    : view === 'kanban' ? [...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]
+    : view === 'kanban' ? [...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.allDone]
     : view === 'board' ? columns.flatMap((c) => [...c.items, ...(c.extra || [])]) : shownGroups.flatMap((g) => g.items);
   const visibleIds = visibleTasks.map((t) => t.id);
   flatRef.current = visibleTasks;
@@ -604,7 +618,7 @@ export default function SoftTasks() {
         {selMode && <button type="button" className="s-selbtn" onClick={exitSelect}>Cancel</button>}
         {!selMode && <Link to="/tasks/plan" className="s-planbtn plan-link"><Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />Plan my day</Link>}
         <div className="s-seg" role="tablist" aria-label="View">
-          {[...VIEWS, ...(team.canAssign ? [['workload', 'Workload']] : [])].map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{name}</button>)}
+          {[...VIEWS, ...(team.canAssign ? [['workload', 'Workload']] : [])].map(([k, name]) => <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} title={VIEW_HINT[k]} onClick={() => setView(k)}>{name}</button>)}
         </div>
       </div>
       <form className="s-addbar" onSubmit={add}>
@@ -675,7 +689,7 @@ export default function SoftTasks() {
       {view === 'table' ? <TaskTable rows={visibleTasks} toggle={toggle} open={(t) => setSheet({ task: t, isNew: false })} selMode={selMode} sel={sel} onSel={(t, shift) => toggleSel(t, shift, visibleIds)} /> : view === 'timeline' ? <TaskTimeline groups={groups} open={(t) => setSheet({ task: t, isNew: false })} /> : view === 'workload' ? (
         <WorkloadView team={team} />
       ) : view === 'kanban' ? (
-        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.done]} team={team} open={(t) => setSheet({ task: t, isNew: false })} onError={setErr} slot={kbSlot} />
+        <KanbanBoard tasks={[...groups.overdue, ...groups.today, ...groups.tomorrow, ...groups.week, ...groups.later, ...groups.allDone]} team={team} open={(t) => setSheet({ task: t, isNew: false })} onError={setErr} slot={kbSlot} />
       ) : view === 'board' ? (
         <div className="s-board">
           {columns.map((c) => (

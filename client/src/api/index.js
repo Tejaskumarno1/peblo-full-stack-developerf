@@ -85,7 +85,8 @@ export const todosAPI = {
   getRange: (from, to) => api.get('/todos/range', { params: { from, to } }),
   create: (data) => api.post('/todos', { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   update: (id, data, space) => api.patch(`/todos/${id}`, { ...data, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, space ? { headers: { 'x-peblo-space': space } } : undefined),
-  delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined })
+  delete: (id, scope) => api.delete(`/todos/${id}`, { params: scope && scope !== 'this' ? { scope } : undefined }),
+  bulk: (ids, set) => api.post('/todos/bulk', { ids, set })
 };
 
 export const publicShareAPI = {

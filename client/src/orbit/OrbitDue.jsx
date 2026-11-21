@@ -12,7 +12,8 @@ import { orbitPrefs } from './orbitPrefs';
 import { TaskExportMenu } from './OrbitExport';
 import OrbitToday, { TimeReport } from './OrbitToday';
 import { TaskDetail, Board, Assignments, DoneLog, NextCard } from './OrbitTaskExtras';
-import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
+import { LABELS, LABEL_HEX, DAY_LIMIT_MIN, metaOf, columnOf, subProgress, isBlocked, blockersOf, plannedMinutes, minutesLabel, parseDateShortcut } from './taskMeta';
+import { useBoardColumns } from '../soft/useBoard';
 import { topicName, levelOf, levelVar, tagsOfTodo, shortDate } from './orbitUtils';
 import { startOfDay, addDays, sameDay, dayWord, clock, isAllDay, momentOf, mondayOf, spanOf } from '../river/riverUtils';
 import TimeGrid from '../components/TimeGrid';
@@ -205,11 +206,15 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     return () => clearInterval(i);
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLeft = focus ? Math.max(0, focus.startedAt + focus.mins * 60000 - Date.now()) : 0;
-  const COLS = { todo: 'To do', doing: 'Doing', done: 'Done' };
-  const applyCol = (t, col) => todosAPI.update(t.id, col === 'done' ? { completed: true, meta: { status: null } } : { completed: false, meta: { status: col === 'doing' ? 'doing' : null } });
+  const { columns: boardCols } = useBoardColumns();
+  const colName = (key) => boardCols.find((c) => c.key === key)?.name || 'To do';
+  // Goes through the same { column, scope } the server's moveToColumn() applies for Soft's Kanban board,
+  // instead of hand-building completed/meta.status here — so a custom column (not just todo/doing/done)
+  // works the same from Orbit's board as it does from Soft's, and the two never disagree on what moved.
+  const applyCol = (t, col) => todosAPI.update(t.id, { column: col, scope: 'this' });
   const moveCol = async (t, col) => {
-    const was = t.completed ? 'done' : metaOf(t).status === 'doing' ? 'doing' : 'todo';
-    if (await run(() => applyCol(t, col), 'Could not move that task.')) say(`Moved to ${COLS[col]}`, () => run(() => applyCol(t, was), 'Could not undo that.'));
+    const was = columnOf(t);
+    if (await run(() => applyCol(t, col), 'Could not move that task.')) say(`Moved to ${colName(col)}`, () => run(() => applyCol(t, was), 'Could not undo that.'));
   };
   const setAStatus = (t, v) => run(() => todosAPI.update(t.id, { completed: v === 'submitted', meta: { astatus: v === 'submitted' ? 'submitted' : v } }), 'Could not update that assignment.');
   const restore = (t) => run(() => todosAPI.update(t.id, { completed: false }), 'Could not bring that back.');
@@ -218,7 +223,9 @@ export default function OrbitDue({ view: initialView = 'list' }) {
   const bulkDone = async () => {
     const items = selItems.filter((t) => !t.completed);
     if (!items.length) return;
-    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { completed: true }))), 'Could not update those tasks.')) {
+    // One atomic /todos/bulk request, not one PATCH per task — a partial failure can no longer leave
+    // some of the batch done and the rest not with nothing to tell the two states apart.
+    if (await run(() => todosAPI.bulk(items.map((t) => t.id), { column: 'done' }), 'Could not update those tasks.')) {
       say(`Marked ${items.length} done`, () => run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { completed: false }))), 'Could not undo that.'));
       setSel([]);
     }
@@ -236,7 +243,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     const items = selItems;
     if (!items.length) return;
     const prev = items.map((t) => [t.id, t.priority || 'medium']);
-    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { priority }))), 'Could not change those tasks.')) {
+    if (await run(() => todosAPI.bulk(items.map((t) => t.id), { priority }), 'Could not change those tasks.')) {
       say(`Set ${items.length} to ${priority} priority`, () => run(() => Promise.all(prev.map(([id, p]) => todosAPI.update(id, { priority: p }))), 'Could not undo that.'));
     }
   };
@@ -244,7 +251,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
     const items = selItems;
     if (!items.length) return;
     const prev = items.map((t) => [t.id, metaOf(t).label || null]);
-    if (await run(() => Promise.all(items.map((t) => todosAPI.update(t.id, { meta: { label } }))), 'Could not label those tasks.')) {
+    if (await run(() => todosAPI.bulk(items.map((t) => t.id), { label }), 'Could not label those tasks.')) {
       say(label ? `Labelled ${items.length} ${label}` : `Cleared the label on ${items.length}`, () => run(() => Promise.all(prev.map(([id, l]) => todosAPI.update(id, { meta: { label: l } }))), 'Could not undo that.'));
     }
   };
@@ -573,7 +580,7 @@ export default function OrbitDue({ view: initialView = 'list' }) {
 
           {view === 'today' && <OrbitToday onToggle={toggle} />}
           {view === 'time' && <TimeReport todos={live} />}
-          {view === 'board' && <Board todos={live} onMove={moveCol} />}
+          {view === 'board' && <Board todos={live} onMove={moveCol} columns={boardCols} />}
           {view === 'assign' && <Assignments todos={live} mastery={mastery} onStatus={setAStatus} />}
           {view === 'done' && (
             <>

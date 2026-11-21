@@ -6,6 +6,7 @@
 import prisma from '../db.js';
 import { spaceAccess, can } from '../utils/access.js';
 import { COLUMN_KEY } from '../utils/taskAccess.js';
+import { emitUserAndSpace } from '../utils/notify.js';
 
 export const DEFAULT_COLUMNS = [
   { key: 'todo', name: 'To do', tone: 'sand' },
@@ -52,7 +53,22 @@ export async function putBoard(req: any, res: any, next: any) {
     if (middle.length > 10) return res.status(400).json({ error: 'A board can have up to 12 columns.' });
     const nameOf = (k: string, d: string) => { const c = given.find((x: any) => x?.key === k); const n = String(c?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 30); return n || d; };
     const columns = [{ key: 'todo', name: nameOf('todo', 'To do'), tone: 'sand' }, ...middle, { key: 'done', name: nameOf('done', 'Done'), tone: 'mint' }];
+
+    // A removed column really moves its tasks back to To do (clears the orphaned meta.status), matching what Settings tells the user happens.
+    const prevRows = await prisma.$queryRaw<any[]>`SELECT columns FROM board_columns WHERE scope = ${w.scope}`;
+    const prevKeys: string[] = Array.isArray(prevRows[0]?.columns)
+      ? prevRows[0].columns.map((c: any) => c?.key).filter((k: any) => typeof k === 'string')
+      : DEFAULT_COLUMNS.map((c) => c.key);
+    const newKeys = new Set(columns.map((c) => c.key));
+    const removedKeys = prevKeys.filter((k) => k !== 'todo' && k !== 'done' && !newKeys.has(k));
+    const spaceId = w.scope.startsWith('u:') ? null : w.scope;
+    if (removedKeys.length) {
+      if (spaceId) await prisma.$executeRaw`UPDATE todos SET meta = meta - 'status' WHERE space_id = ${spaceId} AND meta->>'status' = ANY(${removedKeys}::text[])`;
+      else await prisma.$executeRaw`UPDATE todos SET meta = meta - 'status' WHERE user_id = ${w.scope.slice(2)} AND space_id IS NULL AND meta->>'status' = ANY(${removedKeys}::text[])`;
+    }
+
     await prisma.$executeRaw`INSERT INTO board_columns (scope, columns) VALUES (${w.scope}, ${JSON.stringify(columns)}::jsonb) ON CONFLICT (scope) DO UPDATE SET columns = ${JSON.stringify(columns)}::jsonb, updated_at = NOW()`;
+    if (removedKeys.length) emitUserAndSpace(req.app?.get?.('io'), req.user?.id, spaceId, 'todos_changed');
     res.json({ columns, canEdit: true });
   } catch (e) { next(e); }
 }

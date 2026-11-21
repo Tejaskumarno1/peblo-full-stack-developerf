@@ -292,6 +292,8 @@ function TaskRow({ t, overdue, onToggle, onRemove }) {
           {t.note?.title && <Link to={`/notes/${t.note.id}`} className="tasks-note-link"><FileText size={11} /> {t.note.title}</Link>}
         </span>
       </span>
+      {!t.completed && t.meta?.status === 'doing' && <span className="pb-badge">In progress</span>}
+      {!t.completed && t.meta?.status === 'review' && <span className="pb-badge">In review</span>}
       {tags.slice(0, 2).map((tag) => <span key={tag} className="pb-badge">#{tag}</span>)}
       <span className={`tasks-due${overdue ? ' late' : ''}`}>{dueLabel(t)}</span>
       <span className="tasks-prio">

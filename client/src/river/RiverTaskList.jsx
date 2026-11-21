@@ -177,6 +177,8 @@ export default function RiverTaskList() {
                   : <input type="checkbox" checked={!!t.completed} onChange={() => toggle(t)} aria-label={`Done: ${t.text}`} />}
                 <button type="button" className="r-tl-main" onClick={() => open(t)}>
                   <span className="r-tl-text">{t.text}</span>
+                  {!t.completed && t.meta?.status === 'doing' && <span className="r-tl-tag">In progress</span>}
+                  {!t.completed && t.meta?.status === 'review' && <span className="r-tl-tag">In review</span>}
                   {H.tagsOf(t).map((tg) => <span key={tg} className="r-tl-tag">#{tg}</span>)}
                 </button>
                 <span className={`r-tl-pri ${t.priority || 'medium'}`} title={PRIORITY_LABEL[t.priority] || PRIORITY_LABEL.medium} />

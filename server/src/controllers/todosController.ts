@@ -196,12 +196,13 @@ export async function createTodo(req: Request, res: Response, next: NextFunction
       if (wanted.some((a) => !members.includes(a))) return res.status(400).json({ error: 'That person is not in this space.' });
       if (wanted.length) { cleanMeta.assignees = [...new Set(wanted)].slice(0, 10); base.assigneeId = cleanMeta.assignees[0]; } else delete cleanMeta.assignees;
       if (Array.isArray(cleanMeta.viewers)) cleanMeta.viewers = cleanMeta.viewers.filter((v: string) => members.includes(v));
-      if (typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column)) {
-        const mv = moveToColumn(req.body.column, cleanMeta);
-        base.completed = mv.completed;
-        for (const k of Object.keys(cleanMeta)) delete cleanMeta[k];
-        Object.assign(cleanMeta, mv.meta);
-      }
+    }
+    // Board columns work the same in Personal as in a team: a task typed straight into a Kanban column must land there, not just one dragged there afterwards.
+    if (typeof req.body.column === 'string' && COLUMN_KEY.test(req.body.column)) {
+      const mv = moveToColumn(req.body.column, cleanMeta);
+      base.completed = mv.completed;
+      for (const k of Object.keys(cleanMeta)) delete cleanMeta[k];
+      Object.assign(cleanMeta, mv.meta);
     }
     // "Ask me before Claude adds tasks" (Plan my day): a task added through an access token / MCP waits in the approval inbox.
     // Decided here, on the server, because an access token may not read account settings.

@@ -6,6 +6,7 @@ import { Clock, Filter, AlertTriangle, ChevronDown, ChevronsLeft, ChevronsRight,
 import { Link } from 'react-router-dom';
 import { todosAPI } from '../api';
 import { useBoardColumns, columnFor } from './useBoard';
+import { askScope } from '../utils/askScope';
 import PhotoOrInitial from '../components/Avatar';
 import AssignDialog, { avColor } from './AssignDialog';
 import './teamshare.css';
@@ -41,9 +42,18 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
 
   const move = async (id, col) => {
     const t = tasks.find((x) => x.id === id);
-    if (!t || columnFor(t, keys) === col) return;
-    queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => (x.id === id ? { ...x, completed: col === 'done', meta: { ...(x.meta || {}), status: col === 'todo' || col === 'done' ? null : col } } : x)));
-    try { await todosAPI.update(id, { column: col, scope: 'this' }); } catch { onError?.('Could not move that task.'); }
+    if (!t) return;
+    // Compare the real stored fields, not the column derived for display — a status that no longer
+    // matches any current column still displays folded into "To do", but dropping it back onto the
+    // visible "To do" strip must still clear that stale value instead of silently doing nothing.
+    const nextStatus = col === 'todo' || col === 'done' ? null : col;
+    const nextCompleted = col === 'done';
+    if (!!t.completed === nextCompleted && (t.meta?.status ?? null) === nextStatus) return;
+    let scope = 'this';
+    if (t.seriesId) { scope = await askScope(t, 'edit'); if (!scope) return; }
+    const prev = queryClient.getQueryData(['todos', 'all']);
+    queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => (x.id === id ? { ...x, completed: nextCompleted, meta: { ...(x.meta || {}), status: nextStatus } } : x)));
+    try { await todosAPI.update(id, { column: col, scope }); } catch { queryClient.setQueryData(['todos', 'all'], prev); onError?.('Could not move that task.'); }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
 
@@ -57,8 +67,9 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
   };
   const people = team.canAssign ? team.people : [];
   const setPeople = async (t, next) => {
+    const prev = queryClient.getQueryData(['todos', 'all']);
     queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => (x.id === t.id ? { ...x, assigneeId: next[0] || null, meta: { ...(x.meta || {}), assignees: next } } : x)));
-    try { await todosAPI.update(t.id, { assignees: next, scope: 'this' }); } catch { onError?.('Could not change who is on that task.'); }
+    try { await todosAPI.update(t.id, { assignees: next, scope: 'this' }); } catch { queryClient.setQueryData(['todos', 'all'], prev); onError?.('Could not change who is on that task.'); }
     queryClient.invalidateQueries({ queryKey: ['todos'] });
   };
   const asgTask = asg ? tasks.find((t) => t.id === asg) : null;
@@ -87,7 +98,23 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
     </div>
   );
 
-  const byCol = Object.fromEntries(columns.map((c) => [c.key, shown.filter((t) => columnFor(t, keys) === c.key)]));
+  const orderOf = (t) => (typeof t.meta?.order === 'number' ? t.meta.order : null);
+  const byCol = Object.fromEntries(columns.map((c) => {
+    const items = shown.filter((t) => columnFor(t, keys) === c.key);
+    return [c.key, items.some((t) => orderOf(t) !== null) ? [...items].sort((a, b) => (orderOf(a) ?? 1e12) - (orderOf(b) ?? 1e12)) : items];
+  }));
+  const reorderWithin = async (id, overId, colKey) => {
+    const items = byCol[colKey];
+    if (id === overId || !items.some((x) => x.id === id) || !items.some((x) => x.id === overId)) return;
+    const ids = items.map((x) => x.id).filter((x) => x !== id);
+    const at = ids.indexOf(overId);
+    ids.splice(at < 0 ? ids.length : at, 0, id);
+    const patches = ids.map((x, i) => ({ id: x, order: i * 10 }));
+    const prev = queryClient.getQueryData(['todos', 'all']);
+    queryClient.setQueryData(['todos', 'all'], (o) => (o || []).map((x) => { const p = patches.find((y) => y.id === x.id); return p ? { ...x, meta: { ...(x.meta || {}), order: p.order } } : x; }));
+    try { await Promise.all(patches.map((p) => todosAPI.update(p.id, { meta: { order: p.order }, scope: 'this' }))); } catch { queryClient.setQueryData(['todos', 'all'], prev); onError?.('Could not reorder that column.'); }
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  };
   const isFolded = (c) => (fold[c.key] !== undefined ? fold[c.key] : byCol[c.key].length === 0 && c.key !== 'todo' && c.key !== 'done');
   const template = columns.map((c) => (isFolded(c) ? '56px' : 'minmax(260px, 1fr)')).join(' ');
 
@@ -106,6 +133,7 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
           if (folded) {
             return (
               <section key={c.key} data-col={c.key} data-folded="true" className={`kb-col strip tone-${c.tone}${over === c.key ? ' over' : ''}`} aria-label={`${c.name}, ${items.length} tasks, collapsed`} {...dnd}>
+                <button type="button" className="kb-fold" style={{ margin: '10px auto 0' }} data-testid={`kb-addtask-${c.key}`} aria-label={`Add task to ${c.name}`} onClick={(e) => { e.stopPropagation(); setFolded(c.key, false); setAdding(c.key); setDraft(''); }}><Plus size={14} /></button>
                 <button type="button" className="kb-strip" data-testid={`kb-expand-${c.key}`} aria-label={`Expand ${c.name}`} onClick={() => setFolded(c.key, false)}>
                   <ChevronsRight size={16} /><span className="kb-n" data-testid={`kb-count-${c.key}`}>{items.length}</span><span className="kb-vert">{c.name}</span>
                 </button>
@@ -126,7 +154,7 @@ export default function KanbanBoard({ tasks, team, open, onError, slot }) {
                 {list.map((t) => {
                   const a = assigneesOf(t);
                   return (
-                    <div key={t.id} className={`kb-card${dragId === t.id ? ' dragging' : ''}`} data-testid="task-card" draggable data-kb-card={t.id} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }} onDragEnd={() => { setDragId(null); setOver(null); }}>
+                    <div key={t.id} className={`kb-card${dragId === t.id ? ' dragging' : ''}`} data-testid="task-card" draggable data-kb-card={t.id} onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; setDragId(t.id); }} onDragEnd={() => { setDragId(null); setOver(null); }} onDragOver={(e) => { if (dragId && dragId !== t.id) e.preventDefault(); }} onDrop={(e) => { if (dragId && dragId !== t.id) { e.preventDefault(); e.stopPropagation(); reorderWithin(dragId, t.id, c.key); setDragId(null); setOver(null); } }}>
                       <button type="button" className={`kb-t${t.completed ? ' done' : ''}`} onClick={() => open(t)}>{t.text}</button>
                       {(t.deadline || t.note) && (
                         <div className="kb-chips">
