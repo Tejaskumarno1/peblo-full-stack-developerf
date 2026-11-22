@@ -47,11 +47,23 @@ export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): s
 }
 
 /**
+ * True for a request the server made to itself over the loopback (the hosted /mcp endpoint calls /api this way).
+ * It never passed through the platform's proxy, so it carries no forwarded headers and comes from 127.0.0.1 / ::1.
+ * Without this exemption it was answered with a 308 to https://127.0.0.1:<port>, which fails, and every MCP tool
+ * reported "Peblo could not be reached".
+ */
+function isInternalLoopback(req: Request): boolean {
+  const addr = req.socket.remoteAddress || '';
+  const local = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+  return local && !req.headers['x-forwarded-for'] && !req.headers['x-forwarded-proto'];
+}
+
+/**
  * Behind a hosting platform's proxy (TRUST_PROXY set) in production, plain http is sent to https.
- * The health probe is exempt so the platform can still check the server.
+ * The health probe and the server's own loopback calls are exempt.
  */
 export function forceHttps(req: Request, res: Response, next: NextFunction) {
-  if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY && !req.secure && req.path !== '/api/health') {
+  if (process.env.NODE_ENV === 'production' && process.env.TRUST_PROXY && !req.secure && req.path !== '/api/health' && !isInternalLoopback(req)) {
     return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
   }
   next();
