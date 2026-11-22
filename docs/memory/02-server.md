@@ -729,3 +729,5 @@ Migrations `054_share_limits_activity.sql` (`share_settings.no_copy`, `share_vie
 - Note: `purgeExpiredTrash` only removes Personal notes because the Personal-only guard adds `spaceId: null` to its query; that is what keeps team Trash out of the timed purge.
 
 - **Hosted MCP loopback.** `/mcp` (routes/oauth.ts) makes each tool call back into the same server at `http://127.0.0.1:<port>`. `forceHttps` (middleware/security.ts) used to 308-redirect that plain-http call to `https://127.0.0.1:<port>`, which fails, so every tool said "Peblo could not be reached". `isInternalLoopback` now exempts requests from 127.0.0.1/::1 that carry no `X-Forwarded-*` header.
+
+- **MCP and Teams (1.3.0).** An access token may read a Team/Office it belongs to: `X-Peblo-Space` is honoured for `need==="read"` in `utils/scope.ts`, and `GET /api/workspaces` (list only) is allowed in `middleware/auth.ts`. Writes, moves, shares and every other workspaces route stay blocked for tokens. #private notes stay hidden. MCP tools: `list_spaces`, `space` on search_notes/search_all/get_note, `pictures` in get_note, `upload_image` (Personal only).

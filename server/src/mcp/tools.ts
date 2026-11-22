@@ -7,7 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
-export const MCP_VERSION = '1.2.0';
+export const MCP_VERSION = '1.3.0';
 
 export type ToolLog = (tool: string, summary: string, ok: boolean) => void;
 
@@ -26,7 +26,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createPebloMcp(BASE: string, TOKEN: string, log?: ToolLog): McpServer {
 /** One call to Peblo. Reads (GET) are retried a few times when the server is waking up, busy or briefly unreachable; writes never are, so nothing is saved twice. */
-async function api(method: string, path: string, body?: unknown): Promise<any> {
+async function api(method: string, path: string, body?: unknown, space?: string): Promise<any> {
   const reads = method === 'GET';
   const tries = reads ? 4 : 1;
   let last: Error = new Error('Peblo could not be reached.');
@@ -34,7 +34,7 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
     try {
       const res = await fetch(BASE + '/api' + path, {
         method,
-        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'peblo-mcp/' + MCP_VERSION },
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'peblo-mcp/' + MCP_VERSION, ...(space ? { 'X-Peblo-Space': space } : {}) },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(reads ? 45_000 : 60_000),
       });
@@ -116,12 +116,12 @@ server.registerTool('get_status', {
 
 server.registerTool('search_all', {
   description: 'Search everything at once and get results grouped: notes, tasks, tags and calendar events that match the words. Good first step when the person says "find everything about X". #private notes are never included.',
-  inputSchema: { query: z.string().min(2), limit: z.number().int().min(1).max(10).optional().describe('Most results per group (default 5)') },
+  inputSchema: { query: z.string().min(2), limit: z.number().int().min(1).max(10).optional().describe('Most results per group (default 5)'), space: z.string().optional().describe('A Team or Office id from list_spaces, to read that space instead of Personal notes (read only)') },
   annotations: readOnly,
-}, ({ query, limit }) => run(async () => {
+}, ({ query, limit, space }) => run(async () => {
   const per = limit ?? 5; const q = norm(query);
   const [{ notes }, { todos }, tags] = await Promise.all([
-    api('GET', '/notes?' + new URLSearchParams({ search: query, limit: String(per), snippet: '1' })),
+    api('GET', '/notes?' + new URLSearchParams({ search: query, limit: String(per), snippet: '1' }), undefined, space),
     api('GET', '/todos'),
     api('GET', '/tags').catch(() => ({ tags: [] })),
   ]);
@@ -140,14 +140,14 @@ server.registerTool('search_all', {
 
 server.registerTool('search_notes', {
   description: 'Search the user\'s Peblo notes by text, optionally by tag. Returns titles, tags and a short preview. Empty notes are left out and near-identical results are merged (the count is reported); pass include_empty or include_duplicates to see them.',
-  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional(), offset: z.number().int().min(0).max(5000).optional().describe('Skip this many results (to read the next page)'), include_empty: z.boolean().optional(), include_duplicates: z.boolean().optional() },
+  inputSchema: { query: z.string().optional().describe('Words to look for'), tag: z.string().optional(), limit: z.number().int().min(1).max(50).optional(), offset: z.number().int().min(0).max(5000).optional().describe('Skip this many results (to read the next page)'), include_empty: z.boolean().optional(), include_duplicates: z.boolean().optional(), space: z.string().optional().describe('A Team or Office id from list_spaces, to read that space instead of Personal notes (read only)') },
   annotations: readOnly,
-}, ({ query, tag, limit, offset, include_empty, include_duplicates }) => run(async () => {
+}, ({ query, tag, limit, offset, include_empty, include_duplicates, space }) => run(async () => {
   const q = new URLSearchParams({ limit: String(limit ?? 20), snippet: '1' });
   if (offset) q.set('offset', String(offset));
   if (query) q.set('search', query);
   if (tag) q.set('tag', tag);
-  const { notes } = await api('GET', '/notes?' + q);
+  const { notes } = await api('GET', '/notes?' + q, undefined, space);
   let skippedEmpty = 0; let merged = 0;
   const seen = new Map<string, any>();
   const out: any[] = [];
@@ -167,10 +167,10 @@ server.registerTool('search_notes', {
 
 server.registerTool('get_note', {
   description: 'Read one note by id. Long notes come back in parts: pass offset (the nextOffset of the last answer) to continue. Embedded audio, video and files are replaced by a short marker, so the answer stays small.',
-  inputSchema: { id: z.string(), offset: z.number().int().min(0).optional().describe('Character to start from (default 0)'), max_chars: z.number().int().min(1000).max(60000).optional().describe('Most characters to return (default 20000)') },
+  inputSchema: { id: z.string(), offset: z.number().int().min(0).optional().describe('Character to start from (default 0)'), max_chars: z.number().int().min(1000).max(60000).optional().describe('Most characters to return (default 20000)'), space: z.string().optional().describe('A Team or Office id from list_spaces, to read that space instead of Personal notes (read only)') },
   annotations: readOnly,
-}, ({ id, offset, max_chars }) => run(async () => {
-  const { note } = await api('GET', '/notes/' + encodeURIComponent(id));
+}, ({ id, offset, max_chars, space }) => run(async () => {
+  const { note } = await api('GET', '/notes/' + encodeURIComponent(id), undefined, space);
   const clean = cleanContent(note.content);
   const from = offset ?? 0; const size = max_chars ?? 20000;
   const part = clean.text.slice(from, from + size);
@@ -181,6 +181,7 @@ server.registerTool('get_note', {
     ...(clean.embedded ? { embeddedFilesHidden: clean.embedded } : {}),
     ...(clean.corrupt ? { note: 'Some characters in this note were damaged when it was saved and were dropped.' } : {}),
     ...(clean.text.trim() === '' ? { empty: true } : {}),
+    pictures: [...new Set([...clean.text.matchAll(/\/api\/media\/([\w-]{8,64})/g)].map((m) => m[1]))],
     markdown: part,
     ...(part.length <= 6000 ? { text: strip(part) } : {}),
   };
@@ -208,6 +209,34 @@ server.registerTool('get_image', {
     return { content: [await fetchPicture(id)] };
   } catch (e) { return fail(e); }
 });
+
+server.registerTool('list_spaces', {
+  description: 'List the Teams and Offices the person belongs to, with their ids. Pass an id as `space` to search_notes, search_all or get_note to read that space (for example a content-creation Team). Personal notes need no id.',
+  inputSchema: {},
+  annotations: readOnly,
+}, () => run(async () => {
+  const w = await api('GET', '/workspaces');
+  return { personal: 'Personal notes need no space id.', organizations: (w.orgs || []).map((o: any) => ({ name: o.name, spaces: (o.spaces || []).map((x: any) => ({ id: x.id, name: x.name, kind: x.kind, role: x.role })) })) };
+}));
+
+server.registerTool('upload_image', {
+  description: 'Upload a picture (PNG, JPEG, WebP or GIF, up to 5 MB) to Peblo from base64 data. Returns its address and a Markdown line to paste into a note; pass `note_id` to add it to the end of that Personal note straight away.',
+  inputSchema: { data_base64: z.string().min(100).describe('The picture as base64 (no data: prefix)'), mime_type: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']), alt: z.string().max(200).optional(), note_id: z.string().optional() },
+  annotations: writes,
+}, ({ data_base64, mime_type, alt, note_id }) => run(async () => {
+  const buf = Buffer.from(data_base64.replace(/^data:[^,]*,/, ''), 'base64');
+  if (!buf.length) throw new Error('No picture data came with the request.');
+  if (buf.length > MAX_PICTURE) throw new Error('That picture is larger than 5 MB.');
+  const res = await fetch(`${BASE}/api/media`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': mime_type, 'User-Agent': 'peblo-mcp/' + MCP_VERSION }, body: buf, signal: AbortSignal.timeout(60_000) });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(explainFailure(res.status, data?.error).message);
+  const markdown = `![${(alt || 'picture').replace(/[\]\[]/g, '')}](${data.url})`;
+  if (note_id) {
+    const { note } = await api('GET', '/notes/' + encodeURIComponent(note_id));
+    await api('PATCH', '/notes/' + encodeURIComponent(note_id), { content: (note.content || '').replace(/\s+$/, '') + '\n\n' + markdown });
+  }
+  return { id: data.id, url: data.url, markdown, ...(note_id ? { addedToNote: note_id } : {}) };
+}));
 
 server.registerTool('read_shared_link', {
   description: 'Read a Peblo share link (https://.../s/note/<token>): its text, and the pictures on it as images you can see. Use this when someone pastes a share link.',

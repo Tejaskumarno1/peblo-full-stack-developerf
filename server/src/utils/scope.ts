@@ -26,7 +26,7 @@ export const ownedBy = (scope: Scope) => ({ userId: scope.userId });
 /**
  * Which notes a request is about: the person's own Personal notes (no space header), or one space they belong to.
  * Returns the where-fragment to spread into a notes query, or null after answering 403/404 itself.
- * An AI access token always works on Personal notes only. A space the person is not in answers 404, so its existence is not revealed.
+ * An AI access token reads a space it is a member of but writes to Personal notes only. A space the person is not in answers 404, so its existence is not revealed.
  */
 export type NoteScope = { userId: string } | { spaceId: string; AND?: any[] };
 
@@ -40,7 +40,8 @@ export async function noteScope(req: Request, res: Response, need: 'read' | 'wri
   const user = req.user;
   if (!user?.id) { res.status(401).json({ error: 'Not signed in' }); return null; }
   const raw = String(req.headers['x-peblo-space'] ?? req.query?.space ?? '').trim();
-  if (!raw || raw === 'personal' || (user as any).viaToken) return { userId: user.id };
+  // An access token (an AI app) reads a space the person belongs to, but never changes one: writes stay in Personal.
+  if (!raw || raw === 'personal' || ((user as any).viaToken && need !== 'read')) return { userId: user.id };
   const acc = await spaceAccess(user.id, raw);
   if (!acc) { res.status(404).json({ error: 'Space not found' }); return null; }
   if (!can(need === 'read' ? 'space.read' : 'space.write', acc.org, acc.role)) {
