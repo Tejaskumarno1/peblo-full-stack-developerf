@@ -444,8 +444,7 @@ async function listViewers(kind: string, token: string, mySession: string, canEd
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId, isDeleted: false }, select: { id: true } });
-  const t = await prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token }, select: { id: true } });
-  return t && (await shareableTodo(userId, t.id)) ? t : null;
+  return prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId }, select: { id: true } }); // management on the shared page stays with the owner, as for notes
 }
 
 // The share link remains public, but only its owner can see management controls or revoke it.

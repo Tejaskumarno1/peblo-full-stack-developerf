@@ -1923,6 +1923,13 @@ async function prismaOffUser() {
     check('R3: a guest then sees the team task link as locked', r.status === 200 && r.json.locked === true, r.json);
     r = await as(M.tok, 'POST', `/api/public/todo/${tsh.json.token}/password`, { password: '' });
     check('R3: someone else cannot change the team task link password (404)', r.status === 404, r.status);
+    // a teammate who can write in the team can open the share box of a task they did not create (it used to answer 404 unless they made it) ...
+    r = await as(M.tok, 'GET', `/api/share/todo/${tt.json.todo?.id}`);
+    check('R3: a teammate who can write in the team can open the share box of a task they did not create', r.status === 200 && !!r.json.token, [r.status, r.json]);
+    // ... but not for a task made for "just me", which is hidden from them
+    const hid = await as(O.tok, 'POST', '/api/todos', { text: 'R3 hidden task', meta: { visibility: 'me' } }, { 'x-peblo-space': spaceId });
+    r = await as(M.tok, 'GET', `/api/share/todo/${hid.json.todo?.id}`);
+    check('R3: a teammate cannot open the share box of a task hidden from them (404)', hid.status === 201 && r.status === 404, [hid.status, r.status]);
 
     // a team note's plain-text version works (ANY_SPACE in agentView)
     const tn = await as(O.tok, 'POST', '/api/notes', { title: 'R3 team', content: 'team words' }, { 'x-peblo-space': spaceId });
