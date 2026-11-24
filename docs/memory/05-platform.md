@@ -433,3 +433,5 @@ The PDF (`Peblo_Full_Stack_Developer_Challenge.docx.pdf`, 9 pages, every page ma
 - B19. Deprecated `@google/generative-ai` SDK (TRD D12). Hard-coded model names (`gpt-4o-mini`, `gemini-2.5-flash`).
 
 **MCP 1.4.0 (kanban read):** `list_tasks` takes optional `space` (team id or name) and `all=true`. `all` returns every task, dated or not, grouped by Kanban column with tags, assignees and steps. Before this, tasks without a date were invisible to AI clients. Tokens can read a team board but still write only in Personal, so renaming tags on team cards must be done in the app.
+
+**MCP 1.4.0 batch 2:** 26 read-only tools over existing GET routes (`server/src/mcp/extraTools.ts`). The full list of 50 gaps, with what is done and what is still todo, is `09-mcp-gaps.md`. Nothing destructive is exposed.

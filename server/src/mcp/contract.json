@@ -79,6 +79,63 @@
     "upload_image": [
       "data_base64",
       "mime_type"
-    ]
+    ],
+    "list_board_columns": [],
+    "get_task_thread": [
+      "id"
+    ],
+    "get_my_day": [],
+    "get_team_calendar": [
+      "from",
+      "to"
+    ],
+    "get_team_workload": [
+      "space"
+    ],
+    "list_team_projects": [
+      "space"
+    ],
+    "list_task_templates": [
+      "space"
+    ],
+    "get_note_mentions": [
+      "id"
+    ],
+    "get_note_version": [
+      "id",
+      "versionId"
+    ],
+    "get_trash_info": [],
+    "list_note_comments": [
+      "note_id"
+    ],
+    "list_notifications": [],
+    "get_study_mastery": [],
+    "get_study_activity": [],
+    "list_promises": [],
+    "get_daily_briefing": [],
+    "get_weekly_report": [],
+    "get_insights": [],
+    "list_calendar_feeds": [],
+    "get_calendar_events": [
+      "from",
+      "to"
+    ],
+    "search_media": [
+      "query"
+    ],
+    "get_media_text": [
+      "id"
+    ],
+    "get_team_feed": [
+      "space"
+    ],
+    "list_announcements": [
+      "space"
+    ],
+    "list_people": [
+      "space"
+    ],
+    "get_profile": []
   }
 }

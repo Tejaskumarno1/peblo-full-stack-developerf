@@ -5,6 +5,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { registerExtraTools } from './extraTools.js';
 
 /** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
 export const MCP_VERSION = '1.4.0';
@@ -475,5 +476,7 @@ server.registerTool('list_tags', {
   inputSchema: {},
   annotations: readOnly,
 }, () => run(() => api('GET', '/tags')));
+// MCP 1.4.0: read-only tools over GET routes the app already has (docs/memory/09-mcp-gaps.md)
+registerExtraTools(server, api, spaceIdOf, run, readOnly);
   return server;
 }
