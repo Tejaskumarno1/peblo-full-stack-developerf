@@ -16,7 +16,7 @@ t('64 hex → together', eq(P.candidatesFor('ab'.repeat(32)), ['together']));
 t('32 alnum → mistral', eq(P.candidatesFor('Ab3'.repeat(10) + 'xy'), ['mistral']));
 t('unknown → ask', eq(P.candidatesFor('hello world'), []) && eq(P.candidatesFor('  '), []));
 t('suggestModel prefers the usual one', P.suggestModel('groq', ['a-embed', 'llama-3.3-70b-versatile', 'z']) === 'llama-3.3-70b-versatile');
-t('suggestModel skips non-chat models', P.suggestModel('custom', ['text-embedding-3', 'whisper-1', 'chat-a']) === 'chat-a');
+t('suggestModel falls back to the first model when the usual one is not listed (the list is already chat models only)', P.suggestModel('custom', ['chat-a', 'chat-b']) === 'chat-a');
 t('Gemini is a normal connection, through Google\'s OpenAI-compatible address', P.providerById('gemini').baseUrl === 'https://generativelanguage.googleapis.com/v1beta/openai' && P.providerById('gemini').slot === undefined);
 t('OpenAI and Gemini know their embeddings models', P.providerById('openai').embedModel === 'text-embedding-3-small' && !!P.providerById('gemini').embedModel);
 // desktop (not hosted): any address is fine
