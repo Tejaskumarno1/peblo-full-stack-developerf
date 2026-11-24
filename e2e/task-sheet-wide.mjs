@@ -10,6 +10,7 @@ try {
   check('two columns side by side', cols.length === 2 && cols[1] > cols[0] + 300, cols.join());
   check('sheet fits the window without scrolling', await page.evaluate(() => { const s = document.querySelector('.s-sheet'); return s.scrollHeight <= s.clientHeight + 2; }));
   await page.screenshot({ path: 'D:/Peblo/_shots/sheet-wide.png' });
+  await page.getByTestId('chip-due').click();
   await page.getByRole('button', { name: 'Pick a date' }).click();
   await page.locator('.s-mcal-day').first().waitFor({ timeout: 4000 });
   const sq = await page.locator('.s-mcal-day').evaluateAll((els) => els.every((e) => { const r = e.getBoundingClientRect(); return Math.abs(r.width - r.height) < 1.5; }));

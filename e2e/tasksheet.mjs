@@ -12,8 +12,10 @@ try {
   const dlg = page.getByRole('dialog');
   await dlg.waitFor({ timeout: 6000 }).catch(() => {});
   check('adding a task opens the set-up sheet', await dlg.isVisible().catch(() => false));
+  await dlg.getByTestId('chip-due').click(); // quick chips open their panel first
   await dlg.getByRole('button', { name: 'Tomorrow' }).click();
   await dlg.getByRole('button', { name: /Evening/ }).click();
+  await dlg.getByTestId('chip-priority').click();
   await dlg.getByRole('radio', { name: 'High' }).click();
   await dlg.getByRole('button', { name: '+ Add tag' }).click();
   await dlg.getByLabel('Add a tag').fill('exams');

@@ -31,9 +31,10 @@ try {
   }, team);
   await p.goto(b.base + '/tasks', { waitUntil: 'networkidle' });
   await p.getByText('Edit the Warangal reel').first().click();
-  await p.getByTestId('assignee-add').waitFor({ timeout: 8000 });
+  await p.getByTestId('vis-team').waitFor({ timeout: 8000 });
   ok(await p.getByTestId('vis-team').getAttribute('aria-checked') === 'true', 'a new team task is visible to the whole team by default');
 
+  await p.getByTestId('chip-assignee').click(); // the Assignee chip opens its panel
   // two assignees
   await p.getByTestId('assignee-add').click();
   await p.getByTestId('assign-pill').filter({ hasText: 'Ana' }).click();
@@ -44,6 +45,7 @@ try {
   // picked people + status + watch
   await p.getByTestId('vis-people').click();
   await p.getByTestId('viewer-pill').filter({ hasText: 'Ana' }).click();
+  await p.getByTestId('chip-status').click();
   await p.getByTestId('status-doing').click();
   await p.getByTestId('task-watch').click();
   await p.screenshot({ path: shots + '\\tk-sheet.png' });
