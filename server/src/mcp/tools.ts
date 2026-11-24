@@ -7,7 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 /** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
-export const MCP_VERSION = '1.3.0';
+export const MCP_VERSION = '1.4.0';
 
 export type ToolLog = (tool: string, summary: string, ok: boolean) => void;
 
@@ -280,17 +280,35 @@ server.registerTool('append_to_note', {
   return `Added to "${note.title}".`;
 }));
 
+/** A team can be named by its id or by its name (as list_spaces shows them). */
+async function spaceIdOf(space?: string): Promise<string | undefined> {
+  const q = String(space || '').trim();
+  if (!q || q.toLowerCase() === 'personal') return undefined;
+  const w = await api('GET', '/workspaces');
+  const all = (w.orgs || []).flatMap((o: any) => (o.spaces || []).map((x: any) => ({ id: x.id, name: x.name, org: o.name })));
+  const hit = all.find((x: any) => x.id === q) || all.find((x: any) => norm(x.name) === norm(q)) || all.find((x: any) => norm(x.name).includes(norm(q)) || norm(x.org + ' ' + x.name).includes(norm(q)));
+  if (!hit) throw new Error('No team or office matches "' + q + '". Use list_spaces to see the ones you belong to.');
+  return hit.id;
+}
+
 server.registerTool('list_tasks', {
-  description: 'List the user\'s tasks. With a date (YYYY-MM-DD) it lists that day; without one it lists what is due today, overdue and upcoming.',
-  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeDone: z.boolean().optional() },
+  description: 'List the user\'s tasks. With a date (YYYY-MM-DD) it lists that day; without one it lists what is due today, overdue and upcoming (tasks with no date are NOT included). Set all=true to list every task whatever its date, grouped by Kanban column, with tags and assignees: this is how to read a Kanban board. Pass space (a team id or name from list_spaces) to read a team board; without it you get Personal tasks. Reading a team is allowed, changing it from here is not.',
+  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeDone: z.boolean().optional(), all: z.boolean().optional().describe('Every task, grouped by Kanban column, dated or not'), space: z.string().optional().describe('Team or office id or name; omit for Personal') },
   annotations: readOnly,
-}, ({ date, includeDone }) => run(async () => {
-  const slim = (t: any) => ({ id: t.id, text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline, tags: t.tags });
+}, ({ date, includeDone, all, space }) => run(async () => {
+  const sp = await spaceIdOf(space);
+  const slim = (t: any) => ({ id: t.id, text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline, tags: t.tags ?? t.todoTags, column: t.completed ? 'done' : t.meta?.status || 'todo', assignees: t.meta?.assignees ?? (t.assigneeId ? [t.assigneeId] : []), steps: Array.isArray(t.meta?.subtasks) ? t.meta.subtasks.map((x: any) => ({ text: x.text, done: !!x.done })) : undefined, noteId: t.noteId, link: t.meta?.link });
+  if (all) {
+    const [{ todos }, board] = await Promise.all([api('GET', '/todos', undefined, sp), api('GET', '/todos/board', undefined, sp).catch(() => null)]);
+    const cols: { key: string; name: string }[] = board?.columns || [{ key: 'todo', name: 'To do' }, { key: 'doing', name: 'In progress' }, { key: 'review', name: 'In review' }, { key: 'done', name: 'Done' }];
+    const rows = (todos || []).filter((t: any) => includeDone !== false || !t.completed).map(slim);
+    return { space: sp ?? 'personal', columns: cols.map((c) => ({ key: c.key, name: c.name, tasks: rows.filter((r: any) => r.column === c.key) })), ...(rows.some((r: any) => !cols.some((c) => c.key === r.column)) ? { other: rows.filter((r: any) => !cols.some((c) => c.key === r.column)) } : {}) };
+  }
   if (date) {
-    const { todos } = await api('GET', '/todos?date=' + date);
+    const { todos } = await api('GET', '/todos?date=' + date, undefined, sp);
     return (todos || []).filter((t: any) => includeDone || !t.completed).map(slim);
   }
-  const d = await api('GET', '/todos/today');
+  const d = await api('GET', '/todos/today', undefined, sp);
   const keep = (a: any[]) => (a || []).filter((t) => includeDone || !t.completed).map(slim);
   return { today: keep(d.todayTasks), overdue: keep(d.overdueTasks), upcoming: keep(d.upcomingTasks) };
 }));
