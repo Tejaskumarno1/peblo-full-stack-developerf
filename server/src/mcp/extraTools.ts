@@ -70,10 +70,7 @@ export function registerExtraTools(
   tool('get_weekly_report', 'Peblo\'s report on the past week.', {}, () => api('GET', '/dashboard/weekly-report'));
   tool('get_insights', 'Dashboard insights: streaks, completion, busiest days.', {}, () => api('GET', '/dashboard/insights'));
 
-  // ---- calendar, files
-  tool('list_calendar_feeds', 'External calendars (iCal feeds) connected to Peblo.', {}, () => api('GET', '/calendar-sync'));
-  tool('get_calendar_events', 'Events from the connected external calendars between two dates (YYYY-MM-DD).', { from: DATE, to: DATE },
-    ({ from, to }: any) => api('GET', `/calendar-sync/events?from=${from}&to=${to}`));
+  // ---- files (calendar feeds and the profile stay sign-in only: the server blocks tokens from them)
   tool('search_media', 'Search pictures and files saved in Peblo by name or text.', { query: z.string().min(1) },
     ({ query }: any) => api('GET', `/media/search?q=${enc(query)}`));
   tool('get_media_text', 'The text Peblo read from a file or described from a picture.', { id: z.string() },
@@ -86,5 +83,4 @@ export function registerExtraTools(
     async ({ space }) => api('GET', `/workspaces/spaces/${enc(await needSpace(space))}/announcements`));
   tool('list_people', 'The people in a team (names and ids), so a task can be matched to who it is for.', { space: NEED_SPACE },
     async ({ space }) => api('GET', `/workspaces/spaces/${enc(await needSpace(space))}/people-lite`));
-  tool('get_profile', 'The person\'s own profile settings (name, time zone, working hours).', {}, () => api('GET', '/profile'));
 }

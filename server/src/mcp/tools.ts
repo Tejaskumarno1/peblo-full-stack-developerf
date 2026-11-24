@@ -6,6 +6,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { registerExtraTools } from './extraTools.js';
+import { registerTaskTools } from './taskTools.js';
 
 /** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
 export const MCP_VERSION = '1.4.0';
@@ -86,12 +87,35 @@ const recent = (() => {
   };
 })();
 /** Reminders (minutes before) and travel time live in the task's meta. */
-const taskMeta = (a: { reminders?: number[]; travelMin?: number | null }) => {
+const taskMeta = (a: { reminders?: number[]; travelMin?: number | null; visibility?: string; viewers?: string[]; link?: string | null; estimateMin?: number | null; details?: string; repeatFromDone?: boolean; steps?: { text: string; done?: boolean }[]; watchers?: string[] }) => {
   const m: Record<string, unknown> = {};
   if (a.reminders !== undefined) { m.reminders = a.reminders; m.remindMin = a.reminders.length ? Math.min(...a.reminders) : null; }
   if (a.travelMin !== undefined) m.travelMin = a.travelMin;
+  // Kanban and checklist fields live in the task's meta too; the server keeps only known keys and treats null / [] / false as "clear"
+  if (a.visibility !== undefined) m.visibility = a.visibility === 'team' ? null : a.visibility;
+  if (a.viewers !== undefined) m.viewers = a.viewers;
+  if (a.link !== undefined) m.link = a.link;
+  if (a.estimateMin !== undefined) m.estimateMin = a.estimateMin;
+  if (a.details !== undefined) m.details = a.details;
+  if (a.repeatFromDone !== undefined) m.repeatFromDone = a.repeatFromDone;
+  if (a.steps !== undefined) m.subtasks = a.steps;
+  if (a.watchers !== undefined) m.watchers = a.watchers;
   return m;
 };
+/** Optional task fields shared by create_task and update_task (Kanban column, people, checklist, link, estimate). */
+const taskExtras = {
+  column: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional().describe('Kanban column key: todo, doing, review, done, or a custom column (see list_board_columns)'),
+  assignees: z.array(z.string()).max(10).optional().describe('People ids from list_people, for team tasks; [] clears'),
+  visibility: z.enum(['team', 'people', 'me']).optional().describe('Who can see a team task: the whole team, picked people (with viewers) or just you and the assignees'),
+  viewers: z.array(z.string()).max(50).optional().describe('People ids who can see it when visibility is people'),
+  link: z.string().url().max(300).nullable().optional().describe('A meeting or page link (https://...); null clears it'),
+  estimateMin: z.number().int().min(1).max(1440).nullable().optional().describe('How many minutes it should take; null clears it'),
+  details: z.string().max(4000).optional().describe('Longer notes on the task'),
+  repeatFromDone: z.boolean().optional().describe('For a repeating task: count the next date from the day it is finished'),
+  steps: z.array(z.string().min(1).max(200)).max(30).optional().describe('Checklist steps, in order. On update this replaces the list; steps with the same text keep their tick'),
+  space: z.string().optional().describe('Team or office id or name from list_spaces. Note: Peblo lets an access token change only Personal tasks, so this is for reading and for future use'),
+};
+const stepsOf = (texts: string[], old: { text: string; done?: boolean }[] = []) => texts.map((t) => ({ text: t, done: old.find((o) => norm(o.text) === norm(t))?.done === true }));
 const norm = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const server = new McpServer({ name: 'peblo', version: MCP_VERSION });
@@ -315,21 +339,22 @@ server.registerTool('list_tasks', {
 }));
 
 server.registerTool('create_task', {
-  description: 'Add a task. deadline is an ISO date or date-time; priority is low, medium or high.',
+  description: 'Add a task. deadline is an ISO date or date-time; priority is low, medium or high. Can also set the Kanban column, checklist steps, link, estimate and details. Peblo lets an access token add tasks only in Personal.',
   inputSchema: {
     text: z.string().min(1), deadline: z.string().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), tags: z.array(z.string()).optional(),
     startTime: z.string().optional().describe('Start time of day, HH:MM, to make it a calendar event'), endTime: z.string().optional().describe('End time, HH:MM'),
     recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(), noteId: z.string().optional().describe('Link the task to a note'),
     reminders: z.array(z.number().int().min(0).max(43200)).max(6).optional().describe('Minutes before it starts to remind, e.g. [10, 1440]'), travelMin: z.number().int().min(1).max(600).optional().describe('Minutes it takes to get there; Peblo says when to leave'),
+    ...taskExtras,
   },
   annotations: writes,
 }, (args) => run(async () => {
   // When the person asked to approve what Claude adds (Plan my day), Peblo's server holds the task in their approval inbox.
   const dup = recent.find('task', args);
   if (dup) return { ...dup, duplicate: 'You added this a moment ago, so it was not added again.' };
-  const { reminders, travelMin, ...rest } = args as any;
-  const meta = taskMeta({ reminders, travelMin });
-  const { todo } = await api('POST', '/todos', Object.keys(meta).length ? { ...rest, meta } : rest);
+  const { reminders, travelMin, visibility, viewers, link, estimateMin, details, repeatFromDone, steps, space, ...rest } = args as any;
+  const meta = taskMeta({ reminders, travelMin, visibility, viewers, link, estimateMin, details, repeatFromDone, steps: steps ? stepsOf(steps) : undefined });
+  const { todo } = await api('POST', '/todos', Object.keys(meta).length ? { ...rest, meta } : rest, await spaceIdOf(space));
   const out = { id: todo.id, text: todo.text, deadline: todo.deadline, ...(todo.meta?.proposal ? { status: 'waiting for the person to approve it' } : {}) };
   recent.add('task', args, out);
   return out;
@@ -364,21 +389,36 @@ server.registerTool('update_note', {
 }));
 
 server.registerTool('update_task', {
-  description: 'Change a task: its text, deadline (ISO date or date-time), priority, or the note it is linked to (noteId, or null to unlink).',
+  description: 'Change a task: its text, deadline (ISO date or date-time), priority, the note it is linked to (noteId, or null to unlink), its Kanban column, assignees, who can see it, link, estimate, checklist steps, or follow it with watch. Peblo lets an access token change only Personal tasks; a team task answers that it was not found.',
   inputSchema: {
     id: z.string(), text: z.string().min(1).optional(), deadline: z.string().nullable().optional(), priority: z.enum(['low', 'medium', 'high']).optional(), noteId: z.string().nullable().optional(),
     startTime: z.string().nullable().optional(), endTime: z.string().nullable().optional(), recurrence: z.union([z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly']), z.string().regex(/^every:[1-9]\d{0,2}:(day|week|month|year)$/)]).describe('none, daily, weekdays, weekly, monthly, yearly, or every:<n>:<day|week|month|year> such as every:3:day').optional(),
     tags: z.array(z.string()).optional(), scope: z.enum(['this', 'following', 'all']).optional().describe('For repeating tasks: which occurrences to change'),
     reminders: z.array(z.number().int().min(0).max(43200)).max(6).optional().describe('Minutes before it starts to remind; [] clears them'), travelMin: z.number().int().min(1).max(600).nullable().optional().describe('Minutes it takes to get there; null clears it'),
+    ...taskExtras,
+    watch: z.boolean().optional().describe('Follow (true) or stop following (false) this team task so you are told when it changes'),
   },
   annotations: { ...writes, idempotentHint: true },
-}, ({ id, reminders, travelMin, ...patch }) => run(async () => {
+}, ({ id, reminders, travelMin, visibility, viewers, link, estimateMin, details, repeatFromDone, steps, space, watch, ...patch }) => run(async () => {
+  const sp = await spaceIdOf(space);
   const body: Record<string, unknown> = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
-  const meta = taskMeta({ reminders, travelMin: travelMin === null ? (null as any) : travelMin });
+  // steps and watching change a list, so the current task is read first
+  let current: any = null;
+  if (steps !== undefined || watch !== undefined) {
+    current = ((await api('GET', '/todos?limit=2000', undefined, sp)).todos || []).find((t: any) => t.id === id);
+    if (!current) throw new Error('Peblo could not find that task. Check the id (list_tasks all=true shows ids) and the space.');
+  }
+  let watchers: string[] | undefined;
+  if (watch !== undefined) {
+    const me = (await api('GET', '/whoami')).id as string;
+    const now: string[] = Array.isArray(current.meta?.watchers) ? current.meta.watchers : [];
+    watchers = watch ? [...new Set([...now, me])] : now.filter((x) => x !== me);
+  }
+  const meta = taskMeta({ reminders, travelMin: travelMin === null ? (null as any) : travelMin, visibility, viewers, link, estimateMin, details, repeatFromDone, steps: steps ? stepsOf(steps, current?.meta?.subtasks) : steps, watchers });
   if (Object.keys(meta).length) body.meta = meta;
   if (!Object.keys(body).length) throw new Error('Give something to change.');
-  const { todo } = await api('PATCH', '/todos/' + encodeURIComponent(id), body);
-  return { id: todo.id, text: todo.text, deadline: todo.deadline, priority: todo.priority, noteId: todo.noteId };
+  const { todo } = await api('PATCH', '/todos/' + encodeURIComponent(id), body, sp);
+  return { id: todo.id, text: todo.text, deadline: todo.deadline, priority: todo.priority, noteId: todo.noteId, column: todo.completed ? 'done' : todo.meta?.status || 'todo', steps: todo.meta?.subtasks };
 }));
 
 server.registerTool('get_calendar', {
@@ -478,5 +518,6 @@ server.registerTool('list_tags', {
 }, () => run(() => api('GET', '/tags')));
 // MCP 1.4.0: read-only tools over GET routes the app already has (docs/memory/09-mcp-gaps.md)
 registerExtraTools(server, api, spaceIdOf, run, readOnly);
+registerTaskTools(server, api, spaceIdOf, run, writes, readOnly);
   return server;
 }

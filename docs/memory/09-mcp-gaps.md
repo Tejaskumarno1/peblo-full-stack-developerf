@@ -70,3 +70,17 @@ Status key: **done** = shipped in MCP 1.4.0 (this change), **todo** = not yet.
 
 ## Not planned (destructive, so excluded on purpose)
 Delete task, delete tag, empty trash, remove member or invite, delete organisation, restore a backup over the account, change AI keys, change policy.
+
+## Update: Kanban and task tools (MCP 1.4.0, items 1 to 20)
+Added in `server/src/mcp/taskTools.ts` and by extending `create_task` / `update_task` (column, assignees, visibility, viewers, link, estimate, details, repeat-from-done, steps, watch, space):
+`add_task_comment`, `request_task_review`, `bulk_update_tasks`, `set_board_columns`, `duplicate_task`, `add_task_steps`, `set_task_step_done`, `find_similar_tasks`, `quick_add_task`, `create_task_from_note`, `list_task_proposals`.
+
+**What stays out on purpose**
+- Approving or declining a proposed task: only the person can, otherwise an AI client could approve its own proposals. `list_task_proposals` is read only.
+- Skip one occurrence of a repeating task, delete, hand over a leaver's tasks, set availability: deletes or admin writes.
+
+**Token limits that apply (server, not MCP)**
+- A token changes only Personal tasks (`utils/scope.ts`). `create_task`, `update_task`, `bulk_update_tasks`, `set_board_columns` on a team board answer "not found". Comments and review requests on a team task do work (the server checks team membership).
+- `/api/profile`, `/api/calendar-sync` and `/api/workspaces/orgs/*` stay sign-in only. So `get_profile`, `list_calendar_feeds` and `get_calendar_events` were removed again (they could only return 403).
+- Narrow read-only allowlist added in `middleware/auth.ts` for the team views: `my-day`, `team-range`, `:space/(workload|projects|templates|feed)`, `spaces/:id/(announcements|people-lite)`. Before it, the 8 team tools added earlier could only return 403.
+- `GET /api/whoami` now also returns the person's own `id` (needed for `watch`).

@@ -116,11 +116,6 @@
     "get_daily_briefing": [],
     "get_weekly_report": [],
     "get_insights": [],
-    "list_calendar_feeds": [],
-    "get_calendar_events": [
-      "from",
-      "to"
-    ],
     "search_media": [
       "query"
     ],
@@ -136,6 +131,41 @@
     "list_people": [
       "space"
     ],
-    "get_profile": []
+    "add_task_comment": [
+      "body",
+      "id"
+    ],
+    "request_task_review": [
+      "id",
+      "to"
+    ],
+    "bulk_update_tasks": [
+      "ids"
+    ],
+    "set_board_columns": [
+      "columns"
+    ],
+    "duplicate_task": [
+      "id"
+    ],
+    "add_task_steps": [
+      "id",
+      "steps"
+    ],
+    "set_task_step_done": [
+      "id",
+      "step"
+    ],
+    "find_similar_tasks": [
+      "text"
+    ],
+    "quick_add_task": [
+      "text"
+    ],
+    "create_task_from_note": [
+      "note_id",
+      "quote"
+    ],
+    "list_task_proposals": []
   }
 }

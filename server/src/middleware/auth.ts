@@ -78,7 +78,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     // (an export or backup includes #private notes, and a restore replaces everything).
     // Exception: the plain list of spaces the person belongs to (GET /api/workspaces) so an AI app can find a Team to read.
     const listOfSpaces = req.method === 'GET' && /^\/api\/workspaces\/?(\?.*)?$/i.test(req.originalUrl);
-    if (user.viaToken && !listOfSpaces && /^\/api\/(export|backup|restore|import|example|calendar-sync|workspaces)(\/|\?|$)/i.test(req.originalUrl)) {
+    // Also open to a token, for reading only: the team views an AI app needs (my day, team calendar, workload, projects, templates, feed, announcements, people). Nothing under /orgs (members, invites, audit, keys, policy, export).
+    const teamRead = req.method === 'GET' && /^\/api\/workspaces\/(my-day|team-range|(?!orgs\/)[^/?]+\/(workload|projects|templates|feed)|spaces\/[^/?]+\/(announcements|people-lite))(\/|\?|$)/i.test(req.originalUrl);
+    if (user.viaToken && !listOfSpaces && !teamRead && /^\/api\/(export|backup|restore|import|example|calendar-sync|workspaces)(\/|\?|$)/i.test(req.originalUrl)) {
       return res.status(403).json({ error: 'An access token cannot export, back up, import or restore the whole library. Sign in to Peblo to do that.' });
     }
     if (user.readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {

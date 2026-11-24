@@ -140,7 +140,7 @@ app.use('/api', apiLimiter());
       const timezone = u?.timezone || 'UTC';
       let today = new Date().toISOString().slice(0, 10);
       try { today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch { /* unknown zone: UTC date */ }
-      res.json({ timezone, today, now: new Date().toISOString(), viaToken: !!req.user!.viaToken, readOnly: !!req.user!.readOnly, privateNotesHidden: !!req.user!.viaToken });
+      res.json({ id: req.user!.id, timezone, today, now: new Date().toISOString(), viaToken: !!req.user!.viaToken, readOnly: !!req.user!.readOnly, privateNotesHidden: !!req.user!.viaToken });
     } catch (e) { next(e); }
   });
   app.use('/api/auth', authRoutes);
