@@ -11,11 +11,13 @@ const run = (env, req) => {
   const saved = { n: process.env.NODE_ENV, p: process.env.TRUST_PROXY };
   process.env.NODE_ENV = env.NODE_ENV; if (env.TRUST_PROXY) process.env.TRUST_PROXY = env.TRUST_PROXY; else delete process.env.TRUST_PROXY;
   let out = { next: false, redirect: null };
-  forceHttps({ secure: false, path: '/x', headers: { host: 'h.example' }, originalUrl: '/x?a=1', ...req }, { redirect: (c, u) => { out.redirect = [c, u]; } }, () => { out.next = true; });
+  forceHttps({ secure: false, path: '/x', headers: { host: 'h.example' }, originalUrl: '/x?a=1', socket: { remoteAddress: '203.0.113.9' }, ...req }, { redirect: (c, u) => { out.redirect = [c, u]; } }, () => { out.next = true; });
   process.env.NODE_ENV = saved.n ?? ''; if (saved.p) process.env.TRUST_PROXY = saved.p; else delete process.env.TRUST_PROXY;
   return out;
 };
 await t('production behind a proxy: http goes to https (308, same path)', () => assert.deepEqual(run({ NODE_ENV: 'production', TRUST_PROXY: '1' }, {}).redirect, [308, 'https://h.example/x?a=1']));
+await t('the server\'s own loopback calls (the hosted /mcp endpoint) are not redirected', () => assert.equal(run({ NODE_ENV: 'production', TRUST_PROXY: '1' }, { socket: { remoteAddress: '127.0.0.1' } }).next, true));
+await t('a loopback address with a forwarded header still came through the proxy, so it is redirected', () => assert.deepEqual(run({ NODE_ENV: 'production', TRUST_PROXY: '1' }, { socket: { remoteAddress: '127.0.0.1' }, headers: { host: 'h.example', 'x-forwarded-for': '198.51.100.7' } }).redirect, [308, 'https://h.example/x?a=1']));
 await t('already https is left alone', () => assert.equal(run({ NODE_ENV: 'production', TRUST_PROXY: '1' }, { secure: true }).next, true));
 await t('the health probe is never redirected', () => assert.equal(run({ NODE_ENV: 'production', TRUST_PROXY: '1' }, { path: '/api/health' }).next, true));
 await t('local or desktop use (no proxy) is never redirected', () => assert.equal(run({ NODE_ENV: 'production' }, {}).next, true));

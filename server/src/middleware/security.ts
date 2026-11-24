@@ -53,7 +53,7 @@ export function buildCsp(scriptHashes: string[], extraConnect: string[] = []): s
  * reported "Peblo could not be reached".
  */
 function isInternalLoopback(req: Request): boolean {
-  const addr = req.socket.remoteAddress || '';
+  const addr = req.socket?.remoteAddress || '';
   const local = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
   return local && !req.headers['x-forwarded-for'] && !req.headers['x-forwarded-proto'];
 }
