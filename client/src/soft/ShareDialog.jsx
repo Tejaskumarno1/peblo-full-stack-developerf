@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, Link2, Copy, Check, Bot, Eye, UserCheck } from 'lucide-react';
 import api from '../api/client';
 import { usePublicUrl } from '../api/publicUrl';
+import './shareRedesign.css';
 
 const EXPIRY = [['never', 'Never expires', null], ['1', 'In 1 day', 1], ['7', 'In 7 days', 7], ['30', 'In 30 days', 30], ['90', 'In 90 days', 90], ['pick', 'Pick a date and time…', null]];
 const daysOf = (key) => EXPIRY.find((e) => e[0] === key)?.[2] ?? null;
@@ -148,6 +149,7 @@ export default function ShareDialog({ kind, id, title, onClose }) {
               </div>
             )}
             {kind === 'note' && !allowCopy && <p className="s-share-msg" data-testid="share-nocopy-note">Copying is off, so there is no plain-text or PDF version for AI tools either.</p>}
+            <hr className="s-share-rule" />
             <Activity opens={opens} requests={requests} />
             {local && <p className="s-share-msg warn">This link points to your own computer, so other people cannot open it yet. It will work for everyone once Peblo is hosted online.</p>}
             <button type="button" className="s-share-off" onClick={turnOff} disabled={busy}>Stop sharing</button>

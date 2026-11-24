@@ -1,0 +1,17 @@
+/* Share dialog redesign (Task Modal Redesign, board 22). Loaded by ShareDialog itself; the .s-share-back prefix makes it win over the older rules in dialogs.css and soft2.css. */
+.s-share-back .s-share { width: min(440px, calc(100vw - 32px)); border-radius: 22px; padding: 20px 22px; gap: 13px; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(40, 30, 20, .4); }
+.s-share-back .s-share-head b { font-family: var(--s-display, inherit); font-weight: 800; letter-spacing: -.02em; font-size: 16px; }
+.s-share-back .s-share-head small { font-size: 12.5px; }
+.s-share-back .s-share-msg { font-size: 12.5px; }
+.s-share-back .s-share-mode { gap: 6px; background: var(--s-bg, #fbf6ee); border-radius: 999px; padding: 4px; }
+.s-share-back .s-share-mode button { flex: 1; padding: 7px 10px; font-size: 12.5px; background: transparent; color: var(--s-fg2, #564d43); }
+.s-share-back .s-share-mode button.on { background: var(--s-fg, #241f1a); color: var(--s-bg, #fbf6ee); }
+.s-share-back .s-share-mode small { flex-basis: 100%; font-size: 11.5px; padding: 0 8px 4px; }
+.s-share-back .s-share-note { font-size: 13px; }
+.s-share-back .s-share-exp { gap: 4px; }
+.s-share-back .s-share-exp label { flex-basis: 100%; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--s-fg2, #564d43); }
+.s-share-back .s-share-exp select { width: 100%; height: 38px; border: 1px solid var(--s-line, #eadfd0); border-radius: 999px; padding: 0 14px; background: var(--s-surface, #fff); }
+.s-share-back .s-share-row input { height: 40px; border: 1px solid var(--s-line, #eadfd0); border-radius: 999px; padding: 0 14px; background: var(--s-bg, #fbf6ee); color: var(--s-fg2, #564d43); font-size: 12.5px; }
+.s-share-back .s-share-go { height: 40px; padding: 0 16px; font-size: 13px; white-space: nowrap; }
+.s-share-back .s-share-off { align-self: flex-start; background: transparent; border-radius: 0; padding: 8px 0; color: #b3261e; }
+.s-share-back .s-share-rule { height: 1px; background: var(--s-line, #eadfd0); border: 0; margin: 0; }

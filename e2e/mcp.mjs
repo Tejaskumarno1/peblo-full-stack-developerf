@@ -104,6 +104,44 @@ try {
   const ids1 = (p1.json?.notes || []).map((n) => n.id); const ids2 = (p2.json?.notes || p2.json || []).map((n) => n.id);
   ok(p1.json?.nextOffset === 2 && ids1.length === 2 && ids2.length >= 1 && ids2.every((i) => !ids1.includes(i)), 'search_notes pages with offset and nextOffset', p1.text.slice(0, 120));
 
+  // ---------- 1.4.0: task tools (Kanban fields, steps, quick add, one task, agenda) ----------
+  const q1 = await call('quick_add_task', { text: 'zebrafishing tomorrow 5pm !high #wild' });
+  ok(q1.json?.created === true && q1.json?.task?.id && q1.json?.understood?.tags?.[0] === 'wild' && q1.json?.task?.priority === 'high', 'quick_add_task understands words, time, !high and #tag', q1.text.slice(0, 200));
+  const q2 = await call('quick_add_task', { text: 'zebrafishing again friday' });
+  ok(q2.json?.created === false && (q2.json?.similar || []).length >= 1, 'quick_add_task warns about a similar open task instead of adding a duplicate', q2.text.slice(0, 200));
+  const q3 = await call('quick_add_task', { text: 'zebrafishing again friday', force: true });
+  ok(q3.json?.created === true, 'quick_add_task adds it anyway with force', q3.text.slice(0, 120));
+  const tid = q1.json?.task?.id;
+  const g1 = await call('get_task', { id: tid });
+  ok(g1.json?.id === tid && g1.json?.column === 'todo' && g1.json?.tags?.includes('wild'), 'get_task reads one task', g1.text.slice(0, 160));
+  const u1 = await call('update_task', { id: tid, column: 'doing', steps: ['outline', 'film'], link: 'https://example.com/plan', estimateMin: 45 });
+  ok(!u1.isError && u1.json?.column === 'doing' && u1.json?.steps?.length === 2, 'update_task moves a card to a column and sets steps', u1.text.slice(0, 200));
+  const a1 = await call('add_task_steps', { id: tid, steps: ['edit', 'outline'] });
+  const g2 = await call('get_task', { id: tid });
+  ok(!a1.isError && g2.json?.steps?.length === 3 && g2.json?.link === 'https://example.com/plan' && g2.json?.estimateMin === 45, 'add_task_steps appends without duplicating, and link and estimate stay', g2.text.slice(0, 260));
+  const d1 = await call('set_task_step_done', { id: tid, step: 'film' });
+  const g3 = await call('get_task', { id: tid });
+  ok(!d1.isError && g3.json?.steps?.find((x) => x.text === 'film')?.done === true && g3.json?.steps?.find((x) => x.text === 'outline')?.done === false, 'set_task_step_done ticks one step', g3.text.slice(0, 260));
+  const bu = await call('bulk_update_tasks', { ids: [tid, q3.json?.task?.id].filter(Boolean), priority: 'low', column: 'review' });
+  const g4 = await call('get_task', { id: tid });
+  ok(!bu.isError && g4.json?.priority === 'low' && g4.json?.column === 'review', 'bulk_update_tasks changes priority and column together', bu.text.slice(0, 160));
+  const dup = await call('duplicate_task', { id: tid });
+  ok(!dup.isError && dup.json?.id && dup.json?.id !== tid && (dup.json?.steps || []).every((x) => !x.done), 'duplicate_task copies a task with the steps unticked', dup.text.slice(0, 200));
+  const nb = await call('set_board_columns', { columns: [{ key: 'doing', name: 'Working on it' }, { key: 'review', name: 'In review' }] });
+  ok(!nb.isError, 'set_board_columns keeps a list that removes nothing', nb.text.slice(0, 160));
+  const nb2 = await call('set_board_columns', { columns: [] });
+  ok(nb2.isError && /confirm_removed/.test(nb2.text), 'set_board_columns refuses to remove a column without confirm_removed', nb2.text.slice(0, 200));
+  const ag = await call('get_agenda', { days: 2, tz: 'Asia/Kolkata' });
+  ok(!ag.isError && ag.json?.timezone === 'Asia/Kolkata' && Array.isArray(ag.json?.upcoming), 'get_agenda follows the time zone it is given', ag.text.slice(0, 160));
+  const rn = await call('list_recent_notes', { limit: 3 });
+  ok(!rn.isError && Array.isArray(rn.json), 'list_recent_notes lists notes', rn.text.slice(0, 120));
+  const px = await call('list_task_proposals');
+  ok(!px.isError && Array.isArray(px.json), 'list_task_proposals is readable (approving stays with the person)', px.text.slice(0, 120));
+  const prompts = await client.listPrompts();
+  ok(['plan_my_day', 'weekly_review'].every((n) => (prompts.prompts || []).some((p) => p.name === n)), 'the plan_my_day and weekly_review prompts are offered');
+  const none = await call('get_task', { id: 'does-not-exist' });
+  ok(none.isError, 'get_task on an unknown id is an error');
+
   // ---------- read-only token ----------
   const r = await connect(b.base, ro.token);
   const w = await r.call('create_note', { title: 'should fail' });

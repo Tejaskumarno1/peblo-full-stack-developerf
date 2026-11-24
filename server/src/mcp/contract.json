@@ -166,6 +166,11 @@
       "note_id",
       "quote"
     ],
-    "list_task_proposals": []
+    "list_task_proposals": [],
+    "get_task": [
+      "id"
+    ],
+    "list_recent_notes": [],
+    "get_agenda": []
   }
 }

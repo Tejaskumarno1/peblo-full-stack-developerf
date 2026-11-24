@@ -76,6 +76,17 @@ export async function getTodos(req: Request, res: Response, next: NextFunction) 
 }
 
 // GET /todos/today — Tasks due today + overdue, sorted by priority
+/** GET /api/todos/one/:id -> { todo }: one task, with the same space scope and visibility as the list. */
+export async function getTodo(req: Request, res: Response, next: NextFunction) {
+  try {
+    const own = await noteScope(req, res, 'read', { tasks: true });
+    if (!own) return;
+    const todo = await prisma.todo.findFirst({ where: { id: String(req.params.id), ...own }, include: { note: { select: { id: true, title: true } } } });
+    if (!todo || !taskVisible(todo as any, req.user!.id)) return res.status(404).json({ error: 'Todo not found' });
+    res.json({ todo });
+  } catch (error) { next(error); }
+}
+
 export async function getTodayTodos(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;

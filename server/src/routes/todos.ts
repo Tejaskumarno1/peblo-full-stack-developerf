@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTodos, getTodayTodos, getTodosRange, createTodo, updateTodo, deleteTodo, bulkTodos } from '../controllers/todosController.js';
+import { getTodos, getTodayTodos, getTodo, getTodosRange, createTodo, updateTodo, deleteTodo, bulkTodos } from '../controllers/todosController.js';
 import { getBoard, putBoard } from '../controllers/boardController.js';
 import { getThread, postComment, requestReview } from '../controllers/teamTalk.js';
 import { authenticate } from '../middleware/auth.js';
@@ -14,6 +14,7 @@ router.get('/board', getBoard);
 router.put('/board', putBoard);
 router.get('/', getTodos);
 router.get('/today', getTodayTodos);
+router.get('/one/:id', getTodo);
 router.get('/range', getTodosRange);
 router.post('/', validate(todoSchemas.create), createTodo);
 router.post('/bulk', bulkTodos);

@@ -270,7 +270,7 @@ export default function SharedPage() {
   const menuRef = useRef(null);
   // how this person likes to read the page (kept in this browser only)
   const [tocOpen, setTocOpen] = useState(() => { try { return localStorage.getItem('peblo-share-toc') !== 'closed'; } catch { return true; } });
-  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', pointers: false, quiet: false, pin: false, style: 'follow', ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')), pointers: presenceOn() }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: false, quiet: false, pin: false, style: 'follow' }; } });
+  const [look, setLook] = useState(() => { try { return { size: 'm', width: 'normal', font: 'sans', quiet: false, pin: false, style: 'follow', ...(JSON.parse(localStorage.getItem('peblo-share-look') || '{}')), pointers: presenceOn() }; } catch { return { size: 'm', width: 'normal', font: 'sans', pointers: false, quiet: false, pin: false, style: 'follow' }; } });
   const [lookOpen, setLookOpen] = useState(false);
   const lookRef = useRef(null);
   const toggleToc = () => setTocOpen((open) => { const next = !open; try { localStorage.setItem('peblo-share-toc', next ? 'open' : 'closed'); } catch { /* not remembered */ } return next; });

@@ -46,7 +46,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm --prefix client ci
+      - run: npm --prefix client ci --onnxruntime-node-install-cuda=skip # the CUDA build download 404s on GitHub runners and failed every run
       - name: Type-check the server
         run: npm run typecheck
       - name: Client unit tests

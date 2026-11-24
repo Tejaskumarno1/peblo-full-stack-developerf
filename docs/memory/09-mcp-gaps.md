@@ -84,3 +84,20 @@ Added in `server/src/mcp/taskTools.ts` and by extending `create_task` / `update_
 - `/api/profile`, `/api/calendar-sync` and `/api/workspaces/orgs/*` stay sign-in only. So `get_profile`, `list_calendar_feeds` and `get_calendar_events` were removed again (they could only return 403).
 - Narrow read-only allowlist added in `middleware/auth.ts` for the team views: `my-day`, `team-range`, `:space/(workload|projects|templates|feed)`, `spaces/:id/(announcements|people-lite)`. Before it, the 8 team tools added earlier could only return 403.
 - `GET /api/whoami` now also returns the person's own `id` (needed for `watch`).
+
+## Update: reliability pass (MCP 1.4.0, same version, more tools)
+- **Time zone (real bug):** the server reads the zone from the `X-Timezone` header, which only the browser sends. Every MCP date ("today", overdue, the calendar) used the server's UTC clock. The MCP now sends the person's profile zone, or `tz` when given, on `list_tasks`, `get_calendar`, `get_agenda` and `quick_add_task`. `get_status` warns when the profile zone is the UTC default.
+- **One task by id:** `GET /api/todos/one/:id` and the `get_task` tool. `update_task`, `add_task_steps`, `set_task_step_done` and `duplicate_task` no longer download up to 2000 tasks to find one.
+- **New read tools:** `get_task`, `list_recent_notes`, `get_agenda`. **Prompts:** `plan_my_day`, `weekly_review`.
+- **Sharing:** `shareableTodo` also requires the task to be visible to the person (a task for "just me" or picked people cannot be made public by a teammate who cannot see it).
+- **CI:** every run since 22 Nov failed at `npm --prefix client ci` (onnxruntime-node tried to download a CUDA build that 404s on GitHub runners). Now installs with `--onnxruntime-node-install-cuda=skip`.
+- **Tests:** `server/src/mcp/parseTask.test.mjs` (10 cases, runs with plain `node`); 22 new cases in `e2e/mcp.mjs` for the 1.4.0 task tools. The e2e cases need the app and a database, so they run in CI, not locally.
+- **Share dialog:** restyled to the redesign (board 22) in `client/src/soft/shareRedesign.css`.
+- The MCP endpoint is stateless (a new server per request), so "tools changed" notifications cannot be pushed. A client that cached the tool list keeps it until it reconnects. `get_status` reports the version so a stale list is easy to spot.
+
+## Not done, and why
+- Paid Render plan or a keep-alive pinger: costs money / standing automation, needs your yes.
+- Token scopes per team, token expiry, idempotency keys, undo: each needs a database migration that runs on production at boot.
+- Dependabot majors (Express 5.3, TypeScript 7): breaking upgrades, one at a time.
+- Team-board writes with a token, approving proposals over MCP: deliberately blocked.
+- Setting the profile time zone: tokens cannot change account settings, so do it in the app.

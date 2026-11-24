@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { registerExtraTools } from './extraTools.js';
 import { registerTaskTools } from './taskTools.js';
+import { zonedIso, addDays } from './parseTask.js';
 
 /** Bump when a tool is added or its answer changes. A tool is never renamed or removed, and a new required input is never added to an existing tool. */
 export const MCP_VERSION = '1.4.0';
@@ -28,6 +29,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createPebloMcp(BASE: string, TOKEN: string, log?: ToolLog): McpServer {
 /** One call to Peblo. Reads (GET) are retried a few times when the server is waking up, busy or briefly unreachable; writes never are, so nothing is saved twice. */
+/** The person's time zone for the call in flight. Peblo's server reads it from the X-Timezone header (the browser sends it; a bare MCP call would get the server's UTC clock). */
+let zone: string | undefined;
 async function api(method: string, path: string, body?: unknown, space?: string): Promise<any> {
   const reads = method === 'GET';
   const tries = reads ? 4 : 1;
@@ -36,7 +39,7 @@ async function api(method: string, path: string, body?: unknown, space?: string)
     try {
       const res = await fetch(BASE + '/api' + path, {
         method,
-        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'peblo-mcp/' + MCP_VERSION, ...(space ? { 'X-Peblo-Space': space } : {}) },
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'peblo-mcp/' + MCP_VERSION, ...(zone ? { 'X-Timezone': zone } : {}), ...(space ? { 'X-Peblo-Space': space } : {}) },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(reads ? 45_000 : 60_000),
       });
@@ -59,6 +62,16 @@ async function api(method: string, path: string, body?: unknown, space?: string)
   }
   throw last;
 }
+
+let meMemo: any;
+const whoami = async () => (meMemo ??= await api('GET', '/whoami'));
+/** Runs fn with the right time zone on every request: tz if given, else the one in the person's profile (unless that is the UTC default). fn is told the zone used. */
+async function inZone<T>(tz: string | undefined, fn: (z: string) => Promise<T>): Promise<T> {
+  const z = tz || (await whoami()).timezone || 'UTC';
+  zone = z === 'UTC' && !tz ? undefined : z;
+  try { return await fn(z); } finally { zone = undefined; }
+}
+const TZ = z.string().min(3).max(64).optional().describe('IANA time zone for the dates, e.g. Asia/Kolkata. Defaults to the one in the person\'s Peblo profile.');
 
 const ok = (value: unknown) => ({ content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] });
 const fail = (e: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: e instanceof Error ? e.message : String(e) }] });
@@ -136,7 +149,8 @@ server.registerTool('get_status', {
   annotations: readOnly,
 }, () => run(async () => {
   const me = await api('GET', '/whoami');
-  return { connector: 'peblo', version: MCP_VERSION, ...me, canWrite: !me.readOnly };
+  const warnings = me.timezone === 'UTC' ? ['Your Peblo time zone is UTC (the default), and dates like "today" and "tomorrow" follow it. If you are elsewhere, pass tz (for example Asia/Kolkata) to list_tasks, get_calendar, get_agenda and quick_add_task, or set your time zone in the Peblo app.'] : [];
+  return { connector: 'peblo', version: MCP_VERSION, ...me, canWrite: !me.readOnly, ...(warnings.length ? { warnings } : {}) };
 }));
 
 server.registerTool('search_all', {
@@ -318,9 +332,9 @@ async function spaceIdOf(space?: string): Promise<string | undefined> {
 
 server.registerTool('list_tasks', {
   description: 'List the user\'s tasks. With a date (YYYY-MM-DD) it lists that day; without one it lists what is due today, overdue and upcoming (tasks with no date are NOT included). Set all=true to list every task whatever its date, grouped by Kanban column, with tags and assignees: this is how to read a Kanban board. Pass space (a team id or name from list_spaces) to read a team board; without it you get Personal tasks. Reading a team is allowed, changing it from here is not.',
-  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeDone: z.boolean().optional(), all: z.boolean().optional().describe('Every task, grouped by Kanban column, dated or not'), space: z.string().optional().describe('Team or office id or name; omit for Personal') },
+  inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), includeDone: z.boolean().optional(), all: z.boolean().optional().describe('Every task, grouped by Kanban column, dated or not'), space: z.string().optional().describe('Team or office id or name; omit for Personal'), tz: TZ },
   annotations: readOnly,
-}, ({ date, includeDone, all, space }) => run(async () => {
+}, ({ date, includeDone, all, space, tz }) => run(() => inZone(tz, async () => {
   const sp = await spaceIdOf(space);
   const slim = (t: any) => ({ id: t.id, text: t.text, completed: t.completed, priority: t.priority, deadline: t.deadline, tags: t.tags ?? t.todoTags, column: t.completed ? 'done' : t.meta?.status || 'todo', assignees: t.meta?.assignees ?? (t.assigneeId ? [t.assigneeId] : []), steps: Array.isArray(t.meta?.subtasks) ? t.meta.subtasks.map((x: any) => ({ text: x.text, done: !!x.done })) : undefined, noteId: t.noteId, link: t.meta?.link });
   if (all) {
@@ -336,7 +350,7 @@ server.registerTool('list_tasks', {
   const d = await api('GET', '/todos/today', undefined, sp);
   const keep = (a: any[]) => (a || []).filter((t) => includeDone || !t.completed).map(slim);
   return { today: keep(d.todayTasks), overdue: keep(d.overdueTasks), upcoming: keep(d.upcomingTasks) };
-}));
+})));
 
 server.registerTool('create_task', {
   description: 'Add a task. deadline is an ISO date or date-time; priority is low, medium or high. Can also set the Kanban column, checklist steps, link, estimate and details. Peblo lets an access token add tasks only in Personal.',
@@ -405,8 +419,8 @@ server.registerTool('update_task', {
   // steps and watching change a list, so the current task is read first
   let current: any = null;
   if (steps !== undefined || watch !== undefined) {
-    current = ((await api('GET', '/todos?limit=2000', undefined, sp)).todos || []).find((t: any) => t.id === id);
-    if (!current) throw new Error('Peblo could not find that task. Check the id (list_tasks all=true shows ids) and the space.');
+    try { current = (await api('GET', '/todos/one/' + encodeURIComponent(id), undefined, sp)).todo; }
+    catch { throw new Error('Peblo could not find that task. Check the id (list_tasks all=true shows ids) and the space.'); }
   }
   let watchers: string[] | undefined;
   if (watch !== undefined) {
@@ -423,12 +437,52 @@ server.registerTool('update_task', {
 
 server.registerTool('get_calendar', {
   description: 'Tasks and events with a deadline between two dates (YYYY-MM-DD, inclusive), for planning a week or a month.',
-  inputSchema: { from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), includeDone: z.boolean().optional() },
+  inputSchema: { from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), includeDone: z.boolean().optional(), tz: TZ },
   annotations: readOnly,
-}, ({ from, to, includeDone }) => run(async () => {
-  const { todos } = await api('GET', `/todos?from=${from}T00:00:00.000Z&to=${to}T23:59:59.999Z`);
+}, ({ from, to, includeDone, tz }) => run(() => inZone(tz, async (z) => {
+  const { todos } = await api('GET', `/todos?from=${zonedIso(from, '00:00', z)}&to=${zonedIso(addDays(to, 1), '00:00', z)}`);
   return (todos || []).filter((t: any) => includeDone || !t.completed).map((t: any) => ({ id: t.id, text: t.text, deadline: t.deadline, startTime: t.startTime, endTime: t.endTime, priority: t.priority, completed: t.completed }));
+})));
+
+server.registerTool('get_task', {
+  description: 'Read one task by id: text, column, tags, assignees, steps, link, estimate, due date. Use list_tasks all=true to find ids. Pass space for a team task.',
+  inputSchema: { id: z.string(), space: z.string().optional().describe('Team or office id or name; omit for Personal') },
+  annotations: readOnly,
+}, ({ id, space }) => run(async () => {
+  const { todo: t } = await api('GET', '/todos/one/' + encodeURIComponent(id), undefined, await spaceIdOf(space));
+  return { id: t.id, text: t.text, completed: t.completed, column: t.completed ? 'done' : t.meta?.status || 'todo', priority: t.priority, deadline: t.deadline, startTime: t.startTime, endTime: t.endTime, tags: t.todoTags, assignees: t.meta?.assignees ?? (t.assigneeId ? [t.assigneeId] : []), steps: t.meta?.subtasks, link: t.meta?.link, estimateMin: t.meta?.estimateMin, details: t.meta?.details, noteId: t.noteId, note: t.note, visibility: t.meta?.visibility || 'team', recurrence: t.recurrence };
 }));
+
+server.registerTool('list_recent_notes', {
+  description: 'The notes changed most recently, newest first, with a short snippet. Good for "what was I working on?".',
+  inputSchema: { limit: z.number().int().min(1).max(30).optional().describe('How many (default 10)'), space: z.string().optional().describe('Team or office id or name; omit for Personal') },
+  annotations: readOnly,
+}, ({ limit, space }) => run(async () => {
+  const { notes } = await api('GET', '/notes?' + new URLSearchParams({ sort: 'updated', limit: String(limit ?? 10), snippet: '1' }), undefined, await spaceIdOf(space));
+  return (notes || []).map((n: any) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt, tags: n.tags, snippet: n.snippet }));
+}));
+
+server.registerTool('get_agenda', {
+  description: 'What is coming up: overdue tasks, today and the next days (default 3, at most 14), with dated tasks and events in time order. Dates follow the person\'s time zone (or tz).',
+  inputSchema: { days: z.number().int().min(1).max(14).optional(), includeDone: z.boolean().optional(), tz: TZ },
+  annotations: readOnly,
+}, ({ days, includeDone, tz }) => run(() => inZone(tz, async (z) => {
+  const today = (await whoami()).today as string;
+  const to = addDays(today, days ?? 3);
+  const [t, r] = await Promise.all([api('GET', '/todos/today'), api('GET', `/todos?from=${zonedIso(today, '00:00', z)}&to=${zonedIso(addDays(to, 1), '00:00', z)}`)]);
+  const slim = (x: any) => ({ id: x.id, text: x.text, deadline: x.deadline, startTime: x.startTime, endTime: x.endTime, priority: x.priority, completed: x.completed });
+  const keep = (a: any[]) => (a || []).filter((x) => includeDone || !x.completed).map(slim);
+  return { timezone: z, today, overdue: keep(t.overdueTasks), upcoming: keep(r.todos).sort((a: any, b: any) => String(a.deadline).localeCompare(String(b.deadline))) };
+})));
+
+server.registerPrompt('plan_my_day', {
+  title: 'Plan my day',
+  description: 'Look at today\'s agenda and overdue tasks and propose a realistic order for the day.',
+}, () => ({ messages: [{ role: 'user', content: { type: 'text', text: 'Use get_agenda (days 1) and list_tasks to see what is due today and what is overdue. Propose a realistic order for my day: fixed meetings first, then high priority, then quick wins, with time estimates where tasks have them. Do not create or change anything until I say yes.' } }] }));
+server.registerPrompt('weekly_review', {
+  title: 'Weekly review',
+  description: 'Summarise the past week and set up the next.',
+}, () => ({ messages: [{ role: 'user', content: { type: 'text', text: 'Run a weekly review: use get_weekly_report for what happened, list_recent_notes for what I worked on, and get_agenda with days 7 for what is ahead. Give me wins, what slipped, and three priorities for next week. Do not change anything.' } }] }));
 
 server.registerTool('create_share_link', {
   description: 'Make a public link to one note or task, so anyone with the link can open it. edit=true lets them edit too. The link is returned.',

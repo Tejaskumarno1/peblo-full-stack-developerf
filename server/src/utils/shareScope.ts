@@ -2,6 +2,7 @@ import prisma from '../db.js';
 import { audit, can, spaceAccess } from './access.js';
 import { isOffice, noteLevel, teamViewOnly } from './noteAccess.js';
 import { policyOfSpace } from './orgPolicy.js';
+import { taskVisible } from './taskAccess.js';
 
 import { ANY_SPACE } from '../personalGuard.js';
 /*
@@ -30,7 +31,7 @@ export async function shareableNote(userId: string, id: string) {
   return n;
 }
 
-export const TODO_SHARE_SELECT = { id: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } as const;
+export const TODO_SHARE_SELECT = { id: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true, assigneeId: true, meta: true } as const;
 
 /**
  * The task, when this person may manage its public link; otherwise null.
@@ -43,6 +44,7 @@ export async function shareableTodo(userId: string, id: string) {
   if (!t.spaceId) return t.userId === userId ? t : null;
   const acc = await spaceAccess(userId, t.spaceId);
   if (!acc || !can('space.write', acc.org, acc.role)) return null;
+  if (!taskVisible(t as any, userId)) return null; // a task made for "just me" or picked people cannot be made public by someone who cannot see it
   return t;
 }
 
