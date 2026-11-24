@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, FileText, Check, ChevronLeft, ChevronRight, Copy, Repeat } from 'lucide-react';
+import { X, FileText, Check, ChevronLeft, ChevronRight, ChevronDown, Copy, Repeat, CalendarDays, CheckSquare, UserRound, Link2, ListChecks, MessageSquare, Bell, Eye, Clock, Tag } from 'lucide-react';
 import { notesAPI, todosAPI } from '../api';
 import TaskSteps from '../components/TaskSteps';
 import ShareDialog from './ShareDialog';
@@ -26,7 +26,9 @@ const MORE_REMINDS = [[5, '5 min before'], [30, '30 min before'], [120, '2 hours
 const TRAVEL = [10, 15, 25, 30, 45, 60];
 const ESTIMATES = [[15, '15 min'], [30, '30 min'], [60, '1 hour']];
 const ordinal = (n) => { const v = n % 100; return n + (['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'); };
-const TAG_TONES = ['butter', 'mint', 'lilac', 'peach', 'sky'];
+const PRIORITIES = [['high', 'High', 'var(--s-accent)'], ['medium', 'Normal', 'var(--s-sky)'], ['low', 'Low', 'var(--s-mint)']];
+const STATUSES = [['todo', 'To do'], ['doing', 'In progress'], ['review', 'In review']];
+const TAG_TONES =['butter', 'mint', 'lilac', 'peach', 'sky'];
 
 function MiniCalendar({ value, onPick }) {
   const sel = value ? new Date(`${value}T00:00`) : null;
@@ -95,6 +97,11 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
   const toggleRemind = (m) => setReminders((r) => (r.includes(m) ? r.filter((x) => x !== m) : [...r, m].sort((a, b) => a - b)));
   const [estimate, setEstimate] = useState(task.meta?.estimateMin ?? null);
   const [confirmEsc, setConfirmEsc] = useState(false);
+  const [chip, setChip] = useState(null); // which quick chip (due, priority, status, assignee) has its panel open
+  const [tab, setTab] = useState('details');
+  const toggleChip = (k) => setChip((c) => (c === k ? null : k));
+  const hasThread = team.canAssign && !isNew && !!task.id;
+  const assigneeLabel = assignees.length === 0 ? 'Anyone' : assignees.length === 1 ? (assignees[0] === team.me ? 'Me' : (team.people.find((x) => x.id === assignees[0])?.name || 'Member').split(' ')[0]) : `${assignees.length} people`;
   const snap0 = useRef(null);
   const snapNow = JSON.stringify({ assignees, visibility, viewers, status, watching, text, date, time, priority, tags, note: note?.id || null, link, steps, recurrence, fromDone, reminders, travel, estimate });
   if (snap0.current === null) snap0.current = snapNow;
@@ -207,6 +214,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
 
   const body = (
     <div className={`s-sheet${inline ? ' inline' : ' wide'}`} role={inline ? undefined : 'dialog'} aria-label={isNew ? 'Set up your new task' : 'Edit task'} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && text.trim() && !saving) { e.preventDefault(); save(); return; } if (e.key === 'Escape') { e.stopPropagation(); if (confirmEsc) setConfirmEsc(false); else requestClose(); } }}>
+      {!inline && !isNew && <span className="s-tcrumb"><b>Tasks</b><ChevronRight size={11} strokeWidth={2.4} />{STATUSES.find((s) => s[0] === status)?.[1] || 'Done'}</span>}
       <div className="s-sheet-top">
         <span className={`s-sheet-kicker${isNew ? ' new' : ''}`}>{isNew ? <><Check size={13} strokeWidth={3} /> Task added</> : 'Task'}</span>
         <span className="grow" />
@@ -217,8 +225,31 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       <label className="s-sr" htmlFor="s-sheet-title">Task</label>
       <input id="s-sheet-title" className="s-sheet-title" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }} autoFocus={!inline} />
 
-      <div className="s-sheet-cols">
-        <div className="s-sheet-col">
+      <div className="s-tchips" role="group" aria-label="Quick settings">
+        <button type="button" className={`s-tchip${chip === 'due' ? ' open' : ''}`} aria-expanded={chip === 'due'} data-testid="chip-due" onClick={() => toggleChip('due')}>
+          <CalendarDays size={14} />{dueLabel ? `${dueLabel}${time ? `, ${label12(time)}` : ''}` : 'No date'}{recurrence !== 'none' && date ? <Repeat size={12} /> : null}<ChevronDown size={12} className="care" />
+        </button>
+        <button type="button" className={`s-tchip${chip === 'priority' ? ' open' : ''}`} aria-expanded={chip === 'priority'} data-testid="chip-priority" onClick={() => toggleChip('priority')}>
+          <i className="dot" style={{ background: PRIORITIES.find((p) => p[0] === priority)?.[2] }} />{PRIORITIES.find((p) => p[0] === priority)?.[1]}<ChevronDown size={12} className="care" />
+        </button>
+        {startStatus !== 'done' && (
+          <button type="button" className={`s-tchip${chip === 'status' ? ' open' : ''}`} aria-expanded={chip === 'status'} data-testid="chip-status" onClick={() => toggleChip('status')}>
+            <CheckSquare size={14} />{STATUSES.find((s) => s[0] === status)?.[1]}<ChevronDown size={12} className="care" />
+          </button>
+        )}
+        {team.canAssign && (
+          <button type="button" className={`s-tchip${chip === 'assignee' ? ' open' : ''}`} aria-expanded={chip === 'assignee'} data-testid="chip-assignee" onClick={() => toggleChip('assignee')}>
+            <UserRound size={14} />{assigneeLabel}<ChevronDown size={12} className="care" />
+          </button>
+        )}
+      </div>
+
+      {chip && (
+        <div className="s-tpanel" role="region" aria-label="Task setting">
+          <button type="button" className="s-tpanel-x" aria-label="Close this panel" onClick={() => setChip(null)}><X size={14} strokeWidth={2.4} /></button>
+
+          {chip === 'due' && (
+            <>
       <section className="s-sheet-sec" aria-label="Due">
         <span className="s-sheet-lab">Due{dueLabel ? ` · ${dueLabel}${time ? `, ${label12(time)}` : ''}` : ''}</span>
         <div className="s-sheet-pills">
@@ -260,15 +291,6 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         </section>
       )}
 
-      <section className="s-sheet-sec" aria-label="Remind me">
-        <span className="s-sheet-lab">Remind me</span>
-        <div className="s-sheet-pills" role="group" aria-label="Remind me">
-          {[...REMINDS, ...MORE_REMINDS].sort((x, y) => x[0] - y[0]).map(([m, name]) => <button key={m} type="button" aria-pressed={reminders.includes(m)} className={reminders.includes(m) ? 'on' : ''} onClick={() => toggleRemind(m)}>{name}</button>)}
-          <button type="button" className={`ghost${reminders.length === 0 ? ' on' : ''}`} onClick={() => setReminders([])}>No reminder</button>
-        </div>
-        <p className="s-sheet-hint">Pick as many as you like. When one rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
-      </section>
-
       {time && (
         <section className="s-sheet-sec" aria-label="Travel time">
           <span className="s-sheet-lab">Travel time</span>
@@ -279,41 +301,33 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           <p className="s-sheet-hint">{travel ? `Peblo tells you when to leave, ${travel} min before it starts, and the calendar shows a lighter block for the trip.` : 'Add the time it takes to get there and Peblo will tell you when to leave.'}</p>
         </section>
       )}
+            </>
+          )}
 
-      {source && (
-        <section className="s-sheet-sec" aria-label="Where it came from">
-          <span className="s-sheet-lab">Where it came from</span>
-          <div className="s-sheet-source">
-            <blockquote>&ldquo;{source.quote}&rdquo;</blockquote>
-            <div className="row">
-              <span>{noteFull?.title || task.note?.title || 'Note'}{source.line ? ` \u00b7 line ${source.line}` : ''}</span>
-              {(source.noteId || task.noteId) && <Link className="chip" to={`/notes/${source.noteId || task.noteId}${source.line ? `?line=${source.line}` : ''}`} onClick={onClose}>Jump to the line</Link>}
-              {!isNew && <Link className="chip" to={`/tasks/focus/${task.id}`} onClick={onClose}>Open note beside</Link>}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="s-sheet-sec" aria-label="Link">
-        <span className="s-sheet-lab">Link</span>
-        <div className="s-sheet-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Meeting or page link (https://…)" aria-label="Meeting or page link" maxLength={500} style={{ flex: 1, minWidth: 0 }} />
-          {/^https:\/\//i.test(link.trim()) && <a className="s-outline s-set-btn" href={link.trim()} target="_blank" rel="noopener noreferrer">Open</a>}
-        </div>
-      </section>
-
-        </div>
-        <div className="s-sheet-col">
+          {chip === 'priority' && (
       <section className="s-sheet-sec" aria-label="Priority">
         <span className="s-sheet-lab">Priority</span>
         <div className="s-sheet-pills" role="radiogroup" aria-label="Priority">
-          {[['high', 'High', 'var(--s-accent)'], ['medium', 'Normal', 'var(--s-sky)'], ['low', 'Low', 'var(--s-mint)']].map(([p, name, dot]) => (
+          {PRIORITIES.map(([p, name, dot]) => (
             <button key={p} type="button" role="radio" aria-checked={priority === p} className={priority === p ? 'on' : ''} onClick={() => setPriority(p)}><i style={{ background: dot }} />{name}</button>
           ))}
         </div>
       </section>
+          )}
 
-      {team.canAssign && (
+          {chip === 'status' && startStatus !== 'done' && (
+        <section className="s-sheet-sec" aria-label="Status">
+          <span className="s-sheet-lab">Status</span>
+          <div className="s-sheet-pills" role="radiogroup" aria-label="Status">
+            {STATUSES.map(([v, name]) => (
+              <button key={v} type="button" role="radio" aria-checked={status === v} className={status === v ? 'on' : ''} data-testid={`status-${v}`} onClick={() => setStatus(v)}>{name}</button>
+            ))}
+            {team.canAssign && <button type="button" aria-pressed={watching} className={`tk-watch ${watching ? 'on' : ''}`} data-testid="task-watch" onClick={() => setWatching(!watching)}>{watching ? 'Watching' : 'Watch this task'}</button>}
+          </div>
+        </section>
+          )}
+
+          {chip === 'assignee' && team.canAssign && (
         <section className="s-sheet-sec" aria-label="Assigned to">
           <span className="s-sheet-lab">Assigned to</span>
           <div className="s-sheet-pills" aria-label="Assigned to" data-testid="assignee-chips">
@@ -332,11 +346,54 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
             </div>
           )}
         </section>
+          )}
+        </div>
       )}
+
+      <div className="s-ttabs" role="tablist" aria-label="Task sections">
+        <button type="button" role="tab" id="s-tab-details" className={`s-ttab${tab === 'details' ? ' active' : ''}`} aria-selected={tab === 'details'} onClick={() => setTab('details')}><Link2 size={15} /> Details</button>
+        <button type="button" role="tab" id="s-tab-steps" className={`s-ttab${tab === 'steps' ? ' active' : ''}`} aria-selected={tab === 'steps'} onClick={() => setTab('steps')}><ListChecks size={15} /> Steps{steps.length > 0 && <span className="count">{steps.filter((x) => x.done).length} of {steps.length}</span>}</button>
+        {hasThread && <button type="button" role="tab" id="s-tab-discussion" className={`s-ttab${tab === 'discussion' ? ' active' : ''}`} aria-selected={tab === 'discussion'} onClick={() => setTab('discussion')}><MessageSquare size={15} /> Discussion</button>}
+      </div>
+
+      <div className="s-ttabpanel" role="tabpanel">
+        {tab === 'details' && (
+          <div className="s-sheet-cols">
+            <div className="s-sheet-col">
+      <section className="s-sheet-sec" aria-label="Remind me">
+        <span className="s-sheet-lab"><Bell size={13} /> Remind me</span>
+        <div className="s-sheet-pills" role="group" aria-label="Remind me">
+          {[...REMINDS, ...MORE_REMINDS].sort((x, y) => x[0] - y[0]).map(([m, name]) => <button key={m} type="button" aria-pressed={reminders.includes(m)} className={reminders.includes(m) ? 'on' : ''} onClick={() => toggleRemind(m)}>{name}</button>)}
+          <button type="button" className={`ghost${reminders.length === 0 ? ' on' : ''}`} onClick={() => setReminders([])}>No reminder</button>
+        </div>
+        <p className="s-sheet-hint">Pick as many as you like. When one rings you can snooze it: 10 min, 1 hour, tonight, tomorrow morning or after your next meeting.</p>
+      </section>
+
+      {source && (
+        <section className="s-sheet-sec" aria-label="Where it came from">
+          <span className="s-sheet-lab">Where it came from</span>
+          <div className="s-sheet-source">
+            <blockquote>&ldquo;{source.quote}&rdquo;</blockquote>
+            <div className="row">
+              <span>{noteFull?.title || task.note?.title || 'Note'}{source.line ? ` · line ${source.line}` : ''}</span>
+              {(source.noteId || task.noteId) && <Link className="chip" to={`/notes/${source.noteId || task.noteId}${source.line ? `?line=${source.line}` : ''}`} onClick={onClose}>Jump to the line</Link>}
+              {!isNew && <Link className="chip" to={`/tasks/focus/${task.id}`} onClick={onClose}>Open note beside</Link>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="s-sheet-sec" aria-label="Link">
+        <span className="s-sheet-lab"><Link2 size={13} /> Link</span>
+        <div className="s-sheet-row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Meeting or page link (https://…)" aria-label="Meeting or page link" maxLength={500} style={{ flex: 1, minWidth: 0 }} />
+          {/^https:\/\//i.test(link.trim()) && <a className="s-outline s-set-btn" href={link.trim()} target="_blank" rel="noopener noreferrer">Open</a>}
+        </div>
+      </section>
 
       {team.canAssign && (
         <section className="s-sheet-sec" aria-label="Who can see this">
-          <span className="s-sheet-lab">Who can see this</span>
+          <span className="s-sheet-lab"><Eye size={13} /> Who can see this</span>
           <div className="s-sheet-pills" role="radiogroup" aria-label="Who can see this">
             {[['team', 'Whole team'], ['people', 'Picked people'], ['me', 'Just me']].map(([v, name]) => (
               <button key={v} type="button" role="radio" aria-checked={visibility === v} className={visibility === v ? 'on' : ''} data-testid={`vis-${v}`} onClick={() => setVisibility(v)}>{name}</button>
@@ -350,23 +407,10 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           <span className="tk-hint">{visibility === 'team' ? 'Everyone in this team sees it on the board and in lists.' : visibility === 'me' ? 'Only you and the people assigned to it.' : 'You, the people assigned, and the people picked here.'}</span>
         </section>
       )}
-
-      {startStatus !== 'done' && (
-        <section className="s-sheet-sec" aria-label="Status">
-          <span className="s-sheet-lab">Status</span>
-          <div className="s-sheet-pills" role="radiogroup" aria-label="Status">
-            {[['todo', 'To do'], ['doing', 'In progress'], ['review', 'In review']].map(([v, name]) => (
-              <button key={v} type="button" role="radio" aria-checked={status === v} className={status === v ? 'on' : ''} data-testid={`status-${v}`} onClick={() => setStatus(v)}>{name}</button>
-            ))}
-            {team.canAssign && <button type="button" aria-pressed={watching} className={`tk-watch ${watching ? 'on' : ''}`} data-testid="task-watch" onClick={() => setWatching(!watching)}>{watching ? 'Watching' : 'Watch this task'}</button>}
-          </div>
-        </section>
-      )}
-
-      {team.canAssign && !isNew && task.id && <TaskThread taskId={task.id} team={team} />}
-
+            </div>
+            <div className="s-sheet-col">
       <section className="s-sheet-sec" aria-label="Estimate">
-        <span className="s-sheet-lab">Estimate</span>
+        <span className="s-sheet-lab"><Clock size={13} /> Estimate</span>
         <div className="s-sheet-pills" role="radiogroup" aria-label="Estimate">
           {ESTIMATES.map(([m, name]) => <button key={m} type="button" role="radio" aria-checked={estimate === m} className={estimate === m ? 'on' : ''} onClick={() => setEstimate(estimate === m ? null : m)}>{name}</button>)}
           <input type="number" min="1" max="1440" aria-label="Estimate in minutes" className="s-sheet-time" style={{ width: 96 }} placeholder="minutes" value={estimate && !ESTIMATES.some(([m]) => m === estimate) ? estimate : ''} onChange={(e) => setEstimate(e.target.value ? Number(e.target.value) : null)} />
@@ -374,7 +418,7 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
       </section>
 
       <section className="s-sheet-sec" aria-label="Tags">
-        <span className="s-sheet-lab">Tags</span>
+        <span className="s-sheet-lab"><Tag size={13} /> Tags</span>
         <div className="s-sheet-pills">
           {tags.map((t, i) => (
             <span key={t} className="s-tag s-sheet-tag" style={{ background: `var(--s-${TAG_TONES[i % TAG_TONES.length]})` }}>#{t}<button type="button" aria-label={`Remove tag ${t}`} onClick={() => setTags(tags.filter((x) => x !== t))}><X size={11} strokeWidth={2.8} /></button></span>
@@ -392,10 +436,8 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
         )}
       </section>
 
-      <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} taskText={text} taskDetails={task.meta?.details || ''} /></section>
-
       <section className="s-sheet-sec" aria-label="Connected note">
-        <span className="s-sheet-lab">Connected note</span>
+        <span className="s-sheet-lab"><FileText size={13} /> Connected note</span>
         {noteFull && !picking ? (
           <div className="s-sheet-notecard">
             <span className="ico"><FileText size={17} /></span>
@@ -426,11 +468,14 @@ export default function TaskSheet({ task, isNew = false, inline = false, onClose
           </span>
         )}
       </section>
+            </div>
+          </div>
+        )}
 
+        {tab === 'steps' && <section className="s-sheet-sec" aria-label="Steps"><TaskSteps steps={steps} onChange={setSteps} taskText={text} taskDetails={task.meta?.details || ''} /></section>}
 
-        </div>
+        {tab === 'discussion' && hasThread && <TaskThread taskId={task.id} team={team} />}
       </div>
-
       {shareOpen && <ShareDialog kind="todo" id={task.id} title={text} onClose={() => setShareOpen(false)} />}
       {error && <p className="s-sheet-error" role="alert">{error}</p>}
       {confirmEsc && (

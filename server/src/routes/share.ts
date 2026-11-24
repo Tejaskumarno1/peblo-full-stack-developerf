@@ -20,7 +20,7 @@ export const shareRoutes = Router();
 shareRoutes.use(authenticate);
 shareRoutes.param('id', (req, res, next) => { void hidePrivateFromTokens(req, res, next); }); // an AI client cannot publish a #private note
 
-import { shareableNote, shareBlockReason, shareVerdict } from '../utils/shareScope.js';
+import { shareableNote, shareableTodo, shareBlockReason, shareVerdict } from '../utils/shareScope.js';
 import { ANY_SPACE } from '../personalGuard.js';
 const newToken = () => crypto.randomBytes(18).toString('base64url');
 const kindOf = (k: string) => (k === 'note' || k === 'todo' ? k : null);
@@ -30,7 +30,7 @@ const LIVE = () => ({ OR: [{ shareExpiresAt: null }, { shareExpiresAt: { gt: new
 async function owned(kind: 'note' | 'todo', id: string, userId: string) {
   // a note: its author when it is Personal; in a Team or the Office anyone who can write in that space (utils/shareScope.ts)
   if (kind === 'note') return shareableNote(userId, id);
-  return prisma.todo.findFirst({ where: { ...ANY_SPACE, id, userId }, select: { id: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } });
+  return shareableTodo(userId, id); // its author, or anyone who can write in its team
 }
 /** A turned-off link leaves nothing behind: guests, presence, blocks, read stats, short code. */
 async function purgeToken(kind: string, token: string) {
@@ -444,7 +444,8 @@ async function listViewers(kind: string, token: string, mySession: string, canEd
 
 async function shareOwner(kind: 'note' | 'todo', token: string, userId: string) {
   if (kind === 'note') return prisma.note.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId, isDeleted: false }, select: { id: true } });
-  return prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token, userId }, select: { id: true } });
+  const t = await prisma.todo.findFirst({ where: { ...ANY_SPACE, shareToken: token }, select: { id: true } });
+  return t && (await shareableTodo(userId, t.id)) ? t : null;
 }
 
 // The share link remains public, but only its owner can see management controls or revoke it.

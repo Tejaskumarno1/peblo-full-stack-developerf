@@ -30,6 +30,22 @@ export async function shareableNote(userId: string, id: string) {
   return n;
 }
 
+export const TODO_SHARE_SELECT = { id: true, userId: true, spaceId: true, shareToken: true, shareEdit: true, shareExpiresAt: true, shareNote: true } as const;
+
+/**
+ * The task, when this person may manage its public link; otherwise null.
+ * A Personal task: its author. A task in a Team or the Office: anyone who can write in that space, so a task another
+ * member created or reassigned can still be shared (it used to answer "Not found" unless you were its creator).
+ */
+export async function shareableTodo(userId: string, id: string) {
+  const t = await prisma.todo.findFirst({ where: { id, ...ANY_SPACE }, select: TODO_SHARE_SELECT });
+  if (!t) return null;
+  if (!t.spaceId) return t.userId === userId ? t : null;
+  const acc = await spaceAccess(userId, t.spaceId);
+  if (!acc || !can('space.write', acc.org, acc.role)) return null;
+  return t;
+}
+
 export type ShareBlock = { code: 'org_policy' | 'team_off'; reason: string };
 
 /** Why a new public link cannot be made for something in this space (null when it can). Personal items have no space and are never blocked. */
@@ -58,8 +74,8 @@ export async function shareVerdict(userId: string, kind: 'note' | 'todo', id: st
     const b = await shareBlockReason(raw.spaceId);
     return b ? { allowed: false, code: b.code, reason: b.reason } : { allowed: true };
   }
-  const t = await prisma.todo.findFirst({ where: { ...ANY_SPACE, id, userId }, select: { spaceId: true } });
-  if (!t) return { allowed: false, code: 'not_found', reason: 'This task was not found.' };
+  const t = await shareableTodo(userId, id);
+  if (!t) return { allowed: false, code: 'not_found', reason: 'This task was not found, or you cannot share it.' };
   const b = await shareBlockReason(t.spaceId);
   return b ? { allowed: false, code: b.code, reason: b.reason } : { allowed: true };
 }
